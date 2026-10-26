@@ -1,0 +1,111 @@
+-- name: test_paimon_global_index
+create external catalog paimon_matrix_${uuid0}
+properties (
+"type" = "paimon",
+"paimon.catalog.type" = "filesystem",
+"paimon.catalog.warehouse" = "oss://${oss_bucket}/ci_catalog_test_data/paimon/",
+"aws.s3.access_key" = "${oss_ak}",
+"aws.s3.secret_key" = "${oss_sk}",
+"aws.s3.endpoint" = "${oss_endpoint}"
+);
+-- result:
+-- !result
+set paimon_reader_mode = 'auto';
+-- result:
+-- !result
+[ORDER]select id, amount, score from paimon_matrix_${uuid0}.paimon_test.global_index_v1 order by id;
+-- result:
+1	10	100
+2	20	200
+3	30	300
+-- !result
+[ORDER]select id, amount, score from paimon_matrix_${uuid0}.paimon_test.global_index_v1 where id in (1, 3) order by id;
+-- result:
+1	10	100
+3	30	300
+-- !result
+[ORDER]select id from paimon_matrix_${uuid0}.paimon_test.global_index_v1 where id >= 2 order by id;
+-- result:
+2
+3
+-- !result
+select count(*) from paimon_matrix_${uuid0}.paimon_test.global_index_v1 where id = 999;
+-- result:
+0
+-- !result
+function: assert_paimon_reader("select id, amount, score from paimon_matrix_${uuid0}.paimon_test.global_index_v1 where id in (1, 3) order by id", "global_index_v1", "native")
+-- result:
+None
+-- !result
+function: assert_paimon_native_profile("select id, amount, score from paimon_matrix_${uuid0}.paimon_test.global_index_v1 where id in (1, 3) order by id")
+-- result:
+None
+-- !result
+[ORDER]select id, amount, score from paimon_matrix_${uuid0}.paimon_test.global_index_v1 where id = 1 order by id;
+-- result:
+1	10	100
+-- !result
+function: assert_paimon_readers("select id, amount, score from paimon_matrix_${uuid0}.paimon_test.global_index_v1 where id = 1 order by id", "global_index_v1", "native", "INDEXED_SPLIT")
+-- result:
+None
+-- !result
+[ORDER]select id, amount, score from paimon_matrix_${uuid0}.paimon_test.global_index_v1 where id = 3 order by id;
+-- result:
+3	30	300
+-- !result
+function: assert_paimon_readers("select id, amount, score from paimon_matrix_${uuid0}.paimon_test.global_index_v1 where id = 3 order by id", "global_index_v1", "native", "INDEXED_SPLIT")
+-- result:
+None
+-- !result
+[ORDER]select id, amount, score from paimon_matrix_${uuid0}.paimon_test.global_index_v1 where id in (1, 3) order by id;
+-- result:
+1	10	100
+3	30	300
+-- !result
+function: assert_paimon_readers("select id, amount, score from paimon_matrix_${uuid0}.paimon_test.global_index_v1 where id in (1, 3) order by id", "global_index_v1", "native", "INDEXED_SPLIT")
+-- result:
+None
+-- !result
+set paimon_reader_mode = 'native';
+-- result:
+-- !result
+[ORDER]select id, amount, score from paimon_matrix_${uuid0}.paimon_test.global_index_v1 where id in (1, 3) order by id;
+-- result:
+1	10	100
+3	30	300
+-- !result
+function: assert_paimon_reader("select id, amount, score from paimon_matrix_${uuid0}.paimon_test.global_index_v1 where id in (1, 3) order by id", "global_index_v1", "native")
+-- result:
+None
+-- !result
+set paimon_reader_mode = 'jni';
+-- result:
+-- !result
+[ORDER]select id, amount, score from paimon_matrix_${uuid0}.paimon_test.global_index_v1 where id in (1, 3) order by id;
+-- result:
+1	10	100
+3	30	300
+-- !result
+function: assert_paimon_reader("select id, amount, score from paimon_matrix_${uuid0}.paimon_test.global_index_v1 where id in (1, 3) order by id", "global_index_v1", "jni")
+-- result:
+None
+-- !result
+set paimon_reader_mode = 'native';
+-- result:
+-- !result
+set paimon_force_jni_reader = true;
+-- result:
+-- !result
+function: assert_paimon_reader("select id, amount, score from paimon_matrix_${uuid0}.paimon_test.global_index_v1 where id in (1, 3) order by id", "global_index_v1", "jni")
+-- result:
+None
+-- !result
+set paimon_force_jni_reader = false;
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+drop catalog paimon_matrix_${uuid0};
+-- result:
+-- !result

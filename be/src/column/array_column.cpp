@@ -626,26 +626,6 @@ std::string ArrayColumn::debug_string() const {
     return ss.str();
 }
 
-StatusOr<MutableColumnPtr> ArrayColumn::upgrade_if_overflow() {
-    if (_offsets->size() > Column::MAX_CAPACITY_LIMIT) {
-        return Status::InternalError("Size of ArrayColumn exceed the limit");
-    }
-
-    auto ret = upgrade_helper_func(_elements->as_mutable_raw_ptr());
-    if (ret.ok() && ret.value() != nullptr) {
-        _elements = std::move(ret.value());
-    }
-    return ret;
-}
-
-StatusOr<MutableColumnPtr> ArrayColumn::downgrade() {
-    auto ret = downgrade_helper_func(_elements->as_mutable_raw_ptr());
-    if (ret.ok() && ret.value() != nullptr) {
-        _elements = std::move(ret.value());
-    }
-    return ret;
-}
-
 Status ArrayColumn::unfold_const_children(const starrocks::TypeDescriptor& type) {
     DCHECK(type.children.size() == 1) << "Array schema does not match data's";
     size_t col_size = _elements->size();

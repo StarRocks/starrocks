@@ -253,7 +253,6 @@ template <>
 struct RunTimeTypeTraits<TYPE_CHAR> {
     using CppType = Slice;
     using ColumnType = BinaryColumn;
-    using LargeColumnType = LargeBinaryColumn;
     using ImmContainerType = ColumnType::ImmContainer;
 };
 
@@ -261,7 +260,6 @@ template <>
 struct RunTimeTypeTraits<TYPE_VARCHAR> {
     using CppType = Slice;
     using ColumnType = BinaryColumn;
-    using LargeColumnType = LargeBinaryColumn;
     using ImmContainerType = ColumnType::ImmContainer;
 };
 
@@ -325,7 +323,6 @@ template <>
 struct RunTimeTypeTraits<TYPE_BINARY> {
     using CppType = Slice;
     using ColumnType = BinaryColumn;
-    using LargeColumnType = LargeBinaryColumn;
     using ImmContainerType = ColumnType::ImmContainer;
 };
 
@@ -333,7 +330,6 @@ template <>
 struct RunTimeTypeTraits<TYPE_VARBINARY> {
     using CppType = Slice;
     using ColumnType = BinaryColumn;
-    using LargeColumnType = LargeBinaryColumn;
     using ImmContainerType = ColumnType::ImmContainer;
 };
 
@@ -379,9 +375,6 @@ using RunTimeCppType = typename RunTimeTypeTraits<Type>::CppType;
 
 template <LogicalType Type>
 using RunTimeColumnType = typename RunTimeTypeTraits<Type>::ColumnType;
-
-template <LogicalType Type>
-using RunTimeLargeColumnType = typename RunTimeTypeTraits<Type>::LargeColumnType;
 
 template <LogicalType Type>
 using RunTimeImmContainerType = typename RunTimeTypeTraits<Type>::ImmContainerType;

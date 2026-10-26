@@ -251,6 +251,7 @@ OLAP_SCAN Operator 负责从 StarRocks 内表中读取数据。
 | RuntimeFilterEvalTime | 在 Parquet Reader 内部对已解码数据行求值 Join Runtime Filter 所花费的时间。 |
 | RuntimeFilterInputRows | 进入 Parquet Reader Join Runtime Filter 求值的行数。 |
 | RuntimeFilterOutputRows | 通过 Parquet Reader Join Runtime Filter 求值的行数。与 `RuntimeFilterInputRows` 差距越大，说明在物化 Lazy 列之前过滤掉的行越多。 |
+| ScanRangesPrunedByPartitionValue | 因 identity 分区值被谓词或已到达的 Join Runtime Filter 过滤，而在读取前被跳过的 Scan Range 数量。 |
 | PaimonFSAppIOCount | Paimon 文件系统适配层收到的有效读请求次数，为顺序读、位置读和异步读次数之和。 |
 | PaimonFSAppIOBytes | Paimon 文件系统适配层成功返回的读取字节数。 |
 | PaimonFSAppIOTime | Paimon 文件系统适配层读请求的端到端耗时。 |
@@ -294,6 +295,16 @@ Exchange Operator 负责在 BE 节点之间传输数据。可以有几种交换�
 | BytesUnsent | 未发送的数据大小。当存在短路逻辑时，此指标为非零；否则为零。 |
 | BytesPassThrough | 如果目标节点是当前节点，数据将不会通过网络传输，这称为 passthrough 数据。此指标指示此类 passthrough 数据的大小。Passthrough 由 `enable_exchange_pass_through` 控制。 |
 | PassThroughBufferPeakMemoryUsage | PassThrough Buffer 的内存使用峰值。 |
+| ShuffleChunkBufferNum | 当 PartType 为 HASH_PARTITIONED 或 BUCKET_SHUFFLE_HASH_PARTITIONED 时，Sink 为每个目标 Pipeline Driver 缓存数据而分配的 Partial Chunk 数量。Partial Chunk 被释放后重新分配时，该值会超过目标 Driver 的数量。 |
+| ShuffleChunkBufferPeakMemoryUsage | 上述 Partial Chunk 占用内存的峰值。Partial Chunk 只有在攒满后才会发送，因此在目标数量多、DOP 高且行较宽时，该值可能接近 Sink 的全部输入。该值受 BE 配置项 `exchange_sink_buffer_flush_threshold_bytes` 限制。 |
+| ShuffleBufferFlushCount | Partial Chunk 占用内存超过 `exchange_sink_buffer_flush_threshold_bytes`、在攒满前被提前发送的次数。 |
+| ShuffleBufferFlushRows | 提前发送的行数。 |
+| ShuffleBufferReleasedChunks | 提前发送后，因剩余占用内存仍超过 `exchange_sink_buffer_flush_threshold_bytes` 的一半而被释放的 Partial Chunk 数量。 |
+| PeakSerializedChunkBytes | 单个 Chunk 序列化后（压缩前）大小的最大值。 |
+| SinkBufferPeakMemoryUsage | Sink Buffer 中等待发送或正在发送的请求占用内存的峰值。 |
+| SinkBufferMemoryLimit | Sink Buffer 的内存上限。默认为 `sink_buffer_mem_limit_per_driver` 乘以目标数量。达到上限后，Sink 会停止接收数据，直到有请求完成。 |
+| SinkBufferPeakInFlightRpcNum | 同时进行中的 RPC 数量峰值。 |
+| SinkBufferPeakRequestNum | Sink Buffer 中等待发送或正在发送的请求数量峰值。 |
 | CompressTime | 压缩时间。 |
 | CompressedInputBytes | 实际送入压缩器的序列化数据（压缩前）的大小。被自适应压缩策略跳过的 chunk 不计入其中。`CompressedInputBytes / CompressedBytes` 即为压缩率，`SerializedBytes - CompressedInputBytes` 即为未被压缩的数据大小。 |
 | CompressedBytes | 压缩数据的大小。仅统计实际被压缩的 chunk。 |

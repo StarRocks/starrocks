@@ -84,6 +84,22 @@ public class CommitRateLimiter {
     }
 
     /**
+     * Whether a commit into a partition with this compaction score is delayed or rejected right now, i.e. whether
+     * loads already feel the score. Mirrors the commit path: the limiter only runs when lake_enable_ingest_slowdown
+     * is on (LakeTableTxnStateListener.preCommit), a commit is delayed only above the slowdown threshold with a
+     * positive slowdown ratio, and rejected only above a positive upper bound.
+     */
+    public static boolean throttlesIngestion(double compactionScore) {
+        if (!Config.lake_enable_ingest_slowdown) {
+            return false;
+        }
+        boolean delayed = compactionScore > slowdownThreshold() && slowdownRatio() > 0;
+        long upperBound = compactionScoreUpperBound();
+        boolean rejected = upperBound > 0 && compactionScore > upperBound;
+        return delayed || rejected;
+    }
+
+    /**
      * Checks the commit rate for the given partition IDs and throws a CommitRateExceededException if necessary.
      *
      * @param partitionIds the set of partition IDs to check. Must not be null.
@@ -93,8 +109,13 @@ public class CommitRateLimiter {
     public void check(@NotNull Set<Long> partitionIds, long currentTimeMs)
             throws CommitRateExceededException, CommitFailedException {
         Preconditions.checkNotNull(partitionIds, "partitionIds is null");
-        // Does not limit the commit rate of compaction transactions
-        if (transactionState.getSourceType() == TransactionState.LoadJobSourceType.LAKE_COMPACTION) {
+        // Does not limit the commit rate of compaction transactions, nor of an online-rewrite alter's shadow
+        // rewrite. Compaction is skipped on a table under that alter (see CompactionScheduler), so only the
+        // rewrite finishing lets the score come down: delaying it parks the single alter scheduler thread
+        // while concurrent loads keep raising the score, and the upper bound below then rejects it outright.
+        TransactionState.LoadJobSourceType sourceType = transactionState.getSourceType();
+        if (sourceType == TransactionState.LoadJobSourceType.LAKE_COMPACTION
+                || sourceType == TransactionState.LoadJobSourceType.SHADOW_REWRITE) {
             return;
         }
 

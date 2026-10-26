@@ -39,6 +39,10 @@ import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.Utils;
 import com.starrocks.mv.MVRepairHandler;
+import com.starrocks.persist.OperationType;
+import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
@@ -89,10 +93,13 @@ public class LakeTableAlterMetaJobTest {
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
         connectContext = UtFrameUtils.createDefaultCtx();
+        UtFrameUtils.setUpForPersistTest();
     }
 
     @BeforeEach
     public void setUp() throws Exception {
+        // Only the tests that read the journal drain the follower queue, so start every test from an empty one.
+        UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
         String createDbStmtStr = "create database " + DB_NAME;
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
         GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
@@ -499,13 +506,17 @@ public class LakeTableAlterMetaJobTest {
             Thread.sleep(100);
         }
         Assertions.assertEquals(AlterJobV2.JobState.FINISHED, job.getJobState());
+        // The done job no longer keeps its partition indexes, so replay the FINISHED entry it journaled.
+        LakeTableAlterMetaJob finishedEntry = lastJournaledEntry(job.getJobId());
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED, finishedEntry.getJobState());
 
         LakeTableAlterMetaJob replayAlterMetaJob = new LakeTableAlterMetaJob(job.jobId,
                     job.dbId, job.tableId, job.tableName,
                     job.timeoutMs, TTabletMetaType.ENABLE_PERSISTENT_INDEX, true, "CLOUD_NATIVE");
 
-        Table<Long, Long, MaterializedIndex> partitionIndexMap = job.getPartitionIndexMap();
-        Map<Long, Long> commitVersionMap = job.getCommitVersionMap();
+        Table<Long, Long, MaterializedIndex> partitionIndexMap = finishedEntry.getPartitionIndexMap();
+        Map<Long, Long> commitVersionMap = finishedEntry.getCommitVersionMap();
+        Assertions.assertFalse(partitionIndexMap.isEmpty());
 
         // for replay will check partition.getVisibleVersion()
         // here we reduce the visibleVersion for test
@@ -516,7 +527,7 @@ public class LakeTableAlterMetaJobTest {
             physicalPartition.updateVisibleVersion(commitVersion - 1);
         }
 
-        replayAlterMetaJob.replay(job);
+        replayAlterMetaJob.replay(finishedEntry);
 
         Assertions.assertEquals(AlterJobV2.JobState.FINISHED, replayAlterMetaJob.getJobState());
         Assertions.assertEquals(job.getFinishedTimeMs(), replayAlterMetaJob.getFinishedTimeMs());
@@ -525,7 +536,7 @@ public class LakeTableAlterMetaJobTest {
         Assertions.assertEquals(job.getTableId(), replayAlterMetaJob.getTableId());
         Assertions.assertEquals(job.getDbId(), replayAlterMetaJob.getDbId());
         Assertions.assertEquals(job.getCommitVersionMap(), replayAlterMetaJob.getCommitVersionMap());
-        Assertions.assertEquals(job.getPartitionIndexMap(), replayAlterMetaJob.getPartitionIndexMap());
+        Assertions.assertEquals(partitionIndexMap, replayAlterMetaJob.getPartitionIndexMap());
 
         for (long partitionId : partitionIndexMap.rowKeySet()) {
             PhysicalPartition physicalPartition = table.getPhysicalPartition(partitionId);
@@ -995,5 +1006,194 @@ public class LakeTableAlterMetaJobTest {
         Assertions.assertEquals(commitVersions.get(postAlterLatest.getId()).longValue(),
                 repairInfo.getNewVersion());
         Assertions.assertEquals(900L, repairInfo.getNewVersionTime());
+    }
+
+    @Test
+    public void testLeaderPrunesFinishedJob() throws Exception {
+        runToFinished(job);
+
+        assertPruned(job);
+        Assertions.assertFalse(job.getCommitVersionMap().isEmpty());
+        List<LakeTableAlterMetaJob> entries = readJournaledEntries(job.getJobId());
+        // The first entry is journaled before the job collects the partition indexes.
+        for (LakeTableAlterMetaJob entry : entries.subList(1, entries.size())) {
+            assertHasTabletData(entry);
+        }
+        LakeTableAlterMetaJob finishedEntry = entries.get(entries.size() - 1);
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED, finishedEntry.getJobState());
+        assertShowAlterUnchangedByPrune(finishedEntry);
+    }
+
+    @Test
+    public void testLeaderPrunesCancelledJob() throws Exception {
+        job.runPendingJob();
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
+        assertHasTabletData(job);
+        Assertions.assertNotNull(job.batchTask);
+
+        Assertions.assertTrue(job.cancel("cancel"));
+
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+        assertPruned(job);
+        Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+        LakeTableAlterMetaJob cancelledEntry = lastJournaledEntry(job.getJobId());
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, cancelledEntry.getJobState());
+        assertHasTabletData(cancelledEntry);
+        assertShowAlterUnchangedByPrune(cancelledEntry);
+    }
+
+    @Test
+    public void testFollowerReplayPrunesFinishedJob() throws Exception {
+        LakeTableAlterMetaJob disableIndexJob = new LakeTableAlterMetaJob(
+                GlobalStateMgr.getCurrentState().getNextId(), db.getId(), table.getId(), table.getName(),
+                60 * 1000, TTabletMetaType.ENABLE_PERSISTENT_INDEX, false, "CLOUD_NATIVE");
+        // The follower starts from the catalog as it was before the alter.
+        UtFrameUtils.PseudoImage initialImage = saveMetastore();
+        runToFinished(disableIndexJob);
+        Assertions.assertFalse(table.enablePersistentIndex());
+        List<LakeTableAlterMetaJob> entries = readJournaledEntries(disableIndexJob.getJobId());
+
+        LocalMetastore followerMetastore = loadMetastore(initialImage);
+        OlapTable followerTable = (OlapTable) followerMetastore.getTable(DB_NAME, table.getName());
+        // The alter bumps the visible version of every partition, which only the replay brings to the follower.
+        for (PhysicalPartition physicalPartition : table.getPhysicalPartitions()) {
+            Assertions.assertNotEquals(physicalPartition.getVisibleVersion(),
+                    followerTable.getPhysicalPartition(physicalPartition.getId()).getVisibleVersion());
+        }
+        SchemaChangeHandler followerHandler = new SchemaChangeHandler();
+        for (LakeTableAlterMetaJob entry : entries) {
+            replayOn(followerMetastore, followerHandler, entry);
+        }
+
+        // The handler keeps the first replayed entry and copies the data of each later one into it.
+        LakeTableAlterMetaJob retained = entries.get(0);
+        Assertions.assertSame(retained, followerHandler.getAlterJobsV2().get(disableIndexJob.getJobId()));
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED, retained.getJobState());
+        assertPruned(retained);
+        for (LakeTableAlterMetaJob entry : entries.subList(1, entries.size())) {
+            assertHasTabletData(entry);
+        }
+        Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, followerTable.getState());
+        for (PhysicalPartition physicalPartition : table.getPhysicalPartitions()) {
+            Assertions.assertEquals(physicalPartition.getVisibleVersion(),
+                    followerTable.getPhysicalPartition(physicalPartition.getId()).getVisibleVersion());
+        }
+    }
+
+    @Test
+    public void testLoadPrunesDoneJobFromImage() throws Exception {
+        runToFinished(job);
+        // Images written by older versions hold the done job with its per-tablet data, as the journal entry does.
+        LakeTableAlterMetaJob doneJob = lastJournaledEntry(job.getJobId());
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED, doneJob.getJobState());
+        assertHasTabletData(doneJob);
+        AlterJobMgr alterJobMgr = new AlterJobMgr(new SchemaChangeHandler(), new MaterializedViewHandler(),
+                new SystemHandler());
+        alterJobMgr.getSchemaChangeHandler().addAlterJobV2(doneJob);
+        // SHOW ALTER of the loaded job must match that of a job that went through the same serialization.
+        List<List<Comparable>> expectedRows = new ArrayList<>();
+        gsonCopy(doneJob).getInfo(expectedRows);
+
+        UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
+        alterJobMgr.save(image.getImageWriter());
+        AlterJobMgr restoredMgr = new AlterJobMgr(new SchemaChangeHandler(), new MaterializedViewHandler(),
+                new SystemHandler());
+        SRMetaBlockReader reader = new SRMetaBlockReaderV2(image.getJsonReader());
+        restoredMgr.load(reader);
+        reader.close();
+
+        LakeTableAlterMetaJob restored =
+                (LakeTableAlterMetaJob) restoredMgr.getSchemaChangeHandler().getAlterJobsV2().get(job.getJobId());
+        assertPruned(restored);
+        List<List<Comparable>> restoredRows = new ArrayList<>();
+        restored.getInfo(restoredRows);
+        Assertions.assertFalse(expectedRows.isEmpty());
+        Assertions.assertEquals(expectedRows, restoredRows);
+    }
+
+    private static void runToFinished(LakeTableAlterMetaJob alterMetaJob) throws Exception {
+        long deadlineMs = System.currentTimeMillis() + 60_000L;
+        while (!alterMetaJob.isDone()) {
+            Assertions.assertTrue(System.currentTimeMillis() < deadlineMs, "job is still " + alterMetaJob.getJobState());
+            alterMetaJob.run();
+            Thread.sleep(10);
+        }
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED, alterMetaJob.getJobState(), alterMetaJob.errMsg);
+    }
+
+    /**
+     * Reads the journal entries of the job, from its first one to the one of its final state. Entries of other jobs
+     * are skipped: the schema change daemon keeps running in this class.
+     */
+    private static List<LakeTableAlterMetaJob> readJournaledEntries(long jobId) throws Exception {
+        List<LakeTableAlterMetaJob> entries = new ArrayList<>();
+        while (entries.isEmpty() || !entries.get(entries.size() - 1).isDone()) {
+            AlterJobV2 entry =
+                    (AlterJobV2) UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_ALTER_JOB_V2);
+            if (entry.getJobId() == jobId) {
+                entries.add((LakeTableAlterMetaJob) entry);
+            }
+        }
+        Assertions.assertEquals(AlterJobV2.JobState.PENDING, entries.get(0).getJobState());
+        return entries;
+    }
+
+    private static LakeTableAlterMetaJob lastJournaledEntry(long jobId) throws Exception {
+        List<LakeTableAlterMetaJob> entries = readJournaledEntries(jobId);
+        return entries.get(entries.size() - 1);
+    }
+
+    private static AlterJobV2 gsonCopy(AlterJobV2 alterJob) {
+        return GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(alterJob, AlterJobV2.class), AlterJobV2.class);
+    }
+
+    private static UtFrameUtils.PseudoImage saveMetastore() throws Exception {
+        UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
+        GlobalStateMgr.getCurrentState().getLocalMetastore().save(image.getImageWriter());
+        return image;
+    }
+
+    private static LocalMetastore loadMetastore(UtFrameUtils.PseudoImage image) throws Exception {
+        LocalMetastore metastore = new LocalMetastore(GlobalStateMgr.getCurrentState(), null, null);
+        SRMetaBlockReader reader = new SRMetaBlockReaderV2(image.getJsonReader());
+        metastore.load(reader);
+        reader.close();
+        return metastore;
+    }
+
+    /**
+     * Replays the journal entry into the handler against the given catalog, as a follower does.
+     */
+    private static void replayOn(LocalMetastore metastore, SchemaChangeHandler handler, AlterJobV2 entry) {
+        LocalMetastore leaderMetastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        GlobalStateMgr.getCurrentState().setLocalMetastore(metastore);
+        try {
+            handler.replayAlterJobV2(entry);
+        } finally {
+            GlobalStateMgr.getCurrentState().setLocalMetastore(leaderMetastore);
+        }
+    }
+
+    /**
+     * SHOW ALTER of a done job reads none of the data the prune drops.
+     */
+    private static void assertShowAlterUnchangedByPrune(LakeTableAlterMetaJob doneJob) {
+        List<List<Comparable>> rowsBefore = new ArrayList<>();
+        doneJob.getInfo(rowsBefore);
+        doneJob.pruneMeta();
+        assertPruned(doneJob);
+        List<List<Comparable>> rowsAfter = new ArrayList<>();
+        doneJob.getInfo(rowsAfter);
+        Assertions.assertFalse(rowsBefore.isEmpty());
+        Assertions.assertEquals(rowsBefore, rowsAfter);
+    }
+
+    private static void assertHasTabletData(LakeTableAlterMetaJob alterMetaJob) {
+        Assertions.assertFalse(alterMetaJob.getPartitionIndexMap().isEmpty());
+    }
+
+    private static void assertPruned(LakeTableAlterMetaJob alterMetaJob) {
+        Assertions.assertTrue(alterMetaJob.getPartitionIndexMap().isEmpty());
+        Assertions.assertNull(alterMetaJob.batchTask);
     }
 }

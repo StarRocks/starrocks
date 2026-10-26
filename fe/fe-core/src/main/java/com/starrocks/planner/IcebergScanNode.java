@@ -77,6 +77,7 @@ public class IcebergScanNode extends ScanNode {
     private PartitionIdGenerator partitionIdGenerator = null;
     private IcebergMetricsReporter icebergScanMetricsReporter;
     private boolean usedForDelete = false;
+    private Set<String> runtimeFilterPruningColumns = Set.of();
     private boolean enableGlobalLateMaterialization = false;
     private boolean enableIncrementalScanRanges = false;
 
@@ -167,6 +168,7 @@ public class IcebergScanNode extends ScanNode {
         scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable,
                 remoteFileInfoSource, morParams, desc, bucketProperties, partitionIdGenerator, true,
                 scanOptimizeOption.getCanUseMinMaxOpt());
+        scanRangeSource.setRuntimeFilterPruningColumns(runtimeFilterPruningColumns);
     }
 
     public void setupScanRangeLocations(boolean enableIncrementalScanRanges) throws StarRocksException {
@@ -242,6 +244,7 @@ public class IcebergScanNode extends ScanNode {
         scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable,
                 remoteFileInfoSource, morParams, desc, bucketProperties, partitionIdGenerator, false,
                 scanOptimizeOption.getCanUseMinMaxOpt(), usedForDelete);
+        scanRangeSource.setRuntimeFilterPruningColumns(runtimeFilterPruningColumns);
     }
 
     private void setupCloudCredential() {
@@ -263,6 +266,18 @@ public class IcebergScanNode extends ScanNode {
 
     public boolean isUsedForDelete() {
         return usedForDelete;
+    }
+
+    public void setRuntimeFilterPruningColumns(Set<String> runtimeFilterPruningColumns) {
+        this.runtimeFilterPruningColumns = runtimeFilterPruningColumns;
+    }
+
+    // Whether a runtime filter on the data column matching this slot of an equality delete scan may drop delete rows:
+    // the slot holds the identity partition value of each delete file, see IcebergEqualityDeleteRewriteRule.
+    public boolean isRuntimeFilterPruningSlot(SlotId slotId) {
+        SlotDescriptor slot = desc.getSlot(slotId.asInt());
+        return slot != null && slot.getColumn() != null &&
+                runtimeFilterPruningColumns.contains(slot.getColumn().getName());
     }
 
     public void preProcessIcebergPredicate(ScalarOperator predicate) {
@@ -287,7 +302,6 @@ public class IcebergScanNode extends ScanNode {
         return scanRangeSource.getSeenEqDeleteFiles();
     }
 
-    // for unit tests
     public IcebergMORParams getMORParams() {
         return morParams;
     }
@@ -423,6 +437,10 @@ public class IcebergScanNode extends ScanNode {
                     .collect(Collectors.toList());
             output.append(prefix).append("Iceberg identifier columns: ").append(identifierColumnNames);
             output.append("\n");
+            if (!runtimeFilterPruningColumns.isEmpty()) {
+                output.append(prefix).append("Runtime filter pruning columns: ")
+                        .append(runtimeFilterPruningColumns.stream().sorted().toList()).append("\n");
+            }
         }
 
         return output.toString();

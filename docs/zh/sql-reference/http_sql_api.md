@@ -52,6 +52,14 @@ Authorization: Basic <credentials>
 
 使用 Basic authentication 进行认证，即 `credentials` 里填写用户名和密码 (`-u '<username>:<password>'`)。注意如果账号没有设置密码，只需传入 `<username>:`，密码留空。举例，如果 root 账号没有设置密码，则写作 `-u 'root:'`。
 
+如果配置了 JWT 或 OAuth 2.0 [安全集成](../administration/user_privs/authentication/security_integration.md)，也可以使用身份提供方颁发的 token：
+
+```shell
+Authorization: Bearer <token>
+```
+
+使用 token 时不发送用户名：StarRocks 从安全集成的 `principal_field` 指定的 claim 中读取。各类用户分别能发送哪种凭据，参见[各认证方式在哪些入口可用](../administration/user_privs/authentication/authentication.mdx#各认证方式在哪些入口可用)。
+
 ### Request body
 
 ```shell

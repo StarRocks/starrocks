@@ -260,6 +260,9 @@ Status ColumnChunkReader::_try_load_dictionary() {
         return Status::OK();
     }
 
+    // _parse_page_header() times itself; the dictionary page read and decode is timed here, as in
+    // _parse_page_data().
+    SCOPED_RAW_TIMER(&_opts.stats->page_read_ns);
     RETURN_IF_ERROR(_parse_dict_page());
     return Status::OK();
 }
@@ -273,6 +276,7 @@ Status ColumnChunkReader::load_dictionary_page() {
     if (UNLIKELY(!current_page_is_dict())) {
         return Status::InternalError("Not a dictionary page in dictionary page offset");
     }
+    SCOPED_RAW_TIMER(&_opts.stats->page_read_ns);
     return _parse_dict_page();
 }
 

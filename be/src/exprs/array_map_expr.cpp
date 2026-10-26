@@ -16,6 +16,7 @@
 
 #include <fmt/format.h>
 
+#include <algorithm>
 #include <memory>
 #include <sstream>
 
@@ -33,7 +34,7 @@
 #include "exprs/expr_context.h"
 #include "exprs/function_helper.h"
 #include "exprs/lambda_function.h"
-#include "runtime/chunk_accumulator.h"
+#include "runtime/current_thread.h"
 
 namespace starrocks {
 ArrayMapExpr::ArrayMapExpr(const TExprNode& node) : Expr(node, false) {}
@@ -192,7 +193,9 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
                 auto view_column = ArrayViewColumn::from_array_column(captured_column);
                 ASSIGN_OR_RETURN(auto replicated_view_column, view_column->replicate(aligned_offsets_data));
                 cur_chunk->append_column(replicated_view_column, slot_id);
-                RETURN_IF_ERROR(view_column->capacity_limit_reached());
+                // The replicated column, not the view it was replicated from: the size that can
+                // overflow is the element-level one, and the view has the chunk's row count.
+                RETURN_IF_ERROR(replicated_view_column->capacity_limit_reached());
             } else {
                 ASSIGN_OR_RETURN(auto replicated_column,
                                  captured_column->as_mutable_raw_ptr()->replicate(aligned_offsets_data));
@@ -234,22 +237,31 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
             size_t num_rows = tmp_col->size();
             column = ColumnHelper::align_return_type(std::move(tmp_col), type().children[0], num_rows, true);
         } else {
-            ChunkAccumulator accumulator(DEFAULT_CHUNK_SIZE);
-            RETURN_IF_ERROR(accumulator.push(std::move(cur_chunk)));
-            accumulator.finalize();
-            while (auto tmp_chunk = accumulator.pull()) {
-                tmp_chunk->check_or_die();
-                for (auto& column : tmp_chunk->columns()) {
+            // The lambda is evaluated over one bounded slice of the element-level chunk at a time, so
+            // that its intermediate results cost a slice rather than the whole expansion. The slicing
+            // used to go through ChunkAccumulator, which cuts a chunk that is already fully built into
+            // pieces and holds *all* of them until they are pulled - a second copy of the entire
+            // element-level chunk (every lambda argument plus every replicated capture column, at
+            // sum(array lengths) rows) alive at the same time as the original. Cutting the pieces here
+            // keeps one of them alive instead, and the arithmetic below is the accumulator's own: full
+            // slices of DEFAULT_CHUNK_SIZE rows and a shorter last one.
+            const size_t element_rows = cur_chunk->num_rows();
+            for (size_t start = 0; start < element_rows; start += DEFAULT_CHUNK_SIZE) {
+                const size_t count = std::min<size_t>(DEFAULT_CHUNK_SIZE, element_rows - start);
+                auto slice_chunk = cur_chunk->clone_empty(count);
+                TRY_CATCH_BAD_ALLOC(slice_chunk->append(*cur_chunk, start, count));
+                RETURN_IF_ERROR(slice_chunk->capacity_limit_reached());
+                slice_chunk->check_or_die();
+                for (auto& slice_column : slice_chunk->columns()) {
                     // because not all functions can handle ArrayViewColumn correctly, we need to convert it back to ArrayColumn first.
                     // in the future, this copy can be removed when we solve this problem.
-                    if (column->is_array_view()) {
-                        column = ArrayViewColumn::to_array_column(column);
+                    if (slice_column->is_array_view()) {
+                        slice_column = ArrayViewColumn::to_array_column(slice_column);
                     }
                 }
-                ASSIGN_OR_RETURN(auto tmp_col, context->evaluate(_children[0], tmp_chunk.get()));
+                ASSIGN_OR_RETURN(auto tmp_col, context->evaluate(_children[0], slice_chunk.get()));
                 tmp_col->check_or_die();
-                tmp_col = ColumnHelper::align_return_type(std::move(tmp_col), type().children[0], tmp_chunk->num_rows(),
-                                                          true);
+                tmp_col = ColumnHelper::align_return_type(std::move(tmp_col), type().children[0], count, true);
                 if (column == nullptr) {
                     column = std::move(*tmp_col).mutate();
                 } else {

@@ -145,7 +145,8 @@ CONF_String(consistency_max_memory_limit, "10G");
 
 CONF_Int32(consistency_max_memory_limit_percent, "20");
 
-CONF_Int32(update_memory_limit_percent, "60");
+// Percentage of the process memory limit used by the update (primary key) mem tracker and index cache.
+CONF_mInt32(update_memory_limit_percent, "60");
 
 // The max client cache number per each host.
 // There are variety of client cache in BE, but currently we use the
@@ -249,5 +250,11 @@ CONF_Int32(merge_commit_thread_pool_num_max, "512");
 CONF_Int32(merge_commit_thread_pool_queue_size, "4096");
 
 CONF_mInt32(put_combined_txn_log_thread_pool_num_max, "64");
+
+// Maximum number of threads that run the final close of load sinks, which writes the combined txn log to object
+// storage in shared-data. Running it here keeps a slow PUT off the pipeline poller and the pipeline executor threads.
+// When all threads are busy, further closes wait in the pool's queue, which is unbounded: no close is dropped.
+// Must be positive. Runtime changes resize the existing pool without interrupting running closes.
+CONF_mInt32(load_sink_close_thread_pool_num_max, "64");
 
 } // namespace starrocks::config

@@ -36,6 +36,7 @@
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/AgentService_types.h"
+#include "gen_cpp/HeartbeatService_constants.h"
 #include "platform/store_path.h"
 #include "runtime/runtime_env.h"
 #include "storage/replication_txn_manager.h"
@@ -398,6 +399,92 @@ TEST_F(AgentTaskTest, create_tablet_task_timeout) {
                   request->task_status.error_msgs[0]);
     });
     run_create_tablet_task(agent_task, nullptr);
+}
+
+// Sets the heartbeat flags of the stored master info, or clears them when |flags| is empty.
+static void set_master_heartbeat_flags(std::optional<int64_t> flags) {
+    TMasterInfo info = get_master_info();
+    if (flags.has_value()) {
+        info.__set_heartbeat_flags(flags.value());
+    } else {
+        info.__isset.heartbeat_flags = false;
+    }
+    ASSERT_TRUE(update_master_info(info));
+}
+
+// Runs an ALTER task that waited an hour in the queue, against tablets that do not exist, and returns the finish
+// reports it sent. Also checks the task signature is released.
+static std::vector<TFinishTaskRequest> run_long_queued_alter_task(bool set_job_id) {
+    const int64_t signature = 90002;
+    TAlterTabletReqV2 alter_req;
+    alter_req.__set_base_tablet_id(90001);
+    alter_req.__set_new_tablet_id(signature);
+    alter_req.__set_base_schema_hash(0);
+    alter_req.__set_new_schema_hash(0);
+    if (set_job_id) {
+        alter_req.__set_job_id(777);
+    }
+    TAgentTaskRequest request;
+    request.__set_task_type(TTaskType::ALTER);
+    request.__set_signature(signature);
+    request.__set_alter_tablet_req_v2(alter_req);
+    auto task = std::make_shared<AlterTabletAgentTaskRequest>(request, alter_req, time(nullptr) - 3600);
+    EXPECT_TRUE(register_task_info(TTaskType::ALTER, signature).first);
+
+    std::vector<TFinishTaskRequest> reports;
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("FinishAgentTask::input");
+        SyncPoint::GetInstance()->ClearCallBack("FinishAgentTask::skip");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->SetCallBack("FinishAgentTask::input", [&reports](void* arg) {
+        reports.push_back(*static_cast<TFinishTaskRequest*>(arg));
+    });
+    SyncPoint::GetInstance()->SetCallBack("FinishAgentTask::skip", [](void* arg) { *static_cast<bool*>(arg) = true; });
+
+    run_alter_tablet_task(task, nullptr);
+
+    auto registered = count_all_tasks();
+    bool released = registered.count(TTaskType::ALTER) == 0 || registered[TTaskType::ALTER].count(signature) == 0;
+    EXPECT_TRUE(released);
+    if (!released) {
+        remove_task_info(TTaskType::ALTER, signature);
+    }
+    return reports;
+}
+
+TEST_F(AgentTaskTest, long_queued_alter_task_runs_when_leader_matches_finish_by_job_id) {
+    TMasterInfo saved = get_master_info();
+    DeferOp restore([&saved]() { (void)update_master_info(saved); });
+    set_master_heartbeat_flags(g_HeartbeatService_constants.IS_ALTER_FINISH_MATCHED_BY_JOB_ID_BIT);
+
+    auto reports = run_long_queued_alter_task(true);
+
+    ASSERT_EQ(1, reports.size());
+    EXPECT_EQ(TTaskType::ALTER, reports[0].task_type);
+    EXPECT_EQ(90002, reports[0].signature);
+    ASSERT_TRUE(reports[0].__isset.alter_job_id);
+    EXPECT_EQ(777, reports[0].alter_job_id);
+}
+
+TEST_F(AgentTaskTest, long_queued_alter_task_expires_when_leader_matches_finish_by_signature) {
+    TMasterInfo saved = get_master_info();
+    DeferOp restore([&saved]() { (void)update_master_info(saved); });
+
+    // A leader that does not send heartbeat flags, and one that sends them without the bit.
+    set_master_heartbeat_flags(std::nullopt);
+    EXPECT_TRUE(run_long_queued_alter_task(true).empty());
+    set_master_heartbeat_flags(g_HeartbeatService_constants.IS_SET_DEFAULT_ROWSET_TO_BETA_BIT);
+    EXPECT_TRUE(run_long_queued_alter_task(true).empty());
+}
+
+TEST_F(AgentTaskTest, long_queued_alter_task_without_job_id_expires) {
+    TMasterInfo saved = get_master_info();
+    DeferOp restore([&saved]() { (void)update_master_info(saved); });
+    set_master_heartbeat_flags(g_HeartbeatService_constants.IS_ALTER_FINISH_MATCHED_BY_JOB_ID_BIT);
+
+    EXPECT_TRUE(run_long_queued_alter_task(false).empty());
 }
 
 TEST_F(AgentTaskTest, drop_tablet_blocked_by_clone_task) {

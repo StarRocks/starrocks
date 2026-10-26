@@ -182,8 +182,7 @@ public:
                                    _build_tie);
     }
 
-    template <typename T>
-    Status do_visit(const BinaryColumnBase<T>& column) {
+    Status do_visit(const BinaryColumn& column) {
         if constexpr (!IS_RANGES) {
             DCHECK_GE(column.size(), _permutation.size());
         }
@@ -317,13 +316,12 @@ public:
         return Status::OK();
     }
 
-    template <typename T>
-    Status do_visit(const BinaryColumnBase<T>& column) {
-        using ColumnType = BinaryColumnBase<T>;
+    Status do_visit(const BinaryColumn& column) {
+        using ColumnType = BinaryColumn;
 
         if (_need_inline_value()) {
             using ItemType = CompactChunkItem<Slice>;
-            using ImmContainer = typename BinaryColumnBase<T>::ImmContainer;
+            using ImmContainer = BinaryColumn::ImmContainer;
 
             auto cmp = [&](const ItemType& lhs, const ItemType& rhs) -> int {
                 return lhs.inline_value.compare(rhs.inline_value);

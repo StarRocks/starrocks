@@ -198,6 +198,93 @@ TEST_F(IcebergDeleteBuilderTest, TestOrcBuilder) {
     EXPECT_EQ((std::vector<uint64_t>{7, 11}), deleted_rowids);
 }
 
+// The delete file's own format wins over the data file's: an ORC delete file is read as ORC for a Parquet data file.
+TEST_F(IcebergDeleteBuilderTest, TestBuildPositionDeleteUsesDeleteFileFormat) {
+    RuntimeProfile runtime_profile("IcebergDeleteBuilderTest");
+
+    const std::string data_path = "parquet_data_file.parquet";
+    const std::string delete_path = _tmp_dir + "/iceberg_position_delete_mixed.orc";
+    write_orc_delete_file(delete_path, {{data_path, 3}, {"another_data_file.parquet", 4}, {data_path, 8}});
+
+    FormatScanContext scan_context;
+    scan_context.timezone = "UTC";
+
+    ASSIGN_OR_ABORT(const int64_t delete_file_size, FileSystem::Default()->get_file_size(delete_path));
+    TIcebergDeleteFile delete_file;
+    delete_file.__set_full_path(delete_path);
+    delete_file.__set_length(delete_file_size);
+    delete_file.__set_file_format(THdfsFileFormat::ORC);
+
+    IcebergDeleteBuilder builder(IcebergDeleteBuilderContext{
+            .scan_context = &scan_context,
+            .fs = FileSystem::Default(),
+            .data_file_path = data_path,
+            .runtime_profile = &runtime_profile,
+            .chunk_size = 4096,
+    });
+
+    ASSERT_OK(builder.build_position_delete(delete_file, THdfsFileFormat::PARQUET));
+    auto deletion_bitmap = builder.deletion_bitmap();
+    ASSERT_NE(nullptr, deletion_bitmap);
+    std::vector<uint64_t> deleted_rowids(deletion_bitmap->get_cardinality());
+    deletion_bitmap->to_array(deleted_rowids);
+    EXPECT_EQ((std::vector<uint64_t>{3, 8}), deleted_rowids);
+}
+
+// Without a format from the FE, the delete file is read in the data file's format.
+TEST_F(IcebergDeleteBuilderTest, TestBuildPositionDeleteFallsBackToDataFileFormat) {
+    RuntimeProfile runtime_profile("IcebergDeleteBuilderTest");
+
+    write_parquet_delete_file(_fs, _parquet_delete_path, {{_parquet_data_path, 2}, {"another_data_file.parquet", 5}});
+
+    FormatScanContext scan_context;
+    scan_context.timezone = "UTC";
+
+    ASSIGN_OR_ABORT(const int64_t delete_file_size, _fs.get_file_size(_parquet_delete_path));
+    TIcebergDeleteFile delete_file;
+    delete_file.__set_full_path(_parquet_delete_path);
+    delete_file.__set_length(delete_file_size);
+
+    IcebergDeleteBuilder builder(IcebergDeleteBuilderContext{
+            .scan_context = &scan_context,
+            .fs = &_fs,
+            .data_file_path = _parquet_data_path,
+            .runtime_profile = &runtime_profile,
+            .chunk_size = 4096,
+    });
+
+    ASSERT_OK(builder.build_position_delete(delete_file, THdfsFileFormat::PARQUET));
+    auto deletion_bitmap = builder.deletion_bitmap();
+    ASSERT_NE(nullptr, deletion_bitmap);
+    std::vector<uint64_t> deleted_rowids(deletion_bitmap->get_cardinality());
+    deletion_bitmap->to_array(deleted_rowids);
+    EXPECT_EQ((std::vector<uint64_t>{2}), deleted_rowids);
+}
+
+TEST_F(IcebergDeleteBuilderTest, TestBuildPositionDeleteRejectsUnsupportedFormat) {
+    RuntimeProfile runtime_profile("IcebergDeleteBuilderTest");
+
+    FormatScanContext scan_context;
+    scan_context.timezone = "UTC";
+
+    TIcebergDeleteFile delete_file;
+    delete_file.__set_full_path(_parquet_delete_path);
+    delete_file.__set_length(0);
+    delete_file.__set_file_format(THdfsFileFormat::AVRO);
+
+    IcebergDeleteBuilder builder(IcebergDeleteBuilderContext{
+            .scan_context = &scan_context,
+            .fs = &_fs,
+            .data_file_path = _parquet_data_path,
+            .runtime_profile = &runtime_profile,
+            .chunk_size = 4096,
+    });
+
+    auto status = builder.build_position_delete(delete_file, THdfsFileFormat::PARQUET);
+    EXPECT_TRUE(status.is_not_supported()) << status;
+    EXPECT_EQ(0, builder.deletion_bitmap()->get_cardinality());
+}
+
 TEST_F(IcebergDeleteBuilderTest, TestReadRowsVisitsAllRows) {
     write_parquet_delete_file(_fs, _parquet_delete_path, {{"dataA", 1}, {"dataB", 2}, {"dataA", 3}});
 

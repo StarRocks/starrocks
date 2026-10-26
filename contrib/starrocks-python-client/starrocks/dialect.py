@@ -1373,12 +1373,20 @@ class StarRocksDialect(MySQLDialect_pymysql):
         Args:
             connection: The SQLAlchemy connection object.
 
+        Prefers the read-only ``@@run_mode`` global variable, which needs no
+        privilege (StarRocks PR #69247). Falls back to ``ADMIN SHOW FRONTEND
+        CONFIG`` (needs OPERATE) for servers without that variable.
+
         Returns:
             The run_mode as a string ('shared_data' or 'shared_nothing').
-
-        Raises:
-            exc.DBAPIError: If the query fails.
         """
+        try:
+            value = connection.execute(text("SELECT @@run_mode")).scalar()
+            if value:
+                return value.lower()
+        except exc.DBAPIError as e:
+            logger.debug(f"@@run_mode unavailable, falling back to ADMIN SHOW FRONTEND CONFIG: {e}")
+
         try:
             result = connection.execute(text("ADMIN SHOW FRONTEND CONFIG LIKE 'run_mode'"))
             rows = result.fetchall()

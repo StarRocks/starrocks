@@ -46,7 +46,7 @@ class TabletWriter;
 template <typename T>
 class MetadataIterator;
 using TabletMetadataIter = MetadataIterator<TabletMetadataPtr>;
-class UpdateManager;
+class PrimaryKeyManager;
 enum WriterType : int;
 
 class Tablet : public BaseTablet {
@@ -164,7 +164,7 @@ public:
         return false;
     }
 
-    UpdateManager* update_mgr() const { return _mgr->update_mgr(); }
+    PrimaryKeyManager* primary_key_mgr() const { return _mgr->primary_key_mgr(); }
 
     TabletManager* tablet_mgr() const { return _mgr; }
 

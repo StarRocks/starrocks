@@ -69,12 +69,44 @@ public class RowStoreUtils {
                 }
                 keyToValues.put(columnName, ImmutableList.of((LiteralExpr) literal));
             } else if (expr instanceof InPredicate) {
+                // An IN list is set membership, so a value repeated in it selects the same row once.
+                // These literals become one key tuple each in the cartesian product below, and the
+                // short-circuit lookup returns a row per tuple, so a repeated literal returned the
+                // same row twice:
+                //     select k from t where k in ('x', 'x')   ->  2 rows, with enable_short_circuit
+                // while count(*) over the same predicate returned 1, because only the row path goes
+                // through these tuples. Found by cluster fuzzing on 2026-10-09 (g1007_mut_1134).
+                //
+                // Dedup by value with an equals()-based scan rather than a hash set: LiteralExpr
+                // equality compares the value, but hashCode() comes from Expr and includes the type,
+                // so two literals that are equal can hash differently and both survive a set. The
+                // scan is quadratic in the worst case and bounded by it: ShortCircuitPlanner refuses
+                // a point scan once the tuple count passes MAX_RETURN_ROWS (2048), and real point
+                // lookups carry a handful of keys.
+                //
+                // Two literals count as the same key only if they agree BOTH ways, because neither
+                // test is exact on its own:
+                //   - equals() goes through LiteralExpr.equalsWithoutChild -> compareLiteral, and
+                //     DateLiteral compares getDoubleValue(). A DATETIME key column does store
+                //     microseconds, but at the 10^13 magnitude of yyyyMMddHHmmss a double's ulp is
+                //     about 0.004, so '2025-01-01 00:00:00.000001' and '...000002' -- two distinct
+                //     rows -- compare equal. Deduping on that alone drops one key tuple and loses a
+                //     row.
+                //   - getStringValue() is exact for every type that can be a key column (DATE and
+                //     DATETIME print their microseconds; LARGEINT prints the full BigInteger), but
+                //     it is a rendering, not the value, so requiring equals() as well keeps a literal
+                //     whose text happens to collide.
+                // Disagreement therefore keeps both literals: a duplicated key tuple returns a row
+                // twice, which is the bug above, while a dropped one loses the row silently.
                 List<LiteralExpr> literalExprs = new ArrayList<>();
                 for (Expr literal : expr.getChildren().subList(1, expr.getChildren().size())) {
                     if (!(literal instanceof LiteralExpr)) {
                         continue;
                     }
-                    literalExprs.add((LiteralExpr) literal);
+                    LiteralExpr value = (LiteralExpr) literal;
+                    if (literalExprs.stream().noneMatch(seen -> isSameKeyValue(seen, value))) {
+                        literalExprs.add(value);
+                    }
                 }
                 if (keyToValues.containsKey(columnName)) {
                     return Optional.empty();
@@ -90,5 +122,9 @@ public class RowStoreUtils {
         List<List<LiteralExpr>> values = keyColumns.stream().map(keyToValues::get).collect(Collectors.toList());
         List<List<LiteralExpr>> cartesianProduct = Lists.cartesianProduct(values);
         return Optional.of(cartesianProduct);
+    }
+
+    private static boolean isSameKeyValue(LiteralExpr left, LiteralExpr right) {
+        return left.equals(right) && left.getStringValue().equals(right.getStringValue());
     }
 }

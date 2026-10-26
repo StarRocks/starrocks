@@ -47,6 +47,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
+import java.util.Optional;
 
 // inherit ConnectProcessor  to record the audit log and Query Detail
 public class HttpConnectProcessor extends ConnectProcessor {
@@ -138,6 +139,8 @@ public class HttpConnectProcessor extends ConnectProcessor {
         // only handle query，so no need to dispatch
         ctx.setCommand(MysqlCommand.COM_QUERY);
         ctx.setStartTime();
+        // Set by an INSERT that reads Hive for itself only, see InsertAnalyzer; this context outlives the statement.
+        ctx.setUseConnectorMetadataCache(Optional.empty());
         ctx.setResourceGroup(null);
         ctx.resetErrorCode();
         this.handleQuery();

@@ -29,7 +29,7 @@ description: "Fast analytics in StarRocks begin with table layout design matchin
 | **生命周期操作** | DROP PARTITION 是仅元数据操作——理想用于 GDPR 删除、每月滚动。 | 桶不能被删除；它们仅通过 `ALTER TABLE … MODIFY DISTRIBUTED BY` 更改。 |
 | **典型数量** | 每个表 10^2–10^4（天、周、租户）。 | 每个分区 10–120；StarRocks `BUCKETS xxx` 调整此值。 |
 | **倾斜处理** | 合并或拆分分区；考虑复合/混合方案。 | 提高桶数量，哈希复合键，隔离“大租户”，或使用随机分桶 |
-| **警示信号** | > 100k 分区可能会给 FE 带来显著的内存开销 | > 200k tablet/BE；单个 tablet 超过 10 GB 可能遇到Compaction问题。 |
+| **警示信号** | > 100k 分区可能会给 FE 带来显著的内存开销 | > 200k tablet/BE；单个 tablet 超过 10 GB（v4.1 及以后版本的存算分离集群为 100 GB）可能遇到Compaction问题。 |
 
 ## 什么时候应该分区？
 

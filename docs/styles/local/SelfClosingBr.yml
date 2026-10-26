@@ -1,0 +1,5 @@
+extends: script
+message: "Use a self-closing line break '<br />' instead of '%s'."
+level: error
+scope: raw
+script: SelfClosingBr.tengo

@@ -134,7 +134,7 @@ Status HttpServiceBE::start() {
 
     add_default_path_handlers(_web_page_handler.get(), _runtime_env);
 
-    _ev_http_server->set_auth_verifier(&verify_http_basic_auth);
+    _ev_http_server->set_auth_verifier(&verify_http_auth);
 
     // register load
     auto* stream_load_action = new StreamLoadAction(_env, stream_load_orchestrator, _stream_load_executor,

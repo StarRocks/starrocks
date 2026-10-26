@@ -34,9 +34,11 @@
 
 namespace starrocks::parquet {
 
-// Reference for:
-// https://github.com/apache/arrow/blob/7ebc88c8fae62ed97bc30865c845c8061132af7e/cpp/src/parquet/column_reader.h#L54-L57
-static constexpr size_t kDefaultPageHeaderSize = 16 * 1024;
+// First guess for the page header size; doubled until the header deserializes. Headers are usually well
+// under 1KB, and when the stream cannot peek, every byte of the guess is copied, so start small (Arrow
+// starts at 16KB but always peeks:
+// https://github.com/apache/arrow/blob/7ebc88c8fae62ed97bc30865c845c8061132af7e/cpp/src/parquet/column_reader.h#L54-L57).
+static constexpr size_t kDefaultPageHeaderSize = 1024;
 // 16MB is borrowed from Arrow
 static constexpr size_t kMaxPageHeaderSize = 16 * 1024 * 1024;
 
@@ -111,14 +113,12 @@ Status PageReader::_read_and_deserialize_header(bool need_fill_cache) {
     _header_length = 0;
 
     RETURN_IF_ERROR(_stream->seek(_offset));
-    BufferPtr tmp_page_buffer;
     std::vector<uint8_t>* page_buffer;
     if (need_fill_cache) {
         DCHECK(_cache_buf);
         page_buffer = _cache_buf;
     } else {
-        tmp_page_buffer = std::make_unique<std::vector<uint8_t>>();
-        page_buffer = tmp_page_buffer.get();
+        page_buffer = &_header_buf;
     }
 
     do {
@@ -336,7 +336,7 @@ Status PageReader::_read_and_decompress_internal(bool need_fill_cache) {
     } else {
         std::vector<uint8_t>& read_buffer = is_compressed ? *_compressed_buf : *_uncompressed_buf;
         if (!need_fill_cache || (is_compressed && _cache_decompressed_data())) {
-            TRY_CATCH_BAD_ALLOC(read_buffer.reserve(read_size));
+            TRY_CATCH_BAD_ALLOC(raw::stl_vector_resize_uninitialized(&read_buffer, read_size));
             read_data = Slice(read_buffer.data(), read_size);
         } else {
             auto original_size = _cache_buf->size();

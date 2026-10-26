@@ -23,6 +23,7 @@ public enum IcebergTableOperation {
     REWRITE_DATA_FILES,
     REWRITE_MANIFESTS,
     ADD_FILES,
+    ADD_EQUALITY_DELETE_FILES,
     UNKNOWN;
 
     

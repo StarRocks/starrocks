@@ -131,7 +131,7 @@ LDAP 这一族配置没有统一答案——有的值由 FE 比较，有的由�
 | `authentication_ldap_simple_group_source` | FE | **不区分**，两端空白也会忽略。取值无法识别时：`CREATE` / `ALTER SECURITY INTEGRATION` 直接报错；如果是从 FE 配置项传进来的，则回落到 `group_provider` 并打印 ERROR 日志。 |
 | DN 类取值：`authentication_ldap_simple_bind_root_dn`、`..._bind_base_dn`、`..._bind_dn_pattern` | 目录 | **由目录决定。** DN 里的属性类型（`cn=`、`ou=`、`dc=`）一律不区分大小写；属性值是否区分取决于该属性的匹配规则，常用的 `cn` / `ou` / `dc` 都是不区分的。 |
 | 登录名 | FE，在发给目录之前 | **不区分。** 拼进搜索过滤器、或代入 bind DN 模板之前会先转成小写，与 Active Directory 对账号名的处理一致。 |
-| 用户组名 | FE | **匹配时不区分，显示时保留原样。** `GRANT ... TO EXTERNAL GROUP` 与 `permitted_groups` 都按忽略大小写匹配，但组名字符串本身绝不改写：`current_group()` 和交给 Apache Ranger 的组集合保持目录返回的原始大小写。Ranger 匹配组名是区分大小写的，所以它的策略必须按目录里的写法来写。 |
+| 用户组名 | FE | **匹配时不区分，显示时保留原样。** `GRANT ... TO EXTERNAL GROUP` 与 `permitted_groups` 默认按忽略大小写匹配（FE 配置项 `authentication_group_case_insensitive`，设为 `false` 则精确匹配），但组名字符串本身绝不改写：`current_group()` 和交给 Apache Ranger 的组集合保持目录返回的原始大小写。Ranger 匹配组名是区分大小写的，所以它的策略必须按目录里的写法来写。 |
 
 ## 使用 LDAP 创建用户
 
@@ -197,3 +197,13 @@ properties.put("disabledAuthenticationPlugins", "com.mysql.cj.protocol.a.authent
 - **ODBC**
 
 在 ODBC 的 DSN 中添加 `default\_auth=mysql_clear_password` 和 `ENABLE_CLEARTEXT\_PLUGIN=1`，以及用户名和密码。
+
+### 使用 LDAP 通过 HTTP 或 Arrow Flight 连接
+
+HTTP API 与 Arrow Flight SQL 本来就是发送明文密码，所以 LDAP 用户在这两个入口上不需要任何额外设置：HTTP Basic 认证和 Arrow Flight 的用户名密码最终都走同一次 LDAP bind。用 `IDENTIFIED WITH authentication_ldap_simple` 创建的用户，以及 LDAP [安全集成](./security_integration.md)的用户，在这里的行为一致。参见[各认证方式在哪些入口可用](./authentication.mdx#各认证方式在哪些入口可用)。
+
+```Bash
+curl -u tom:<password> -H 'Content-Type: application/json' -XPOST \
+    http://<fe_host>:<fe_http_port>/api/v1/catalogs/default_catalog/databases/<db>/sql \
+    -d '{"query": "select current_user()"}'
+```

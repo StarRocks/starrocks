@@ -83,6 +83,18 @@ public class PartitionCommitInfo implements Writable {
     @SerializedName(value = "DictCollectedVersion")
     private List<Long> dictCollectedVersions = Lists.newArrayList();
 
+    // Empty identities use collected versions; conflicts go in invalidDictCacheColumns.
+    @SerializedName("dictContentIdentities")
+    private List<Long> dictContentIdentities = Lists.newArrayList();
+
+    public List<Long> getDictContentIdentities() {
+        return dictContentIdentities;
+    }
+
+    public void setDictContentIdentities(List<Long> identities) {
+        this.dictContentIdentities = identities == null ? Lists.newArrayList() : Lists.newArrayList(identities);
+    }
+
     // compaction score quantiles of lake table
     @SerializedName(value = "compactionScore")
     private Quantiles compactionScore;
@@ -155,6 +167,7 @@ public class PartitionCommitInfo implements Writable {
         this.dictCollectedVersions = partitionCommitInfo.dictCollectedVersions == null
                 ? Lists.newArrayList()
                 : Lists.newArrayList(partitionCommitInfo.dictCollectedVersions);
+        setDictContentIdentities(partitionCommitInfo.dictContentIdentities);
         this.compactionScore = partitionCommitInfo.compactionScore == null
                 ? null
                 : new Quantiles(partitionCommitInfo.compactionScore);

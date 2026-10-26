@@ -38,10 +38,10 @@
 #include "storage/lake/compaction_scheduler.h"
 #include "storage/lake/compaction_task.h"
 #include "storage/lake/filenames.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reshard_helper.h"
-#include "storage/lake/update_manager.h"
 #include "storage/lake/versioned_tablet.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/rows_mapper.h"
@@ -1963,15 +1963,15 @@ Status TabletParallelCompactionManager::execute_sst_compaction_for_parallel(
     VLOG(1) << "Executing unified SST compaction for parallel compaction, tablet=" << tablet_id
             << ", version=" << version;
 
-    auto* update_mgr = _tablet_mgr->update_mgr();
-    if (update_mgr == nullptr) {
-        LOG(WARNING) << "UpdateManager is null, skip SST compaction for tablet " << tablet_id;
+    auto* primary_key_mgr = _tablet_mgr->primary_key_mgr();
+    if (primary_key_mgr == nullptr) {
+        LOG(WARNING) << "PrimaryKeyManager is null, skip SST compaction for tablet " << tablet_id;
         return Status::OK();
     }
 
     // Use a temporary TxnLogPB to capture SST compaction results
     TxnLogPB temp_log;
-    auto st = update_mgr->execute_index_major_compaction(metadata, &temp_log);
+    auto st = primary_key_mgr->execute_index_major_compaction(metadata, &temp_log);
     if (!st.ok()) {
         // Propagate, like horizontal_compaction_task.cpp, vertical_compaction_task.cpp and
         // cloud_native_index_compaction_task.cpp do for the same call. Swallowing it here let the

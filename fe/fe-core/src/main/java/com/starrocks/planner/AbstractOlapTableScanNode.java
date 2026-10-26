@@ -19,6 +19,7 @@ import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.sql.common.MetaUtils;
@@ -129,7 +130,15 @@ public abstract class AbstractOlapTableScanNode extends ScanNode {
         int bucketNum = distInfo.getBucketNum();
         if (selectedLogicalPartitionIds.size() <= 1) {
             for (Long pid : selectedLogicalPartitionIds) {
-                bucketNum = olapTable.getPartition(pid).getDistributionInfo().getBucketNum();
+                // Scheduling runs after planning released the table lock, so a TTL or dynamic-partition
+                // drop can remove the selected partition in between.
+                Partition partition = olapTable.getPartition(pid);
+                if (partition == null) {
+                    throw new IllegalStateException(String.format(
+                            "partition %d of table %s was dropped after the query was planned, please retry",
+                            pid, olapTable.getName()));
+                }
+                bucketNum = partition.getDistributionInfo().getBucketNum();
             }
         }
         return bucketNum;

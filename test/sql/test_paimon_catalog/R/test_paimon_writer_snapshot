@@ -1,0 +1,66 @@
+-- name: test_paimon_writer_snapshot
+create external catalog paimon_writer_${uuid0}
+properties (
+"type" = "paimon",
+"paimon.catalog.type" = "filesystem",
+"paimon.catalog.warehouse" = "oss://${oss_bucket}/ci_catalog_test_data/paimon/",
+"aws.s3.access_key" = "${oss_ak}",
+"aws.s3.secret_key" = "${oss_sk}",
+"aws.s3.endpoint" = "${oss_endpoint}"
+);
+-- result:
+-- !result
+set paimon_reader_mode = 'native';
+-- result:
+-- !result
+[ORDER]select id, amount from paimon_writer_${uuid0}.paimon_test.writer_refresh_v1 order by id;
+-- result:
+1	100
+2	20
+-- !result
+select count(*) from paimon_writer_${uuid0}.paimon_test.writer_refresh_v1 where amount = 10;
+-- result:
+0
+-- !result
+select count(*), sum(amount) from paimon_writer_${uuid0}.paimon_test.writer_refresh_v1;
+-- result:
+2	120
+-- !result
+set paimon_reader_mode = 'jni';
+-- result:
+-- !result
+[ORDER]select id, amount from paimon_writer_${uuid0}.paimon_test.writer_refresh_v1 order by id;
+-- result:
+1	100
+2	20
+-- !result
+select count(*) from paimon_writer_${uuid0}.paimon_test.writer_refresh_v1 where amount = 10;
+-- result:
+0
+-- !result
+select count(*), sum(amount) from paimon_writer_${uuid0}.paimon_test.writer_refresh_v1;
+-- result:
+2	120
+-- !result
+set paimon_reader_mode = 'auto';
+-- result:
+-- !result
+[ORDER]select id, amount from paimon_writer_${uuid0}.paimon_test.writer_refresh_v1 order by id;
+-- result:
+1	100
+2	20
+-- !result
+select count(*) from paimon_writer_${uuid0}.paimon_test.writer_refresh_v1 where amount = 10;
+-- result:
+0
+-- !result
+select count(*), sum(amount) from paimon_writer_${uuid0}.paimon_test.writer_refresh_v1;
+-- result:
+2	120
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+drop catalog paimon_writer_${uuid0};
+-- result:
+-- !result

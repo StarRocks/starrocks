@@ -429,6 +429,117 @@ TEST_F(LakeMetacacheTest, test_segment_destruction_does_not_block_cache) {
     EXPECT_TRUE(victim_weak.expired());
 }
 
+TEST_F(LakeMetacacheTest, test_replace_segment_if_matches_preserves_old_reader_and_charge_identity) {
+    std::shared_ptr<FileSystem> fs;
+    TabletSchemaCSPtr schema;
+    const std::string key = "segment_to_replace";
+    auto old = std::make_shared<Segment>(fs, FileInfo{"old.dat"}, 0, schema, _tablet_mgr.get());
+    auto replacement = std::make_shared<Segment>(fs, FileInfo{std::string(256, 'r')}, 0, schema, _tablet_mgr.get());
+    Metacache metacache(1024 * 1024);
+    metacache.cache_segment(key, old);
+    ASSERT_TRUE(metacache.replace_segment_if_matches(key, old.get(), replacement));
+    EXPECT_EQ(replacement, metacache.lookup_segment(key));
+    EXPECT_EQ(1, old.use_count());
+    EXPECT_EQ("old.dat", old->file_name());
+    const auto replacement_charge = replacement->mem_usage() + LRUCache::key_handle_size(CacheKey(key));
+    EXPECT_EQ(replacement_charge, metacache.memory_usage());
+    EXPECT_FALSE(metacache.update_segment_cache_size(key, replacement->mem_usage() + 1024, old.get()));
+    EXPECT_EQ(replacement_charge, metacache.memory_usage());
+    EXPECT_TRUE(metacache.update_segment_cache_size(key, replacement->mem_usage() + 128, replacement.get()));
+    EXPECT_EQ(replacement_charge + 128, metacache.memory_usage());
+}
+
+TEST_F(LakeMetacacheTest, test_replace_segment_if_matches_self_eviction_preserves_caller_ownership) {
+    std::shared_ptr<FileSystem> fs;
+    TabletSchemaCSPtr schema;
+    const std::string key = "oversized_replacement";
+    auto old = std::make_shared<Segment>(fs, FileInfo{"old.dat"}, 0, schema, _tablet_mgr.get());
+    const auto shard_capacity = old->mem_usage() + LRUCache::key_handle_size(CacheKey(key));
+    Metacache metacache(shard_capacity * kNumShards);
+    metacache.cache_segment(key, old);
+    ASSERT_EQ(old, metacache.lookup_segment(key));
+    ASSERT_EQ(shard_capacity, metacache.memory_usage());
+
+    const std::string replacement_path(shard_capacity * 2, 'r');
+    auto replacement = std::make_shared<Segment>(fs, FileInfo{replacement_path}, 0, schema, _tablet_mgr.get());
+    ASSERT_GT(replacement->mem_usage(), shard_capacity);
+    EXPECT_TRUE(metacache.replace_segment_if_matches(key, old.get(), replacement));
+    EXPECT_EQ(nullptr, metacache.lookup_segment(key));
+    EXPECT_EQ(0, metacache.memory_usage());
+    EXPECT_EQ(1, old.use_count());
+    EXPECT_EQ(1, replacement.use_count());
+    EXPECT_EQ("old.dat", old->file_name());
+    EXPECT_EQ(replacement_path, replacement->file_name());
+}
+
+TEST_F(LakeMetacacheTest, test_replace_segment_if_matches_rejects_missing_and_changed_entries) {
+    std::shared_ptr<FileSystem> fs;
+    TabletSchemaCSPtr schema;
+    const std::string key = "segment_to_replace";
+    auto old = std::make_shared<Segment>(fs, FileInfo{key}, 0, schema, _tablet_mgr.get());
+    auto winner = std::make_shared<Segment>(fs, FileInfo{key}, 0, schema, _tablet_mgr.get());
+    auto rejected = std::make_shared<Segment>(fs, FileInfo{key}, 0, schema, _tablet_mgr.get());
+    Metacache metacache(1024 * 1024);
+    EXPECT_FALSE(metacache.replace_segment_if_matches(key, old.get(), rejected));
+    EXPECT_EQ(nullptr, metacache.lookup_segment(key));
+    EXPECT_EQ(0, metacache.memory_usage());
+    EXPECT_EQ(1, rejected.use_count());
+
+    metacache.cache_segment(key, winner);
+    const auto usage = metacache.memory_usage();
+    EXPECT_FALSE(metacache.replace_segment_if_matches(key, old.get(), rejected));
+    EXPECT_EQ(winner, metacache.lookup_segment(key));
+    EXPECT_EQ(usage, metacache.memory_usage());
+    EXPECT_EQ(1, rejected.use_count());
+}
+
+TEST_F(LakeMetacacheTest, test_replace_segment_destruction_does_not_block_cache) {
+    std::shared_ptr<FileSystem> fs;
+    TabletSchemaCSPtr schema;
+    const std::string key = "segment_to_replace";
+    auto old = std::make_shared<Segment>(fs, FileInfo{key}, 0, schema, _tablet_mgr.get());
+    auto replacement = std::make_shared<Segment>(fs, FileInfo{key}, 0, schema, _tablet_mgr.get());
+    Metacache metacache(1024 * 1024);
+    metacache.cache_segment(key, old);
+    auto* expected = old.get();
+    std::weak_ptr<Segment> old_weak = old;
+    old.reset();
+
+    std::promise<void> deleter_entered;
+    auto entered_future = deleter_entered.get_future();
+    std::promise<void> allow_deletion;
+    auto deletion_future = allow_deletion.get_future().share();
+    auto* sync_point = SyncPoint::GetInstance();
+    sync_point->SetCallBack("lake::Metacache::cache_value_deleter", [&](void* arg) {
+        auto* segment = std::get_if<std::shared_ptr<Segment>>(static_cast<CacheValue*>(arg));
+        if (segment != nullptr && segment->get() == expected) {
+            deleter_entered.set_value();
+            deletion_future.wait();
+        }
+    });
+    sync_point->EnableProcessing();
+    auto callback_cleanup = MakeScopedCleanup([&]() {
+        sync_point->DisableProcessing();
+        sync_point->ClearCallBack("lake::Metacache::cache_value_deleter");
+    });
+    auto replace_future = std::async(
+            std::launch::async, [&]() { return metacache.replace_segment_if_matches(key, expected, replacement); });
+    bool deletion_released = false;
+    auto unblock_deleter = MakeScopedCleanup([&]() {
+        if (!deletion_released) allow_deletion.set_value();
+    });
+    using namespace std::chrono_literals;
+    ASSERT_EQ(std::future_status::ready, entered_future.wait_for(5s));
+    auto lookup_future = std::async(std::launch::async, [&]() { return metacache.lookup_segment(key); });
+    EXPECT_EQ(std::future_status::ready, lookup_future.wait_for(1s));
+    allow_deletion.set_value();
+    deletion_released = true;
+    unblock_deleter.cancel();
+    EXPECT_TRUE(replace_future.get());
+    EXPECT_EQ(replacement, lookup_future.get());
+    EXPECT_TRUE(old_weak.expired());
+}
+
 TEST_F(LakeMetacacheTest, test_update_segment_cache_size) {
     std::shared_ptr<FileSystem> fs;
     TabletSchemaCSPtr schema;

@@ -58,3 +58,46 @@ shell: ossutil64 rm -rf oss://${oss_bucket}/test_sink/testCsvFilesSink2/${uuid0}
 0
 
 -- !result
+-- name: testCsvFilesSinkDuplicateColumnNames
+insert into files (
+	"path" = "s3://${oss_bucket}/test_sink/testCsvFilesSinkDuplicateColumnNames/${uuid0}/",
+    "aws.s3.endpoint" = "${oss_endpoint}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+	"format" = "csv",
+	"compression" = "uncompressed",
+	"csv.column_separator" = ",",
+	"csv.include_header" = "true",
+	"single" = "true"
+)
+select * from (select l.*, r.* from (select 1 as id, "x" as name) l join (select 1 as id, "y" as name) r on l.id = r.id) t;
+-- result:
+-- !result
+select * from files (
+	"path" = "oss://${oss_bucket}/test_sink/testCsvFilesSinkDuplicateColumnNames/${uuid0}/*",
+    "fs.oss.endpoint" = "${oss_endpoint}",
+    "fs.oss.accessKeyId" = "${oss_ak}",
+    "fs.oss.accessKeySecret" = "${oss_sk}",
+	"format" = "csv",
+	"csv.column_separator" = ","
+) order by 1;
+-- result:
+1	x	1	y
+id	name	id	name
+-- !result
+insert into files (
+	"path" = "s3://${oss_bucket}/test_sink/testCsvFilesSinkDuplicateColumnNames/${uuid0}/parquet/",
+    "aws.s3.endpoint" = "${oss_endpoint}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+	"format" = "parquet"
+)
+select l.*, r.* from (select 1 as id, "x" as name) l join (select 1 as id, "y" as name) r on l.id = r.id;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: expect column names to be distinct (case-insensitive) for parquet format, but got duplicate(s): [id, name].')
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_sink/testCsvFilesSinkDuplicateColumnNames/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result

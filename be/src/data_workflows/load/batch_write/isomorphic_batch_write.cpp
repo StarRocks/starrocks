@@ -21,6 +21,7 @@
 #include <atomic>
 #include <utility>
 
+#include "base/auth/auth_info.h"
 #include "base/testutil/sync_point.h"
 #include "common/config_merge_commit_fwd.h"
 #include "common/system/backend_options.h"
@@ -450,9 +451,9 @@ Status IsomorphicBatchWrite::_send_rpc_request(StreamLoadContext* data_ctx) {
     TMergeCommitRequest request;
     request.__set_db(_batch_write_id.db);
     request.__set_tbl(_batch_write_id.table);
-    request.__set_user(data_ctx->auth.user);
-    request.__set_passwd(data_ctx->auth.passwd);
-    request.__set_user_ip(data_ctx->auth.user_ip);
+    // user / passwd / user_ip / auth_type: the same template every other load RPC uses, so a
+    // Bearer token reaching this BE over Stream Load keeps its auth_type into the merge commit.
+    set_request_auth(&request, data_ctx->auth);
     if (!data_ctx->auth.internal_token.empty()) {
         // Cluster-internal trust token (RejectedRecordSyncDaemon path):
         // FE will treat the request as ROOT for system tables whitelisted

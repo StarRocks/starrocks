@@ -21,6 +21,8 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.util.concurrent.lock.LockManager;
+import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.lake.qe.scheduler.DefaultSharedDataWorkerProvider;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.qe.ConnectContext;
@@ -39,6 +41,7 @@ import com.starrocks.transaction.TransactionState;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.cngroup.ComputeResource;
+import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
@@ -46,6 +49,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
@@ -269,6 +273,53 @@ public class FrontendServiceImplImmutablePartitionMultiNodeWriteTest {
         OlapTableSink.createLocation(hashTable, partitionParam(hashTable), false,
                 WarehouseManager.DEFAULT_RESOURCE, hashTxn, 3);
         Assertions.assertEquals(1, hashTxn.getMultiNodeWriteWidth(hashTable.getId()));
+    }
+
+    @Test
+    public void testPartitionLookupsHoldTheTableLock() throws Exception {
+        // The RPC runs while loads keep creating partitions, which rehash the table's plain HashMaps.
+        // Every lookup it makes into them must hold the table lock.
+        OlapTable table = table("t_random");
+        long txnId = TXN_ID.incrementAndGet();
+        mockNodes(newTxnState(txnId), 50001L, Lists.newArrayList(50001L));
+        long filled = onlyMutableSubPartition(table);
+
+        // One entry per lookup the RPC makes itself: whether the calling thread held the table lock.
+        List<Boolean> lockHeld = new ArrayList<>();
+        new MockUp<OlapTable>() {
+            @Mock
+            public PhysicalPartition getPhysicalPartition(Invocation inv, long physicalPartitionId) {
+                recordIfCalledByTheRpc(lockHeld, inv.getInvokedInstance());
+                return inv.proceed();
+            }
+
+            @Mock
+            public Partition getPartition(Invocation inv, long partitionId) {
+                recordIfCalledByTheRpc(lockHeld, inv.getInvokedInstance());
+                return inv.proceed();
+            }
+        };
+        updateImmutablePartition(table, txnId, filled);
+
+        Assertions.assertFalse(lockHeld.isEmpty());
+        Assertions.assertFalse(lockHeld.contains(false), lockHeld::toString);
+    }
+
+    private static void recordIfCalledByTheRpc(List<Boolean> lockHeld, Object table) {
+        // Lookups made by the metadata methods the RPC calls take their own locks and are not checked here.
+        boolean calledByTheRpc = StackWalker.getInstance().walk(frames -> frames
+                .filter(f -> f.getClassName().startsWith("com.starrocks.")
+                        && !f.getClassName().startsWith("com.starrocks.catalog.")
+                        && !f.getClassName().startsWith(FrontendServiceImplImmutablePartitionMultiNodeWriteTest.class.getName()))
+                .findFirst()
+                .map(f -> f.getMethodName().equals("updateImmutablePartitionInternal"))
+                .orElse(false));
+        if (calledByTheRpc) {
+            long tableId = ((OlapTable) table).getId();
+            LockManager lockManager = GlobalStateMgr.getCurrentState().getLockManager();
+            lockHeld.add(lockManager.isOwnedByCurrentThread(tableId, LockType.READ)
+                    || lockManager.isOwnedByCurrentThread(tableId, LockType.WRITE));
+        }
     }
 
     private static TOlapTablePartitionParam partitionParam(OlapTable table) {

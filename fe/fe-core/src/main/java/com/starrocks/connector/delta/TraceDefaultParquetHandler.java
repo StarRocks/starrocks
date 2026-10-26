@@ -16,6 +16,7 @@ package com.starrocks.connector.delta;
 
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.util.concurrent.lock.BlockingCallValidator;
 import io.delta.kernel.data.ColumnarBatch;
 import io.delta.kernel.defaults.engine.DefaultParquetHandler;
 import io.delta.kernel.defaults.engine.hadoopio.HadoopFileIO;
@@ -67,6 +68,9 @@ public class TraceDefaultParquetHandler extends DefaultParquetHandler {
                     Utils.closeCloseables(currentFileReader);
                     currentFileReader = null;
                     if (fileIter.hasNext()) {
+                        // Inside the branch for the same reason as the json handler: the call that finds
+                        // no next file opens nothing.
+                        BlockingCallValidator.validateNotUnderLock("remote-storage");
                         try (Timer ignored = Tracers.watchScope(Tracers.get(), EXTERNAL,
                                 "TraceDefaultParquetHandler.readParquetFile")) {
                             FileStatus nextFile = fileIter.next();

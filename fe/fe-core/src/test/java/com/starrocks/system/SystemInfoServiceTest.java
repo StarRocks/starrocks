@@ -15,6 +15,8 @@
 package com.starrocks.system;
 
 import com.google.api.client.util.Maps;
+import com.google.common.collect.HashMultimap;
+import com.google.common.collect.Multimap;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
@@ -809,5 +811,25 @@ public class SystemInfoServiceTest {
             // throw not support exception
             service.modifyBackendHost(clause);
         });
+    }
+
+    @Test
+    public void testLocationMatchedBackendIds() {
+        Backend be1 = new Backend(100, "originalHost", 1000);
+        be1.setLocation(Map.of("rack", "data_1"));
+
+        Backend be2 = new Backend(200, "originalHost_2", 1000);
+        be2.setLocation(Map.of("rack", "data_2"));
+
+        service.addBackend(be1);
+        service.addBackend(be2);
+        Multimap<String, String> label = HashMultimap.create();
+        label.put("rack", "data_1");
+        Assertions.assertEquals(1, service.getLocationMatchedBackendIds(label).size());
+        Multimap<String, String> empty = HashMultimap.create();
+        Assertions.assertThrows(IllegalArgumentException.class,
+                () -> service.getLocationMatchedBackendIds(empty));
+        Assertions.assertThrows(IllegalArgumentException.class,
+                () -> service.getLocationMatchedBackendIds(null));
     }
 }

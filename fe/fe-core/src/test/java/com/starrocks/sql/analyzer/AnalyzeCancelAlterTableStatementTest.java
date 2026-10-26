@@ -23,6 +23,8 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getStarRocksAssert;
 
@@ -52,6 +54,17 @@ public class AnalyzeCancelAlterTableStatementTest {
         Assertions.assertEquals("db", stmt.getDbName());
         Assertions.assertEquals(ShowAlterStmt.AlterType.ROLLUP, stmt.getAlterType());
         Assertions.assertEquals("tbl", stmt.getTableName());
+        Assertions.assertEquals(List.of(1L, 2L, 3L), stmt.getAlterJobIdList());
+    }
+
+    @Test
+    public void testCancelRollupWithoutJobIds() {
+        // Without a job id list the handler must cancel every unfinished rollup job of the table,
+        // which it only does when the list is null rather than empty.
+        CancelAlterTableStmt stmt = (CancelAlterTableStmt) analyzeSuccess(
+                "cancel alter table rollup from db.tbl");
+        Assertions.assertEquals(ShowAlterStmt.AlterType.ROLLUP, stmt.getAlterType());
+        Assertions.assertNull(stmt.getAlterJobIdList());
     }
 
     @Test

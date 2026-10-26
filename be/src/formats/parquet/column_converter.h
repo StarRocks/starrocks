@@ -51,6 +51,15 @@ public:
 
     virtual Status convert(const Column* src, Column* dst) { return Status::OK(); };
 
+    // Converts paired min/max statistics (row i of min_src and max_src bound the same values) so that every value
+    // between them still lies between the converted bounds. Converting each column alone does that for an order
+    // preserving conversion; a conversion that is not (UTC instants shown in a zone with daylight saving time)
+    // overrides this.
+    virtual Status convert_min_max(const Column* min_src, const Column* max_src, Column* min_dst, Column* max_dst) {
+        RETURN_IF_ERROR(convert(min_src, min_dst));
+        return convert(max_src, max_dst);
+    }
+
 public:
     bool need_convert = false;
     tparquet::Type::type parquet_type;

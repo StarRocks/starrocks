@@ -478,7 +478,9 @@ public class AstToStringBuilder {
                     String sortNullsOrder = sortField.nullOrder().toString();
                     sortColumns.add(String.format("%s %s %s", sortColumnName, sortDirection, sortNullsOrder));
                 }
-                createTableSql.append("\nORDER BY (").append(String.join(",", sortColumns)).append(")");
+                if (!sortColumns.isEmpty()) {
+                    createTableSql.append("\nORDER BY (").append(String.join(",", sortColumns)).append(")");
+                }
             }
         }
 

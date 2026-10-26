@@ -35,7 +35,7 @@ StarRocks にロードしたいソースデータが、Azure ストレージア�
 
 ### 認証情報の収集
 
-このトピックの例では、Shared Key 認証方法を使用します。ADLS Gen2 からデータを読み取る権限があることを確認するために、[Azure Data Lake Storage Gen2 > Shared Key (ストレージアカウントのアクセスキー)](../../integrations/csp_auth/authenticate_to_azure_storage.md#service-principal-1) を読み、設定する必要がある認証パラメータを理解することをお勧めします。
+このトピックの例では、Shared Key 認証方法を使用します。ADLS Gen2 からデータを読み取る権限があることを確認するために、[Azure Data Lake Storage Gen2 > 共有キー (ストレージアカウントのアクセスキー)](../../integrations/csp_auth/authenticate_to_azure_storage.md#共有キー-ストレージアカウントのアクセスキー-1) を読み、設定する必要がある認証パラメータを理解することをお勧めします。
 
 要するに、Shared Key 認証を実践する場合、以下の情報を収集する必要があります:
 

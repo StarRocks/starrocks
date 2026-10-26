@@ -23,7 +23,6 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.util.concurrent.lock.LockHoldDepth;
 import com.starrocks.mv.pct.BaseToMVPartitionMapping;
 import com.starrocks.scheduler.mv.pct.MVPCTRefreshProcessor;
 import com.starrocks.scheduler.mv.pct.PCTRefreshScope;
@@ -36,6 +35,7 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBas
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.utframe.LockProbe;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Invocation;
 import mockit.Mock;
@@ -52,7 +52,6 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 @TestMethodOrder(MethodName.class)
@@ -292,15 +291,11 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
      */
     @Test
     public void testBaseTablePartitionsAreCollectedBeforeTakingTheLock() {
-        AtomicBoolean collected = new AtomicBoolean(false);
-        AtomicBoolean collectedUnderLock = new AtomicBoolean(false);
+        LockProbe probe = LockProbe.onAnyThread();
         new MockUp<ListPartitionDiffer>() {
             @Mock
             public Map<Table, BaseToMVPartitionMapping> syncBaseTablePartitionInfos(Invocation invocation) {
-                collected.set(true);
-                if (LockHoldDepth.isUnderLock()) {
-                    collectedUnderLock.set(true);
-                }
+                probe.record("syncBaseTablePartitionInfos");
                 return invocation.proceed();
             }
         };
@@ -323,8 +318,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                         String insertSql = "insert into t2 partition(p1) values(1, 1, '2021-12-01', 'beijing');";
                         Assertions.assertNotNull(getExecPlanAfterInsert(taskRun, insertSql));
 
-                        Assertions.assertTrue(collected.get(), "the base table partitions should have been collected");
-                        Assertions.assertFalse(collectedUnderLock.get(),
+                        probe.assertReachedOutsideTheLock("syncBaseTablePartitionInfos",
                                 "collecting base table partitions goes through the connector for an external base " +
                                         "table and must not run under the mv's lock");
                     });
@@ -1891,5 +1885,41 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                     "     partitions=1/2");
             Assertions.assertNotNull(execPlan);
         }
+    }
+
+    /**
+     * A list-partitioned mv maps 1:1 onto its base partitions, so a dropped base partition takes the mv partition
+     * that held its rows with it and leaves nothing to recompute.
+     */
+    @Test
+    public void testDropBaseListPartitionDropsMvPartitionWithoutRefresh() {
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        starRocksAssert.withTable(T2, () -> {
+            starRocksAssert.withMaterializedView("create materialized view mv1\n" +
+                            "partition by province \n" +
+                            "distributed by random \n" +
+                            "REFRESH DEFERRED MANUAL \n" +
+                            "as select dt, province, sum(age) from t2 group by dt, province;",
+                    (obj) -> {
+                        String mvName = (String) obj;
+                        MaterializedView materializedView =
+                                ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                        .getTable(testDb.getFullName(), mvName));
+                        Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
+                        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+
+                        getExecPlanAfterInsert(taskRun,
+                                "insert into t2 partition(p1) values(1, 1, '2021-12-01', 'beijing');");
+                        getExecPlanAfterInsert(taskRun,
+                                "insert into t2 partition(p2) values(2, 2, '2021-12-01', 'guangdong');");
+                        Assertions.assertEquals(2, materializedView.getVisiblePartitionNames().size());
+
+                        sql("ALTER TABLE t2 DROP PARTITION p1");
+                        ExecPlan execPlan = getExecPlan(taskRun);
+
+                        Assertions.assertEquals(1, materializedView.getVisiblePartitionNames().size());
+                        Assertions.assertNull(execPlan);
+                    });
+        });
     }
 }

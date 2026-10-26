@@ -16,8 +16,10 @@ package com.starrocks.scheduler.mv;
 
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockParams;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.MVTaskRunProcessor;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
@@ -25,14 +27,24 @@ import com.starrocks.scheduler.TaskRun;
 import com.starrocks.scheduler.TaskRunBuilder;
 import com.starrocks.scheduler.TaskRunContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.StatementPlanner;
+import com.starrocks.sql.analyzer.PlannerMetaLocker;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
+import mockit.Invocation;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CopyOnWriteArraySet;
 
 /**
  * An external base table has no usable lock identity: BaseTableInfo's external constructor leaves tableId at
@@ -111,5 +123,48 @@ public class MVRefreshLockParamsTest extends MVTestBase {
         Assertions.assertEquals(Set.of(internalTableId), lockParams.getTables().get(db.getId()));
         // The -1 default that external BaseTableInfos carry must never show up as a lock id.
         lockParams.getTables().values().forEach(ids -> Assertions.assertFalse(ids.contains(-1L)));
+    }
+
+    /**
+     * The refresh takes its lock within mv_refresh_try_lock_timeout_ms and bounds every later acquisition the same
+     * way. Planning the INSERT off copies collects them while that lock is held; a locker of its own there would
+     * wait without a bound, on top of the held lock. The INSERT of a refresh plans off copies only when it reads
+     * through a connector (AnalyzerUtils#isCopySafe), hence the MV over a hive table.
+     */
+    @Test
+    public void testRefreshPlanningTakesNoUnboundedLock() throws Exception {
+        Thread refresher = Thread.currentThread();
+        List<String> unbounded = new CopyOnWriteArrayList<>();
+        new MockUp<PlannerMetaLocker>() {
+            @Mock
+            public void lock(Invocation invocation) {
+                if (Thread.currentThread() == refresher) {
+                    // The caller: the first frame of ours that is not the locker or this probe.
+                    Arrays.stream(new Throwable().getStackTrace())
+                            .filter(f -> f.getClassName().startsWith("com.starrocks.")
+                                    && !f.getClassName().startsWith(PlannerMetaLocker.class.getName())
+                                    && !f.getClassName().startsWith(MVRefreshLockParamsTest.class.getName()))
+                            .findFirst().ifPresent(f -> unbounded.add(f.toString()));
+                }
+                invocation.proceed();
+            }
+        };
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "lock_params_mixed_mv");
+        Set<String> plannedOffCopies = new CopyOnWriteArraySet<>();
+        new MockUp<StatementPlanner>() {
+            @Mock
+            public Set<OlapTable> collectOriginalOlapTables(Invocation invocation, ConnectContext session,
+                                                            StatementBase stmt, PlannerMetaLocker heldLocker) {
+                plannedOffCopies.add(stmt.getClass().getSimpleName());
+                return invocation.proceed(session, stmt, heldLocker);
+            }
+        };
+        refreshMV(db.getFullName(), mv);
+        Assertions.assertEquals(Set.of("InsertStmt"), plannedOffCopies,
+                "the refresh did not plan its INSERT off copies, so this is not testing it");
+        Assertions.assertTrue(unbounded.isEmpty(), "an MV refresh waited on the planner lock without a bound: "
+                + unbounded);
     }
 }

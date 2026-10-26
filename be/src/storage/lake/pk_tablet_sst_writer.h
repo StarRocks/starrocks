@@ -75,8 +75,12 @@ public:
 
 class PkTabletSSTWriter : public DefaultSSTWriter {
 public:
-    PkTabletSSTWriter(TabletSchemaCSPtr tablet_schema_ptr, TabletManager* tablet_mgr, int64_t tablet_id)
-            : _tablet_schema_ptr(std::move(tablet_schema_ptr)), _tablet_mgr(tablet_mgr), _tablet_id(tablet_id) {}
+    // `txn_id` is the load or compaction transaction the sstables are written for; it prefixes their file names.
+    PkTabletSSTWriter(TabletSchemaCSPtr tablet_schema_ptr, TabletManager* tablet_mgr, int64_t tablet_id, int64_t txn_id)
+            : _tablet_schema_ptr(std::move(tablet_schema_ptr)),
+              _tablet_mgr(tablet_mgr),
+              _tablet_id(tablet_id),
+              _txn_id(txn_id) {}
     ~PkTabletSSTWriter() override = default;
     Status append_sst_record(const Chunk& data, const std::vector<uint64_t>* rssid_rowids = nullptr,
                              const std::vector<uint32_t>* column_indexes = nullptr) override;
@@ -100,6 +104,7 @@ protected:
     TabletSchemaCSPtr _tablet_schema_ptr;
     TabletManager* _tablet_mgr;
     int64_t _tablet_id;
+    int64_t _txn_id;
 
 private:
     std::unique_ptr<PersistentIndexSstableStreamBuilder> _pk_sst_builder;

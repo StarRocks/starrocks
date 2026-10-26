@@ -166,12 +166,21 @@ TEST_F(KVStoreTest, calc_rocksdb_write_buffer_size_test) {
     auto size = KVStore::calc_rocksdb_write_buffer_size(&mem_tracker);
     ASSERT_EQ(size, 4294967296 * config::rocksdb_write_buffer_memory_percent / 100 / 2);
 
-    // case2: two paths
+    // case2: two paths. parse_conf_store_paths() creates the directories, so /storage only
+    // resolves when the test happens to run as root; point it at the working directory
+    // instead (parse_root_path() rejects anything that does not start with '/', so these
+    // have to be absolute). Restore the config before asserting: a failed ASSERT_ returns
+    // from the test body, and leaving storage_root_path unparseable makes every later
+    // fixture that calls parse_conf_store_paths() abort the whole binary.
+    const std::string path1 = (std::filesystem::current_path() / "kv_store_test_disk1").string();
+    const std::string path2 = (std::filesystem::current_path() / "kv_store_test_disk2").string();
     std::string old_val2 = config::storage_root_path;
-    config::storage_root_path = "/storage;/storage2";
+    config::storage_root_path = path1 + ";" + path2;
     auto size2 = KVStore::calc_rocksdb_write_buffer_size(&mem_tracker);
-    ASSERT_EQ(size2, 67108864L);
     config::storage_root_path = old_val2;
+    fs::remove_all(path1);
+    fs::remove_all(path2);
+    ASSERT_EQ(size2, 67108864L);
 }
 
 TEST_F(KVStoreTest, iterate_with_compact_on_timeout_test) {

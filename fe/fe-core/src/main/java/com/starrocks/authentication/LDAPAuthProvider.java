@@ -58,7 +58,7 @@ public class LDAPAuthProvider implements AuthenticationProvider {
     private final String ldapSearchFilter;
     private final String ldapUserDN;
     private final String ldapBindDNPattern;
-    private final LdapGroupSource ldapGroupSource;
+    private final GroupSource ldapGroupSource;
     private final String ldapMemberOfAttr;
 
     /**
@@ -78,7 +78,7 @@ public class LDAPAuthProvider implements AuthenticationProvider {
                             String ldapBindDNPattern) {
         this(ldapServerHost, ldapServerPort, useSSL, trustStorePath, trustStorePwd, ldapBindRootDN, ldapBindRootPwd,
                 ldapBindBaseDN, ldapSearchFilter, ldapUserDN, ldapBindDNPattern,
-                LdapGroupSource.GROUP_PROVIDER, "memberOf");
+                GroupSource.GROUP_PROVIDER, "memberOf");
     }
 
     public LDAPAuthProvider(String ldapServerHost,
@@ -92,9 +92,13 @@ public class LDAPAuthProvider implements AuthenticationProvider {
                             String ldapSearchFilter,
                             String ldapUserDN,
                             String ldapBindDNPattern,
-                            LdapGroupSource ldapGroupSource,
+                            GroupSource ldapGroupSource,
                             String ldapMemberOfAttr) {
-        this.ldapGroupSource = ldapGroupSource == null ? LdapGroupSource.GROUP_PROVIDER : ldapGroupSource;
+        // The legacy `AS '<dn>'` form does not support memberOf: its groups keep coming from the group
+        // providers whatever the configured group source says. Settled once here so that every reader of
+        // the group source - memberOf reading and the group-provider gate alike - agrees.
+        this.ldapGroupSource = ldapGroupSource == null || !Strings.isNullOrEmpty(ldapUserDN)
+                ? GroupSource.GROUP_PROVIDER : ldapGroupSource;
         this.ldapMemberOfAttr = Strings.isNullOrEmpty(ldapMemberOfAttr) ? "memberOf" : ldapMemberOfAttr;
         this.ldapServerHost = ldapServerHost;
         this.ldapServerPort = ldapServerPort;
@@ -110,19 +114,21 @@ public class LDAPAuthProvider implements AuthenticationProvider {
     }
 
     @Override
-    public void authenticate(AccessControlContext authContext, UserIdentity userIdentity, byte[] authResponse)
+    public UserIdentity authenticate(AccessControlContext authContext, UserIdentity userIdentity, AuthCredentials cred)
             throws AuthenticationException {
-        // clear password terminate string: the MySQL clear-password frame appends a trailing \0, while
-        // HTTP Basic sends the bare password and may even send an empty one.
-        byte[] clearPassword = authResponse;
-        if (authResponse.length > 0 && authResponse[authResponse.length - 1] == 0) {
-            clearPassword = Arrays.copyOf(authResponse, authResponse.length - 1);
+        // One shape only. The MySQL clear-password frame reaches here as PLAIN_PASSWORD with its
+        // trailing NUL already stripped at the entry point, so MySQL and HTTP Basic are the same
+        // bytes by the time they arrive.
+        if (cred.kind() != AuthCredentialKind.PLAIN_PASSWORD) {
+            throw new AuthenticationException(
+                    "LDAP user must authenticate with a password, not " + cred.kind());
         }
+        byte[] clearPassword = cred.rawSecret();
 
         String user = userIdentity.getUser();
         boolean legacyPerUserDN = !Strings.isNullOrEmpty(ldapUserDN);
-        // The legacy `AS \'<dn>\'` form intentionally does not read memberOf, see below.
-        boolean readMemberOf = ldapGroupSource.readsMemberOf() && !legacyPerUserDN;
+        // Always false for the legacy `AS '<dn>'` form, see the constructor.
+        boolean readMemberOf = ldapGroupSource.usesAuthenticatorGroups();
         // The entry's own spelling of the name, wanted only when the session identity is going to be
         // taken from the directory rather than from what the client typed.
         boolean readCanonicalName = Config.authentication_ldap_case_insensitive && !legacyPerUserDN;
@@ -196,20 +202,24 @@ public class LDAPAuthProvider implements AuthenticationProvider {
             // Authentication already succeeded at this point. A group-resolution failure must never
             // turn into an authentication failure, so everything below is contained.
             try {
-                authContext.setMemberOfGroups(
+                authContext.setAuthenticatorGroups(
                         resolveMemberOfGroups(user, distinguishedName,
                                 userEntry == null ? null : userEntry.attributes(), directBind));
             } catch (Exception e) {
                 LOG.warn("failed to resolve memberOf groups for user: {}, dn: {}", user, distinguishedName, e);
-                authContext.setMemberOfGroups(Set.of());
+                authContext.setAuthenticatorGroups(Set.of());
             }
-        } else {
-            // Write the field in this branch too, so it always states what *this* authentication
-            // resolved instead of keeping whatever it happened to hold. Leaving it untouched would
-            // make correctness depend on "nobody wrote it earlier", which is exactly the kind of
-            // assumption that breaks when the field gets reused somewhere else later.
-            authContext.setMemberOfGroups(Set.of());
         }
+        return userIdentity;
+    }
+
+    @Override
+    public boolean supportsCredentialKind(AuthCredentialKind kind) {
+        // Binds against the directory with a password. The MySQL clear-password frame is unwrapped
+        // at the entry point, so this one shape covers MySQL and HTTP Basic alike. A Bearer token
+        // is not a password: leaving it out is what keeps the security-integration chain from
+        // offering this provider a token it cannot check.
+        return kind == AuthCredentialKind.PLAIN_PASSWORD;
     }
 
     /**
@@ -243,6 +253,7 @@ public class LDAPAuthProvider implements AuthenticationProvider {
      * called at all: calling and discarding would pay for a read we said we do not want, and a broken
      * group provider would still be able to affect a mode that explicitly excludes it.
      */
+    @Override
     public boolean isGroupProviderUsed() {
         return ldapGroupSource.usesGroupProvider();
     }
@@ -253,8 +264,9 @@ public class LDAPAuthProvider implements AuthenticationProvider {
      * configured group source, so neither can silently keep contributing after the other is turned
      * off.
      */
-    public boolean isMemberOfUsed() {
-        return ldapGroupSource.readsMemberOf();
+    @Override
+    public boolean isAuthenticatorGroupsUsed() {
+        return ldapGroupSource.usesAuthenticatorGroups();
     }
 
     /**
@@ -270,19 +282,22 @@ public class LDAPAuthProvider implements AuthenticationProvider {
      *     account. With several patterns configured we cannot know which one is the real entry
      *     without binding, so they are tried in the configured order and the first one that answers
      *     wins.</li>
+     *     <li>the legacy `AS '<dn>'` form: the DN is the one the user was created with. memberOf is
+     *     still not read (see the constructor), but the DN is handed back so that a group provider
+     *     keyed by DN can match the target the same way it matches that user's own login.</li>
      * </ul>
      *
      * @return the resolved group names, empty when this mode/configuration cannot resolve them - an
      * empty result is never an error here, it just means the caller keeps the group providers only
      */
     public TargetUserGroups resolveMemberOfGroupsForUser(String user) {
-        if (!ldapGroupSource.readsMemberOf()) {
+        if (!Strings.isNullOrEmpty(ldapUserDN)) {
+            // Known without a directory round trip, and never paired with memberOf.
+            return new TargetUserGroups(ldapUserDN, Set.of());
+        }
+        if (!ldapGroupSource.usesAuthenticatorGroups()) {
             // Nothing to read, and deliberately no request: the default configuration must not pay
             // for a directory round trip it does not need.
-            return TargetUserGroups.NONE;
-        }
-        if (!Strings.isNullOrEmpty(ldapUserDN)) {
-            // The legacy per-user-DN form does not support memberOf at all, see authenticate().
             return TargetUserGroups.NONE;
         }
         if (!canProbeWithServiceAccount()) {
@@ -355,7 +370,7 @@ public class LDAPAuthProvider implements AuthenticationProvider {
         private static final TargetUserGroups NONE = new TargetUserGroups(null, Set.of());
     }
 
-    public LdapGroupSource getGroupSource() {
+    public GroupSource getGroupSource() {
         return ldapGroupSource;
     }
 

@@ -696,44 +696,6 @@ std::string MapColumn::debug_string() const {
     return ss.str();
 }
 
-StatusOr<MutableColumnPtr> MapColumn::upgrade_if_overflow() {
-    if (_offsets->size() > Column::MAX_CAPACITY_LIMIT) {
-        return Status::InternalError("Size of MapColumn exceed the limit");
-    }
-
-    auto ret = upgrade_helper_func(_keys->as_mutable_raw_ptr());
-    if (!ret.ok()) {
-        return ret;
-    }
-    if (ret.value() != nullptr) {
-        _keys = std::move(ret.value());
-    }
-
-    ret = upgrade_helper_func(_values->as_mutable_raw_ptr());
-    if (ret.ok() && ret.value() != nullptr) {
-        _values = std::move(ret.value());
-    }
-
-    return ret;
-}
-
-StatusOr<MutableColumnPtr> MapColumn::downgrade() {
-    auto ret = downgrade_helper_func(_keys->as_mutable_raw_ptr());
-    if (!ret.ok()) {
-        return ret;
-    }
-    if (ret.value() != nullptr) {
-        _keys = std::move(ret.value());
-    }
-
-    ret = downgrade_helper_func(_values->as_mutable_raw_ptr());
-    if (ret.ok() && ret.value() != nullptr) {
-        _values = std::move(ret.value());
-    }
-
-    return ret;
-}
-
 Status MapColumn::unfold_const_children(const starrocks::TypeDescriptor& type) {
     DCHECK(type.children.size() == 2) << "Map schema does not match data's";
     size_t keys_size = _keys->size();

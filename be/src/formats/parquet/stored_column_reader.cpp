@@ -78,9 +78,13 @@ private:
     Status _next_page() override;
 
     StatusOr<size_t> _convert_row_to_value(size_t* row) override;
-    void _collect_not_null_values(size_t num_levels, bool lazy_flag) override;
+    void _defer_skip(size_t num_levels) override;
+    // Levels are always consumed by _convert_row_to_value, only values can be pending.
+    Status _skip_deferred_levels() override {
+        DCHECK(_levels_to_skip == 0);
+        return Status::OK();
+    }
 
-    Status _lazy_skip_values(uint64_t begin) override;
     Status _read_values_on_levels(size_t num_values, starrocks::parquet::ColumnContentType content_type,
                                   starrocks::Column* dst, bool append_default, const FilterData* filter) override;
 
@@ -95,9 +99,9 @@ private:
 private:
     const ParquetField* _field = nullptr;
 
+    // Record delimiting state: a record may span pages, so the first rep level of a page does not always start a
+    // record. Set once the start of the current record is seen, reset when a row is completed.
     bool _meet_first_record = false;
-
-    size_t _not_null_to_skip = 0;
 
     NullInfos _null_infos;
 
@@ -139,7 +143,7 @@ private:
     Status _decode_levels(size_t* num_rows, size_t* num_levels_parsed, level_t** def_levels);
 
     void _consume_levels(size_t num_values) { _reader->def_level_decoder().consume_levels(num_values); }
-    Status _lazy_skip_values(uint64_t begin) override;
+    Status _skip_deferred_levels() override;
     Status _read_values_on_levels(size_t num_values, starrocks::parquet::ColumnContentType content_type,
                                   starrocks::Column* dst, bool append_default, const FilterData* filter) override;
 
@@ -181,7 +185,6 @@ public:
     }
 
 private:
-    Status _lazy_skip_values(uint64_t begin) override;
     Status _read_values_on_levels(size_t num_values, starrocks::parquet::ColumnContentType content_type,
                                   starrocks::Column* dst, bool append_default, const FilterData* filter) override;
     const ParquetField* _field = nullptr;
@@ -329,7 +332,7 @@ Status StoredColumnReaderImpl::_skip(uint64_t rows_to_skip) {
                 size_t skip_row = static_cast<size_t>(batch_to_skip) - batch_skipped;
                 ASSIGN_OR_RETURN(size_t num_values, _convert_row_to_value(&skip_row));
                 DCHECK_LE(num_values, _num_values_left_in_cur_page);
-                _collect_not_null_values(num_values, num_values != _num_values_left_in_cur_page);
+                _defer_skip(num_values);
                 _num_values_left_in_cur_page -= num_values;
                 batch_skipped += skip_row;
             } else {
@@ -353,10 +356,13 @@ Status StoredColumnReaderImpl::_read(const Range<uint64_t>& range, const starroc
             ASSIGN_OR_RETURN(size_t num_values, _convert_row_to_value(&to_read));
             DCHECK_LE(num_values, _num_values_left_in_cur_page);
             if (_cur_page_selected(row_readed, filter, to_read)) {
-                RETURN_IF_ERROR(_lazy_skip_values(range.begin()));
+                RETURN_IF_ERROR(_skip_deferred());
                 auto* value_filter = _convert_filter_row_to_value(filter, row_readed);
                 RETURN_IF_ERROR(_read_values_on_levels(num_values, content_type, dst, false, value_filter));
             } else {
+                // The segment may end in the middle of the page: record exactly what is passed over, so that the
+                // next selected read in this page starts at the right position.
+                _defer_skip(num_values);
                 RETURN_IF_ERROR(_read_values_on_levels(num_values, content_type, dst, true));
             }
             row_readed += to_read;
@@ -395,46 +401,58 @@ StatusOr<size_t> RepeatedStoredColumnReader::_convert_row_to_value(size_t* row) 
     return num_parsed_levels;
 }
 
-Status RequiredStoredColumnReader::_lazy_skip_values(uint64_t begin) {
-    if (_cur_page_loaded) {
-        return _reader->skip_values(static_cast<size_t>(begin - _read_cursor));
-    } else {
+Status StoredColumnReaderImpl::_skip_deferred() {
+    if (!_cur_page_loaded) {
         RETURN_IF_ERROR(_reader->load_page());
         _cur_page_loaded = true;
-        return _reader->skip_values(_reader->num_values() - _num_values_left_in_cur_page);
     }
+    if (_levels_to_skip > 0) {
+        RETURN_IF_ERROR(_skip_deferred_levels());
+    }
+    if (_values_to_skip > 0) {
+        size_t to_skip = _values_to_skip;
+        _values_to_skip = 0;
+        return _reader->skip_values(to_skip);
+    }
+    return Status::OK();
 }
 
-Status OptionalStoredColumnReader::_lazy_skip_values(uint64_t begin) {
-    size_t row_to_skip = 0;
-    if (_cur_page_loaded) {
-        row_to_skip = static_cast<size_t>(begin - _read_cursor);
-    } else {
-        RETURN_IF_ERROR(_reader->load_page());
-        _cur_page_loaded = true;
-        row_to_skip = _reader->num_values() - _num_values_left_in_cur_page;
+Status OptionalStoredColumnReader::_skip_deferred_levels() {
+#ifndef NDEBUG
+    // Levels are pending only until the first selected segment of the page; a later segment of the same read
+    // starts on a new page. So no level of the current read is parsed yet and reset_levels() below drops nothing.
+    {
+        level_t* levels = nullptr;
+        size_t num_levels = 0;
+        _reader->def_level_decoder().get_levels(&levels, &num_levels);
+        DCHECK(num_levels == 0);
     }
-    size_t values_to_skip = 0;
-    size_t row_skipped = 0;
-    while (row_skipped < row_to_skip) {
+#endif
+    auto& def_level_decoder = _reader->def_level_decoder();
+    if (!_need_parse_levels && def_level_decoder.can_decode_nulls()) {
+        // 1-bit levels nobody reads back: count the non-null values without materializing them
+        size_t num_non_null = 0;
+        if (UNLIKELY(!def_level_decoder.skip_count_non_null(_levels_to_skip, &num_non_null))) {
+            return Status::InternalError(fmt::format("def levels need to skip: {}", _levels_to_skip));
+        }
+        _values_to_skip += num_non_null;
+        _levels_to_skip = 0;
+        return Status::OK();
+    }
+    size_t level_skipped = 0;
+    while (level_skipped < _levels_to_skip) {
         level_t* def_levels = nullptr;
         size_t level_parsed = 0;
-        size_t cur_to_skip = row_to_skip - row_skipped;
         // skip batch by batch to avoid big memory alloc
-        size_t batch_to_skip = std::min(cur_to_skip, (size_t)BATCH_PROCESS_SIZE);
+        size_t batch_to_skip = std::min(_levels_to_skip - level_skipped, (size_t)BATCH_PROCESS_SIZE);
         RETURN_IF_ERROR(_decode_levels(&batch_to_skip, &level_parsed, &def_levels));
-        values_to_skip += count_not_null(&def_levels[0], level_parsed, _field->max_def_level());
-        row_skipped += level_parsed;
+        _values_to_skip += count_not_null(&def_levels[0], level_parsed, _field->max_def_level());
+        level_skipped += level_parsed;
         // reset_levels() to avoiding using too much memory and prepare levels for new reading.
         reset_levels();
     }
-    return _reader->skip_values(values_to_skip);
-}
-
-Status RepeatedStoredColumnReader::_lazy_skip_values(uint64_t begin) {
-    size_t to_skip = _not_null_to_skip;
-    _not_null_to_skip = 0;
-    return _reader->skip_values(to_skip);
+    _levels_to_skip = 0;
+    return Status::OK();
 }
 
 Status RequiredStoredColumnReader::_read_values_on_levels(size_t num_values,
@@ -448,27 +466,6 @@ Status RequiredStoredColumnReader::_read_values_on_levels(size_t num_values,
     return _reader->decode_values(num_values, content_type, dst, filter);
 }
 
-static void assign_nulls(int16_t* __restrict levels, uint16_t def_level, size_t n, uint8_t* __restrict is_nulls,
-                         size_t* ranges_dst, size_t* num_nulls_dst) {
-    size_t num_ranges = 1;
-    size_t num_nulls{};
-    int16_t max_def_level = def_level;
-    size_t num_values = n;
-    if (num_values > 0) {
-        is_nulls[0] = levels[0] < max_def_level;
-        num_nulls += is_nulls[0];
-    }
-
-    for (size_t i = 1; i < num_values; ++i) {
-        is_nulls[i] = levels[i] < max_def_level;
-        num_nulls += is_nulls[i];
-        num_ranges += is_nulls[i] != is_nulls[i - 1];
-    }
-
-    *ranges_dst = num_ranges;
-    *num_nulls_dst = num_nulls;
-}
-
 Status OptionalStoredColumnReader::_read_values_on_levels(size_t num_values,
                                                           starrocks::parquet::ColumnContentType content_type,
                                                           starrocks::Column* dst, bool append_default,
@@ -478,19 +475,30 @@ Status OptionalStoredColumnReader::_read_values_on_levels(size_t num_values,
         dst->append_default(num_values);
         return Status::OK();
     } else {
+        auto& def_level_decoder = _reader->def_level_decoder();
+        if (!_need_parse_levels && def_level_decoder.can_decode_nulls()) {
+            // Nobody reads these levels back (get_levels), so decode 1-bit levels straight into null flags.
+            if (UNLIKELY(!def_level_decoder.decode_nulls(num_values, &_null_infos))) {
+                return Status::InternalError(fmt::format("def levels need to parsed: {}", num_values));
+            }
+            if (_reader->current_page_no_null()) {
+                return _reader->decode_values(num_values, content_type, dst, filter);
+            }
+            return _reader->decode_values(num_values, _null_infos, content_type, dst, filter);
+        }
         level_t* def_levels = nullptr;
         size_t level_parsed = 0;
         RETURN_IF_ERROR(_decode_levels(&num_values, &level_parsed, &def_levels));
         DCHECK_EQ(num_values, level_parsed);
-        _null_infos.reset_with_capacity(num_values);
-        size_t num_ranges = 1;
-        size_t num_nulls{};
-        // decode def levels
-        level_t max_def_level = _field->max_def_level();
-        uint8_t* __restrict is_nulls = _null_infos.nulls_data();
-        assign_nulls(def_levels, max_def_level, num_values, is_nulls, &num_ranges, &num_nulls);
-        _null_infos.num_ranges = num_ranges;
-        _null_infos.num_nulls = num_nulls;
+        if (_reader->current_page_no_null()) {
+            // statistics say there are no nulls: the null flags would be all zero and decode_values ignores them
+            return _reader->decode_values(num_values, content_type, dst, filter);
+        }
+        {
+            SCOPED_RAW_TIMER(&_opts.stats->level_decode_ns);
+            _null_infos.reset_with_capacity(num_values);
+            assign_nulls_from_def_levels(def_levels, _field->max_def_level(), num_values, &_null_infos);
+        }
         return _reader->decode_values(num_values, _null_infos, content_type, dst, filter);
     }
 }
@@ -499,10 +507,21 @@ Status RepeatedStoredColumnReader::_read_values_on_levels(size_t num_values,
                                                           starrocks::parquet::ColumnContentType content_type,
                                                           starrocks::Column* dst, bool append_default,
                                                           const FilterData* filter) {
+    level_t* def_levels = _reader->def_level_decoder().get_forward_levels(num_values);
+    if (append_default) {
+        // Only the number of slots is needed; the skip of the values is recorded by _defer_skip().
+        size_t num_slots = 0;
+        level_t slot_def_level = _field->level_info.immediate_repeated_ancestor_def_level;
+        for (size_t i = 0; i < num_values; ++i) {
+            num_slots += def_levels[i] >= slot_def_level;
+        }
+        dst->append_default(num_slots);
+        return Status::OK();
+    }
+
     _null_infos.reset_with_capacity(num_values);
 
     int null_pos = 0;
-    level_t* def_levels = _reader->def_level_decoder().get_forward_levels(num_values);
     uint8_t* __restrict is_nulls = _null_infos.nulls_data();
     int16_t* __restrict levels = def_levels;
     size_t num_nulls{};
@@ -516,21 +535,19 @@ Status RepeatedStoredColumnReader::_read_values_on_levels(size_t num_values,
         null_pos += has_value;
     }
     _null_infos.num_nulls = num_nulls;
-    if (append_default) {
-        _collect_not_null_values(num_values, num_values != _num_values_left_in_cur_page);
-        dst->append_default(null_pos);
-        return Status::OK();
-    } else if (null_pos != 0) {
+    if (null_pos != 0) {
         return _reader->decode_values(null_pos, _null_infos, content_type, dst, filter);
     } else {
         return Status::OK();
     }
 }
 
-void RepeatedStoredColumnReader::_collect_not_null_values(size_t num_levels, bool lazy_flag) {
-    if (lazy_flag) {
-        _not_null_to_skip += count_not_null(_reader->def_level_decoder().get_forward_levels(num_levels), num_levels,
-                                            _field->max_def_level());
+void RepeatedStoredColumnReader::_defer_skip(size_t num_levels) {
+    // The levels are already consumed by _convert_row_to_value; only the values are pending. Nothing to record
+    // when the rest of the page is passed over: the next read enters a new page.
+    if (num_levels != _num_values_left_in_cur_page) {
+        _values_to_skip += count_not_null(_reader->def_level_decoder().get_forward_levels(num_levels), num_levels,
+                                          _field->max_def_level());
     }
 }
 
@@ -543,14 +560,17 @@ Status StoredColumnReaderImpl::_next_page() {
     } else {
         _cur_page_loaded = false;
         _num_values_left_in_cur_page = _reader->num_values();
+        _reset_deferred_skip();
     }
     return Status::OK();
 }
 
 Status RepeatedStoredColumnReader::_next_page() {
     RETURN_IF_ERROR(StoredColumnReaderImpl::_next_page());
-    _not_null_to_skip = 0;
-    return _reader->load_page();
+    // Levels are needed to delimit rows, so the page is always loaded eagerly.
+    RETURN_IF_ERROR(_reader->load_page());
+    _cur_page_loaded = true;
+    return Status::OK();
 }
 
 bool StoredColumnReaderImpl::_cur_page_selected(size_t row_readed, const Filter* filter, size_t to_read) {
@@ -575,13 +595,15 @@ Status StoredColumnReaderImpl::load_specific_page(size_t cur_page_idx, uint64_t 
     RETURN_IF_ERROR(_reader->load_header());
     _cur_page_loaded = false;
     _num_values_left_in_cur_page = _reader->num_values();
+    _reset_deferred_skip();
     _read_cursor = first_row;
     return Status::OK();
 }
 
 Status RepeatedStoredColumnReader::load_specific_page(size_t cur_page_idx, uint64_t offset, uint64_t first_row) {
     RETURN_IF_ERROR(StoredColumnReaderImpl::load_specific_page(cur_page_idx, offset, first_row));
-    _not_null_to_skip = 0;
-    return _reader->load_page();
+    RETURN_IF_ERROR(_reader->load_page());
+    _cur_page_loaded = true;
+    return Status::OK();
 }
 } // namespace starrocks::parquet

@@ -182,10 +182,10 @@
 #include "storage/lake/filenames.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_writer.h"
-#include "storage/lake/update_manager.h"
 #include "storage/lake/versioned_tablet.h"
 #include "storage/lake/vertical_compaction_task.h"
 #include "storage/options.h"
@@ -408,15 +408,16 @@ public:
         _parent_tracker = std::make_unique<MemTracker>(-1);
         _mem_tracker = std::make_unique<MemTracker>(-1, "flat-json-bench", _parent_tracker.get());
         _location_provider = std::make_shared<FixedLocationProvider>(_root);
-        _update_manager = std::make_unique<UpdateManager>(_location_provider, _mem_tracker.get());
-        _tablet_manager = std::make_unique<TabletManager>(_location_provider, _update_manager.get(), 512 * 1024 * 1024,
-                                                          PlatformEnv::GetInstance()->store_path_registry());
+        _primary_key_manager = std::make_unique<PrimaryKeyManager>(_location_provider, _mem_tracker.get());
+        _tablet_manager =
+                std::make_unique<TabletManager>(_location_provider, _primary_key_manager.get(), 512 * 1024 * 1024,
+                                                PlatformEnv::GetInstance()->store_path_registry());
         return Status::OK();
     }
 
     ~LakeHarness() {
         _tablet_manager.reset();
-        _update_manager.reset();
+        _primary_key_manager.reset();
         if (!_root.empty()) {
             (void)fs::remove_all(_root);
         }
@@ -429,7 +430,7 @@ private:
     std::unique_ptr<MemTracker> _parent_tracker;
     std::unique_ptr<MemTracker> _mem_tracker;
     std::shared_ptr<LocationProvider> _location_provider;
-    std::unique_ptr<UpdateManager> _update_manager;
+    std::unique_ptr<PrimaryKeyManager> _primary_key_manager;
     std::unique_ptr<TabletManager> _tablet_manager;
 };
 

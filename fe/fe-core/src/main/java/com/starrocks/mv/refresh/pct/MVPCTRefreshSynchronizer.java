@@ -38,6 +38,7 @@ import com.starrocks.scheduler.mv.pct.PCTRefreshScope;
 import com.starrocks.scheduler.mv.pct.PCTTableSnapshotInfo;
 import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
 import com.starrocks.sql.common.DmlException;
+import com.starrocks.sql.common.MVInactiveException;
 import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 
@@ -190,7 +191,7 @@ public final class MVPCTRefreshSynchronizer {
                 MaterializedView mv = processor.getMv();
                 MVRefreshSchemaChecker.checkExternalBaseSchemaCompat(mv);
                 if (!mv.isActive()) {
-                    throw new DmlException(String.format(
+                    throw new MVInactiveException(String.format(
                             "Materialized view: %s/%d is not active due to %s.",
                             mv.getName(), mv.getId(), mv.getInactiveReason()));
                 }

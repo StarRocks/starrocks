@@ -410,10 +410,13 @@ public class SchemaChangeHandlerLakeIndexFastPathTest {
     public void testTryBuildLakeAddBloomFilterJob_HappyPath() throws Exception {
         SchemaChangeHandler handler = newHandler();
         OlapTable table = stubLakeTable("c1", "c2");
+        Column renamed = table.getColumn(ColumnId.create("c1"));
+        renamed.setName("renamed");
+        when(table.getColumn("renamed")).thenReturn(renamed);
         when(table.getBfFpp()).thenReturn(0.05);
 
         Method m = privateMethod("tryBuildLakeAddBloomFilterJob", Database.class, OlapTable.class, Set.class);
-        Set<String> added = new HashSet<>(Arrays.asList("c1", "c2"));
+        Set<String> added = new HashSet<>(Arrays.asList("renamed", "c2"));
         try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class)) {
             GlobalStateMgr gsm = stubGsm();
             gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
@@ -427,6 +430,15 @@ public class SchemaChangeHandlerLakeIndexFastPathTest {
                 assertNotNull(t.getIndex_properties());
                 assertTrue(t.getIndex_properties().containsKey("bloom_filter_fpp"));
             }
+            AlterReplicaTask task = mock(AlterReplicaTask.class);
+            job.populateAlterRequest(task, 100L, table.getIndexMetaByMetaId(100L), table);
+            ArgumentCaptor<List<TOlapTableIndex>> indexes = ArgumentCaptor.forClass(List.class);
+            verify(task).setOnlyAddIndex(indexes.capture());
+            Set<String> wireColumns = new HashSet<>();
+            for (TOlapTableIndex index : indexes.getValue()) {
+                wireColumns.addAll(index.getColumns());
+            }
+            assertEquals(Set.of("c1", "c2"), wireColumns);
             verify(table).setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
         }
     }

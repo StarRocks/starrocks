@@ -1,0 +1,30 @@
+-- name: test_native_geo_coverage_simplify_fixed_arithmetic
+SET pipeline_dop=4;
+-- result:
+-- !result
+CREATE TABLE exact_fixture_${uuid0} (id INT, coverage_id INT, wkt VARCHAR(256), expected VARCHAR(256)) DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 3 PROPERTIES("replication_num"="1");
+-- result:
+-- !result
+INSERT INTO exact_fixture_${uuid0} VALUES (1,1,'POLYGON ((0 0,0 1,4 1,6 0.5,4 0,0 0))','POLYGON ((0 0,0 1,4 1,4 0,0 0))'),(2,1,'POLYGON ((4 0,6 0.5,4 1,8 1,8 0,4 0))','POLYGON ((4 0,4 1,8 1,8 0,4 0))'),(3,2,'POLYGON ((0 0,0 1,4 1,6.000000000000001 0.5,4 0,0 0))','POLYGON ((0 0,0 1,4 1,6.000000000000001 0.5,4 0,0 0))'),(4,2,'POLYGON ((4 0,6.000000000000001 0.5,4 1,8 1,8 0,4 0))','POLYGON ((4 0,6.000000000000001 0.5,4 1,8 1,8 0,4 0))');
+-- result:
+-- !result
+SELECT id, ST_AsBinary(f)=ST_AsBinary(ST_GeomFromText(expected,'EPSG:3857')), ST_AsBinary(t)=ST_AsBinary(ST_GeomFromText(expected,'EPSG:3857')), ST_AsBinary(d)=ST_AsBinary(ST_GeomFromText(expected,'EPSG:3857')) FROM (SELECT id,expected,ST_CoverageSimplify(ST_GeomFromText(wkt,'EPSG:3857'),1,FALSE) OVER(PARTITION BY coverage_id) f,ST_CoverageSimplify(ST_GeomFromText(wkt,'EPSG:3857'),1,TRUE) OVER(PARTITION BY coverage_id) t,ST_CoverageSimplify(ST_GeomFromText(wkt,'EPSG:3857'),1) OVER(PARTITION BY coverage_id) d FROM exact_fixture_${uuid0}) s ORDER BY id;
+-- result:
+1	1	1	1
+2	1	1	1
+3	1	1	1
+4	1	1	1
+-- !result
+SET pipeline_dop=1;
+-- result:
+-- !result
+SELECT id, ST_AsBinary(f)=ST_AsBinary(ST_GeomFromText(expected,'EPSG:3857')), ST_AsBinary(t)=ST_AsBinary(ST_GeomFromText(expected,'EPSG:3857')), ST_AsBinary(d)=ST_AsBinary(ST_GeomFromText(expected,'EPSG:3857')) FROM (SELECT id,expected,ST_CoverageSimplify(ST_GeomFromText(wkt,'EPSG:3857'),1,FALSE) OVER(PARTITION BY coverage_id) f,ST_CoverageSimplify(ST_GeomFromText(wkt,'EPSG:3857'),1,TRUE) OVER(PARTITION BY coverage_id) t,ST_CoverageSimplify(ST_GeomFromText(wkt,'EPSG:3857'),1) OVER(PARTITION BY coverage_id) d FROM exact_fixture_${uuid0}) s ORDER BY id;
+-- result:
+1	1	1	1
+2	1	1	1
+3	1	1	1
+4	1	1	1
+-- !result
+DROP TABLE exact_fixture_${uuid0};
+-- result:
+-- !result

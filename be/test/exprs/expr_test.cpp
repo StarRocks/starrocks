@@ -81,6 +81,14 @@ TEST(ExprTest, TypeWithoutCastSkipsCastOpcode) {
     EXPECT_EQ(&child, Expr::expr_without_cast(&cast));
 }
 
+TEST(ExprTest, GeoTypesDoNotRequireLiteralNode) {
+    for (auto type : {TYPE_GEOGRAPHY, TYPE_GEOMETRY}) {
+        SimpleExpr expr{TypeDescriptor(type)};
+        EXPECT_EQ(type, expr.type().type);
+        EXPECT_FALSE(expr.is_slotref());
+    }
+}
+
 TEST(ExprTest, EvaluateConstCachesResult) {
     SimpleExpr expr{TypeDescriptor(TYPE_INT)};
     RuntimeState state;

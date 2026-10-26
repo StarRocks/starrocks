@@ -645,6 +645,36 @@ StatusOr<int64_t> Rowset::copy_files_to(const std::string& dir) {
                             ncopy += copy_st.value();
                         }
                     }
+                } else if (index.index_type() == IndexType::VECTOR) {
+                    std::string src_index_path = IndexDescriptor::vector_index_file_path(
+                            _rowset_path, rowset_id().to_string(), i, index.index_id());
+                    // As in link_files_to(), an index build below the threshold may leave no .vi file.
+                    auto st = FileSystem::Default()->path_exists(src_index_path);
+                    if (st.is_not_found()) {
+                        VLOG(2) << "skip copying non-existent vector index file " << src_index_path;
+                        continue;
+                    }
+                    RETURN_IF_ERROR(st);
+
+                    std::string dst_index_path =
+                            IndexDescriptor::vector_index_file_path(dir, rowset_id().to_string(), i, index.index_id());
+                    st = FileSystem::Default()->path_exists(dst_index_path);
+                    if (st.ok()) {
+                        LOG(WARNING) << "Index path already exist: " << dst_index_path;
+                        return Status::AlreadyExist(fmt::format("Index path already exist: {}", dst_index_path));
+                    }
+                    if (!st.is_not_found()) {
+                        return st;
+                    }
+
+                    copy_st = fs::copy_file(src_index_path, dst_index_path);
+                    if (!copy_st.ok()) {
+                        LOG(WARNING) << "Error to copy vector index. src:" << src_index_path
+                                     << ", dst:" << dst_index_path << ", error:" << copy_st.status();
+                        return copy_st.status().clone_and_append(
+                                fmt::format("Fail to copy vector index from {} to {}", src_index_path, dst_index_path));
+                    }
+                    ncopy += copy_st.value();
                 }
             }
         }

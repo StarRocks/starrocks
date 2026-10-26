@@ -59,4 +59,8 @@ using MasterInfoPtr = butil::DoublyBufferedData<TMasterInfo>::ScopedPtr;
 // Returns the value of current FE's run mode.
 [[nodiscard]] std::optional<TRunMode::type> get_master_run_mode();
 
+// Returns true if the current FE leader declared in its heartbeat flags that it ignores the finish report of an
+// ALTER task answering another job than the queued task's. False if the flags are absent.
+[[nodiscard]] bool master_matches_alter_finish_by_job_id();
+
 } // namespace starrocks

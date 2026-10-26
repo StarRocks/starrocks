@@ -22,6 +22,7 @@
 
 #include "base/simd/simd.h"
 #include "column/column_helper.h"
+#include "exec/runtime_filter_compat/runtime_filter_merger.h"
 #include "exec/runtime_filter_compat/runtime_filter_serde.h"
 #include "testutil/column_test_helper.h"
 #include "types/logical_type.h"
@@ -1450,6 +1451,20 @@ TEST_F(RuntimeMembershipFilterTest, TestEvaluateBitsetFilter) {
         // Only min-max filter effective.
         _check_equal(ctx.selection, {0, 0, 1, 0, 1, 0, 0, 1, 1});
     }
+}
+
+TEST_F(RuntimeFilterTest, TestMergerMaxSizeNonPositiveMeansNoLimit) {
+    TRuntimeFilterParams params;
+    EXPECT_EQ(std::numeric_limits<size_t>::max(), RuntimeFilterMerger::resolve_max_size(params));
+
+    params.__set_runtime_filter_max_size(0);
+    EXPECT_EQ(std::numeric_limits<size_t>::max(), RuntimeFilterMerger::resolve_max_size(params));
+
+    params.__set_runtime_filter_max_size(-1);
+    EXPECT_EQ(std::numeric_limits<size_t>::max(), RuntimeFilterMerger::resolve_max_size(params));
+
+    params.__set_runtime_filter_max_size(64L * 1024 * 1024);
+    EXPECT_EQ(64UL * 1024 * 1024, RuntimeFilterMerger::resolve_max_size(params));
 }
 
 INSTANTIATE_TEST_SUITE_P(RuntimeFilterTest, RuntimeFilterTestFixture, ::testing::Values(RF_VERSION_V2, RF_VERSION_V3));

@@ -15,29 +15,84 @@
 
 package com.starrocks.http;
 
+import com.starrocks.authentication.AuthChannel;
+import com.starrocks.authentication.AuthCredentialKind;
+import com.starrocks.authentication.AuthCredentials;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 public class BasicActionTest {
 
+    /**
+     * TC-L3-46-01: the Basic branch must produce a PLAIN_PASSWORD credential tagged with the HTTP
+     * channel, and must strip the legacy {@code user@cluster_id} suffix the same way it always did.
+     */
     @Test
-    public void testParseAuthInfo() {
-        BaseAction.ActionAuthorizationInfo authInfo =
-                BaseAction.parseAuthInfo("abc", "123", "127.0.0.1");
-        verifyAuthInfo(BaseAction.ActionAuthorizationInfo.of(
-                "abc", "123", "127.0.0.1"), authInfo);
+    public void testParseBasicCredential() {
+        AuthCredentials cred = parseBasic("abc", "123", "127.0.0.1");
+        assertEquals(AuthCredentialKind.PLAIN_PASSWORD, cred.kind());
+        assertEquals(AuthChannel.HTTP, cred.channel());
+        assertEquals("abc", cred.userDeclared());
+        assertEquals("127.0.0.1", cred.remoteHost());
+        assertEquals("123", cred.tokenString());
 
-        authInfo = BaseAction.parseAuthInfo("test@cluster_id", "", "192.168.19.10");
-        verifyAuthInfo(BaseAction.ActionAuthorizationInfo.of(
-                "test", "", "192.168.19.10"), authInfo);
+        cred = parseBasic("test@cluster_id", "", "192.168.19.10");
+        assertEquals("test", cred.userDeclared());
+        assertEquals("", cred.tokenString());
+        assertEquals("192.168.19.10", cred.remoteHost());
     }
 
-    private void verifyAuthInfo(BaseAction.ActionAuthorizationInfo expect, BaseAction.ActionAuthorizationInfo actual) {
-        assertEquals(expect.fullUserName, actual.fullUserName);
-        assertEquals(expect.remoteIp, actual.remoteIp);
-        assertEquals(expect.password, actual.password);
+    /** TC-L3-46-02: the Bearer branch carries no declared user - the username comes from the token. */
+    @Test
+    public void testParseBearerCredential() {
+        AuthCredentials cred = new BaseAction(null) {
+            @Override
+            public void execute(BaseRequest request, BaseResponse response) {
+            }
+        }.parseAuthCredentials(mockRequest("Bearer header.payload.signature", "10.1.2.3"));
+        assertEquals(AuthCredentialKind.BEARER_TOKEN, cred.kind());
+        assertEquals(AuthChannel.HTTP, cred.channel());
+        Assertions.assertNull(cred.userDeclared());
+        assertEquals("header.payload.signature", cred.tokenString());
+    }
+
+    /** TC-L3-46-03: missing header, unknown scheme and malformed Basic all yield null, i.e. a 401. */
+    @Test
+    public void testParseRejectsUnusableHeaders() {
+        BaseAction action = new BaseAction(null) {
+            @Override
+            public void execute(BaseRequest request, BaseResponse response) {
+            }
+        };
+        Assertions.assertNull(action.parseAuthCredentials(mockRequest(null, "10.1.2.3")));
+        Assertions.assertNull(action.parseAuthCredentials(mockRequest("Foo xxx", "10.1.2.3")));
+        Assertions.assertNull(action.parseAuthCredentials(mockRequest("Basic", "10.1.2.3")));
+        // Base64 of "nocolon" - no ':' separator, so user and password cannot be split.
+        Assertions.assertNull(action.parseAuthCredentials(mockRequest("Basic bm9jb2xvbg==", "10.1.2.3")));
+    }
+
+    private static AuthCredentials parseBasic(String user, String password, String host) {
+        String encoded = Base64.getEncoder().encodeToString(
+                (user + ":" + password).getBytes(StandardCharsets.UTF_8));
+        return new BaseAction(null) {
+            @Override
+            public void execute(BaseRequest request, BaseResponse response) {
+            }
+        }.parseAuthCredentials(mockRequest("Basic " + encoded, host));
+    }
+
+    private static BaseRequest mockRequest(String authHeader, String host) {
+        BaseRequest request = mock(BaseRequest.class);
+        when(request.getAuthorizationHeader()).thenReturn(authHeader);
+        when(request.getHostString()).thenReturn(host);
+        return request;
     }
 
     @Test
@@ -55,6 +110,29 @@ public class BasicActionTest {
         uri = "/api/metrics?all=true";
         result = WebUtils.sanitizeHttpReqUri(uri);
         Assertions.assertEquals(uri, result);
+
+        Assertions.assertEquals("/api/metrics", WebUtils.sanitizeHttpReqUri("/api/metrics"));
+    }
+
+    @Test
+    public void testSanitizeHttpReqUriParsesQueryAsActionsDo() throws Exception {
+        // Each of these passes token=TopSecret to the action, which parses the query with QueryStringDecoder: ';' is
+        // a separator too, a leading '=' in a name is skipped, and an escaped '&' is part of the value.
+        String[] uris = {
+                "/api/bootstrap?label=1;token=TopSecret",
+                "/api/bootstrap?label=1&=token=TopSecret",
+                "/api/bootstrap?label=1&token=Top%26Secret",
+        };
+        for (String uri : uris) {
+            Assertions.assertEquals("/api/bootstrap?label=1&token=*", WebUtils.sanitizeHttpReqUri(uri), uri);
+        }
+
+        // The other parameters keep their order, and are encoded again; what is not parsed as a parameter, like the
+        // fragment, is left out.
+        Assertions.assertEquals("/api/get_small_file?label=a+b&file_id=*&flag=",
+                WebUtils.sanitizeHttpReqUri("/api/get_small_file?label=a%20b&file_id=1&flag"));
+        Assertions.assertEquals("http://fe:8030/api/bootstrap?token=*&token=*",
+                WebUtils.sanitizeHttpReqUri("http://fe:8030/api/bootstrap?token=a&token=b#Secret"));
     }
 
 }

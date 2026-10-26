@@ -1,0 +1,305 @@
+-- name: test_agg_serialized_key_compact_len
+create table t_len (
+    id int,
+    s1 varchar(65533),
+    s2 varchar(65533),
+    n int
+) DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 3 PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+insert into t_len
+select x, repeat('a', 250 + (x % 9)), repeat('b', 1 + (floor(x / 9) % 3)), x % 5
+from TABLE(generate_series(1, 2000)) as g(x);
+-- result:
+-- !result
+set pipeline_dop=2;
+-- result:
+-- !result
+select length(s1), length(s2), count(*) from t_len group by s1, s2 order by 1, 2;
+-- result:
+250	1	74
+250	2	74
+250	3	74
+251	1	75
+251	2	74
+251	3	74
+252	1	75
+252	2	74
+252	3	74
+253	1	74
+253	2	74
+253	3	74
+254	1	74
+254	2	74
+254	3	74
+255	1	74
+255	2	74
+255	3	74
+256	1	74
+256	2	74
+256	3	74
+257	1	74
+257	2	74
+257	3	74
+258	1	74
+258	2	74
+258	3	74
+-- !result
+select count(*) as num_groups from (select s1, s2 from t_len group by s1, s2) t;
+-- result:
+27
+-- !result
+select count(distinct s1) as d1, count(distinct s2) as d2 from t_len;
+-- result:
+9	3
+-- !result
+insert into t_len values (90001, null, repeat('b', 2), 1);
+-- result:
+-- !result
+insert into t_len values (90002, repeat('a', 254), null, 2);
+-- result:
+-- !result
+insert into t_len values (90003, repeat('a', 255), null, 2);
+-- result:
+-- !result
+insert into t_len values (90004, null, null, 3);
+-- result:
+-- !result
+select count(*) as num_groups_with_nulls from (select s1, s2 from t_len group by s1, s2) t;
+-- result:
+31
+-- !result
+select length(s1), length(s2), count(*) from t_len where s1 is null or s2 is null group by s1, s2 order by 1, 2;
+-- result:
+None	None	1
+None	2	1
+254	None	1
+255	None	1
+-- !result
+select count(*) from (select distinct s1, s2 from t_len) t;
+-- result:
+31
+-- !result
+select count(*) from ((select s1, s2 from t_len) except (select s1, s2 from t_len where length(s1) = 254)) t;
+-- result:
+27
+-- !result
+select count(*) from ((select s1, s2 from t_len) intersect (select s1, s2 from t_len where length(s1) >= 255)) t;
+-- result:
+13
+-- !result
+select length(s1), length(s2), cnt from (
+    select s1, s2,
+           count(*) over (partition by s1, s2) as cnt,
+           row_number() over (partition by s1, s2 order by id) as rn
+    from t_len
+) t where rn = 1 order by 1, 2;
+-- result:
+None	None	1
+None	2	1
+250	1	74
+250	2	74
+250	3	74
+251	1	75
+251	2	74
+251	3	74
+252	1	75
+252	2	74
+252	3	74
+253	1	74
+253	2	74
+253	3	74
+254	None	1
+254	1	74
+254	2	74
+254	3	74
+255	None	1
+255	1	74
+255	2	74
+255	3	74
+256	1	74
+256	2	74
+256	3	74
+257	1	74
+257	2	74
+257	3	74
+258	1	74
+258	2	74
+258	3	74
+-- !result
+select length(s1), length(s2), n, count(*) from t_len group by s1, s2, n order by 1, 2, 3;
+-- result:
+None	None	3	1
+None	2	1	1
+250	1	0	14
+250	1	1	15
+250	1	2	15
+250	1	3	15
+250	1	4	15
+250	2	0	15
+250	2	1	15
+250	2	2	14
+250	2	3	15
+250	2	4	15
+250	3	0	15
+250	3	1	14
+250	3	2	15
+250	3	3	15
+250	3	4	15
+251	1	0	15
+251	1	1	15
+251	1	2	15
+251	1	3	15
+251	1	4	15
+251	2	0	15
+251	2	1	15
+251	2	2	15
+251	2	3	14
+251	2	4	15
+251	3	0	15
+251	3	1	15
+251	3	2	14
+251	3	3	15
+251	3	4	15
+252	1	0	15
+252	1	1	15
+252	1	2	15
+252	1	3	15
+252	1	4	15
+252	2	0	15
+252	2	1	15
+252	2	2	15
+252	2	3	15
+252	2	4	14
+252	3	0	15
+252	3	1	15
+252	3	2	15
+252	3	3	14
+252	3	4	15
+253	1	0	15
+253	1	1	14
+253	1	2	15
+253	1	3	15
+253	1	4	15
+253	2	0	14
+253	2	1	15
+253	2	2	15
+253	2	3	15
+253	2	4	15
+253	3	0	15
+253	3	1	15
+253	3	2	15
+253	3	3	15
+253	3	4	14
+254	None	2	1
+254	1	0	15
+254	1	1	15
+254	1	2	14
+254	1	3	15
+254	1	4	15
+254	2	0	15
+254	2	1	14
+254	2	2	15
+254	2	3	15
+254	2	4	15
+254	3	0	14
+254	3	1	15
+254	3	2	15
+254	3	3	15
+254	3	4	15
+255	None	2	1
+255	1	0	15
+255	1	1	15
+255	1	2	15
+255	1	3	14
+255	1	4	15
+255	2	0	15
+255	2	1	15
+255	2	2	14
+255	2	3	15
+255	2	4	15
+255	3	0	15
+255	3	1	14
+255	3	2	15
+255	3	3	15
+255	3	4	15
+256	1	0	15
+256	1	1	15
+256	1	2	15
+256	1	3	15
+256	1	4	14
+256	2	0	15
+256	2	1	15
+256	2	2	15
+256	2	3	14
+256	2	4	15
+256	3	0	15
+256	3	1	15
+256	3	2	14
+256	3	3	15
+256	3	4	15
+257	1	0	14
+257	1	1	15
+257	1	2	15
+257	1	3	15
+257	1	4	15
+257	2	0	15
+257	2	1	15
+257	2	2	15
+257	2	3	15
+257	2	4	14
+257	3	0	15
+257	3	1	15
+257	3	2	15
+257	3	3	14
+257	3	4	15
+258	1	0	15
+258	1	1	14
+258	1	2	15
+258	1	3	15
+258	1	4	15
+258	2	0	14
+258	2	1	15
+258	2	2	15
+258	2	3	15
+258	2	4	15
+258	3	0	15
+258	3	1	15
+258	3	2	15
+258	3	3	15
+258	3	4	14
+-- !result
+create table t_huge (
+    id int,
+    s1 varchar(1048576),
+    s2 varchar(100)
+) DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+insert into t_huge select x, repeat('z', 600000), concat('k', x % 3) from TABLE(generate_series(1, 6)) as g(x);
+-- result:
+-- !result
+insert into t_huge values (100, 'short', 'k0');
+-- result:
+-- !result
+insert into t_huge values (101, 'short', 'k0');
+-- result:
+-- !result
+insert into t_huge values (102, repeat('z', 600000), 'k0');
+-- result:
+-- !result
+select count(*) as num_groups from (select s1, s2 from t_huge group by s1, s2) t;
+-- result:
+4
+-- !result
+select length(s1), s2, count(*) from t_huge group by s1, s2 order by 1, 2;
+-- result:
+5	k0	2
+600000	k0	3
+600000	k1	2
+600000	k2	2
+-- !result
+select count(distinct s1) from t_huge;
+-- result:
+2
+-- !result

@@ -14,7 +14,10 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.common.Pair;
 import com.starrocks.planner.ScanNode;
+import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -202,5 +205,25 @@ public class HiveScanTest extends ConnectorPlanTestBase {
             }
         }
         connectContext.getSessionVariable().setEnableRewriteSimpleAggToHdfsScan(false);
+    }
+
+    @Test
+    public void testTwoKeyRollupSkipsUnprunedPartitionedScan() throws Exception {
+        // PushDownAggregateGroupingSetsRule runs before external partition pruning; estimating an unpruned
+        // partitioned hive scan would read every partition's statistics, so the rule keeps main's plan unestimated
+        boolean previous = connectContext.getSessionVariable().isCboPushDownGroupingSet();
+        connectContext.getSessionVariable().setCboPushDownGroupingSet(true);
+        try {
+            Pair<ExecPlan, String> planAndTrace = UtFrameUtils.getFragmentPlanWithTrace(connectContext,
+                    "select l_returnflag, l_linestatus, count(*) from hive0.partitioned_db.lineitem_par " +
+                            "group by rollup(l_returnflag, l_linestatus)", "Optimizer").second;
+            String plan = planAndTrace.first.getExplainString(TExplainLevel.NORMAL);
+            assertNotContains(plan, "MultiCastDataSinks");
+            assertContains(plan, "repeat: repeat 2 lines");
+            Assertions.assertTrue(planAndTrace.second.contains(
+                    "scans a partitioned table before partition pruning"), planAndTrace.second);
+        } finally {
+            connectContext.getSessionVariable().setCboPushDownGroupingSet(previous);
+        }
     }
 }

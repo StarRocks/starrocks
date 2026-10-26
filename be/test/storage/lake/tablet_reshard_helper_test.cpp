@@ -21,7 +21,6 @@
 #include <numeric>
 #include <optional>
 #include <random>
-#include <roaring/roaring.hh>
 
 #include "base/testutil/assert.h"
 #include "storage/datum_variant.h"
@@ -707,85 +706,6 @@ bool ranges_pb_equal(const TabletRangePB& a, const TabletRangePB& b) {
 
 } // namespace
 
-// ranges_are_contiguous --------------------------------------------------------
-
-TEST_F(TabletReshardHelperTest, test_ranges_are_contiguous_overlap) {
-    EXPECT_TRUE(ranges_are_contiguous(co_range(0, 15), co_range(10, 20)));
-    EXPECT_TRUE(ranges_are_contiguous(co_range(10, 20), co_range(0, 15)));
-}
-
-TEST_F(TabletReshardHelperTest, test_ranges_are_contiguous_touching_included) {
-    // [0, 10] + [10, 20) → contiguous (10 is in left side).
-    EXPECT_TRUE(ranges_are_contiguous(make_range(0, true, 10, true), make_range(10, false, 20, false)));
-    // [0, 10) + [10, 20) → contiguous (10 is in right side, lower_included).
-    EXPECT_TRUE(ranges_are_contiguous(co_range(0, 10), co_range(10, 20)));
-    // Reverse argument order.
-    EXPECT_TRUE(ranges_are_contiguous(co_range(10, 20), co_range(0, 10)));
-}
-
-TEST_F(TabletReshardHelperTest, test_ranges_are_contiguous_touching_excluded) {
-    // [0, 10) + (10, 20) → gap at value 10 (excluded both sides).
-    EXPECT_FALSE(ranges_are_contiguous(co_range(0, 10), make_range(10, false, 20, false)));
-}
-
-TEST_F(TabletReshardHelperTest, test_ranges_are_contiguous_gap) {
-    EXPECT_FALSE(ranges_are_contiguous(co_range(0, 10), co_range(20, 30)));
-    EXPECT_FALSE(ranges_are_contiguous(co_range(20, 30), co_range(0, 10)));
-}
-
-TEST_F(TabletReshardHelperTest, test_ranges_are_contiguous_unbounded_same_side) {
-    // (-∞, 10) + (-∞, 20) → both reach -∞, overlap → contiguous.
-    EXPECT_TRUE(ranges_are_contiguous(co_range(std::nullopt, 10), co_range(std::nullopt, 20)));
-    // [10, +∞) + [20, +∞) → both reach +∞, overlap → contiguous.
-    EXPECT_TRUE(ranges_are_contiguous(make_range(10, true, std::nullopt, false),
-                                      make_range(20, true, std::nullopt, false)));
-}
-
-TEST_F(TabletReshardHelperTest, test_ranges_are_contiguous_unbounded_inner) {
-    // (-∞, +∞) covers everything, contiguous with anything non-empty.
-    EXPECT_TRUE(ranges_are_contiguous(make_range(std::nullopt, false, std::nullopt, false), co_range(0, 10)));
-    // (-∞, 10) + [20, +∞) → strict gap [10, 20).
-    EXPECT_FALSE(ranges_are_contiguous(co_range(std::nullopt, 10), make_range(20, true, std::nullopt, false)));
-    // (-∞, 10) + [10, +∞) → touch at 10, contiguous.
-    EXPECT_TRUE(ranges_are_contiguous(make_range(std::nullopt, false, 10, false),
-                                      make_range(10, true, std::nullopt, false)));
-}
-
-// sort_and_merge_adjacent_ranges -----------------------------------------------
-
-TEST_F(TabletReshardHelperTest, test_sort_and_merge_adjacent_basic) {
-    auto result = sort_and_merge_adjacent_ranges({co_range(20, 30), co_range(0, 10)});
-    ASSERT_TRUE(result.ok());
-    ASSERT_EQ(2u, result.value().size());
-    EXPECT_TRUE(ranges_pb_equal(co_range(0, 10), result.value()[0]));
-    EXPECT_TRUE(ranges_pb_equal(co_range(20, 30), result.value()[1]));
-}
-
-TEST_F(TabletReshardHelperTest, test_sort_and_merge_adjacent_overlapping) {
-    auto result = sort_and_merge_adjacent_ranges({co_range(5, 15), co_range(0, 10), co_range(12, 20)});
-    ASSERT_TRUE(result.ok());
-    // [0,15) ∪ [12,20) merge to [0,20). [5,15) overlaps with [0,15) → [0,15).
-    ASSERT_EQ(1u, result.value().size());
-    EXPECT_TRUE(ranges_pb_equal(co_range(0, 20), result.value()[0]));
-}
-
-TEST_F(TabletReshardHelperTest, test_sort_and_merge_adjacent_touching) {
-    // [0,10) and [10,20) touch at 10 with right side included → merge.
-    auto result = sort_and_merge_adjacent_ranges({co_range(10, 20), co_range(0, 10)});
-    ASSERT_TRUE(result.ok());
-    ASSERT_EQ(1u, result.value().size());
-    EXPECT_TRUE(ranges_pb_equal(co_range(0, 20), result.value()[0]));
-}
-
-TEST_F(TabletReshardHelperTest, test_sort_and_merge_adjacent_unbounded) {
-    auto result =
-            sort_and_merge_adjacent_ranges({co_range(std::nullopt, 10), make_range(10, true, std::nullopt, false)});
-    ASSERT_TRUE(result.ok());
-    ASSERT_EQ(1u, result.value().size());
-    EXPECT_FALSE(result.value()[0].has_lower_bound());
-    EXPECT_FALSE(result.value()[0].has_upper_bound());
-}
-
 // compute_disjoint_gaps_within --------------------------------------------------
 
 TEST_F(TabletReshardHelperTest, test_compute_disjoint_gaps_within_full_coverage) {
@@ -1060,85 +980,6 @@ TEST_F(TabletReshardHelperTest, HasValidUid_rejects_absent_and_zero) {
     EXPECT_FALSE(has_valid_uid(rs)); // present but zero
     rs.mutable_uid()->set_lo(1);
     EXPECT_TRUE(has_valid_uid(rs));
-}
-
-namespace {
-DcgRowWindow make_window(size_t owner, rowid_t begin, rowid_t end, bool is_gap = false) {
-    return DcgRowWindow{owner, Range<rowid_t>(begin, end), is_gap};
-}
-void expect_window(const DcgRowWindow& w, rowid_t begin, rowid_t end, bool is_gap) {
-    EXPECT_EQ(w.range.begin(), begin);
-    EXPECT_EQ(w.range.end(), end);
-    EXPECT_EQ(w.is_gap, is_gap);
-}
-} // namespace
-
-TEST_F(TabletReshardHelperTest, Reconcile_NullGapBits_ContiguousOK) {
-    std::vector<DcgRowWindow> in{make_window(0, 0, 10), make_window(1, 10, 30)};
-    std::vector<DcgRowWindow> out;
-    auto st = reconcile_windows_with_gap(in, /*gap_bits=*/nullptr, /*num_rows=*/30, &out);
-    ASSERT_TRUE(st.ok()) << st;
-    ASSERT_EQ(out.size(), 2u);
-    expect_window(out[0], 0, 10, false);
-    expect_window(out[1], 10, 30, false);
-}
-
-TEST_F(TabletReshardHelperTest, Reconcile_NullGapBits_HoleFails) {
-    std::vector<DcgRowWindow> in{make_window(0, 0, 10), make_window(1, 20, 30)}; // hole [10, 20)
-    std::vector<DcgRowWindow> out;
-    auto st = reconcile_windows_with_gap(in, /*gap_bits=*/nullptr, /*num_rows=*/30, &out);
-    EXPECT_TRUE(st.is_not_supported()) << st;
-}
-
-TEST_F(TabletReshardHelperTest, Reconcile_GapMasked_FillsGapWindow) {
-    std::vector<DcgRowWindow> in{make_window(0, 0, 10), make_window(1, 20, 30)}; // hole [10, 20)
-    roaring::Roaring gap_bits;
-    gap_bits.addRange(10, 20);
-    std::vector<DcgRowWindow> out;
-    auto st = reconcile_windows_with_gap(in, &gap_bits, /*num_rows=*/30, &out);
-    ASSERT_TRUE(st.ok()) << st;
-    ASSERT_EQ(out.size(), 3u);
-    expect_window(out[0], 0, 10, false);
-    expect_window(out[1], 10, 20, true);
-    expect_window(out[2], 20, 30, false);
-}
-
-TEST_F(TabletReshardHelperTest, Reconcile_GapPartiallyMasked_Fails) {
-    std::vector<DcgRowWindow> in{make_window(0, 0, 10), make_window(1, 20, 30)}; // hole [10, 20)
-    roaring::Roaring gap_bits;
-    gap_bits.addRange(10, 18); // misses [18, 20)
-    std::vector<DcgRowWindow> out;
-    auto st = reconcile_windows_with_gap(in, &gap_bits, /*num_rows=*/30, &out);
-    EXPECT_TRUE(st.is_not_supported()) << st;
-}
-
-TEST_F(TabletReshardHelperTest, Reconcile_Overlap_Fails) {
-    std::vector<DcgRowWindow> in{make_window(0, 0, 20), make_window(1, 10, 30)}; // distinct owners overlap [10, 20)
-    roaring::Roaring gap_bits;
-    std::vector<DcgRowWindow> out;
-    auto st = reconcile_windows_with_gap(in, &gap_bits, /*num_rows=*/30, &out);
-    EXPECT_TRUE(st.is_not_supported()) << st;
-}
-
-TEST_F(TabletReshardHelperTest, Reconcile_ZeroRows_Fails) {
-    std::vector<DcgRowWindow> in;
-    std::vector<DcgRowWindow> out;
-    auto st = reconcile_windows_with_gap(in, /*gap_bits=*/nullptr, /*num_rows=*/0, &out);
-    EXPECT_TRUE(st.is_not_supported()) << st;
-}
-
-TEST_F(TabletReshardHelperTest, Reconcile_LeadingAndTrailingGap) {
-    std::vector<DcgRowWindow> in{make_window(0, 10, 20)}; // gaps [0, 10) and [20, 30)
-    roaring::Roaring gap_bits;
-    gap_bits.addRange(0, 10);
-    gap_bits.addRange(20, 30);
-    std::vector<DcgRowWindow> out;
-    auto st = reconcile_windows_with_gap(in, &gap_bits, /*num_rows=*/30, &out);
-    ASSERT_TRUE(st.ok()) << st;
-    ASSERT_EQ(out.size(), 3u);
-    expect_window(out[0], 0, 10, true);
-    expect_window(out[1], 10, 20, false);
-    expect_window(out[2], 20, 30, true);
 }
 
 TEST_F(TabletReshardHelperTest, set_idg_shared_toggles_all_entries) {

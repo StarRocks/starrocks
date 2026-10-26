@@ -87,6 +87,9 @@ Status AIRuntimeConfig::validate() const {
     if (max_response_bytes <= 0) {
         return Status::InvalidArgument("ai_function_max_response_bytes must be positive");
     }
+    if (max_input_file_bytes <= 0) {
+        return Status::InvalidArgument("ai_function_max_input_file_bytes must be positive");
+    }
     if (worker_thread_num <= 0) {
         return Status::InvalidArgument("ai_function_worker_thread_num must be positive");
     }
@@ -165,7 +168,7 @@ int64_t AIRuntimeConfigSource::qps(AICapability capability) const noexcept {
     switch (capability) {
     case AICapability::CHAT:
         return _load_snapshot()->rate_limit_qps_chat;
-    case AICapability::TEXT_EMBEDDING:
+    case AICapability::EMBEDDING:
         return _load_snapshot()->rate_limit_qps_embedding;
     }
     return 0;

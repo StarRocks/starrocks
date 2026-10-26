@@ -15,9 +15,11 @@
 #include "exprs/encryption_functions.h"
 
 #include <optional>
+#include <string_view>
 #include <vector>
 
 #include "base/base64.h"
+#include "base/coding.h"
 #include "base/crypto/aes_util.h"
 #include "base/crypto/md5.h"
 #include "base/crypto/sha.h"
@@ -813,6 +815,12 @@ enum class RowFingerprintValueType : uint8_t {
     DateTime = 11,
 };
 
+static void update_length(SHA256Digest& digest, uint64_t length) {
+    uint8_t buf[sizeof(uint64_t)];
+    encode_fixed64_le(buf, length);
+    digest.update(buf, sizeof(buf));
+}
+
 // Template helper to encode a column into SHA256 digests based on its logical type
 template <LogicalType LT>
 struct EncodeColumnToDigest {
@@ -822,7 +830,7 @@ struct EncodeColumnToDigest {
     // `is_const` marks a constant argument, whose unwrapped data column holds exactly one element
     // that logically repeats for every row. Such a column must always be read at index 0.
     static void encode(const Column* data_col, const NullColumn* null_col, size_t chunk_size, bool is_const,
-                       std::vector<SHA256Digest>& digests) {
+                       bool length_prefixed, std::vector<SHA256Digest>& digests) {
         if constexpr (lt_is_string<LT> || lt_is_binary<LT>) {
             // String/Binary types
             auto* col = data_col ? down_cast<const ColumnType*>(data_col) : nullptr;
@@ -837,6 +845,9 @@ struct EncodeColumnToDigest {
                     uint8_t marker = static_cast<uint8_t>(RowFingerprintValueType::String);
                     digests[row].update(&marker, 1);
                     Slice value = col->get_slice(idx);
+                    if (length_prefixed) {
+                        update_length(digests[row], value.size);
+                    }
                     digests[row].update(value.data, value.size);
                 }
             }
@@ -883,8 +894,7 @@ struct EncodeColumnToDigest {
                 digests[row].update(&marker, 1);
             }
         } else {
-            // Fallback for unsupported types (JSON, HLL, OBJECT, STRUCT, ARRAY, MAP, etc.)
-            // Cast to string representation and encode
+            // Types folded in through their string rendering: JSON, VARIANT, GEOGRAPHY, GEOMETRY.
             auto* col = data_col ? down_cast<const ColumnType*>(data_col) : nullptr;
             const auto* null_data = null_col ? null_col->immutable_data().data() : nullptr;
             for (size_t row = 0; row < chunk_size; row++) {
@@ -898,6 +908,9 @@ struct EncodeColumnToDigest {
                     digests[row].update(&marker, 1);
                     // Convert the value to string and encode
                     std::string str_value = col->debug_item(idx);
+                    if (length_prefixed) {
+                        update_length(digests[row], str_value.size());
+                    }
                     digests[row].update(str_value.data(), str_value.size());
                 }
             }
@@ -905,8 +918,9 @@ struct EncodeColumnToDigest {
     }
 };
 
-StatusOr<ColumnPtr> EncryptionFunctions::encode_fingerprint_sha256(FunctionContext* ctx, const Columns& columns) {
-    RETURN_IF(columns.empty(), Status::InvalidArgument("encode_fingerprint_sha256 requires at least 1 argument"));
+static StatusOr<ColumnPtr> encode_row_fingerprint(FunctionContext* ctx, const Columns& columns, bool length_prefixed,
+                                                  std::string_view fn_name) {
+    RETURN_IF(columns.empty(), Status::InvalidArgument(fmt::format("{} requires at least 1 argument", fn_name)));
 
     size_t chunk_size = columns[0]->size();
     std::vector<SHA256Digest> digests(chunk_size);
@@ -933,16 +947,21 @@ StatusOr<ColumnPtr> EncryptionFunctions::encode_fingerprint_sha256(FunctionConte
         // Get logical type from FunctionContext
         const auto* type_desc = ctx->get_arg_type(col_idx);
         if (type_desc == nullptr) {
-            return Status::InternalError(fmt::format(
-                    "FunctionContext arg types not initialized for ENCODE_FINGERPRINT_SHA256 at index {}", col_idx));
+            return Status::InternalError(
+                    fmt::format("FunctionContext arg types not initialized for {} at index {}", fn_name, col_idx));
         }
         LogicalType type = type_desc->type;
 
-        // Use type dispatch to call the appropriate template specialization
-        type_dispatch_filter(type, false, [&]<LogicalType LT>() -> bool {
-            EncodeColumnToDigest<LT>::encode(data_col, null_col, chunk_size, is_const, digests);
+        // type_dispatch_filter covers only APPLY_FOR_ALL_SCALAR_TYPE: an argument it does not reach
+        // contributes nothing at all -- not even a null marker -- so its values would all hash alike.
+        bool encoded = type_dispatch_filter(type, false, [&]<LogicalType LT>() -> bool {
+            EncodeColumnToDigest<LT>::encode(data_col, null_col, chunk_size, is_const, length_prefixed, digests);
             return true;
         });
+        if (!encoded) {
+            return Status::NotSupported(
+                    fmt::format("{} does not support type {} (argument {})", fn_name, type_to_string(type), col_idx));
+        }
     }
 
     // Build result column with raw binary digests as VARBINARY
@@ -953,6 +972,16 @@ StatusOr<ColumnPtr> EncryptionFunctions::encode_fingerprint_sha256(FunctionConte
         result.append(Slice(reinterpret_cast<const char*>(digests[row].binary()), digests[row].binary_size()));
     }
     return result.build(ColumnHelper::is_all_const(columns));
+}
+
+StatusOr<ColumnPtr> EncryptionFunctions::encode_fingerprint_sha256(FunctionContext* ctx, const Columns& columns) {
+    return encode_row_fingerprint(ctx, columns, false, "encode_fingerprint_sha256");
+}
+
+// v1 is not prefix-free: a string carries no length, so its bytes can stand for the start of the next argument and
+// ('a', 5) hashes like ('a\x03\x05\x00\x00', NULL). v1 stays byte-for-byte for the rows already keyed on it.
+StatusOr<ColumnPtr> EncryptionFunctions::encode_fingerprint_sha256_v2(FunctionContext* ctx, const Columns& columns) {
+    return encode_row_fingerprint(ctx, columns, true, "encode_fingerprint_sha256_v2");
 }
 
 } // namespace starrocks

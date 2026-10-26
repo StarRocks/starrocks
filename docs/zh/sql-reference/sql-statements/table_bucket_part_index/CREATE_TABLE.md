@@ -1005,6 +1005,24 @@ PROPERTIES (
 - `flat_json.sparsity.factor`（可选）：同名列的比例阈值。如果同名列的比例低于此值，则 Flat JSON 不会提取该列。此参数仅在 `flat_json.enable` 设置为 `true` 时生效。默认值：`0.3`。
 - `flat_json.column.max`（可选）：Flat JSON 可提取的最大子字段数。此参数仅在 `flat_json.enable` 设置为 `true` 时生效。默认值：`100`。
 
+### 在自动采集统计信息时跳过某张表
+
+将 `enable_statistic_auto_collect` 设置为 `false` 后，自动采集统计信息时会跳过该表。默认值：`true`。
+
+```SQL
+PROPERTIES (
+    "enable_statistic_auto_collect" = "false"
+)
+```
+
+该属性为 `false` 时：
+
+- StarRocks 提供的自动采集任务，以及通过 `CREATE ANALYZE ALL` 或 `CREATE ANALYZE DATABASE` 创建的自动采集任务，都会跳过该表。
+- 明确指定该表的采集任务（通过 `CREATE ANALYZE TABLE` 创建，或通过 `ANALYZE TABLE` 执行）仍会采集该表的统计信息。
+- 导入数据时触发的统计信息采集不受影响，它由 `enable_statistic_collect_on_first_load` 单独控制。
+
+可以通过 [ALTER TABLE](ALTER_TABLE.md) 修改该属性。物化视图不支持该属性。
+
 ## 示例
 
 ### 带有Hash分桶和列式存储的聚合表

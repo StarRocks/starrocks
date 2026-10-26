@@ -15,14 +15,21 @@
 #include "exprs/geo_functions.h"
 
 #include <algorithm>
+#include <array>
+#include <bit>
 #include <charconv>
 #include <cmath>
+#include <cstring>
 #include <limits>
 #include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
+
+#define BOOST_MATH_DISABLE_FLOAT128
+#define BOOST_CSTDFLOAT_NO_LIBQUADMATH_SUPPORT
+#include <boost/multiprecision/cpp_int.hpp>
 
 #include "column/column_builder.h"
 #include "column/column_helper.h"
@@ -31,9 +38,16 @@
 #include "column/geo_column.h"
 #include "column/nullable_column.h"
 #include "common/logging.h"
+#include "geo/geo_buffer.h"
+#include "geo/geo_exact_arithmetic.h"
 #include "geo/geo_measurements.h"
+#include "geo/geo_overlay.h"
+#include "geo/geo_topology_simplify.h"
 #include "geo/geo_types.h"
 #include "geo/wkb.h"
+#include "gutil/compiler_util.h"
+#include "runtime/current_thread.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks {
 
@@ -110,6 +124,24 @@ StatusOr<GeoInput> geo_input(const ColumnPtr& column) {
     return GeoInput{geo, nullable, constant};
 }
 
+bool decode_canonical_xy_point(Slice wkb, WkbCoordinate* point) {
+    // Finite canonical XY POINTs survive parse/write without normalization.
+    constexpr std::array<uint8_t, 5> kPointHeader = {1, 1, 0, 0, 0};
+    if (wkb.size != kPointHeader.size() + 2 * sizeof(double) ||
+        std::memcmp(wkb.data, kPointHeader.data(), kPointHeader.size()) != 0) {
+        return false;
+    }
+    std::array<uint64_t, 2> coordinates;
+    std::memcpy(coordinates.data(), wkb.data + kPointHeader.size(), sizeof(coordinates));
+    if constexpr (std::endian::native != std::endian::little) {
+        coordinates[0] = std::byteswap(coordinates[0]);
+        coordinates[1] = std::byteswap(coordinates[1]);
+    }
+    point->x = std::bit_cast<double>(coordinates[0]);
+    point->y = std::bit_cast<double>(coordinates[1]);
+    return std::isfinite(point->x) && std::isfinite(point->y);
+}
+
 template <LogicalType Type, bool X>
 StatusOr<ColumnPtr> geo_coordinate(const Columns& columns) {
     constexpr auto semantics = Type == TYPE_GEOGRAPHY ? WkbCoordinateSemantics::GEOGRAPHY_CRS84
@@ -122,6 +154,11 @@ StatusOr<ColumnPtr> geo_coordinate(const Columns& columns) {
     for (size_t row = 0; row < rows; ++row) {
         if (input.is_null(row)) {
             result.append_null();
+            continue;
+        }
+        if (WkbCoordinate point; decode_canonical_xy_point(input.wkb(row), &point) &&
+                                 (Type != TYPE_GEOGRAPHY || is_valid_crs84_coordinate(point.x, point.y))) {
+            result.append(X ? point.x : point.y);
             continue;
         }
         WkbGeometry geometry;
@@ -237,6 +274,30 @@ StatusOr<const WkbGeometry*> distance_geometry(const GeoInput& input, size_t row
 }
 
 template <LogicalType Type>
+bool distance_point_coordinates(const GeoInput& input, size_t row, const NativeGeoDistanceArgumentState* prepared,
+                                WkbCoordinate* point) {
+    if (input.constant) {
+        if (prepared == nullptr || !prepared->constant || !prepared->parse_status.ok()) return false;
+        const auto& geometry = prepared->geometry.value();
+        if (geometry.type != WkbGeometryType::POINT || geometry.empty) return false;
+        *point = geometry.coordinates[0];
+        return true;
+    }
+    return decode_canonical_xy_point(input.wkb(row), point) &&
+           (Type != TYPE_GEOGRAPHY || is_valid_crs84_coordinate(point->x, point->y));
+}
+
+template <LogicalType Type>
+bool point_point_distance(const WkbCoordinate& left, const WkbCoordinate& right, double* distance) {
+    if constexpr (Type == TYPE_GEOGRAPHY) {
+        return GeoPoint::st_distance_sphere(left.x, left.y, right.x, right.y, distance);
+    } else {
+        *distance = std::hypot(right.x - left.x, right.y - left.y);
+        return true;
+    }
+}
+
+template <LogicalType Type>
 Status prepare_distance_constants(FunctionContext* context, NativeGeoDistanceState* state) {
     constexpr auto semantics = Type == TYPE_GEOGRAPHY ? WkbCoordinateSemantics::GEOGRAPHY_CRS84
                                                       : WkbCoordinateSemantics::GEOMETRY_CARTESIAN;
@@ -301,7 +362,7 @@ long double planar_point_line_distance(const WkbCoordinate& point, const WkbGeom
     return minimum;
 }
 
-template <LogicalType Type, bool DWithin>
+template <LogicalType Type, bool DWithin, bool PointFastPath = !DWithin>
 StatusOr<ColumnPtr> geo_distance(FunctionContext* context, const Columns& columns) {
     constexpr auto semantics = Type == TYPE_GEOGRAPHY ? WkbCoordinateSemantics::GEOGRAPHY_CRS84
                                                       : WkbCoordinateSemantics::GEOMETRY_CARTESIAN;
@@ -325,6 +386,22 @@ StatusOr<ColumnPtr> geo_distance(FunctionContext* context, const Columns& column
                                          ? nullptr
                                          : reinterpret_cast<const NativeGeoDistanceState*>(
                                                    context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    if constexpr (PointFastPath) {
+        // Keep other shapes on the existing loop without per-row POINT checks.
+        const auto* left = prepared_state == nullptr ? nullptr : &prepared_state->arguments[0];
+        const auto* right = prepared_state == nullptr ? nullptr : &prepared_state->arguments[1];
+        WkbCoordinate point;
+        bool point_sizes = (!lhs.constant || distance_point_coordinates<Type>(lhs, 0, left, &point)) &&
+                           (!rhs.constant || distance_point_coordinates<Type>(rhs, 0, right, &point));
+        // ISO POINT WKB: a byte-order byte, uint32 type and two doubles.
+        constexpr size_t kPointWkbSize = 1 + sizeof(uint32_t) + 2 * sizeof(double);
+        for (size_t row = 0; point_sizes && row < rows; ++row) {
+            if (lhs.is_null(row) || rhs.is_null(row)) continue;
+            point_sizes = (lhs.constant || lhs.wkb(row).size == kPointWkbSize) &&
+                          (rhs.constant || rhs.wkb(row).size == kPointWkbSize);
+        }
+        if (!point_sizes) return geo_distance<Type, DWithin, false>(context, columns);
+    }
     NativeGeoDistanceThreadState* thread_state = nullptr;
     if constexpr (Type == TYPE_GEOGRAPHY) {
         if (prepared_state != nullptr) {
@@ -348,9 +425,21 @@ StatusOr<ColumnPtr> geo_distance(FunctionContext* context, const Columns& column
                 return Status::InvalidArgument("ST_DWithin requires a finite, nonnegative distance threshold");
             }
         }
-        WkbGeometry varying_geometry[2];
         const auto* prepared_left = prepared_state == nullptr ? nullptr : &prepared_state->arguments[0];
         const auto* prepared_right = prepared_state == nullptr ? nullptr : &prepared_state->arguments[1];
+        if constexpr (PointFastPath) {
+            WkbCoordinate left_point, right_point;
+            if (distance_point_coordinates<Type>(lhs, row, prepared_left, &left_point) &&
+                distance_point_coordinates<Type>(rhs, row, prepared_right, &right_point)) {
+                double distance;
+                if (!point_point_distance<Type>(left_point, right_point, &distance)) {
+                    return Status::InvalidArgument("ST_Distance received invalid GEOGRAPHY coordinates");
+                }
+                result.append(distance);
+                continue;
+            }
+        }
+        WkbGeometry varying_geometry[2];
         ASSIGN_OR_RETURN(const auto* left, distance_geometry(lhs, row, semantics, prepared_left, &constant_geometry[0],
                                                              &varying_geometry[0]));
         ASSIGN_OR_RETURN(const auto* right, distance_geometry(rhs, row, semantics, prepared_right,
@@ -372,17 +461,11 @@ StatusOr<ColumnPtr> geo_distance(FunctionContext* context, const Columns& column
             continue;
         }
         if (point_point) {
-            if constexpr (Type == TYPE_GEOGRAPHY) {
-                double distance;
-                if (!GeoPoint::st_distance_sphere(left->coordinates[0].x, left->coordinates[0].y,
-                                                  right->coordinates[0].x, right->coordinates[0].y, &distance)) {
-                    return Status::InvalidArgument("ST_Distance received invalid GEOGRAPHY coordinates");
-                }
-                result.append(distance);
-            } else {
-                result.append(std::hypot(right->coordinates[0].x - left->coordinates[0].x,
-                                         right->coordinates[0].y - left->coordinates[0].y));
+            double distance;
+            if (!point_point_distance<Type>(left->coordinates[0], right->coordinates[0], &distance)) {
+                return Status::InvalidArgument("ST_Distance received invalid GEOGRAPHY coordinates");
             }
+            result.append(distance);
             continue;
         }
         const size_t point_argument = left->type == WkbGeometryType::POINT ? 0 : 1;
@@ -514,9 +597,39 @@ PointPolygonRelation planar_polygon_family_relation(const WkbGeometry& polygon, 
     return result;
 }
 
-long double planar_orientation(const WkbCoordinate& a, const WkbCoordinate& b, const WkbCoordinate& c) {
-    return (static_cast<long double>(b.x) - a.x) * (static_cast<long double>(c.y) - a.y) -
-           (static_cast<long double>(b.y) - a.y) * (static_cast<long double>(c.x) - a.x);
+ALWAYS_NOINLINE int exact_planar_orientation(const WkbCoordinate& a, const WkbCoordinate& b, const WkbCoordinate& c) {
+    // Finite binary64 coordinates scaled by 2^1074 have magnitude <2^2098.
+    // Differences need at most 2099 bits and the determinant 4199, so
+    // 4224 fixed bits suffice without heap allocations.
+    using Integer = boost::multiprecision::number<
+            boost::multiprecision::cpp_int_backend<4224, 4224, boost::multiprecision::signed_magnitude,
+                                                   boost::multiprecision::unchecked, void>,
+            boost::multiprecision::et_off>;
+    const auto scaled = [](double value) -> Integer { return geo_exact::scaled_binary64<Integer>(value); };
+    const Integer ax = scaled(a.x), ay = scaled(a.y);
+    const Integer bx = scaled(b.x), by = scaled(b.y);
+    const Integer cx = scaled(c.x), cy = scaled(c.y);
+    const Integer determinant = geo_exact::orientation(ax, ay, bx, by, cx, cy);
+    return geo_exact::sign(determinant);
+}
+
+int planar_orientation(const WkbCoordinate& a, const WkbCoordinate& b, const WkbCoordinate& c) {
+    const long double left = (static_cast<long double>(b.x) - a.x) * (static_cast<long double>(c.y) - a.y);
+    const long double right = (static_cast<long double>(b.y) - a.y) * (static_cast<long double>(c.x) - a.x);
+    const long double determinant = left - right;
+    // Eight epsilons bound the rounding of differences, products and subtraction.
+    constexpr long double kErrorBound = 8 * std::numeric_limits<long double>::epsilon();
+    const long double error = kErrorBound * (std::abs(left) + std::abs(right));
+    bool certain = std::abs(determinant) > error;
+    // A wide long double exponent range also covers the smallest binary64
+    // product's error bound. Narrower platforms must check for underflow.
+    if constexpr (std::numeric_limits<long double>::min_exponent >
+                  2 * (std::numeric_limits<double>::min_exponent - std::numeric_limits<double>::digits) -
+                          std::numeric_limits<long double>::digits) {
+        certain &= error >= std::numeric_limits<long double>::min();
+    }
+    if (!certain) [[unlikely]] return exact_planar_orientation(a, b, c);
+    return determinant > 0 ? 1 : -1;
 }
 
 bool planar_segments_intersect(const WkbCoordinate& a, const WkbCoordinate& b, const WkbCoordinate& c,
@@ -525,30 +638,177 @@ bool planar_segments_intersect(const WkbCoordinate& a, const WkbCoordinate& b, c
         planar_point_on_segment(d, a, b)) {
         return true;
     }
-    const auto abc = planar_orientation(a, b, c);
-    const auto abd = planar_orientation(a, b, d);
-    const auto cda = planar_orientation(c, d, a);
-    const auto cdb = planar_orientation(c, d, b);
-    return (abc > 0) != (abd > 0) && (cda > 0) != (cdb > 0);
+    const int abc = planar_orientation(a, b, c);
+    const int abd = planar_orientation(a, b, d);
+    if (abc * abd >= 0) return false;
+    return planar_orientation(c, d, a) * planar_orientation(c, d, b) < 0;
 }
 
-bool planar_polygon_intersects(const WkbGeometry& lhs, const WkbGeometry& rhs) {
-    for (const auto& lhs_ring : lhs.rings) {
-        for (const auto& rhs_ring : rhs.rings) {
-            for (size_t i = 1; i < lhs_ring.size(); ++i) {
-                for (size_t j = 1; j < rhs_ring.size(); ++j) {
-                    if (planar_segments_intersect(lhs_ring[i - 1], lhs_ring[i], rhs_ring[j - 1], rhs_ring[j])) {
-                        return true;
+struct PlanarIntersectsBounds {
+    double min_x = std::numeric_limits<double>::infinity();
+    double min_y = std::numeric_limits<double>::infinity();
+    double max_x = -std::numeric_limits<double>::infinity();
+    double max_y = -std::numeric_limits<double>::infinity();
+
+    void add(const WkbCoordinate& point) {
+        min_x = std::min(min_x, point.x);
+        min_y = std::min(min_y, point.y);
+        max_x = std::max(max_x, point.x);
+        max_y = std::max(max_y, point.y);
+    }
+
+    std::optional<PlanarIntersectsBounds> expanded(double padding) const {
+        PlanarIntersectsBounds result{min_x - padding, min_y - padding, max_x + padding, max_y + padding};
+        if (!std::isfinite(result.min_x) || !std::isfinite(result.min_y) || !std::isfinite(result.max_x) ||
+            !std::isfinite(result.max_y)) {
+            return std::nullopt;
+        }
+        return result;
+    }
+
+    bool disjoint(const PlanarIntersectsBounds& rhs) const {
+        return max_x < rhs.min_x || min_x > rhs.max_x || max_y < rhs.min_y || min_y > rhs.max_y;
+    }
+};
+
+PlanarIntersectsBounds planar_intersects_bounds(const std::vector<WkbCoordinate>& ring) {
+    PlanarIntersectsBounds result;
+    for (const auto& point : ring) result.add(point);
+    return result;
+}
+
+PlanarIntersectsBounds planar_intersects_bounds(const WkbGeometry& polygon) {
+    PlanarIntersectsBounds result;
+    for (const auto& ring : polygon.rings) {
+        for (const auto& point : ring) result.add(point);
+    }
+    return result;
+}
+
+std::optional<double> planar_intersects_padding(const PlanarIntersectsBounds& lhs, const PlanarIntersectsBounds& rhs) {
+    const double span = std::max(std::max(lhs.max_x, rhs.max_x) - std::min(lhs.min_x, rhs.min_x),
+                                 std::max(lhs.max_y, rhs.max_y) - std::min(lhs.min_y, rhs.min_y));
+    if (!std::isfinite(span)) return std::nullopt;
+    // Four times the endpoint tolerance, plus a normal underflow margin; bounds compare binary64 endpoints.
+    constexpr double kPaddingFactor = 4 * kPlanarBoundaryUlps * std::numeric_limits<double>::epsilon();
+    return kPaddingFactor * span + std::numeric_limits<double>::min();
+}
+
+// Calibration: a plain first probe avoids setup for tiny pairs without giving up disjoint pruning.
+constexpr size_t kPlanarIntersectsPlainPairBudget = 64;
+
+struct PlanarIntersectsEdgeIndex {
+    struct Edge {
+        PlanarIntersectsBounds bounds;
+        WkbCoordinate a;
+        WkbCoordinate b;
+    };
+    std::vector<Edge> edges;
+    std::vector<double> prefix_max_x;
+
+    void build(const std::vector<WkbCoordinate>& ring) {
+        edges.clear();
+        edges.reserve(ring.size() - 1);
+        for (size_t j = 1; j < ring.size(); ++j) {
+            PlanarIntersectsBounds bounds;
+            bounds.add(ring[j - 1]);
+            bounds.add(ring[j]);
+            edges.push_back({bounds, ring[j - 1], ring[j]});
+        }
+        std::sort(edges.begin(), edges.end(),
+                  [](const Edge& a, const Edge& b) { return a.bounds.min_x < b.bounds.min_x; });
+        prefix_max_x.resize(edges.size());
+        double max_x = -std::numeric_limits<double>::infinity();
+        for (size_t j = 0; j < edges.size(); ++j) {
+            max_x = std::max(max_x, edges[j].bounds.max_x);
+            prefix_max_x[j] = max_x;
+        }
+    }
+
+    bool intersects(const WkbCoordinate& a, const WkbCoordinate& b, const PlanarIntersectsBounds& query) const {
+        const auto first = std::lower_bound(prefix_max_x.begin(), prefix_max_x.end(), query.min_x);
+        const auto last = std::upper_bound(edges.begin(), edges.end(), query.max_x,
+                                           [](double x, const Edge& edge) { return x < edge.bounds.min_x; });
+        for (size_t j = first - prefix_max_x.begin(), end = last - edges.begin(); j < end; ++j) {
+            const auto& edge = edges[j];
+            if (!query.disjoint(edge.bounds) && planar_segments_intersect(a, b, edge.a, edge.b)) return true;
+        }
+        return false;
+    }
+};
+
+// Separate calibration: avoid index setup on small rings and pairs with an early hit.
+constexpr size_t kPlanarIntersectsIndexMinEdges = 128;
+constexpr size_t kPlanarIntersectsIndexPairBudget = 256;
+
+bool planar_polygon_intersects(const WkbGeometry& lhs, const WkbGeometry& rhs, PlanarIntersectsEdgeIndex* index) {
+    const auto& first_left = lhs.rings[0];
+    const auto& first_right = rhs.rings[0];
+    const size_t left_edges = first_left.size() - 1;
+    const size_t right_edges = first_right.size() - 1;
+    const bool tiny = left_edges <= kPlanarIntersectsPlainPairBudget &&
+                      right_edges <= kPlanarIntersectsPlainPairBudget &&
+                      left_edges * right_edges <= kPlanarIntersectsPlainPairBudget;
+    const size_t plain_end = tiny ? first_right.size() : 2;
+    for (size_t j = 1; j < plain_end; ++j) {
+        if (planar_segments_intersect(first_left[0], first_left[1], first_right[j - 1], first_right[j])) return true;
+    }
+    const auto lhs_bounds = planar_intersects_bounds(lhs);
+    const auto rhs_bounds = planar_intersects_bounds(rhs);
+    const auto padding = planar_intersects_padding(lhs_bounds, rhs_bounds);
+    const auto expanded = padding ? lhs_bounds.expanded(*padding) : std::nullopt;
+    if (!expanded || !expanded->disjoint(rhs_bounds)) {
+        for (const auto& lhs_ring : lhs.rings) {
+            const auto left = lhs.rings.size() == 1 ? lhs_bounds : planar_intersects_bounds(lhs_ring);
+            for (const auto& rhs_ring : rhs.rings) {
+                const auto right = rhs.rings.size() == 1 ? rhs_bounds : planar_intersects_bounds(rhs_ring);
+                const auto ring_bounds = padding ? left.expanded(*padding) : std::nullopt;
+                if (ring_bounds && ring_bounds->disjoint(right)) continue;
+                const bool eligible = padding && lhs_ring.size() - 1 >= kPlanarIntersectsIndexMinEdges &&
+                                      rhs_ring.size() - 1 >= kPlanarIntersectsIndexMinEdges;
+                size_t tested_pairs = 0;
+                bool indexed = false;
+                for (size_t i = 1; i < lhs_ring.size(); ++i) {
+                    if (eligible && !indexed && tested_pairs >= kPlanarIntersectsIndexPairBudget) {
+                        index->build(rhs_ring);
+                        indexed = true;
                     }
+                    PlanarIntersectsBounds edge;
+                    edge.add(lhs_ring[i - 1]);
+                    edge.add(lhs_ring[i]);
+                    const auto query = padding ? edge.expanded(*padding) : std::nullopt;
+                    const size_t first =
+                            i == 1 && &lhs_ring == &lhs.rings[0] && &rhs_ring == &rhs.rings[0] ? plain_end : 1;
+                    if (!query) {
+                        for (size_t j = first; j < rhs_ring.size(); ++j) {
+                            if (planar_segments_intersect(lhs_ring[i - 1], lhs_ring[i], rhs_ring[j - 1], rhs_ring[j]))
+                                return true;
+                        }
+                    } else if (indexed) {
+                        if (index->intersects(lhs_ring[i - 1], lhs_ring[i], *query)) return true;
+                    } else {
+                        for (size_t j = first; j < rhs_ring.size(); ++j) {
+                            const auto& c = rhs_ring[j - 1];
+                            const auto& d = rhs_ring[j];
+                            if (query->max_x < std::min(c.x, d.x) || query->min_x > std::max(c.x, d.x) ||
+                                query->max_y < std::min(c.y, d.y) || query->min_y > std::max(c.y, d.y)) {
+                                continue;
+                            }
+                            if (planar_segments_intersect(lhs_ring[i - 1], lhs_ring[i], c, d)) return true;
+                        }
+                    }
+                    if (eligible && !indexed) tested_pairs += rhs_ring.size() - first;
                 }
             }
         }
     }
+    // Bounds prune edge contacts only: preserve the original containment calculation.
     return planar_polygon_relation(lhs, rhs.rings[0][0]) != PointPolygonRelation::OUTSIDE ||
            planar_polygon_relation(rhs, lhs.rings[0][0]) != PointPolygonRelation::OUTSIDE;
 }
 
-bool planar_polygon_family_intersects(const WkbGeometry& lhs, const WkbGeometry& rhs) {
+bool planar_polygon_family_intersects(const WkbGeometry& lhs, const WkbGeometry& rhs,
+                                      PlanarIntersectsEdgeIndex* index) {
     const size_t lhs_count = lhs.type == WkbGeometryType::POLYGON ? 1 : lhs.children.size();
     const size_t rhs_count = rhs.type == WkbGeometryType::POLYGON ? 1 : rhs.children.size();
     for (size_t i = 0; i < lhs_count; ++i) {
@@ -556,7 +816,7 @@ bool planar_polygon_family_intersects(const WkbGeometry& lhs, const WkbGeometry&
         if (lhs_polygon.empty) continue;
         for (size_t j = 0; j < rhs_count; ++j) {
             const auto& rhs_polygon = rhs.type == WkbGeometryType::POLYGON ? rhs : rhs.children[j];
-            if (!rhs_polygon.empty && planar_polygon_intersects(lhs_polygon, rhs_polygon)) return true;
+            if (!rhs_polygon.empty && planar_polygon_intersects(lhs_polygon, rhs_polygon, index)) return true;
         }
     }
     return false;
@@ -840,6 +1100,7 @@ StatusOr<ColumnPtr> geo_intersects(FunctionContext* context, const Columns& colu
     }
     std::optional<WkbGeometry> constant_geometry[2];
     SphericalPolygonFamilyCache constant_spherical_polygons[2];
+    PlanarIntersectsEdgeIndex edge_index;
     for (size_t row = 0; row < rows; ++row) {
         if (lhs.is_null(row) || rhs.is_null(row)) {
             result.append_null();
@@ -875,7 +1136,7 @@ StatusOr<ColumnPtr> geo_intersects(FunctionContext* context, const Columns& colu
                              spherical_polygon_family_intersects(*left, *right, left_cache, right_cache));
             result.append(intersects);
         } else {
-            result.append(planar_polygon_family_intersects(*left, *right));
+            result.append(planar_polygon_family_intersects(*left, *right, &edge_index));
         }
     }
     auto output = result.build(false);
@@ -907,6 +1168,223 @@ StatusOr<MutableColumnPtr> create_geometry_result(FunctionContext* context) {
     return NullableColumn::create(std::move(data), NullColumn::create());
 }
 
+Status overlay_checkpoint(FunctionContext* context) {
+    if (context != nullptr && context->state() != nullptr) {
+        RETURN_IF_CANCELLED(context->state());
+        RETURN_IF_ERROR(context->state()->check_query_state("Polygon overlay"));
+        RETURN_IF_ERROR(context->state()->check_mem_limit("Polygon overlay"));
+    }
+    return Status::OK();
+}
+
+struct NativeGeoOverlayArgument {
+    bool constant = false;
+    Status status = Status::OK();
+    std::unique_ptr<PreparedGeoPolygon> polygon;
+};
+
+struct NativeGeoOverlayState {
+    std::array<NativeGeoOverlayArgument, 2> arguments;
+};
+
+StatusOr<const PreparedGeoPolygon*> overlay_polygon(const GeoInput& input, size_t row,
+                                                    const NativeGeoOverlayArgument* prepared,
+                                                    std::unique_ptr<PreparedGeoPolygon>* batch_constant,
+                                                    std::unique_ptr<PreparedGeoPolygon>* varying) {
+    if (prepared != nullptr && prepared->constant) {
+        RETURN_IF_ERROR(prepared->status);
+        return prepared->polygon.get();
+    }
+    auto* target = input.constant ? batch_constant : varying;
+    if (!input.constant || *target == nullptr) {
+        ASSIGN_OR_RETURN(*target, PreparedGeoPolygon::prepare(input.wkb(row)));
+    }
+    return target->get();
+}
+
+StatusOr<ColumnPtr> geo_overlay(FunctionContext* context, const Columns& columns, GeoOverlayKind kind) {
+    RETURN_IF_ERROR(overlay_checkpoint(context));
+    if (context == nullptr) return Status::InvalidArgument("Polygon overlay requires a function context");
+    const size_t size = columns[0]->size();
+    if (columns[0]->only_null() || columns[1]->only_null()) return ColumnHelper::create_const_null_column(size);
+    ASSIGN_OR_RETURN(auto left, geo_input<TYPE_GEOMETRY>(columns[0]));
+    ASSIGN_OR_RETURN(auto right, geo_input<TYPE_GEOMETRY>(columns[1]));
+    if (!is_geo_compute_compatible(left.data->descriptor(), right.data->descriptor())) {
+        return Status::InvalidArgument("Polygon overlay requires compatible GEOMETRY CRS descriptors");
+    }
+    ASSIGN_OR_RETURN(auto result, create_geometry_result(context));
+    const auto* output =
+            down_cast<const GeoColumn*>(down_cast<const NullableColumn*>(result.get())->data_column().get());
+    if (!is_geo_compute_compatible(left.data->descriptor(), output->descriptor())) {
+        return Status::InvalidArgument("Polygon overlay return CRS does not match its inputs");
+    }
+    const auto* prepared = reinterpret_cast<const NativeGeoOverlayState*>(
+            context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    std::array<std::unique_ptr<PreparedGeoPolygon>, 2> batch_constants;
+    const bool constant = left.constant && right.constant;
+    const size_t rows = constant ? 1 : size;
+    for (size_t row = 0; row < rows; ++row) {
+        RETURN_IF_ERROR(overlay_checkpoint(context));
+        if (left.is_null(row) || right.is_null(row)) {
+            result->append_nulls(1);
+            continue;
+        }
+        std::array<std::unique_ptr<PreparedGeoPolygon>, 2> varying;
+        ASSIGN_OR_RETURN(const auto* a, overlay_polygon(left, row, prepared ? &prepared->arguments[0] : nullptr,
+                                                        &batch_constants[0], &varying[0]));
+        ASSIGN_OR_RETURN(const auto* b, overlay_polygon(right, row, prepared ? &prepared->arguments[1] : nullptr,
+                                                        &batch_constants[1], &varying[1]));
+        RETURN_IF_ERROR(overlay_checkpoint(context));
+        ASSIGN_OR_RETURN(auto geometry, a->overlay(*b, kind, [&]() { return overlay_checkpoint(context); }));
+        RETURN_IF_ERROR(overlay_checkpoint(context));
+        std::string wkb;
+        RETURN_IF_ERROR(WkbCodec::to_wkb(geometry, &wkb, WkbCoordinateSemantics::GEOMETRY_CARTESIAN));
+        result->append_datum(Datum(Slice(wkb)));
+        RETURN_IF_ERROR(overlay_checkpoint(context));
+    }
+    if (constant) return ConstColumn::create(std::move(result), size);
+    return result;
+}
+
+struct NativeGeoBufferState {
+    Status status = Status::OK();
+    std::unique_ptr<PreparedGeoBuffer> input;
+};
+
+Status buffer_checkpoint(FunctionContext* context) {
+    if (context != nullptr && context->state() != nullptr) {
+        RETURN_IF_CANCELLED(context->state());
+        RETURN_IF_ERROR(context->state()->check_query_state("ST_Buffer"));
+        RETURN_IF_ERROR(context->state()->check_mem_limit("ST_Buffer"));
+    }
+    return Status::OK();
+}
+
+StatusOr<ColumnPtr> geo_buffer(FunctionContext* context, const Columns& columns) {
+    if (context == nullptr || columns.size() != 2) {
+        return Status::InvalidArgument("ST_Buffer requires a context and two arguments");
+    }
+    RETURN_IF_ERROR(buffer_checkpoint(context));
+    const size_t size = columns[0]->size();
+    if (columns[1]->size() != size) return Status::InvalidArgument("ST_Buffer argument sizes differ");
+    if (columns[0]->only_null() || columns[1]->only_null()) return ColumnHelper::create_const_null_column(size);
+    ASSIGN_OR_RETURN(auto input, geo_input<TYPE_GEOMETRY>(columns[0]));
+    ASSIGN_OR_RETURN(auto result, create_geometry_result(context));
+    const auto* output =
+            down_cast<const GeoColumn*>(down_cast<const NullableColumn*>(result.get())->data_column().get());
+    if (!is_geo_compute_compatible(input.data->descriptor(), output->descriptor())) {
+        return Status::InvalidArgument("ST_Buffer return CRS does not match its input");
+    }
+    ColumnViewer<TYPE_DOUBLE> distances(columns[1]);
+    const auto* prepared =
+            reinterpret_cast<const NativeGeoBufferState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    std::unique_ptr<PreparedGeoBuffer> batch_constant;
+    const bool constant = input.constant && columns[1]->is_constant();
+    const size_t rows = constant && size != 0 ? 1 : size;
+    for (size_t row = 0; row < rows; ++row) {
+        RETURN_IF_ERROR(buffer_checkpoint(context));
+        if (input.is_null(row) || distances.is_null(row)) {
+            result->append_nulls(1);
+            continue;
+        }
+        const double distance = distances.value(row);
+        if (!std::isfinite(distance)) return Status::InvalidArgument("ST_Buffer requires a finite distance");
+        std::unique_ptr<PreparedGeoBuffer> varying;
+        const PreparedGeoBuffer* model;
+        if (prepared != nullptr) {
+            RETURN_IF_ERROR(prepared->status);
+            model = prepared->input.get();
+            if (model == nullptr) return Status::InvalidArgument("ST_Buffer constant geometry is NULL");
+        } else {
+            auto* target = input.constant ? &batch_constant : &varying;
+            if (!input.constant || *target == nullptr) {
+                ASSIGN_OR_RETURN(*target, PreparedGeoBuffer::prepare(input.wkb(row),
+                                                                     [&] { return buffer_checkpoint(context); }));
+            }
+            model = target->get();
+        }
+        ASSIGN_OR_RETURN(auto geometry, model->buffer(distance, [&] { return buffer_checkpoint(context); }));
+        std::string wkb;
+        RETURN_IF_ERROR(WkbCodec::to_wkb(geometry, &wkb, WkbCoordinateSemantics::GEOMETRY_CARTESIAN));
+        result->append_datum(Datum(Slice(wkb)));
+        RETURN_IF_ERROR(buffer_checkpoint(context));
+    }
+    if (constant && size != 0) return ConstColumn::create(std::move(result), size);
+    return result;
+}
+
+struct NativeGeoTopologySimplifyState {
+    Status status = Status::OK();
+    std::unique_ptr<PreparedGeoTopologySimplify> input;
+};
+
+Status simplify_checkpoint(FunctionContext* context) {
+    if (context != nullptr && context->state() != nullptr) {
+        RETURN_IF_CANCELLED(context->state());
+        RETURN_IF_ERROR(context->state()->check_query_state("ST_SimplifyPreserveTopology"));
+        RETURN_IF_ERROR(context->state()->check_mem_limit("ST_SimplifyPreserveTopology"));
+    }
+    return Status::OK();
+}
+
+StatusOr<ColumnPtr> geo_simplify(FunctionContext* context, const Columns& columns) {
+    if (context == nullptr || columns.size() != 2) {
+        return Status::InvalidArgument("ST_SimplifyPreserveTopology requires a context and two arguments");
+    }
+    RETURN_IF_ERROR(simplify_checkpoint(context));
+    const size_t size = columns[0]->size();
+    if (columns[1]->size() != size) return Status::InvalidArgument("ST_SimplifyPreserveTopology argument sizes differ");
+    if (columns[0]->only_null() || columns[1]->only_null()) return ColumnHelper::create_const_null_column(size);
+    ASSIGN_OR_RETURN(auto input, geo_input<TYPE_GEOMETRY>(columns[0]));
+    ASSIGN_OR_RETURN(auto result, create_geometry_result(context));
+    const auto* output =
+            down_cast<const GeoColumn*>(down_cast<const NullableColumn*>(result.get())->data_column().get());
+    if (!is_geo_compute_compatible(input.data->descriptor(), output->descriptor())) {
+        return Status::InvalidArgument("ST_SimplifyPreserveTopology return CRS does not match its input");
+    }
+    ColumnViewer<TYPE_DOUBLE> tolerances(columns[1]);
+    const auto* prepared = reinterpret_cast<const NativeGeoTopologySimplifyState*>(
+            context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    std::unique_ptr<PreparedGeoTopologySimplify> batch_constant;
+    const bool constant = input.constant && columns[1]->is_constant();
+    const size_t rows = constant && size != 0 ? 1 : size;
+    for (size_t row = 0; row < rows; ++row) {
+        RETURN_IF_ERROR(simplify_checkpoint(context));
+        if (input.is_null(row) || tolerances.is_null(row)) {
+            result->append_nulls(1);
+            continue;
+        }
+        const double tolerance = tolerances.value(row);
+        if (!std::isfinite(tolerance) || tolerance < 0)
+            return Status::InvalidArgument("ST_SimplifyPreserveTopology requires a finite nonnegative tolerance");
+        std::unique_ptr<PreparedGeoTopologySimplify> varying;
+        const PreparedGeoTopologySimplify* model;
+        if (prepared != nullptr) {
+            RETURN_IF_ERROR(prepared->status);
+            model = prepared->input.get();
+            if (model == nullptr)
+                return Status::InvalidArgument("ST_SimplifyPreserveTopology constant geometry is NULL");
+        } else {
+            auto* target = input.constant ? &batch_constant : &varying;
+            if (!input.constant || *target == nullptr) {
+                ASSIGN_OR_RETURN(*target, PreparedGeoTopologySimplify::prepare(
+                                                  input.wkb(row), [&] { return simplify_checkpoint(context); }));
+            }
+            model = target->get();
+        }
+        ASSIGN_OR_RETURN(auto wkb, model->simplify(tolerance, [&] { return simplify_checkpoint(context); }));
+        result->append_datum(Datum(Slice(wkb)));
+        RETURN_IF_ERROR(simplify_checkpoint(context));
+    }
+    if (constant && size != 0) return ConstColumn::create(std::move(result), size);
+    return result;
+}
+
+bool is_valid_canonical_geography_point(Slice wkb) {
+    WkbCoordinate point;
+    return decode_canonical_xy_point(wkb, &point) && is_valid_crs84_coordinate(point.x, point.y);
+}
+
 template <LogicalType InputType>
 StatusOr<ColumnPtr> construct_geography(FunctionContext* context, const Columns& columns, bool text) {
     const size_t size = columns[0]->size();
@@ -922,8 +1400,12 @@ StatusOr<ColumnPtr> construct_geography(FunctionContext* context, const Columns&
             result->append_nulls(1);
             continue;
         }
-        WkbGeometry geometry;
         const Slice value = input.value(row);
+        if (!text && is_valid_canonical_geography_point(value)) {
+            result->append_datum(Datum(value));
+            continue;
+        }
+        WkbGeometry geometry;
         Status status = text ? WkbCodec::parse_wkt(std::string_view(value.data, value.size), &geometry)
                              : WkbCodec::parse_wkb(value, &geometry);
         std::string wkb;
@@ -963,8 +1445,13 @@ StatusOr<ColumnPtr> construct_geometry(FunctionContext* context, const Columns& 
             result->append_nulls(1);
             continue;
         }
-        WkbGeometry geometry;
         const Slice value = input.value(row);
+        WkbCoordinate point;
+        if (!text && decode_canonical_xy_point(value, &point)) {
+            result->append_datum(Datum(value));
+            continue;
+        }
+        WkbGeometry geometry;
         Status status = text ? WkbCodec::parse_wkt(std::string_view(value.data, value.size), &geometry, semantics)
                              : WkbCodec::parse_wkb(value, &geometry, semantics);
         std::string wkb;
@@ -1039,6 +1526,17 @@ StatusOr<ColumnPtr> geo_measure(FunctionContext* context, const Columns& columns
     return output;
 }
 
+static ALWAYS_NOINLINE StatusOr<bool> geography_is_valid(const WkbGeometry& geometry) {
+    if (geometry.empty) return true;
+    if (geometry.type == WkbGeometryType::POLYGON && geometry.rings.size() == 1) {
+        GeoCoordinateList coordinates;
+        coordinates.list.reserve(geometry.rings[0].size());
+        for (const auto& point : geometry.rings[0]) coordinates.add({point.x, point.y});
+        return GeoPolygon::is_valid_ring_direct(coordinates);
+    }
+    return spherical_is_valid(geometry);
+}
+
 template <LogicalType Type>
 StatusOr<ColumnPtr> geo_validity(FunctionContext* context, const Columns& columns) {
     constexpr auto semantics = Type == TYPE_GEOGRAPHY ? WkbCoordinateSemantics::GEOGRAPHY_CRS84
@@ -1061,7 +1559,7 @@ StatusOr<ColumnPtr> geo_validity(FunctionContext* context, const Columns& column
         ASSIGN_OR_RETURN(const auto* geometry,
                          unary_geometry(input, row, semantics, prepared, &constant_geometry, &varying_geometry));
         if constexpr (Type == TYPE_GEOGRAPHY) {
-            ASSIGN_OR_RETURN(auto valid, spherical_is_valid(*geometry));
+            ASSIGN_OR_RETURN(auto valid, geography_is_valid(*geometry));
             result.append(valid);
         } else {
             ASSIGN_OR_RETURN(auto valid, planar_is_valid(*geometry));
@@ -1163,6 +1661,83 @@ StatusOr<ColumnPtr> serialize_geo(const Columns& columns, bool text) {
     auto output = result.build(false);
     if (constant) return ConstColumn::create(std::move(output), size);
     return output;
+}
+
+struct NativeGeoCrsState {
+    std::string source;
+    std::string target;
+};
+
+constexpr double kPi = 3.141592653589793238462643383279502884;
+constexpr double kWebMercatorRadius = 6378137.0;
+constexpr double kWebMercatorMaxLatitude = 85.0511287798066;
+constexpr double kWebMercatorMaxCoordinate = kWebMercatorRadius * kPi + 1e-7;
+
+StatusOr<int32_t> supported_transform_srid(std::string_view crs) {
+    if (crs == "EPSG:4326" || crs == "OGC:CRS84") return 4326;
+    if (crs == "EPSG:3857") return 3857;
+    return Status::NotSupported("ST_Transform supports only EPSG:4326 and EPSG:3857");
+}
+
+Status transform_coordinate(WkbCoordinate* point, int32_t source_srid, int32_t target_srid) {
+    if (!std::isfinite(point->x) || !std::isfinite(point->y)) {
+        return Status::InvalidArgument("ST_Transform coordinate is not finite");
+    }
+    if (source_srid == target_srid) return Status::OK();
+    if (source_srid == 4326) {
+        if (std::abs(point->x) > 180.0 || std::abs(point->y) > kWebMercatorMaxLatitude) {
+            return Status::InvalidArgument("ST_Transform coordinate is outside the EPSG:4326 Web Mercator domain");
+        }
+        const double longitude = point->x * kPi / 180.0;
+        const double latitude = point->y * kPi / 180.0;
+        point->x = kWebMercatorRadius * longitude;
+        point->y = kWebMercatorRadius * std::asinh(std::tan(latitude));
+    } else {
+        if (std::abs(point->x) > kWebMercatorMaxCoordinate || std::abs(point->y) > kWebMercatorMaxCoordinate) {
+            return Status::InvalidArgument("ST_Transform coordinate is outside the EPSG:3857 Web Mercator domain");
+        }
+        point->x = point->x / kWebMercatorRadius * 180.0 / kPi;
+        point->y = std::atan(std::sinh(point->y / kWebMercatorRadius)) * 180.0 / kPi;
+        // Rounding at the Web Mercator edge must not make a valid inverse result
+        // invalid as input to a subsequent forward transformation.
+        point->x = std::clamp(point->x, -180.0, 180.0);
+        point->y = std::clamp(point->y, -kWebMercatorMaxLatitude, kWebMercatorMaxLatitude);
+    }
+    if (!std::isfinite(point->x) || !std::isfinite(point->y)) {
+        return Status::InvalidArgument("ST_Transform coordinate is outside the supported CRS domain");
+    }
+    return Status::OK();
+}
+
+Status transform_geometry_coordinates(WkbGeometry* geometry, int32_t source_srid, int32_t target_srid) {
+    auto transform_point = [source_srid, target_srid](WkbCoordinate* point) -> Status {
+        return transform_coordinate(point, source_srid, target_srid);
+    };
+    for (auto& coordinate : geometry->coordinates) RETURN_IF_ERROR(transform_point(&coordinate));
+    for (auto& ring : geometry->rings) {
+        for (auto& coordinate : ring) RETURN_IF_ERROR(transform_point(&coordinate));
+    }
+    for (auto& child : geometry->children) {
+        RETURN_IF_ERROR(transform_geometry_coordinates(&child, source_srid, target_srid));
+    }
+    return Status::OK();
+}
+
+StatusOr<int32_t> checked_target_srid(FunctionContext* context, const Columns& columns) {
+    if (context == nullptr || columns.size() != 2 || !columns[1]->is_constant() || columns[1]->only_null()) {
+        return Status::InvalidArgument("Target SRID must be a non-NULL constant INT");
+    }
+    ColumnViewer<TYPE_INT> target(columns[1]);
+    if (target.is_null(0) || target.value(0) <= 0) {
+        return Status::InvalidArgument("Target SRID must be a positive INT");
+    }
+    const int32_t value = target.value(0);
+    const auto& type = context->get_return_type();
+    if (type.type != TYPE_GEOMETRY || !type.geo_type.has_value() ||
+        type.geo_type->crs != "EPSG:" + std::to_string(value) || type.geo_type->srid != value) {
+        return Status::InvalidArgument("Target SRID conflicts with GEOMETRY result descriptor");
+    }
+    return value;
 }
 
 } // namespace
@@ -1614,7 +2189,7 @@ StatusOr<ColumnPtr> GeoFunctions::st_geography_intersects(FunctionContext* conte
 }
 
 StatusOr<ColumnPtr> GeoFunctions::st_geometry_intersects(FunctionContext* context, const Columns& columns) {
-    return geo_intersects<TYPE_GEOMETRY>(context, columns);
+    TRY_CATCH_BAD_ALLOC(return geo_intersects<TYPE_GEOMETRY>(context, columns));
 }
 Status GeoFunctions::native_geo_unary_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope != FunctionContext::FRAGMENT_LOCAL || !context->is_constant_column(0)) return Status::OK();
@@ -1824,6 +2399,255 @@ Status GeoFunctions::st_line_prepare(FunctionContext* ctx, FunctionContext::Func
 
 Status GeoFunctions::st_polygon_prepare(FunctionContext* ctx, FunctionContext::FunctionStateScope scope) {
     return st_from_wkt_prepare_common(ctx, scope, GEO_SHAPE_POLYGON);
+}
+
+Status GeoFunctions::native_geo_transform_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope != FunctionContext::FRAGMENT_LOCAL) return Status::OK();
+    if (context == nullptr || !context->is_constant_column(1)) {
+        return Status::InvalidArgument("Native GEOMETRY CRS functions require a constant target SRID");
+    }
+    const auto* source_type = context->get_arg_type(0);
+    const auto& result_type = context->get_return_type();
+    if (source_type == nullptr || source_type->type != TYPE_GEOMETRY || !source_type->geo_type.has_value() ||
+        result_type.type != TYPE_GEOMETRY || !result_type.geo_type.has_value()) {
+        return Status::InvalidArgument("Native GEOMETRY CRS functions require semantic type metadata");
+    }
+    auto target_column = context->get_constant_column(1);
+    if (target_column == nullptr || target_column->only_null()) {
+        return Status::InvalidArgument("Target SRID must be a non-NULL constant INT");
+    }
+    ColumnViewer<TYPE_INT> target(target_column);
+    if (target.is_null(0) || target.value(0) <= 0) {
+        return Status::InvalidArgument("Target SRID must be a positive INT");
+    }
+    const std::string target_crs = "EPSG:" + std::to_string(target.value(0));
+    if (result_type.geo_type->crs != target_crs || result_type.geo_type->srid != target.value(0)) {
+        return Status::InvalidArgument("Target SRID conflicts with GEOMETRY result descriptor");
+    }
+    auto state = std::make_unique<NativeGeoCrsState>();
+    state->source = source_type->geo_type->crs;
+    state->target = target_crs;
+    if (state->source.empty() || source_type->geo_type->srid != derive_srid(state->source)) {
+        return Status::InvalidArgument("Source GEOMETRY CRS is missing or conflicts with SRID metadata");
+    }
+    ASSIGN_OR_RETURN(const int32_t source_srid, supported_transform_srid(state->source));
+    ASSIGN_OR_RETURN(const int32_t target_srid, supported_transform_srid(state->target));
+    (void)source_srid;
+    (void)target_srid;
+    context->set_function_state(scope, state.release());
+    return Status::OK();
+}
+
+Status GeoFunctions::native_geo_transform_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope == FunctionContext::FRAGMENT_LOCAL) {
+        delete reinterpret_cast<NativeGeoCrsState*>(context->get_function_state(scope));
+        context->set_function_state(scope, nullptr);
+    }
+    return Status::OK();
+}
+
+StatusOr<ColumnPtr> GeoFunctions::st_geometry_srid(FunctionContext*, const Columns& columns) {
+    const size_t size = columns[0]->size();
+    if (columns[0]->only_null()) return ColumnHelper::create_const_null_column(size);
+    const bool constant = columns[0]->is_constant();
+    const Column* source =
+            constant ? down_cast<const ConstColumn*>(columns[0].get())->data_column().get() : columns[0].get();
+    const auto* nullable = source->is_nullable() ? down_cast<const NullableColumn*>(source) : nullptr;
+    const auto* geo = down_cast<const GeoColumn*>(nullable ? nullable->data_column().get() : source);
+    RETURN_IF_ERROR(check_geometry_boundary(*geo));
+    const size_t rows = constant ? 1 : size;
+    ColumnBuilder<TYPE_INT> result(rows);
+    for (size_t row = 0; row < rows; ++row) {
+        if ((nullable != nullptr && nullable->is_null(row)) || !geo->descriptor().type.srid.has_value()) {
+            result.append_null();
+        } else {
+            result.append(geo->descriptor().type.srid.value());
+        }
+    }
+    auto output = result.build(false);
+    if (constant) return ConstColumn::create(std::move(output), size);
+    return output;
+}
+
+StatusOr<ColumnPtr> GeoFunctions::st_geometry_set_srid(FunctionContext* context, const Columns& columns) {
+    ASSIGN_OR_RETURN(const int32_t target_srid, checked_target_srid(context, columns));
+    const auto* state =
+            reinterpret_cast<const NativeGeoCrsState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    if (state == nullptr || state->target != "EPSG:" + std::to_string(target_srid)) {
+        return Status::InvalidArgument("ST_SetSRID requires prepared CRS metadata");
+    }
+    const size_t size = columns[0]->size();
+    if (columns[0]->only_null()) return ColumnHelper::create_const_null_column(size);
+    ASSIGN_OR_RETURN(auto input, geo_input<TYPE_GEOMETRY>(columns[0]));
+    if (input.data->descriptor().type.crs != state->source) {
+        return Status::InvalidArgument("Source GEOMETRY CRS differs from prepared descriptor");
+    }
+    const bool constant = ColumnHelper::is_all_const(columns);
+    const size_t rows = constant ? 1 : size;
+    ASSIGN_OR_RETURN(auto result, create_geometry_result(context));
+    for (size_t row = 0; row < rows; ++row) {
+        if (input.is_null(row)) {
+            result->append_nulls(1);
+            continue;
+        }
+        WkbGeometry geometry;
+        RETURN_IF_ERROR(WkbCodec::parse_wkb(input.wkb(row), &geometry, WkbCoordinateSemantics::GEOMETRY_CARTESIAN));
+        // Re-tag the existing WKB; ST_SetSRID never changes its coordinate bytes.
+        result->append_datum(Datum(input.wkb(row)));
+    }
+    if (constant) return ConstColumn::create(std::move(result), size);
+    return result;
+}
+
+StatusOr<ColumnPtr> GeoFunctions::st_geometry_transform(FunctionContext* context, const Columns& columns) {
+    ASSIGN_OR_RETURN(const int32_t target_srid, checked_target_srid(context, columns));
+    const auto* state =
+            reinterpret_cast<const NativeGeoCrsState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    if (state == nullptr || state->target != "EPSG:" + std::to_string(target_srid)) {
+        return Status::InvalidArgument("ST_Transform requires prepared CRS metadata");
+    }
+    const size_t size = columns[0]->size();
+    if (columns[0]->only_null()) return ColumnHelper::create_const_null_column(size);
+    ASSIGN_OR_RETURN(auto input, geo_input<TYPE_GEOMETRY>(columns[0]));
+    if (input.data->descriptor().type.crs != state->source) {
+        return Status::InvalidArgument("Source GEOMETRY CRS differs from prepared descriptor");
+    }
+    ASSIGN_OR_RETURN(const int32_t source_srid, supported_transform_srid(state->source));
+    ASSIGN_OR_RETURN(const int32_t prepared_target_srid, supported_transform_srid(state->target));
+    if (prepared_target_srid != target_srid) {
+        return Status::InvalidArgument("Target SRID differs from prepared GEOMETRY CRS");
+    }
+    const bool constant = ColumnHelper::is_all_const(columns);
+    const size_t rows = constant ? 1 : size;
+    ASSIGN_OR_RETURN(auto result, create_geometry_result(context));
+    for (size_t row = 0; row < rows; ++row) {
+        if (input.is_null(row)) {
+            result->append_nulls(1);
+            continue;
+        }
+        WkbGeometry geometry;
+        RETURN_IF_ERROR(WkbCodec::parse_wkb(input.wkb(row), &geometry, WkbCoordinateSemantics::GEOMETRY_CARTESIAN));
+        RETURN_IF_ERROR(transform_geometry_coordinates(&geometry, source_srid, target_srid));
+        std::string wkb;
+        RETURN_IF_ERROR(WkbCodec::to_wkb(geometry, &wkb, WkbCoordinateSemantics::GEOMETRY_CARTESIAN));
+        result->append_datum(Datum(Slice(wkb)));
+    }
+    if (constant) return ConstColumn::create(std::move(result), size);
+    return result;
+}
+
+Status GeoFunctions::native_geo_buffer_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope != FunctionContext::FRAGMENT_LOCAL || !context->is_constant_column(0)) return Status::OK();
+    RETURN_IF_ERROR(buffer_checkpoint(context));
+    auto prepared = std::make_unique<NativeGeoBufferState>();
+    const auto& column = context->get_constant_column(0);
+    if (!column->only_null() && column->size() != 0) {
+        // Keep plan-time errors lazy until a non-NULL row uses this geometry.
+        auto input = geo_input<TYPE_GEOMETRY>(column);
+        prepared->status = input.status();
+        if (prepared->status.ok()) {
+            auto model = PreparedGeoBuffer::prepare(input->wkb(0), [&] { return buffer_checkpoint(context); });
+            prepared->status = model.status();
+            if (prepared->status.ok()) prepared->input = std::move(model.value());
+        }
+    }
+    RETURN_IF_ERROR(buffer_checkpoint(context));
+    context->set_function_state(scope, prepared.release());
+    return Status::OK();
+}
+
+Status GeoFunctions::native_geo_buffer_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope == FunctionContext::FRAGMENT_LOCAL) {
+        delete reinterpret_cast<NativeGeoBufferState*>(context->get_function_state(scope));
+        context->set_function_state(scope, nullptr);
+    }
+    return Status::OK();
+}
+
+StatusOr<ColumnPtr> GeoFunctions::st_geometry_buffer(FunctionContext* context, const Columns& columns) {
+    return geo_buffer(context, columns);
+}
+
+Status GeoFunctions::native_geo_simplify_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope != FunctionContext::FRAGMENT_LOCAL || !context->is_constant_column(0)) return Status::OK();
+    RETURN_IF_ERROR(simplify_checkpoint(context));
+    auto prepared = std::make_unique<NativeGeoTopologySimplifyState>();
+    const auto& column = context->get_constant_column(0);
+    if (!column->only_null() && column->size() != 0) {
+        // Keep plan-time errors lazy until a non-NULL row uses this geometry.
+        auto input = geo_input<TYPE_GEOMETRY>(column);
+        prepared->status = input.status();
+        if (prepared->status.ok()) {
+            auto model =
+                    PreparedGeoTopologySimplify::prepare(input->wkb(0), [&] { return simplify_checkpoint(context); });
+            prepared->status = model.status();
+            if (prepared->status.is_cancelled() || prepared->status.is_mem_limit_exceeded()) return prepared->status;
+            if (prepared->status.ok()) prepared->input = std::move(model.value());
+        }
+    }
+    RETURN_IF_ERROR(simplify_checkpoint(context));
+    context->set_function_state(scope, prepared.release());
+    return Status::OK();
+}
+
+Status GeoFunctions::native_geo_simplify_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope == FunctionContext::FRAGMENT_LOCAL) {
+        delete reinterpret_cast<NativeGeoTopologySimplifyState*>(context->get_function_state(scope));
+        context->set_function_state(scope, nullptr);
+    }
+    return Status::OK();
+}
+
+StatusOr<ColumnPtr> GeoFunctions::st_geometry_simplify_preserve_topology(FunctionContext* context,
+                                                                         const Columns& columns) {
+    return geo_simplify(context, columns);
+}
+
+Status GeoFunctions::native_geo_overlay_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope != FunctionContext::FRAGMENT_LOCAL ||
+        (!context->is_constant_column(0) && !context->is_constant_column(1)))
+        return Status::OK();
+    RETURN_IF_ERROR(overlay_checkpoint(context));
+    auto state = std::make_unique<NativeGeoOverlayState>();
+    for (size_t argument = 0; argument < 2; ++argument) {
+        auto& prepared = state->arguments[argument];
+        prepared.constant = context->is_constant_column(argument);
+        if (!prepared.constant) continue;
+        const auto& column = context->get_constant_column(argument);
+        if (column->only_null()) continue;
+        // Defer constant input errors until a non-NULL row actually uses this operand.
+        auto input = geo_input<TYPE_GEOMETRY>(column);
+        prepared.status = input.status();
+        if (!prepared.status.ok()) continue;
+        auto polygon = PreparedGeoPolygon::prepare(input->wkb(0));
+        prepared.status = polygon.status();
+        if (prepared.status.ok()) prepared.polygon = std::move(polygon.value());
+        RETURN_IF_ERROR(overlay_checkpoint(context));
+    }
+    context->set_function_state(scope, state.release());
+    return Status::OK();
+}
+
+Status GeoFunctions::native_geo_overlay_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope == FunctionContext::FRAGMENT_LOCAL) {
+        delete reinterpret_cast<NativeGeoOverlayState*>(context->get_function_state(scope));
+        context->set_function_state(scope, nullptr);
+    }
+    return Status::OK();
+}
+
+StatusOr<ColumnPtr> GeoFunctions::st_geometry_intersection(FunctionContext* context, const Columns& columns) {
+    return geo_overlay(context, columns, GeoOverlayKind::INTERSECTION);
+}
+
+StatusOr<ColumnPtr> GeoFunctions::st_geometry_union(FunctionContext* context, const Columns& columns) {
+    return geo_overlay(context, columns, GeoOverlayKind::UNION);
+}
+StatusOr<ColumnPtr> GeoFunctions::st_geometry_difference(FunctionContext* context, const Columns& columns) {
+    return geo_overlay(context, columns, GeoOverlayKind::DIFFERENCE);
+}
+StatusOr<ColumnPtr> GeoFunctions::st_geometry_sym_difference(FunctionContext* context, const Columns& columns) {
+    return geo_overlay(context, columns, GeoOverlayKind::SYMMETRIC_DIFFERENCE);
 }
 
 } // namespace starrocks

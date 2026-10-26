@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "SQL で AI 関数を使用し、TopN プッシュダウンで AI 入力行数を削減します。"
+description: "AI Provider、AI 関数、使用権限の関係を理解し、SQL からモデルサービスを呼び出してテキストを処理します。"
 sidebar_position: 10
 ---
 
@@ -10,7 +10,91 @@ import Experimental from '../../../_assets/commonMarkdown/_experimental.mdx'
 
 <Experimental />
 
-AI 関数は、SQL から設定済みのモデルサービスを呼び出します。テキスト生成については [ai_complete](ai_complete.md) を参照してください。
+AI 関数は、SQL からモデルサービスを呼び出し、テキストの生成、分類、抽出、翻訳、要約、ベクトル化を行います。定数テキストに対して関数を呼び出すことも、クエリ内でテキスト列を処理することもできます。
+
+## AI Provider と AI 関数
+
+AI Provider は、クラスター内で一元管理されるモデルサービスの設定です。エンドポイント、プロトコル、デフォルトモデル、オプションの認証情報を保持します。AI 関数は Provider からこれらの設定を取得するため、SQL でエンドポイントや認証情報を繰り返し指定する必要はありません。
+
+- `ai_embed` は `embedding` タイプの Provider を使用します。
+- `ai_complete` とその他のテキスト補助関数は `chat` タイプの Provider を使用します。
+- これらの AI 関数は現在、Provider が `openai` プロトコルを使用することを必要とします。エンドポイントとモデルも、対応するチャットまたは埋め込み機能をサポートしている必要があります。
+
+関数の呼び出し時には、`provider` で Provider を指定するか、対応するタイプのクラスターデフォルト Provider を使用できます。デフォルトはタイプごとに独立して管理されます。`model` を省略すると、選択した Provider のデフォルトモデルが使用されます。そのサービスがサポートする別のモデルを明示的に指定することもできます。
+
+Provider の作成、設定プロパティ、管理構文については [CREATE AI PROVIDER](../../sql-statements/cluster-management/ai_provider/CREATE_AI_PROVIDER.md) を、デフォルトの設定については [SET DEFAULT AI PROVIDER](../../sql-statements/cluster-management/ai_provider/SET_DEFAULT_AI_PROVIDER.md) を参照してください。
+
+## AI 関数の権限 {/* #ai-function-privileges */}
+
+AI 関数を呼び出すには、次の両方の使用権限が必要です。
+
+- **関数の権限**: 対応する AI 関数の使用を許可します。
+- **Provider の権限**: 呼び出しで選択された Provider へのアクセスを許可します。デフォルト Provider を使用する場合も確認されます。
+
+一方の権限で他方を代替することはできません。Provider の管理には SYSTEM OPERATE 権限が必要です。Provider の管理権限があっても、一般ユーザーに関数と Provider の使用権限が付与されているとは限りません。クエリで使用するテーブル、列、ビューの権限も引き続き適用されます。
+
+詳細は [AI の権限項目](../../../administration/user_privs/authorization/privilege_item.md#ai-function-privileges)を参照してください。権限の付与、取り消し、確認の構文については、それぞれ [GRANT](../../sql-statements/account-management/GRANT.md#ai-関数と-provider)、[REVOKE](../../sql-statements/account-management/REVOKE.md#ai-関数と-provider)、[SHOW GRANTS](../../sql-statements/account-management/SHOW_GRANTS.md) を参照してください。
+
+## はじめに
+
+次の例では、Alibaba Cloud Model Studio（Bailian）の北京リージョンの OpenAI 互換 API を使用します。モデルサービスを有効にし、`YOUR_DASHSCOPE_API_KEY` を北京リージョンの API キーに置き換えてください。Provider の管理権限と、該当する関数および Provider の使用権限を持つアカウントで実行してください。
+
+### Chat Provider: テキストの生成
+
+`qwen-plus` モデルを使用する chat Provider を作成し、`ai_complete` を呼び出します。
+
+```sql
+CREATE AI PROVIDER bailian_chat TYPE chat
+PROPERTIES (
+    "endpoint" = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+    "protocol" = "openai",
+    "model" = "qwen-plus",
+    "api_key" = "YOUR_DASHSCOPE_API_KEY"
+);
+
+-- Provider を明示的に指定し、そのデフォルトモデルを使用します。
+SELECT ai_complete(
+    prompt => '列指向ストレージとは何かを一文で説明してください。',
+    provider => 'bailian_chat',
+    options => json_object('enable_thinking', false)
+);
+
+-- デフォルトの chat Provider を設定すると、呼び出し時に provider を省略できます。
+SET bailian_chat AS DEFAULT AI PROVIDER;
+
+SELECT ai_complete(
+    prompt => '列指向ストレージとは何かを一文で説明してください。',
+    options => json_object('enable_thinking', false)
+);
+```
+
+### Embedding Provider: テキストの埋め込みベクトルの生成
+
+`text-embedding-v4` モデルを使用する embedding Provider を作成し、出力次元数を 256 に設定して、`ai_embed` を呼び出します。
+
+```sql
+CREATE AI PROVIDER bailian_embedding TYPE embedding
+PROPERTIES (
+    "endpoint" = "https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings",
+    "protocol" = "openai",
+    "model" = "text-embedding-v4",
+    "dimensions" = "256",
+    "api_key" = "YOUR_DASHSCOPE_API_KEY"
+);
+
+-- Provider を明示的に指定して、テキストの埋め込みベクトルを返します。
+SELECT ai_embed(
+    input => '列指向ストレージは分析クエリに適しています。',
+    provider => 'bailian_embedding'
+);
+
+-- デフォルトの embedding Provider を設定します。デフォルトの chat Provider には影響しません。
+SET bailian_embedding AS DEFAULT AI PROVIDER;
+
+SELECT ai_embed('列指向ストレージは分析クエリに適しています。');
+```
+
+関数の完全な構文、引数のルール、例については、[AI テキスト関数](ai_text_functions.md)を参照してください。モデル呼び出しでは、入力テキストが Provider のエンドポイントに送信されます。データ送信の要件に応じてサービスを選び、クエリの行数、遅延、呼び出し費用を考慮してください。
 
 ## AI 入力行数の削減 {/* #reducing-ai-input-rows */}
 

@@ -29,6 +29,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -200,5 +201,66 @@ public class SkipBlacklistSharedDataWorkerProviderTest {
             assertSelectBackupWorkerRespectsEligible(workerId, defaultProvider.selectBackupWorker(workerId),
                     defaultEligible);
         }
+    }
+
+    /**
+     * {@link com.starrocks.qe.SessionVariableConstants.BlacklistBackupRoutingPolicy#TABLET_HASH}:
+     * {@link SkipBlacklistSharedDataWorkerProvider} keeps the blocklisted node eligible and hashes some tablets to it,
+     * while the default provider skips it; every other tablet gets the same backup from both providers.
+     */
+    @Test
+    public void testSelectBackupWorkerSkipsBlacklistTabletHashPolicy() {
+        ImmutableMap<Long, ComputeNode> id2ComputeNode = genWorkers(10, 15, ComputeNode::new, false);
+
+        long inBlacklistCNId = 11L;
+        Set<Long> blacklistWorkerIds = ImmutableSet.of(inBlacklistCNId);
+
+        new MockUp<SimpleScheduler>() {
+            @Mock
+            public boolean isInBlocklist(long backendId) {
+                return blacklistWorkerIds.contains(backendId);
+            }
+        };
+
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public List<Long> getAllComputeNodeIds(ComputeResource computeResource) {
+                return Arrays.asList(10L, 11L, 12L, 13L, 14L);
+            }
+        };
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public ComputeNode getBackendOrComputeNode(long nodeId) {
+                return id2ComputeNode.get(nodeId);
+            }
+        };
+
+        BlacklistBackupRoutingPolicy backupRoutingPolicy = BlacklistBackupRoutingPolicy.TABLET_HASH;
+        SkipBlacklistSharedDataWorkerProvider skipProvider =
+                new SkipBlacklistSharedDataWorkerProvider.Factory(backupRoutingPolicy).captureAvailableWorkers(
+                        null, // Not used in our mock
+                        false, -1, ComputationFragmentSchedulingPolicy.ALL_NODES,
+                        WarehouseManager.DEFAULT_RESOURCE);
+        DefaultSharedDataWorkerProvider defaultProvider =
+                new DefaultSharedDataWorkerProvider.Factory(backupRoutingPolicy).captureAvailableWorkers(
+                        null, // Not used in our mock
+                        false, -1, ComputationFragmentSchedulingPolicy.ALL_NODES,
+                        WarehouseManager.DEFAULT_RESOURCE);
+
+        long workerId = 10L;
+        Set<Long> skipEligible = ImmutableSet.of(11L, 12L, 13L, 14L);
+        Set<Long> defaultEligible = ImmutableSet.of(12L, 13L, 14L);
+        Set<Long> skipSelected = new HashSet<>();
+        for (long tabletId = 20001L; tabletId <= 20200L; tabletId++) {
+            long skipBackup = skipProvider.selectBackupWorker(workerId, tabletId);
+            long defaultBackup = defaultProvider.selectBackupWorker(workerId, tabletId);
+            assertSelectBackupWorkerRespectsEligible(workerId, skipBackup, skipEligible);
+            assertSelectBackupWorkerRespectsEligible(workerId, defaultBackup, defaultEligible);
+            if (skipBackup != inBlacklistCNId) {
+                Assertions.assertEquals(skipBackup, defaultBackup);
+            }
+            skipSelected.add(skipBackup);
+        }
+        Assertions.assertEquals(skipEligible, skipSelected);
     }
 }

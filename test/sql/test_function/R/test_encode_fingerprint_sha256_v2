@@ -1,0 +1,42 @@
+-- name: test_encode_fingerprint_sha256_v2
+CREATE TABLE t_fp_v2 (id INT, s VARCHAR(32), i INT)
+  DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1
+  PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t_fp_v2 VALUES (1, 'a', 5), (2, unhex('6103050000'), NULL);
+-- result:
+-- !result
+SELECT count(DISTINCT encode_fingerprint_sha256(s, i)) FROM t_fp_v2;
+-- result:
+1
+-- !result
+SELECT count(DISTINCT encode_fingerprint_sha256_v2(s, i)) FROM t_fp_v2;
+-- result:
+2
+-- !result
+SELECT id, hex(encode_fingerprint_sha256_v2(s, i)) FROM t_fp_v2 ORDER BY id;
+-- result:
+1	8F63405920D617F56FEB4BE3DA5CE143F40D1F2B050C1EFCFB967A3EEE86717E
+2	CE532AF2BB2DC25BFB4BDE85CBA696A396C0DB820BA96F2593AC45A899965F95
+-- !result
+SELECT encode_fingerprint_sha256(concat('a', char(8)), 'b') = encode_fingerprint_sha256('a', concat(char(8), 'b'));
+-- result:
+1
+-- !result
+SELECT encode_fingerprint_sha256_v2(concat('a', char(8)), 'b') = encode_fingerprint_sha256_v2('a', concat(char(8), 'b'));
+-- result:
+0
+-- !result
+SELECT encode_fingerprint_sha256_v2('', concat(char(8), '')) = encode_fingerprint_sha256_v2(char(8), '');
+-- result:
+0
+-- !result
+SELECT encode_fingerprint_sha256_v2(CAST(NULL AS INT), 'a') IS NULL;
+-- result:
+0
+-- !result
+SELECT count(*) FROM t_fp_v2 WHERE encode_fingerprint_sha256_v2(s, CAST(5 AS INT)) = encode_fingerprint_sha256_v2(s, i);
+-- result:
+1
+-- !result

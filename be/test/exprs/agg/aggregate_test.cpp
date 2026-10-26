@@ -3145,6 +3145,40 @@ TEST_F(AggregateTest, test_array_agg_nullable) {
     ASSERT_EQ(1024, offsets->get_data().back());
 }
 
+TEST_F(AggregateTest, test_bool_or_merge_nullable_intermediate) {
+    const AggregateFunction* func = get_aggregate_function("bool_or", TYPE_BOOLEAN, TYPE_BOOLEAN, false);
+    ASSERT_NE(nullptr, func);
+
+    // A NULL input whose data slot holds true: streaming pre-aggregation passes it through as the intermediate.
+    auto data_column = BooleanColumn::create();
+    auto null_column = NullColumn::create();
+    data_column->append(1);
+    null_column->append(1);
+    data_column->append(0);
+    null_column->append(0);
+    Columns src{NullableColumn::create(std::move(data_column), std::move(null_column))};
+    MutableColumnPtr intermediate;
+    func->convert_to_serialize_format(ctx, src, 2, intermediate);
+    ASSERT_TRUE(intermediate->has_null());
+
+    auto state0 = ManagedAggrState::create(ctx, func);
+    auto state1 = ManagedAggrState::create(ctx, func);
+    AggDataPtr states[2] = {state0->state(), state0->state()};
+    func->merge_batch(ctx, 2, 0, intermediate.get(), states);
+
+    Filter filter{0, 0};
+    AggDataPtr selective_states[2] = {state1->state(), state1->state()};
+    func->merge_batch_selectively(ctx, 2, 0, intermediate.get(), selective_states, filter);
+    func->merge_batch_single_state(ctx, state1->state(), intermediate.get(), 0, 2);
+
+    for (auto* state : {state0->state(), state1->state()}) {
+        auto result = BooleanColumn::create();
+        func->finalize_to_column(ctx, state, result.get());
+        ASSERT_EQ(1, result->size());
+        ASSERT_EQ(0, result->get_data()[0]);
+    }
+}
+
 TEST_F(AggregateTest, test_array_agg_nullable_distinct) {
     const AggregateFunction* func = get_aggregate_function("array_agg_distinct", TYPE_INT, TYPE_ARRAY, true);
     auto state = ManagedAggrState::create(ctx, func);

@@ -6,6 +6,9 @@ sidebar_position: 10
 
 # ネイティブ認証
 
+import EditionSpecificDefaultAdminUser from '../../../_assets/commonMarkdown/Edition_Specific_Default_Admin_User.mdx'
+import EditionSpecificResetLostAdminPassword from '../../../_assets/commonMarkdown/Edition_Specific_Reset_Lost_Admin_Password.mdx'
+
 StarRocks 内で SQL コマンドを使用して、ネイティブ認証を通じてユーザーを作成および管理します。
 
 StarRocks のネイティブ認証は、パスワードベースの認証方法です。加えて、StarRocks は LDAP などの外部認証システムとの統合もサポートしています。詳細な手順については、[セキュリティインテグレーションで認証](./security_integration.md) を参照してください。
@@ -15,6 +18,8 @@ StarRocks のネイティブ認証は、パスワードベースの認証方法�
 システム定義のロール `user_admin` を持つユーザーは、StarRocks 内でユーザーの作成、変更、削除が可能です。
 
 :::
+
+<EditionSpecificDefaultAdminUser />
 
 ## ユーザーの作成
 
@@ -60,7 +65,6 @@ ALTER USER 'jack' SET PROPERTIES ("max_user_connections" = "1000");
 > **NOTE**
 >
 > - どのユーザーも自分のパスワードを特権なしでリセットできます。
-> - `root` ユーザー自身のみがそのパスワードを設定できます。パスワードを忘れて StarRocks に接続できない場合は、[Reset lost root password](#失われた-root-パスワードのリセット) を参照してください。
 
 以下の例はどちらも `jack` のパスワードを `54321` にリセットします。
 
@@ -76,53 +80,7 @@ ALTER USER 'jack' SET PROPERTIES ("max_user_connections" = "1000");
   ALTER USER jack@'172.10.1.10' IDENTIFIED BY '54321';
   ```
 
-#### 失われた root パスワードのリセット
-
-`root` ユーザーのパスワードを忘れて StarRocks に接続できない場合は、次の手順に従ってリセットできます。
-
-1. **すべての FE ノード** の設定ファイル **fe/conf/fe.conf** に次の設定項目を追加して、ユーザー認証を無効にします。
-
-   ```YAML
-   enable_auth_check = false
-   ```
-
-2. 設定を有効にするために **すべての FE ノード** を再起動します。
-
-   ```Bash
-   ./fe/bin/stop_fe.sh
-   ./fe/bin/start_fe.sh
-   ```
-
-3. MySQL クライアントから `root` ユーザーを介して StarRocks に接続します。ユーザー認証が無効な場合、パスワードを指定する必要はありません。
-
-   ```Bash
-   mysql -h <fe_ip_or_fqdn> -P<fe_query_port> -uroot
-   ```
-
-4. `root` ユーザーのパスワードをリセットします。
-
-   ```SQL
-   SET PASSWORD for root = PASSWORD('xxxxxx');
-   ```
-
-5. **すべての FE ノード** の設定ファイル **fe/conf/fe.conf** で設定項目 `enable_auth_check` を `true` に設定して、ユーザー認証を再度有効にします。
-
-   ```YAML
-   enable_auth_check = true
-   ```
-
-6. 設定を有効にするために **すべての FE ノード** を再起動します。
-
-   ```Bash
-   ./fe/bin/stop_fe.sh
-   ./fe/bin/start_fe.sh
-   ```
-
-7. MySQL クライアントから `root` ユーザーと新しいパスワードを使用して StarRocks に接続し、パスワードが正常にリセットされたかどうかを確認します。
-
-   ```Bash
-   mysql -h <fe_ip_or_fqdn> -P<fe_query_port> -uroot -p<xxxxxx>
-   ```
+<EditionSpecificResetLostAdminPassword />
 
 ## ユーザーの削除
 

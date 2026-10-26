@@ -44,6 +44,7 @@
 #include "storage/lake/meta_file.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/pk_tablet_writer.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/spill_mem_table_sink.h"
 #include "storage/lake/table_schema_service.h"
 #include "storage/lake/tablet.h"
@@ -51,7 +52,6 @@
 #include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/tablet_write_log_manager.h"
 #include "storage/lake/tablet_writer.h"
-#include "storage/lake/update_manager.h"
 #include "storage/memtable.h"
 #include "storage/memtable_sink.h"
 #include "storage/storage_engine.h"
@@ -448,7 +448,7 @@ Status DeltaWriterImpl::build_schema_and_writer() {
         if (_force_build_vector_index_inline) {
             _tablet_writer->force_set_build_vector_index_inline();
         }
-        // A column partial-update publish routes through UpdateManager::_handle_delete_files, which erases
+        // A column partial-update publish routes through PrimaryKeyManager::_handle_delete_files, which erases
         // every del file via the memtable path and never reads op_write.del_ssts(). Building a tombstone
         // sstable here would cost a full sort+SST write at import and then leave the file orphaned (it never
         // reaches sstable_meta(), so only a full vacuum's orphan scan reclaims it), with no publish speedup
@@ -831,6 +831,10 @@ Status DeltaWriterImpl::finish() {
     RETURN_IF_ERROR(build_schema_and_writer());
     RETURN_IF_ERROR(flush());
     RETURN_IF_ERROR(merge_blocks_to_segments());
+    // Merging spilled blocks can take long and does not observe cancel(). A cancel that arrived meanwhile must
+    // still fail the load before the tablet writer is marked finished: close() deletes the files of an unfinished
+    // writer only, and nothing else deletes them when the load is aborted before its txn log is persisted.
+    RETURN_IF_ERROR(current_cancel_status());
     RETURN_IF_ERROR(_tablet_writer->finish());
     if (_bundle_writable_file_context) {
         RETURN_IF_ERROR(_bundle_writable_file_context->decrease_active_writers());
@@ -1090,7 +1094,8 @@ Status DeltaWriterImpl::fill_auto_increment_id(Chunk& chunk) {
     auto metadata = _tablet_manager->get_latest_cached_tablet_metadata(_tablet_id);
     Status st;
     if (metadata != nullptr) {
-        st = tablet.update_mgr()->get_rowids_from_pkindex(tablet.id(), metadata->version(), upserts, &rss_rowids, true);
+        st = tablet.primary_key_mgr()->get_rowids_from_pkindex(tablet.id(), metadata->version(), upserts, &rss_rowids,
+                                                               true);
     }
 
     Filter filter;

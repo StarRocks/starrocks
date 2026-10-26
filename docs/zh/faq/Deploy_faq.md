@@ -159,7 +159,7 @@ FE 节点之间的时钟不同步。FE 节点之间的时间差必须小于 5 �
 
 ## BE 节点上的 tablet 数量有限制吗？例如，对于一台具有 64 GB RAM 和 16 核的服务器，合理的 tablet 数量范围是多少？
 
-tablet 数量没有严格限制。然而，对于 tablet 大小，建议保持每个 tablet 大约 1 GB。适当的分区和分桶策略将有助于提高查询性能。tablet 大小规划很重要。
+tablet 数量没有严格限制。然而，对于 tablet 大小，建议保持每个 tablet 大约 1 GB。v4.1 及以后版本的存算分离集群已支持大容量 tablet，建议每个 tablet 保持在 10 GB ~ 50 GB，最大不超过 100 GB。适当的分区和分桶策略将有助于提高查询性能。tablet 大小规划很重要。
 
 ## 启动 BE 时，我看到错误 “error while loading shared libraries: libjvm.so: cannot open shared object file: No such file or directory”。在手动创建目录 `lib/starrocks_be` 后，我收到权限被拒绝的错误。我该怎么办？
 

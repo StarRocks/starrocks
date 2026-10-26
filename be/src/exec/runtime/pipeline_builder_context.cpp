@@ -112,7 +112,12 @@ void PipelineBuilderContext::inherit_upstream_source_properties(SourceOperatorFa
                                                                 SourceOperatorFactory* upstream_source) {
     downstream_source->set_degree_of_parallelism(upstream_source->degree_of_parallelism());
     downstream_source->set_could_local_shuffle(upstream_source->could_local_shuffle());
+    // The partition type and the bucket properties together name the hash a later local shuffle of this
+    // source has to use to stay aligned with how the fragment's rows are spread over instances, e.g. the
+    // bucket transform of an Iceberg bucket table. Carrying the type without the properties would turn
+    // that into plain crc32.
     downstream_source->set_partition_type(upstream_source->partition_type());
+    downstream_source->set_bucket_properties(upstream_source->get_bucket_properties());
     if (!upstream_source->partition_exprs().empty() || !downstream_source->partition_exprs().empty()) {
         downstream_source->set_partition_exprs(upstream_source->partition_exprs());
     }

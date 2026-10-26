@@ -65,9 +65,6 @@ Status RuntimeFilterBuilder::fill(RuntimeFilter* filter, LogicalType type, const
     if (column == nullptr || filter == nullptr) {
         return Status::InternalError("column or filter is nullptr");
     }
-    if (column->has_large_column()) {
-        return Status::NotSupported("unsupported build runtime filter for large binary column");
-    }
 
     switch (filter->type()) {
     case RuntimeFilterSerializeType::BLOOM_FILTER:

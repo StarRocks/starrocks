@@ -48,7 +48,7 @@ private:
     bool _should_skip_file;
 
     // hdfs_scanner_orc will only eval conjunctions in _eval_conjunct_ctxs_by_materialized_slot
-    // _eval_conjunct_ctxs_by_materialized_slot's slot must be existed in orc file
+    // _eval_conjunct_ctxs_by_materialized_slot's slot must be existed in orc file, or be _pos, which the scanner fills
     std::unordered_map<SlotId, std::vector<ExprContext*>> _eval_conjunct_ctxs_by_materialized_slot{};
 
     Status build_iceberg_delete_builder();
@@ -57,6 +57,12 @@ private:
     Status build_split_tasks(orc::Reader* reader, const std::vector<DiskRange>& stripes);
     Status build_io_ranges(ORCHdfsFileStream* file_stream, const std::vector<DiskRange>& stripes);
     Status resolve_columns(orc::Reader* reader);
+    const std::vector<std::string>* column_names() const {
+        return _iceberg_column_names.empty() ? &_scanner_ctx->hive_column_names : &_iceberg_column_names;
+    }
+    bool use_orc_column_names() const {
+        return _iceberg_column_names.empty() && _scanner_ctx->format_scan_context.options.orc_use_column_names;
+    }
 
     // disable orc search argument would be much easier for
     // writing unittest of customized filter
@@ -69,6 +75,10 @@ private:
     Filter _chunk_filter;
     SkipRowsContextPtr _skip_rows_ctx;
     std::unique_ptr<ORCHdfsFileStream> _input_stream;
+    // Current Iceberg name of each top-level ORC column, set when the file carries Iceberg field ids.
+    std::vector<std::string> _iceberg_column_names;
+    // Iceberg `_pos` slot (the row's position in the data file), filled by the scanner; null when not read.
+    const SlotDescriptor* _row_position_slot = nullptr;
 };
 
 } // namespace starrocks

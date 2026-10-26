@@ -1759,7 +1759,11 @@ public class RedirectStatus {
 
         @Override
         public RedirectStatus visitCreateBaselinePlanStatement(CreateBaselinePlanStmt statement, Void context) {
-            return RedirectStatus.NO_FORWARD;
+            // A global baseline is persisted in the leader's statistics table and journalled, so it can only be
+            // built on the leader. A session baseline lives in the issuing ConnectContext alone, and the leader
+            // runs a forwarded statement against a throwaway proxy context, so forwarding one would store it
+            // where nobody can ever see it again. Split the two the way SET GLOBAL / SET is split above.
+            return statement.isGlobal() ? visitDDLStatement(statement, context) : RedirectStatus.NO_FORWARD;
         }
 
         @Override

@@ -22,6 +22,7 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
 import com.starrocks.sql.ast.expression.ExprUtils;
@@ -38,7 +39,9 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownAggregateGroupingSetsRule;
+import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.type.Type;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
@@ -743,7 +746,7 @@ public class GroupingSetsTest extends PlanTestBase {
                         .setOutputGrouping(outputGrouping)
                         .setRepeatColumnRefList(repeatRefs)
                         .setGroupingIds(groupingIds)
-                        .setHasPushDown(true)
+                        .setPushDownLevel(1)
                         .setPredicate(predicate)
                         .build();
 
@@ -846,6 +849,217 @@ public class GroupingSetsTest extends PlanTestBase {
             assertContains(plan, "limit: 5");
         } finally {
             connectContext.getSessionVariable().setEnableRewriteGroupingSetsToUnionAll(old);
+        }
+    }
+
+    // The verbose plan from the REPEAT_NODE to the end of its fragment, i.e. the nodes below the repeat.
+    private static String belowRepeat(String plan) {
+        int start = plan.indexOf("REPEAT_NODE");
+        Assertions.assertTrue(start >= 0, plan);
+        int end = plan.indexOf("PLAN FRAGMENT", start);
+        return end < 0 ? plan.substring(start) : plan.substring(start, end);
+    }
+
+    @Test
+    public void testAggRuntimeFilterNotPushedBelowRepeatOnNulledKey() throws Exception {
+        connectContext.getSessionVariable().setNewPlanerAggStage(2);
+        // Below the repeat a row still has its real v1, but above it the row is also copied into the
+        // grouping set () with v1 = NULL. Filtering on v1 under the repeat drops that copy too, so the
+        // grand-total row of the ROLLUP undercounts.
+        // TOPN_FILTER from `order by v1 limit n`
+        String plan = getVerboseExplain("select v1, count(*) from t0 group by rollup(v1) order by v1 limit 3");
+        assertNotContains(belowRepeat(plan), "probe runtime filters");
+        // AGG_IN_FILTER from `group by ... limit n`
+        plan = getVerboseExplain("select v1, count(*) from t0 group by rollup(v1) limit 3");
+        assertNotContains(belowRepeat(plan), "probe runtime filters");
+
+        // v1 is kept by every grouping set, so filtering on it below the repeat stays correct.
+        plan = getVerboseExplain("select v1, v2, count(*) from t0 group by grouping sets ((v1, v2), (v1)) "
+                + "order by v1 limit 3");
+        assertContains(belowRepeat(plan), "probe runtime filters");
+    }
+
+    @Test
+    public void testNullSafeJoinRuntimeFilterNotPushedBelowRepeatOnNulledKey() throws Exception {
+        // `<=>` lets NULL through, so the filter keeps the grand-total row above the repeat while dropping
+        // the rows it is built from below it.
+        String plan = getVerboseExplain("select a.v1, a.cnt from "
+                + "(select v1, count(*) cnt from t0 group by rollup(v1)) a "
+                + "join [broadcast] t1 on a.v1 <=> t1.v4");
+        assertContains(plan, "build runtime filters");
+        assertNotContains(belowRepeat(plan), "probe runtime filters");
+
+        // A plain `=` rejects the NULL-keyed rows anyway, so pushing below the repeat is still fine.
+        plan = getVerboseExplain("select a.v1, a.cnt from "
+                + "(select v1, count(*) cnt from t0 group by rollup(v1)) a "
+                + "join [broadcast] t1 on a.v1 = t1.v4");
+        assertContains(belowRepeat(plan), "probe runtime filters");
+    }
+
+    @Test
+    public void testPartitionedRuntimeFilterNotPushedBelowRepeatOnNulledPartitionKey() throws Exception {
+        boolean old = connectContext.getSessionVariable().isEnableMultiColumnsOnGlobbalRuntimeFilter();
+        connectContext.getSessionVariable().setEnableMultiColumnsOnGlobbalRuntimeFilter(true);
+        try {
+            // The v1 filter itself is safe (v1 is kept by every grouping set), but the shuffle partitions it
+            // by (v1, v2). Below the repeat v2 is still the real value instead of the NULL of the (v1)
+            // subtotal, so the row would be probed against the wrong partition.
+            String plan = getVerboseExplain("select a.v1 from "
+                    + "(select v1, v2, count(*) cnt from t0 group by grouping sets ((v1, v2), (v1))) a "
+                    + "join [shuffle] t1 on a.v1 = t1.v4 and a.v2 <=> t1.v5");
+            assertContains(plan, "build runtime filters");
+            assertNotContains(belowRepeat(plan), "probe runtime filters");
+
+            // Neither v1 nor v2 is ever nulled, so both filters may still be pushed below the repeat.
+            plan = getVerboseExplain("select a.v1 from "
+                    + "(select v1, v2, v3, count(*) cnt from t0 group by grouping sets ((v1, v2, v3), (v1, v2))) a "
+                    + "join [shuffle] t1 on a.v1 = t1.v4 and a.v2 = t1.v5");
+            assertContains(belowRepeat(plan), "probe runtime filters");
+        } finally {
+            connectContext.getSessionVariable().setEnableMultiColumnsOnGlobbalRuntimeFilter(old);
+        }
+    }
+
+    private static String[] planAndOptimizerTrace(String sql) throws Exception {
+        Pair<ExecPlan, String> planAndTrace =
+                UtFrameUtils.getFragmentPlanWithTrace(connectContext, sql, "Optimizer").second;
+        return new String[] {planAndTrace.first.getExplainString(TExplainLevel.NORMAL), planAndTrace.second};
+    }
+
+    @Test
+    public void testThreeGroupingSetsKeepPlanWithoutEstimate() throws Exception {
+        connectContext.getSessionVariable().setCboPushDownGroupingSet(true);
+        try {
+            // no column statistics on t0: a two-key rollup keeps the plan main builds, and says why
+            String[] planAndTrace = planAndOptimizerTrace("select v1, v2, count(*) from t0 group by rollup(v1, v2)");
+            assertNotContains(planAndTrace[0], "MultiCastDataSinks");
+            assertContains(planAndTrace[0], "repeat: repeat 2 lines");
+            Assertions.assertTrue(planAndTrace[1].contains("a grouping key has unknown statistics"), planAndTrace[1]);
+
+            // A list-partitioned table is estimated over every partition before partition pruning (and its partition
+            // predicate is dropped from the estimate), so the estimate is skipped rather than trusted.
+            starRocksAssert.withTable("CREATE TABLE gs_list_part (k1 int, region varchar(20), v bigint) " +
+                    "DUPLICATE KEY(k1) PARTITION BY LIST(region) " +
+                    "(PARTITION p1 VALUES IN ('a'), PARTITION p2 VALUES IN ('b')) " +
+                    "DISTRIBUTED BY HASH(k1) BUCKETS 3 PROPERTIES ('replication_num' = '1')");
+            planAndTrace = planAndOptimizerTrace(
+                    "select k1, v, count(*) from gs_list_part where region = 'a' group by rollup(k1, v)");
+            assertNotContains(planAndTrace[0], "MultiCastDataSinks");
+            Assertions.assertTrue(planAndTrace[1].contains("scans a partitioned table before partition pruning"),
+                    planAndTrace[1]);
+
+            // 3 sets whose finest one adds no key to the others: nothing to peel off, so the rule does not apply
+            String plan = getFragmentPlan("select v1, count(*) from t0 group by grouping sets ((), (v1), (v1))");
+            assertNotContains(plan, "MultiCastDataSinks");
+            assertContains(plan, "repeat: repeat 2 lines");
+        } finally {
+            connectContext.getSessionVariable().setCboPushDownGroupingSet(false);
+        }
+    }
+
+    private static int countOf(String plan, String needle) {
+        int count = 0;
+        for (int i = plan.indexOf(needle); i >= 0; i = plan.indexOf(needle, i + needle.length())) {
+            count++;
+        }
+        return count;
+    }
+
+    @Test
+    public void testPushDownGroupingSetCascade() throws Exception {
+        // rollup over 5 keys = 6 grouping sets. Each application of the rule peels the finest set off
+        // the repeat and re-aggregates the rest from it, replacing the repeat it consumed - so exactly
+        // one REPEAT_NODE survives, holding whatever sets the cascade stopped at, and the number of
+        // cascade levels shows up as the number of UNION nodes.
+        String sql = "select t1a, t1b, t1c, t1d, t1e, sum(t1g) " +
+                "   from test_all_type group by rollup(t1a, t1b, t1c, t1d, t1e)";
+
+        connectContext.getSessionVariable().setCboPushDownGroupingSet(true);
+        try {
+            // cascade_level = 1 is the historical single-split behaviour and doubles as the rollback
+            // switch: one push down, and the repeat still expands the remaining 5 grouping sets.
+            connectContext.getSessionVariable().setCboPushDownGroupingSetCascadeLevel(1);
+            String single = getFragmentPlan(sql);
+            Assertions.assertEquals(1, countOf(single, ":UNION"), single);
+            assertContains(single, "repeat: repeat 4 lines");
+
+            // The rule stops once the repeat is down to 3 grouping sets, so 6 sets cascade exactly
+            // three times: 6 -> 5 -> 4 -> 3. Each level re-aggregates from the previous one, which is
+            // the whole point: the group-by list loses one key per level instead of every level being
+            // expanded out of the finest aggregate.
+            connectContext.getSessionVariable().setCboPushDownGroupingSetCascadeLevel(8);
+            String cascade = getFragmentPlan(sql);
+            Assertions.assertEquals(3, countOf(cascade, ":UNION"), cascade);
+            Assertions.assertEquals(1, countOf(cascade, "REPEAT_NODE"), cascade);
+            assertContains(cascade, "repeat: repeat 2 lines");
+            assertContains(cascade, "group by: 1: t1a, 2: t1b, 3: t1c, 4: t1d, 5: t1e");
+            assertContains(cascade, "group by: 14: t1a, 15: t1b, 16: t1c, 17: t1d");
+            assertContains(cascade, "group by: 29: t1a, 30: t1b, 31: t1c");
+
+            // The level cap bounds the cascade independently of that floor.
+            connectContext.getSessionVariable().setCboPushDownGroupingSetCascadeLevel(2);
+            String capped = getFragmentPlan(sql);
+            Assertions.assertEquals(2, countOf(capped, ":UNION"), capped);
+            assertContains(capped, "repeat: repeat 3 lines");
+
+            // <= 0 is the off sentinel and must be identical to level 1.
+            connectContext.getSessionVariable().setCboPushDownGroupingSetCascadeLevel(0);
+            Assertions.assertEquals(single, getFragmentPlan(sql));
+        } finally {
+            connectContext.getSessionVariable().setCboPushDownGroupingSetCascadeLevel(5);
+            connectContext.getSessionVariable().setCboPushDownGroupingSet(false);
+        }
+    }
+
+    @Test
+    public void testPushDownGroupingSetCascadeCountNullability() throws Exception {
+        // Regression: count -> sum does not preserve nullability (count(*) is non-nullable, sum() is
+        // nullable), and avg's count part has the same problem. Inheriting the original aggregation's
+        // flag declared a non-nullable column that a nullable sum() writes. With a single push down
+        // that level's input really is the non-nullable count(*) so nothing shows, but every further
+        // cascade level reads the previous level's sum() output - and the BE then segfaults in
+        // SumAggregateFunction::update_batch on a null data pointer. Assert every rolled-up count
+        // column is declared nullable.
+        connectContext.getSessionVariable().setCboPushDownGroupingSet(true);
+        try {
+            connectContext.getSessionVariable().setCboPushDownGroupingSetCascadeLevel(8);
+
+            // Exactly one rollup sum() may read a non-nullable column: the first level, whose input
+            // really is the non-nullable count(*). Every level above it reads the previous level's
+            // sum() output and must therefore see a nullable column. Before the fix all of them
+            // claimed non-nullable.
+            String plan = getVerboseExplain("select t1a, t1b, t1c, t1d, t1e, count(*) " +
+                    "   from test_all_type group by rollup(t1a, t1b, t1c, t1d, t1e)");
+            Assertions.assertEquals(1, countOf(plan, "args nullable: false; result nullable: true"),
+                    "only the sum() reading count(*) itself may take a non-nullable input\n" + plan);
+
+            plan = getVerboseExplain("select t1a, t1b, t1c, t1d, t1e, avg(t1g) " +
+                    "   from test_all_type group by rollup(t1a, t1b, t1c, t1d, t1e)");
+            Assertions.assertEquals(1, countOf(plan, "args nullable: false; result nullable: true"),
+                    "avg's rolled-up count part must be nullable above the first level\n" + plan);
+        } finally {
+            connectContext.getSessionVariable().setCboPushDownGroupingSetCascadeLevel(5);
+            connectContext.getSessionVariable().setCboPushDownGroupingSet(false);
+        }
+    }
+
+    @Test
+    public void testPushDownGroupingSetCascadeSkipsCube() throws Exception {
+        // CUBE is not prefix-nested: removing the complete grouping set still leaves sets whose union
+        // is every key, so a cascade level would peel no key and buy nothing while costing one more
+        // CTE and blocking stage. The first push down is still worth it - it puts a full-key aggregate
+        // under the repeat - so the rule must fire exactly once here regardless of the cascade level.
+        String sql = "select t1a, t1b, t1c, t1d, sum(t1g) " +
+                "   from test_all_type group by cube(t1a, t1b, t1c, t1d)";
+
+        connectContext.getSessionVariable().setCboPushDownGroupingSet(true);
+        try {
+            connectContext.getSessionVariable().setCboPushDownGroupingSetCascadeLevel(8);
+            String cube = getFragmentPlan(sql);
+            Assertions.assertEquals(1, countOf(cube, ":UNION"), cube);
+        } finally {
+            connectContext.getSessionVariable().setCboPushDownGroupingSetCascadeLevel(5);
+            connectContext.getSessionVariable().setCboPushDownGroupingSet(false);
         }
     }
 }

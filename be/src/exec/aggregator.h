@@ -614,6 +614,9 @@ protected:
     // Choose different agg hash map/set by different group by column's count, type, nullable
     template <typename HashVariantType>
     void _init_agg_hash_variant(HashVariantType& hash_variant);
+
+    // Publishes the selected key representation to the query profile.
+    void _report_hash_variant(const char* name);
     // get spec hash table/set type
     template <typename HashVariantType>
     typename HashVariantType::Type _get_hash_table_type();

@@ -14,6 +14,8 @@
 
 #include "exprs/map_expr.h"
 
+#include <numeric>
+
 #include "base/container/raw_container.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
@@ -76,14 +78,16 @@ StatusOr<ColumnPtr> MapExpr::evaluate_checked(ExprContext* context, Chunk* chunk
     } else if (num_pairs > 0) { // avoid copying for only one pair
         key_col = std::move(*pairs_columns[0]).mutate();
         value_col = std::move(*pairs_columns[1]).mutate();
-        for (size_t i = 0; i < num_rows; ++i) {
-            curr_offset++;
-            offsets->append(curr_offset);
-        }
+        // One pair per row, so the offsets are 0, 1, ... num_rows. Filling the buffer directly keeps
+        // the non-inlined get_data() call out of the loop; map_apply() feeds this one row per map
+        // entry, so num_rows here is sum(map sizes), not the chunk size.
+        auto& offsets_data = offsets->get_data();
+        raw::make_room(&offsets_data, num_rows + 1);
+        std::iota(offsets_data.begin(), offsets_data.end(), static_cast<uint32_t>(0));
+        curr_offset = num_rows;
     } else { // {}
-        for (size_t i = 0; i < num_rows; ++i) {
-            offsets->append(curr_offset);
-        }
+        auto& offsets_data = offsets->get_data();
+        offsets_data.assign(num_rows + 1, curr_offset);
     }
 
     auto res = MapColumn::create(std::move(key_col), std::move(value_col), std::move(offsets));

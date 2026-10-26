@@ -32,24 +32,37 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.SchemaVersionAndHash;
+import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.persist.OperationType;
+import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.system.Backend;
+import com.starrocks.task.AgentBatchTask;
+import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.function.Executable;
 
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeSet;
 
 public class SchemaChangeJobV2EditLogTest {
     private static final String DB_NAME = "test_schema_change_job_v2_editlog";
@@ -233,6 +246,117 @@ public class SchemaChangeJobV2EditLogTest {
     }
 
     @Test
+    public void testCancelPrunesLiveJob() throws Exception {
+        TableContext ctx = createTableContext(true, true);
+        SchemaChangeJobV2 job = newRunningJob(ctx);
+
+        Assertions.assertTrue(job.cancel("cancel"));
+
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+        assertPruned(job);
+    }
+
+    @Test
+    public void testReplaySameCancelledEntryTwice() throws Exception {
+        TableContext ctx = createTableContext(true, true);
+        SchemaChangeJobV2 job = newRunningJob(ctx);
+        Assertions.assertTrue(job.cancel("cancel"));
+        AlterJobV2 entry = (AlterJobV2) UtFrameUtils.PseudoJournalReplayer
+                .replayNextJournal(OperationType.OP_ALTER_JOB_V2);
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, entry.getJobState());
+        List<Object> catalogAfterCancel = catalogSnapshot(ctx);
+
+        SchemaChangeHandler followerHandler = new SchemaChangeHandler();
+        replayCopyAndAssertPruned(followerHandler, entry, ctx, catalogAfterCancel);
+        AlterJobV2 retained = followerHandler.getAlterJobsV2().get(job.getJobId());
+        replayCopyAndAssertPruned(followerHandler, entry, ctx, catalogAfterCancel);
+        Assertions.assertSame(retained, followerHandler.getAlterJobsV2().get(job.getJobId()));
+    }
+
+    @Test
+    public void testReplayCancelledEntryOntoJobLoadedFromImage() throws Exception {
+        TableContext ctx = createTableContext(true, true);
+        SchemaChangeJobV2 job = newRunningJob(ctx);
+        AlterJobMgr leaderMgr = new AlterJobMgr(new SchemaChangeHandler(), new MaterializedViewHandler(),
+                new SystemHandler());
+        leaderMgr.getSchemaChangeHandler().addAlterJobV2(job);
+        UtFrameUtils.PseudoImage runningImage = new UtFrameUtils.PseudoImage();
+        leaderMgr.save(runningImage.getImageWriter());
+
+        Assertions.assertTrue(job.cancel("cancel"));
+        UtFrameUtils.PseudoImage cancelledImage = new UtFrameUtils.PseudoImage();
+        leaderMgr.save(cancelledImage.getImageWriter());
+        AlterJobV2 entry = (AlterJobV2) UtFrameUtils.PseudoJournalReplayer
+                .replayNextJournal(OperationType.OP_ALTER_JOB_V2);
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, entry.getJobState());
+        List<Object> catalogAfterCancel = catalogSnapshot(ctx);
+
+        // An image taken while the job was running holds the full per-tablet data; one taken after the
+        // cancel holds the already pruned job.
+        for (UtFrameUtils.PseudoImage image : List.of(runningImage, cancelledImage)) {
+            AlterJobMgr followerMgr = new AlterJobMgr(new SchemaChangeHandler(), new MaterializedViewHandler(),
+                    new SystemHandler());
+            SRMetaBlockReader reader = new SRMetaBlockReaderV2(image.getJsonReader());
+            followerMgr.load(reader);
+            reader.close();
+            SchemaChangeHandler followerHandler = followerMgr.getSchemaChangeHandler();
+            AlterJobV2 loaded = followerHandler.getAlterJobsV2().get(job.getJobId());
+            Assertions.assertNotNull(loaded);
+
+            replayCopyAndAssertPruned(followerHandler, entry, ctx, catalogAfterCancel);
+            replayCopyAndAssertPruned(followerHandler, entry, ctx, catalogAfterCancel);
+            Assertions.assertSame(loaded, followerHandler.getAlterJobsV2().get(job.getJobId()));
+        }
+    }
+
+    @Test
+    public void testCancelDuringReplicaCreationDropsReplicaLatch() throws Throwable {
+        TableContext ctx = createTableContext(false, true);
+        SchemaChangeJobV2 job = newPendingJob(ctx);
+        // The job stops waiting as soon as it sees the cancel, so the latch keeps a mark for every replica.
+        job.setIsCancelling(true);
+        withUnreportedReplicaCreation(job::runPendingJob);
+        job.setIsCancelling(false);
+        Assertions.assertEquals(AlterJobV2.JobState.PENDING, job.getJobState());
+        MarkedCountDownLatch<Long, Long> latch = Deencapsulation.getField(job, "createReplicaLatch");
+        Assertions.assertEquals(1, latch.getLeftMarks().size());
+
+        Assertions.assertTrue(job.cancel("cancel"));
+
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+        assertPruned(job);
+    }
+
+    @Test
+    public void testReplicaCreationTimeoutDropsReplicaLatch() throws Throwable {
+        TableContext ctx = createTableContext(false, true);
+        SchemaChangeJobV2 job = newPendingJob(ctx);
+        int savedTimeout = Config.tablet_create_timeout_second;
+        Config.tablet_create_timeout_second = 0;
+        try {
+            withUnreportedReplicaCreation(job::run);
+        } finally {
+            Config.tablet_create_timeout_second = savedTimeout;
+        }
+
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+        Assertions.assertTrue(job.errMsg.contains("Create replicas failed"), job.errMsg);
+        assertPruned(job);
+    }
+
+    @Test
+    public void testCancelSkipsReplicaLatchAlreadyDropped() throws Exception {
+        TableContext ctx = createTableContext(false, true);
+        SchemaChangeJobV2 job = newPendingJob(ctx);
+        // A cancel can see the replica wait in progress and then find no latch: the wait has ended since.
+        job.setWaitingCreatingReplica(true);
+
+        Assertions.assertTrue(job.cancel("cancel"));
+
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+    }
+
+    @Test
     public void testCancelImplException() throws Exception {
         TableContext ctx = createTableContext(true, true);
         SchemaChangeJobV2 job = new SchemaChangeJobV2(
@@ -300,6 +424,76 @@ public class SchemaChangeJobV2EditLogTest {
         Assertions.assertTrue(job.physicalPartitionIndexMap.isEmpty());
         Assertions.assertTrue(job.indexMetaIdToSchema.isEmpty());
         Assertions.assertTrue(job.indexMetaIdToShortKey.isEmpty());
+        Assertions.assertEquals(0, job.schemaChangeBatchTask.getTaskNum());
+        Assertions.assertNull(Deencapsulation.getField(job, "createReplicaLatch"));
+    }
+
+    private static SchemaChangeJobV2 newPendingJob(TableContext ctx) throws Exception {
+        SchemaChangeJobV2 job = new TestSchemaChangeJobV2(
+                GlobalStateMgr.getCurrentState().getNextId(),
+                ctx.db.getId(),
+                ctx.table.getId(),
+                ctx.table.getName(),
+                600_000L);
+        job.setJobState(AlterJobV2.JobState.PENDING);
+        populateJobFields(job, ctx, ctx.shadowIndex);
+        ctx.table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
+        return job;
+    }
+
+    /**
+     * Runs {@code action} with the job waiting for its replicas to be created, while the create replica tasks
+     * are dropped instead of sent, so no replica is ever reported created.
+     */
+    private static void withUnreportedReplicaCreation(Executable action) throws Throwable {
+        new MockUp<AgentTaskExecutor>() {
+            @Mock
+            public void submit(AgentBatchTask task) {
+            }
+        };
+        boolean savedRunningUnitTest = FeConstants.runningUnitTest;
+        FeConstants.runningUnitTest = false;
+        try {
+            action.execute();
+        } finally {
+            FeConstants.runningUnitTest = savedRunningUnitTest;
+        }
+    }
+
+    private static SchemaChangeJobV2 newRunningJob(TableContext ctx) throws Exception {
+        SchemaChangeJobV2 job = new SchemaChangeJobV2(
+                GlobalStateMgr.getCurrentState().getNextId(),
+                ctx.db.getId(),
+                ctx.table.getId(),
+                ctx.table.getName(),
+                1000L);
+        job.setJobState(AlterJobV2.JobState.RUNNING);
+        populateJobFields(job, ctx, ctx.shadowIndex);
+        ctx.table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
+        return job;
+    }
+
+    /**
+     * Replays an independently deserialized copy of the journaled entry, then checks that the job kept by the
+     * handler is pruned and that the catalog is the same as right after the leader applied the entry.
+     */
+    private static void replayCopyAndAssertPruned(SchemaChangeHandler handler, AlterJobV2 entry, TableContext ctx,
+                                                  List<Object> expectedCatalog) throws Exception {
+        AlterJobV2 copy = GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(entry, AlterJobV2.class), AlterJobV2.class);
+        handler.replayAlterJobV2(copy);
+
+        SchemaChangeJobV2 retained = (SchemaChangeJobV2) handler.getAlterJobsV2().get(entry.getJobId());
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, retained.getJobState());
+        assertPruned(retained);
+        Assertions.assertEquals(expectedCatalog, catalogSnapshot(ctx));
+    }
+
+    private static List<Object> catalogSnapshot(TableContext ctx) {
+        PhysicalPartition physicalPartition = ctx.table.getPartition(ctx.partitionId).getDefaultPhysicalPartition();
+        return List.of(ctx.table.getState(),
+                new TreeSet<>(ctx.table.getIndexNameToMetaId().keySet()),
+                physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL).size(),
+                GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletMeta(ctx.shadowTabletId) == null);
     }
 
     private static TableContext createTableContext(boolean addShadowIndexToTable, boolean shadowHasReplica) {

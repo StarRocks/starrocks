@@ -472,7 +472,12 @@ StatusOr<ChunkPtr> SpillableHashJoinProbeOperator::pull_chunk(RuntimeState* stat
     if (!spilled()) {
         return HashJoinProbeOperator::pull_chunk(state);
     }
+    ASSIGN_OR_RETURN(auto chunk, _pull_chunk_from_spilled_partitions(state));
+    eval_runtime_bloom_filters_keep_nulls(chunk.get());
+    return chunk;
+}
 
+StatusOr<ChunkPtr> SpillableHashJoinProbeOperator::_pull_chunk_from_spilled_partitions(RuntimeState* state) {
     _check_partitions();
 
     auto all_probe_partition_is_empty = [this]() {

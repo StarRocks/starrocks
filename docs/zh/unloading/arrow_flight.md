@@ -193,6 +193,18 @@ SET GLOBAL arrow_flight_proxy = 'your-proxy-hostname:Port';
 - Arrow Flight 在 StarRocks FE 上监听所使用的端口
 - 具有必要权限的 StarRocks 用户的用户名和密码
 
+如果配置了 JWT 或 OAuth 2.0 [安全集成](../administration/user_privs/authentication/security_integration.md)，可以用身份提供方颁发的 token 代替用户名密码：把它放在 authorization 请求头里，而不是传 `USERNAME` 和 `PASSWORD`：
+
+```Python
+from adbc_driver_flightsql import DatabaseOptions
+
+conn = flight_sql.connect(uri=f"grpc://{FE_HOST}:{FE_PORT}", db_kwargs={
+    DatabaseOptions.AUTHORIZATION_HEADER.value: "Bearer " + token,
+})
+```
+
+服务端在第一次调用时返回它自己颁发的 session token，客户端在该连接的后续请求中使用它，与用户名密码认证之后的行为完全一致。该 session 不会比 JWT 活得更久：token 的 `exp` 一过，连接即被拒绝，客户端需要用新的 token 重新连接。参见[各认证方式在哪些入口可用](../administration/user_privs/authentication/authentication.mdx#各认证方式在哪些入口可用)。
+
 示例：
 
 ```Python

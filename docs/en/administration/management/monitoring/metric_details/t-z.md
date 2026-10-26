@@ -16,71 +16,6 @@ description: "Alphabetical t - z"
 - Unit: -
 - Description: Highest cumulative compaction score of tablets in this BE.
 
-## `tablet_merge_sstable_fallback_cohort_mismatch_total`
-
-- Unit: Count
-- Description: Cumulative number of tablet merges that selected lazy index rebuild because source SST cohorts differed in count, order, or semantic metadata.
-
-## `tablet_merge_sstable_fallback_duplicate_physical_file_total`
-
-- Unit: Count
-- Description: Cumulative number of tablet merges that selected lazy index rebuild because a candidate cohort contained a duplicate physical SST filename.
-
-## `tablet_merge_sstable_fallback_embedded_delvec_total`
-
-- Unit: Count
-- Description: Cumulative number of tablet merges that selected lazy index rebuild because a required embedded delete vector could not be resolved after SST projection.
-
-## `tablet_merge_sstable_fallback_nonuniform_mapping_total`
-
-- Unit: Count
-- Description: Cumulative number of tablet merges that selected lazy index rebuild because source-to-target RSSID mapping or ownership was not uniform enough for metadata reuse.
-
-## `tablet_merge_sstable_fallback_projected_domain_total`
-
-- Unit: Count
-- Description: Cumulative number of tablet merges that selected lazy index rebuild because a projected SST owner, RSSID offset, or watermark fell outside the reusable live or supported domain.
-
-## `tablet_merge_sstable_fallback_rowset_layout_mismatch_total`
-
-- Unit: Count
-- Description: Cumulative number of tablet merges that selected lazy index rebuild because source rowset physical layouts differed.
-
-## `tablet_merge_sstable_fallback_shared_or_mixed_total`
-
-- Unit: Count
-- Description: Cumulative number of tablet merges that selected lazy index rebuild because shared or mixed source SST ownership prevented safe metadata reuse.
-
-## `tablet_merge_sstable_fallback_unsupported_sst_form_total`
-
-- Unit: Count
-- Description: Cumulative number of tablet merges that selected lazy index rebuild because source ranges or SST metadata did not meet the supported reuse form.
-
-## `tablet_merge_sstable_meta_identical_total`
-
-- Unit: Count
-- Description: Cumulative number of tablet merges that reused one complete, identical inherited SST cohort in the merged tablet metadata.
-
-## `tablet_merge_sstable_meta_lazy_rebuild_total`
-
-- Unit: Count
-- Description: Cumulative number of tablet merges that omitted source SST metadata so the next operation or user that loads the Primary Key index rebuilds it.
-
-## `tablet_merge_sstable_meta_private_total`
-
-- Unit: Count
-- Description: Cumulative number of tablet merges that projected and reused a complete cohort of private source SST metadata.
-
-## `tablet_merge_sstable_omitted_bytes_total`
-
-- Unit: Bytes
-- Description: Cumulative size of unique source SST files omitted from merged index metadata and recorded as orphan files during lazy rebuild fallback.
-
-## `tablet_merge_sstable_omitted_file_total`
-
-- Unit: Count
-- Description: Cumulative number of unique source SST files omitted from merged index metadata and recorded as orphan files during lazy rebuild fallback.
-
 ## `tablet_metadata_mem_bytes`
 
 - Unit: Bytes
@@ -104,6 +39,11 @@ description: "Alphabetical t - z"
 - Unit: Count
 - Description: Cumulative count of tablet-exclusion events during merge planning, not a live count of currently blocked tablets: it increases every planning pass that skips an otherwise-eligible tablet, and never decreases except across an FE restart. Watch its rate of increase, not its raw value. A tablet is skipped either because it still holds merge-blocking shared data files left over from a tablet split, or because it has not yet been proven free of them -- which usually means compaction has not caught up yet, but can also mean the tablet is on a BE that predates this check, or has simply not been observed yet. Clearing the shared files a split leaves behind takes a compaction that rewrites them: on a non-primary-key table `ALTER TABLE ... COMPACT` forces that on demand. On a primary-key table the same statement forces base compaction only for a tablet that carries outstanding deletes; a delete-free tablet, which is the usual shape right after a split, is unaffected by it and waits for ordinary compaction to reach those rowsets. Only the Leader FE increments this counter.
 
+## `tablet_reshard_merge_rejected_total`
+
+- Unit: Count
+- Description: Cumulative number of tablet merges this BE refused before writing anything, because the tablets to merge did not meet what a merge requires. Typical causes: a tablet still holds data files it shares with another tablet since a split, two of the tablets declare the same file, or the tablets disagree on a table-level setting. The refused publish fails with an error message that starts with `MERGE_REJECTED`, and the BE logs a WARNING that names the source and target tablets.
+
 ## `tablet_schema_mem_bytes`
 
 - Unit: Bytes
@@ -118,6 +58,12 @@ description: "Alphabetical t - z"
 
 - Unit: Count
 - Description: Cumulative number of task exceptions caught and swallowed by ThreadPool worker threads across the BE process. Increments only when [`enable_threadpool_catch_task_exception`](../../../configuration/BE_parameters/log_server_meta.md#enable_threadpool_catch_task_exception) is `true`. When that item is `false` (default), this metric stays unchanged because there is no enclosing catch clause. Use it to alert on swallowed failures while catch mode is enabled; pool name and exception detail remain in the BE ERROR logs.
+
+## `thrift_client_retries_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total number of retries that FE Thrift RPC calls made after their connection broke. Before each retry, the FE waits a random interval with exponential backoff (100 to 200 ms before the first retry, with both bounds doubling for each further retry until the wait reaches 500 to 1000 ms), then reopens the connection and resends the request. Calls that time out are not retried and are not counted. The number of retries per call is bounded by `thrift_rpc_retry_times`. A rising value means the FE keeps losing its Thrift connections to other nodes, for example because the Thrift worker pool of the Leader FE is saturated and closing new connections; read it together with `thrift_server_rejected_connections_total` on that node.
 
 ## `thrift_connections_total`
 

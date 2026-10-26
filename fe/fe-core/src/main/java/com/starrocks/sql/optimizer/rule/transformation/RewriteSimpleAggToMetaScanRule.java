@@ -200,6 +200,12 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
         LogicalOlapScanOperator scanOperator =
                 (LogicalOlapScanOperator) input.getInputs().get(0).getInputs().get(0).getOp();
         OlapTable table = (OlapTable) scanOperator.getTable();
+        // Direct synchronous-MV query copies retain the source table ID/name, but change their base index.
+        // Table-level statistics and row counts describe the original base index, not a filtered/aggregated MV.
+        Long catalogBaseIndexMetaId = table.getIndexMetaIdByName(table.getName());
+        if (catalogBaseIndexMetaId == null || catalogBaseIndexMetaId != scanOperator.getSelectedIndexMetaId()) {
+            return false;
+        }
         // we can only apply this rule to the queries met all the following conditions:
         // 1. query on DUPLICATE_KEY table
         // 2. no group by key

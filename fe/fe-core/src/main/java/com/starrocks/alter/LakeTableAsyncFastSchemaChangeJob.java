@@ -445,6 +445,18 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
         return new LakeTableAsyncFastSchemaChangeJob(this, true);
     }
 
+    /**
+     * Also drops the target range of every tablet and the set of partitions with a schema file, which only the
+     * running job and replay read: every reader checks the target ranges for null, as on a job that flips no
+     * ranges. A replay installs the entry's targets again.
+     */
+    @Override
+    public void pruneMeta() {
+        super.pruneMeta();
+        targetRanges = null;
+        partitionsWithSchemaFile = new HashSet<>();
+    }
+
     @SuppressWarnings("rawtypes")
     @Override
     protected void getInfo(List<List<Comparable>> infos) {

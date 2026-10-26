@@ -14,6 +14,7 @@
 
 package com.starrocks.alter.reshard;
 
+import com.staros.proto.PlacementPolicy;
 import com.starrocks.catalog.ColocateGroupSchema;
 import com.starrocks.catalog.ColocateRange;
 import com.starrocks.catalog.ColocateRangeMgr;
@@ -25,18 +26,30 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RangeDistributionInfo;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.Tuple;
+import com.starrocks.catalog.Variant;
 import com.starrocks.common.Config;
+import com.starrocks.common.Range;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.task.CreateReplicaTask;
+import com.starrocks.thrift.TCreateTabletReq;
+import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Invocation;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class RangeColocateTableTest {
     protected static ConnectContext connectContext;
@@ -203,5 +216,78 @@ public class RangeColocateTableTest {
 
         Assertions.assertFalse(colocateTableIndex.isMetaGroupColocateTable(table1.getId()));
         Assertions.assertFalse(colocateTableIndex.isMetaGroupColocateTable(table2.getId()));
+    }
+
+    /**
+     * Each tablet of a range-colocate partition has its own range, so none of them may be created
+     * from a partition-shared version-1 object: the BE stamps only the tablet id onto that object, so
+     * every tablet after the first would carry the first tablet's range. file_bundling, the default,
+     * used to turn exactly that layout on.
+     */
+    @Test
+    public void testRangeColocatePartitionCreatesEveryTabletWithItsOwnRange() throws Exception {
+        starRocksAssert.withTable("create table t_shared_v1_a (k1 int, k2 int, v1 int)\n"
+                + "order by(k1, k2)\n"
+                + "properties('replication_num' = '1', 'file_bundling' = 'true', "
+                + "'colocate_with' = 'rg_shared_v1:k1');");
+        OlapTable tableA = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "t_shared_v1_a");
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        long grpId = colocateTableIndex.getGroup(tableA.getId()).grpId;
+        ColocateRangeMgr rangeMgr = colocateTableIndex.getColocateRangeMgr();
+
+        // Give the group three ColocateRanges, as earlier splits would have.
+        long firstShardGroupId = rangeMgr.getColocateRanges(grpId).get(0).getShardGroupId();
+        long secondShardGroupId = GlobalStateMgr.getCurrentState().getStarOSAgent().createShardGroup(
+                db.getId(), tableA.getId(), 0L, 0L, PlacementPolicy.PACK);
+        long thirdShardGroupId = GlobalStateMgr.getCurrentState().getStarOSAgent().createShardGroup(
+                db.getId(), tableA.getId(), 0L, 0L, PlacementPolicy.PACK);
+        Tuple b100 = new Tuple(Arrays.asList(Variant.of(IntegerType.INT, "100")));
+        Tuple b200 = new Tuple(Arrays.asList(Variant.of(IntegerType.INT, "200")));
+        rangeMgr.setColocateRanges(grpId, Arrays.asList(
+                new ColocateRange(Range.lt(b100), firstShardGroupId),
+                new ColocateRange(Range.gelt(b100, b200), secondShardGroupId),
+                new ColocateRange(Range.ge(b200), thirdShardGroupId)));
+
+        List<CreateReplicaTask> built = new ArrayList<>();
+        new MockUp<CreateReplicaTask.Builder>() {
+            @Mock
+            public CreateReplicaTask build(Invocation inv) {
+                CreateReplicaTask task = inv.proceed();
+                built.add(task);
+                return task;
+            }
+        };
+
+        // A new table in the group gets one tablet per ColocateRange.
+        starRocksAssert.withTable("create table t_shared_v1_b (k1 int, k2 int, v1 int)\n"
+                + "order by(k1, k2)\n"
+                + "properties('replication_num' = '1', 'file_bundling' = 'true', "
+                + "'colocate_with' = 'rg_shared_v1:k1');");
+        OlapTable tableB = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "t_shared_v1_b");
+        Assertions.assertTrue(tableB.isFileBundling());
+        List<Tablet> tablets = tableB.getPartitions().iterator().next().getDefaultPhysicalPartition()
+                .getLatestBaseIndex().getTablets();
+        Assertions.assertEquals(3, tablets.size());
+
+        List<CreateReplicaTask> tasksOfB = built.stream()
+                .filter(task -> task.getTableId() == tableB.getId())
+                .collect(Collectors.toList());
+        Assertions.assertEquals(3, tasksOfB.size(), "every tablet must get its own create task");
+        for (Tablet tablet : tablets) {
+            CreateReplicaTask task = tasksOfB.stream()
+                    .filter(t -> t.getTabletId() == tablet.getId())
+                    .findFirst()
+                    .orElseThrow(() -> new AssertionError("no create task for tablet " + tablet.getId()));
+            TCreateTabletReq request = task.toThrift();
+            Assertions.assertEquals(tablet.getRange().toThrift(), request.getRange(),
+                    "tablet " + tablet.getId() + " must be created with its own range");
+            Assertions.assertFalse(request.isEnable_tablet_creation_optimization(),
+                    "tablet " + tablet.getId() + " must not use the partition-shared version-1 object");
+        }
+        // t_shared_v1_a still has a single tablet against the three ranges set above; do not leave that
+        // misaligned group behind for the rest of the class.
+        starRocksAssert.dropTables(List.of("t_shared_v1_a", "t_shared_v1_b"));
     }
 }

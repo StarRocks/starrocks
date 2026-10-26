@@ -247,6 +247,19 @@ public class LeaderImpl {
             }
             return result;
         } else {
+            if (taskType == TTaskType.ALTER && request.isSetAlter_job_id()
+                    && request.getAlter_job_id() != ((AlterReplicaTask) task).getJobId()) {
+                // The report of a copy left in the backend queue by another job that used the same signature. Leave
+                // the queued task alone: if the backend skipped it in favour of that copy, the next task report
+                // resends it.
+                String errMsg = "ignore finish report of alter job " + request.getAlter_job_id()
+                        + ", the queued task belongs to alter job " + ((AlterReplicaTask) task).getJobId()
+                        + ", backendId: " + backendId + ", signature: " + signature;
+                LOG.warn(errMsg);
+                tStatus.setStatus_code(TStatusCode.CANCELLED);
+                tStatus.setError_msgs(Lists.newArrayList(errMsg));
+                return result;
+            }
             if (taskStatus.getStatus_code() != TStatusCode.OK) {
                 task.failed();
                 String taskErrMsg = taskStatus.getError_msgs() != null ? Joiner.on(",").join(taskStatus.getError_msgs()) : "";
@@ -887,7 +900,7 @@ public class LeaderImpl {
         } else if (alterTask.getJobType() == JobType.SCHEMA_CHANGE) {
             GlobalStateMgr.getCurrentState().getSchemaChangeHandler().handleFinishAlterTask(alterTask);
         }
-        AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.ALTER, task.getSignature());
+        AgentTaskQueue.removeTaskIfSame(task);
     }
 
     public TGetTableMetaResponse getTableMeta(TGetTableMetaRequest request) {

@@ -1,0 +1,110 @@
+### FE ノードで Ranger を有効にする
+
+1. StarRocks クラスターの各 FE マシンで、`fe/conf` フォルダーに [ranger-starrocks-security.xml](https://github.com/StarRocks/starrocks/blob/main/conf/ranger/ranger-starrocks-security.xml) を作成し、内容をコピーします。次の 2 つのパラメーターを変更し、変更を保存する必要があります。
+
+   - `ranger.plugin.starrocks.service.name`: ステップ 4 で作成した StarRocks Service の名前に変更します。
+   - `ranger.plugin.starrocks.policy.rest the url`: Ranger Admin のアドレスに変更します。
+
+   他の設定を変更する必要がある場合は、Apache Ranger の公式ドキュメントを参照してください。たとえば、`ranger.plugin.starrocks.policy.pollIntervalMs` を変更してポリシー変更の取得間隔を変更できます。
+
+   ```SQL
+   vim ranger-starrocks-security.xml
+
+   ...
+       <property>
+           <name>ranger.plugin.starrocks.service.name</name>
+           <value>starrocks</value> -- StarRocks Service 名に変更します。
+           <description>
+               Name of the Ranger service containing policies for this StarRocks instance
+           </description>
+       </property>
+   ...
+
+   ...
+       <property>
+           <name>ranger.plugin.starrocks.policy.rest.url</name>
+           <value>http://localhost:6080</value> -- Ranger Admin アドレスに変更します。
+           <description>
+               URL to Ranger Admin
+           </description>
+       </property>   
+   ...
+   ```
+
+2. (オプション) Ranger の監査ログサービスを使用する場合は、各 FE マシンの `fe/conf` フォルダーに [ranger-starrocks-audit.xml](https://github.com/StarRocks/starrocks/blob/main/conf/ranger/ranger-starrocks-audit.xml) ファイルを作成します。内容をコピーし、**`xasecure.audit.solr.solr_url` の `solr_url` を自分の `solr_url` に置き換えて**、ファイルを保存します。
+
+   StarRocks は Ranger の監査ログの送信先として次の 2 つをサポートしますが、同時に使用できるのはどちらか一方のみです。
+
+   - Solr: テンプレートで使用されている `xasecure.audit.solr.*` プロパティを使用します。`xasecure.audit.destination.solr` による Solr の設定はサポートされていません。
+   - ローカルファイル: `xasecure.audit.destination.file` を `true` に、`xasecure.audit.destination.file.dir` を監査ファイルのディレクトリに設定します。
+
+   `xasecure.audit.destination.*` プロパティのいずれかが有効になると、Ranger は Solr のものを含め、すべての `xasecure.audit.<destination>.*` プロパティを無視します。`ranger-hive-audit.xml` も同様です。
+
+3. すべての FE 設定ファイルに `access_control = ranger` の設定を追加します。
+
+   ```SQL
+   vim fe.conf
+   access_control=ranger 
+   ```
+
+4. すべての FE マシンを再起動します。
+
+   ```SQL
+   -- FE フォルダーに切り替えます。
+   cd..
+
+   bin/stop_fe.sh
+   bin/start_fe.sh
+   ```
+
+## 他のサービスを再利用して外部テーブルへのアクセスを制御する
+
+External Catalog については、外部サービス (Hive Service など) を再利用してアクセス制御を行うことができます。StarRocks は、異なる Catalog に対して異なる Ranger 外部サービスを一致させることをサポートしています。ユーザーが外部テーブルにアクセスする際、システムは対応する外部テーブルの Ranger サービスのアクセス ポリシーに基づいてアクセス制御を実施します。ユーザーの権限は、同じ名前の Ranger ユーザーと一致します。
+
+1. Hive の Ranger 設定ファイル [ranger-hive-security.xml](https://github.com/StarRocks/ranger/blob/master/hive-agent/conf/ranger-hive-security.xml) と [ranger-hive-audit.xml](https://github.com/StarRocks/ranger/blob/master/hive-agent/conf/ranger-hive-audit.xml) をすべての FE マシンの `fe/conf` ファイルにコピーします。Ranger の IP とポートが正しいことを確認してください。
+2. すべての FE マシンを再起動します。
+3. External Catalog を設定します。
+
+   - External Catalog を作成する際に、プロパティ `"ranger.plugin.hive.service.name"` を追加します。
+
+      ```SQL
+        CREATE EXTERNAL CATALOG hive_catalog_1
+        PROPERTIES (
+            "type" = "hive",
+            "hive.metastore.type" = "hive",
+            "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
+            "ranger.plugin.hive.service.name" = "<ranger_hive_service_name>"
+        )
+      ```
+
+   - 既存の External Catalog にもこのプロパティを追加できます。
+  
+       ```SQL
+       ALTER CATALOG hive_catalog_1
+       SET ("ranger.plugin.hive.service.name" = "<ranger_hive_service_name>");
+       ```
+
+​    この操作により、既存の Catalog の認証方法が Ranger ベースの認証に変更されます。
+
+4. (オプション) データベース名の前に Catalog 名を付ける。`ranger.plugin.hive.service.name` を設定した External Catalog (Hive、Iceberg、Hudi Catalog など) であれば、本節が適用されます。
+
+   Ranger の Hive Service が認識するのは `database`、`table`、`column` の 3 階層だけで、Catalog の階層はありません。そのため、複数の External Catalog が 1 つの Hive Service を共有している場合 (たとえば複数の AWS Glue Catalog)、複数の Catalog に同名のデータベースがあると同じポリシーにマッチしてしまいます。そのような Catalog にプロパティ `"ranger.plugin.hive.catalog_prefix.enabled" = "true"` を設定すると、StarRocks は Ranger に送る `database` リソースとして、素のデータベース名ではなく `<catalog_name>_<database_name>` を使用します。たとえば `glue_prod.sales.orders` へのクエリは、database が `glue_prod_sales` である Ranger ポリシーに対して権限チェックされます。
+
+   ```SQL
+   CREATE EXTERNAL CATALOG glue_prod
+   PROPERTIES (
+       "type" = "hive",
+       "hive.metastore.type" = "glue",
+       "aws.glue.region" = "us-west-2",
+       "ranger.plugin.hive.service.name" = "<ranger_hive_service_name>",
+       "ranger.plugin.hive.catalog_prefix.enabled" = "true"
+   );
+
+   -- 既存の Catalog にも設定できます。新しい値はステートメントが返った時点で有効になります。
+   ALTER CATALOG glue_prod
+   SET ("ranger.plugin.hive.catalog_prefix.enabled" = "true");
+   ```
+
+   - 有効な値は `true` と `false` のみです。それ以外の値を指定すると CREATE または ALTER CATALOG が失敗します。
+   - このプロパティを設定しない場合、Catalog は FE 設定項目 `ranger_hive_catalog_prefix_enabled` (デフォルト `false`) に従います。`ranger.plugin.hive.service.name` を設定していない Catalog ではこのプロパティは無視されます。
+   - Catalog 名とデータベース名の間の区切り文字は FE 設定項目 `ranger_hive_catalog_prefix_separator` (デフォルト `_`) で決まります。1 つの Ranger Service を共有するすべての Catalog で同じ区切り文字を使う必要があるため、この項目はグローバルにのみ設定できます。

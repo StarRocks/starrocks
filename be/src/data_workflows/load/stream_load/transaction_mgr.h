@@ -38,6 +38,7 @@ public:
     Status list_transactions(const HttpRequest* req, std::string* resp);
 
     Status _begin_transaction(const HttpRequest* http_req, StreamLoadContext* ctx);
+    void _refresh_auth(const HttpRequest* http_req, StreamLoadContext* ctx);
     Status _commit_transaction(StreamLoadContext* ctx, bool prepare);
     Status _rollback_transaction(StreamLoadContext* ctx);
 

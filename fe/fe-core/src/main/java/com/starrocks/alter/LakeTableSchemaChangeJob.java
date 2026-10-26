@@ -30,8 +30,6 @@ import com.starrocks.catalog.Index;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndexMeta;
-import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
@@ -43,7 +41,6 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
@@ -326,6 +323,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             Map<Long, MaterializedIndex> shadowIndexMap = physicalPartitionIndexMap.row(physicalPartitionId);
             for (MaterializedIndex shadowIndex : shadowIndexMap.values()) {
                 shadowIndex.setVisibleTxnId(visibleTxnId);
+                shadowIndex.setShadowWatershedTxnId(visibleTxnId);
                 Preconditions.checkState(shadowIndex.getState() == MaterializedIndex.IndexState.SHADOW,
                         shadowIndex.getState());
                 physicalPartition.createRollupIndex(shadowIndex);
@@ -531,27 +529,24 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             addShadowIndexToCatalog(table, watershedTxnId);
         }
 
-        // Getting the `watershedTxnId` and adding the shadow index are not atomic. It's possible a
-        // transaction A begins between these operations. This is safe as long as A gets the tablet
-        // list(with database lock) after beginTransaction(), so that it sees the shadow index and
-        // writes to it. All current import transactions do this (beginTransaction first), so even
-        // without checking the `nextTxnId` here it should be safe. However, beginTransaction() first
-        // is just a convention not a requirement. If violated, transactions with IDs greater than
-        // the `watershedTxnId` may ignore the shadow index. To avoid this, we ensure no new
-        // beginTransaction() succeeds between getting the `watershedTxnId` and adding the shadow index.
+        // Getting the `watershedTxnId` and adding the shadow index are not atomic, and the id generator is
+        // shared by the whole cluster, so other ids are routinely drawn in between. That is safe without a
+        // check here: a writer that begins its transaction before resolving tablets does so under the table
+        // READ lock, which the WRITE lock above excludes, so any such transaction with an id above the
+        // watershed sees the shadow index and writes it. A writer that resolves tablets first (replication,
+        // a bypass-write client with cached metadata) is rejected at commit by
+        // LakeTableTxnStateListener#checkShadowIndexesLoaded if it misses a shadow index it had to write and
+        // commits before this job makes the index NORMAL.
+        // The next id is kept only as a breadcrumb for the log line below.
         long nextTxnId = peekNextTransactionId();
-        if (nextTxnId != watershedTxnId + 1) {
-            throw new AlterCancelException(
-                    "concurrent transaction detected while adding shadow index, please re-run the alter table command");
-        }
 
         if (span != null) {
             span.setAttribute("watershedTxnId", this.watershedTxnId);
             span.addEvent("setWaitingTxn");
         }
 
-        // can't add addRollIndexToCatalog into the applier, because of the nextTxnId check.
-        // But addRollIndexToCatalog is idempotent, so it's ok to re-add if Leader transferred.
+        // The shadow index is added to the catalog above rather than in the applier; addShadowIndexToCatalog
+        // is replayed from the journaled watershed, so it's ok to re-add if Leader transferred.
         persistStateChange(this, JobState.WAITING_TXN);
 
         // The shadow tablets exist and the state change is durable, so runPendingJob cannot need the
@@ -559,8 +554,8 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         // holding a full TTabletSchema) for the hours the rewrite may run.
         abandonCreateReplicaTasks();
 
-        LOG.info("transfer schema change job {} state to {}, watershed txn_id: {}", jobId, this.jobState,
-                watershedTxnId);
+        LOG.info("transfer schema change job {} state to {}, watershed txn_id: {}, next txn_id after adding"
+                + " shadow index: {}", jobId, this.jobState, watershedTxnId, nextTxnId);
     }
 
     /**
@@ -570,7 +565,6 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
      *         light-weight path turned tablet creation into a no-op and the job can go straight on
      */
     private boolean createShadowTablets() throws AlterCancelException {
-        boolean enableTabletCreationOptimization = Config.lake_enable_tablet_creation_optimization;
         long numTablets = 0;
         AgentBatchTask batchTask = new AgentBatchTask();
         MarkedCountDownLatch<Long, Long> countDownLatch;
@@ -587,16 +581,8 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             lightWeight = table.isLightWeightTabletCreation() && !indexChange && !hasBfChange
                     && !hasZstdCompressionChange;
 
-            // disable tablet creation optimaization to avoid overwriting files with the same name.
-            if (table.isFileBundling()) {
-                enableTabletCreationOptimization = false;
-            }
-            if (enableTabletCreationOptimization) {
-                numTablets = physicalPartitionIndexMap.size();
-            } else {
-                numTablets = physicalPartitionIndexMap.values().stream().map(MaterializedIndex::getTablets)
-                        .mapToLong(List::size).sum();
-            }
+            numTablets = physicalPartitionIndexMap.values().stream().map(MaterializedIndex::getTablets)
+                    .mapToLong(List::size).sum();
             countDownLatch = new MarkedCountDownLatch<>((int) numTablets);
             long baseIndexMetaId = table.getBaseIndexMetaId();
             long gtid = getNextGtid();
@@ -668,7 +654,10 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                                 .setCompressionLevel(table.getCompressionLevel())
                                 .setCreateSchemaFile(createSchemaFile)
                                 .setTabletSchema(tabletSchema)
-                                .setEnableTabletCreationOptimization(enableTabletCreationOptimization)
+                                // Never the partition-shared version-1 object: it is named after tablet id 0, so the
+                                // shadow index would overwrite the base index's one in the same partition path, and
+                                // it carries a single range where each tablet of a range-distribution table has its own.
+                                .setEnableTabletCreationOptimization(false)
                                 .setGtid(gtid)
                                 .setCompactionStrategy(table.getCompactionStrategy())
                                 .setRange(table.isRangeDistribution() ? shadowTablet.getRange() : null)
@@ -676,10 +665,6 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                         // For each partition, the schema file is created only when the first Tablet is created
                         createSchemaFile = false;
                         batchTask.addTask(task);
-
-                        if (enableTabletCreationOptimization) {
-                            break;
-                        }
                     }
                 }
             }
@@ -957,8 +942,8 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             persistStateChange(this, JobState.FINISHED, () -> {
                 // Below this point, all query and load jobs will use the new schema.
                 visualiseShadowIndex(table);
-                // inactivate related mv
-                inactiveRelatedMv(modifiedColumns, table);
+                // Inactivate and journal every MV that reads a modified column, in any database, and the MVs above them.
+                AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(table, modifiedColumns);
                 table.onReload();
             });
         }
@@ -1135,33 +1120,6 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             modifiedColumns.addAll(AlterHelper.collectDroppedOrModifiedColumns(originSchema, shadowSchema));
         }
         return modifiedColumns;
-    }
-
-    private void inactiveRelatedMv(Set<String> modifiedColumns, @NotNull OlapTable tbl) {
-        if (modifiedColumns.isEmpty()) {
-            return;
-        }
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
-        for (MvId mvId : tbl.getRelatedMaterializedViews()) {
-            MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                        .getTable(db.getId(), mvId.getId());
-            if (mv == null) {
-                LOG.warn("Ignore materialized view {} does not exists", mvId);
-                continue;
-            }
-            for (Column mvColumn : mv.getColumns()) {
-                if (modifiedColumns.contains(mvColumn.getName())) {
-                    LOG.warn("Setting the materialized view {}({}) to invalid because " +
-                                    "the column {} of the table {} was modified.", mv.getName(), mv.getId(),
-                            mvColumn.getName(), tbl.getName());
-                    mv.setInactiveAndReason(
-                            MaterializedViewExceptions.inactiveReasonForColumnChanged(modifiedColumns));
-                    // clear version map to make sure the MV will be refreshed
-                    mv.getRefreshScheme().getAsyncRefreshContext().clearVisibleVersionMap();
-                    return;
-                }
-            }
-        }
     }
 
     boolean tableHasBeenDropped() {
@@ -1489,12 +1447,27 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         return new LakeTableSchemaChangeJob(this);
     }
 
+    /**
+     * Drops the per-tablet data of a done job, which stays in memory only for SHOW ALTER. getInfo reads none of it.
+     * The maps are replaced, not cleared: replay shares them with the journal entry they came from.
+     */
+    @Override
+    public void pruneMeta() {
+        physicalPartitionIndexTabletMap = HashBasedTable.create();
+        physicalPartitionIndexMap = HashBasedTable.create();
+        indexMetaIdToSchema = Maps.newHashMap();
+        indexMetaIdToShortKey = Maps.newHashMap();
+        schemaChangeBatchTask = new AgentBatchTask();
+    }
+
     @Override
     protected void getInfo(List<List<Comparable>> infos) {
         // calc progress first. all index share the same process
+        // Read once: this runs without the job lock, and pruning the done job replaces the batch.
         String progress = FeConstants.NULL_STRING;
-        if (jobState == JobState.RUNNING && schemaChangeBatchTask.getTaskNum() > 0) {
-            progress = schemaChangeBatchTask.getFinishedTaskNum() + "/" + schemaChangeBatchTask.getTaskNum();
+        AgentBatchTask batchTask = schemaChangeBatchTask;
+        if (jobState == JobState.RUNNING && batchTask.getTaskNum() > 0) {
+            progress = batchTask.getFinishedTaskNum() + "/" + batchTask.getTaskNum();
         }
 
         // one line for one shadow index

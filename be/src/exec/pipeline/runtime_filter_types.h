@@ -97,6 +97,19 @@ public:
                                        OpTRuntimeBloomFilterBuildParams&& partial_bloom_filter_build_params,
                                        RuntimeMembershipFilters&& bloom_filter_descriptors);
 
+    // Whether HashJoiner drops a runtime filter for exceeding the local row limit. The limit bounds the size of a
+    // local bloom filter; a bitset filter is never larger than a bloom filter of the same row count, so a local filter
+    // that will be a bitset is kept.
+    static bool skips_local_filter_over_limit(bool enable_join_runtime_bitset_filter, int func_version,
+                                              bool is_skew_join, const RuntimeFilterBuildDescriptor* desc,
+                                              const Columns& columns, size_t row_count, size_t local_rf_limit,
+                                              size_t global_rf_limit);
+    // Whether a local filter will be built as a bitset filter. Mirrors the bitset path of
+    // merge_singleton_local_bloom_filters.
+    static bool can_build_local_bitset_filter(bool enable_join_runtime_bitset_filter, int func_version,
+                                              bool is_skew_join, const RuntimeFilterBuildDescriptor* desc,
+                                              const Columns& columns, size_t row_count, size_t global_rf_limit);
+
     Status merge_local_in_filters();
     Status merge_local_bloom_filters();
     Status merge_singleton_local_bloom_filters();

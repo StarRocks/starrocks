@@ -14,6 +14,9 @@
 
 #pragma once
 
+#include <cstdint>
+#include <optional>
+
 #include "base/phmap/phmap_fwd_decl.h"
 #include "base/phmap/phmap_hash.h"
 #include "base/string/slice.h"
@@ -38,6 +41,7 @@ template <class GlobalDictType>
 struct GlobalDictsWithVersion {
     GlobalDictType dict;
     long version;
+    std::optional<int64_t> content_identity = std::nullopt;
 };
 
 using GlobalDictByNameMaps = phmap::flat_hash_map<std::string, GlobalDictsWithVersion<GlobalDictMap>>;

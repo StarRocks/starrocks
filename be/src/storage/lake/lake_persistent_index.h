@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <functional>
 #include <mutex>
 #include <ostream>
@@ -38,6 +39,7 @@ struct ParallelPublishSlot;
 namespace lake {
 
 class MetaFileBuilder;
+class ParallelTaskRunner;
 class SegmentPKIterator;
 struct SegmentPKChunkRef;
 
@@ -51,9 +53,22 @@ class PersistentIndexSstable;
 class TabletManager;
 class PersistentIndexSstableFileset;
 
+// Resident memory of a LakePersistentIndex, by component.
+struct LakePersistentIndexMemoryStats {
+    size_t memtable_bytes = 0;    // active and inactive memtables
+    size_t index_block_bytes = 0; // sstable index blocks
+    size_t filter_bytes = 0;      // sstable bloom filters
+    // Delete vectors held by ingested sstables, compaction output for example. memory_usage() leaves them
+    // out, so the index cache does not charge them either.
+    size_t delvec_bytes = 0;
+
+    // What LakePersistentIndex::memory_usage() reports.
+    size_t charged_bytes() const { return memtable_bytes + index_block_bytes + filter_bytes; }
+};
+
 // A shared-data tablet's primary-key index: a write-ahead memtable in front of a stack of sstable
 // filesets on shared storage, plus the load state and the lock the publish path serialises on.
-// UpdateManager's index cache holds one of these per tablet, by value.
+// PrimaryKeyManager's index cache holds one of these per tablet, by value.
 //
 // Standalone on purpose. It used to derive from PersistentIndex, the local-disk implementation, but
 // took nothing from it except two scalar members and the vtable -- it overrode 7 of that class's 39
@@ -74,7 +89,7 @@ class LakePersistentIndex {
 public:
     explicit LakePersistentIndex(TabletManager* tablet_mgr, int64_t tablet_id);
 
-    // UpdateManager's index cache stores this class by value and creates an entry from a tablet id
+    // PrimaryKeyManager's index cache stores this class by value and creates an entry from a tablet id
     // alone, so it needs a default-constructible type. lake_load() supplies the tablet.
     //
     // Defined in the .cpp, not defaulted here: a constructor needs its members' destructors for
@@ -223,6 +238,14 @@ public:
                                  const MetaFileBuilder* builder);
 
     size_t memory_usage() const;
+
+    // memory_usage() split by component, plus the sstable delete vectors it leaves out.
+    LakePersistentIndexMemoryStats memory_stats() const;
+
+    // Publish this index's current memory_stats() to the lake_pk_index_cache_* gauges and return
+    // memory_usage(). PrimaryKeyManager calls this whenever it resizes the index's cache entry, so the gauges
+    // track what the cache holds; _reset_index_state() takes the index back out. Caller holds the index lock.
+    size_t refresh_cache_memory_metrics();
 
     int32_t current_fileset_index() const { return (int32_t)_sstable_filesets.size() - 1; }
 
@@ -385,6 +408,16 @@ private:
     Status parallel_reverse_lookup(size_t n, const Slice* keys, IndexValue* old_values, size_t num_tasks,
                                    const std::function<KeyIndexSet(size_t)>& make_subset, bool parallel_worthwhile);
 
+    using DelFilter = std::vector<std::atomic<uint64_t>>;
+    static constexpr size_t kDelFilterBitsPerWord = 64;
+
+    // Submit disjoint filter lookups without waiting. Keep one packed bitmap per file; atomic
+    // words allow batches to share boundary words without allocating a bitmap per tiny batch.
+    // IndexValues are task-local and bounded by the configured batch size. The caller owns keys
+    // and filter_words until runner joins, after all producers sharing its pool have finished.
+    Status parallel_get(ParallelTaskRunner* runner, size_t n, const Slice* keys, uint32_t too_old,
+                        DelFilter* filter_words);
+
     // rebuild delete operation from rowset.
     Status load_dels(const RowsetPtr& rowset, const Schema& pkey_schema, int64_t rowset_version);
 
@@ -411,6 +444,8 @@ private:
     size_t _key_size{0};
     // The version stamped on memtable entries; see set_publish_version().
     int64_t _publish_version{0};
+    // What refresh_cache_memory_metrics() last added to the lake_pk_index_cache_* gauges.
+    LakePersistentIndexMemoryStats _reported_memory_stats;
 
     // Guards the load bookkeeping below, not the index contents -- those are under _mutex.
     mutable std::mutex _load_lock;

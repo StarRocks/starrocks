@@ -17,7 +17,6 @@ package com.starrocks.sql.analyzer;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
@@ -25,7 +24,6 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.planner.IcebergRowDeltaSink;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ColumnAssignment;
 import com.starrocks.sql.ast.HintNode;
 import com.starrocks.sql.ast.JoinOperator;
@@ -51,7 +49,6 @@ import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.IsNullPredicate;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.type.IntegerType;
 
@@ -69,18 +66,7 @@ public class MergeIntoAnalyzer {
         TableRef tableRef = AnalyzerUtils.normalizedTableRef(stmt.getTableRef(), session);
         stmt.setTableRef(tableRef);
         TableName tableName = TableName.fromTableRef(tableRef);
-        // An external target was resolved before the lock was taken, because the lock covers nothing about
-        // it; see PreResolvedWriteTargets. A miss -- an internal target, or a pre-resolve that did not
-        // succeed -- falls through to the resolve this has always done.
-        Table table = session.getPreResolvedWriteTargets().take(tableName);
-        if (table == null) {
-            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                    .getDb(session, tableName.getCatalog(), tableName.getDb());
-            if (db == null) {
-                throw new SemanticException("Database %s is not found", tableName.getCatalogAndDb());
-            }
-            table = MetaUtils.getSessionAwareTable(session, null, tableName);
-        }
+        Table table = AnalyzerUtils.resolveWriteTarget(session, tableName);
 
         if (table instanceof IcebergTable icebergTable) {
             analyzeIcebergTable(stmt, icebergTable, tableName, session);

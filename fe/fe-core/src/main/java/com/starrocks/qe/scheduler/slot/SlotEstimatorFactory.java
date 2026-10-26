@@ -138,7 +138,7 @@ public class SlotEstimatorFactory {
 
     private static int estimateScanWorkUnits(QueryQueueOptions opts, PlanNode sourceNode) {
         if (sourceNode instanceof OlapScanNode) {
-            List<TScanRangeLocations> locations = ((OlapScanNode) sourceNode).getScanRangeLocations(0);
+            List<TScanRangeLocations> locations = ((ScanNode) sourceNode).getScanRangeLocations(0);
             if (locations != null && !locations.isEmpty()) {
                 return locations.size();
             }

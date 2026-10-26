@@ -14,8 +14,10 @@
 
 package com.starrocks.connector.iceberg;
 
+import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.MetaNotFoundException;
@@ -33,6 +35,8 @@ import mockit.Expectations;
 import mockit.Mocked;
 import mockit.Verifications;
 import org.apache.iceberg.BaseTable;
+import org.apache.iceberg.DataFile;
+import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.ManifestFile;
 import org.apache.iceberg.MetadataTableType;
 import org.apache.iceberg.MetadataTableUtils;
@@ -55,6 +59,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.BrokenBarrierException;
 import java.util.concurrent.CountDownLatch;
@@ -110,6 +115,37 @@ public class CachingIcebergCatalogTest {
         cachingIcebergCatalog.dropTable(connectContext, "test", "table", true);
         cachingIcebergCatalog.invalidateCache("test", "table");
         cachingIcebergCatalog.invalidatePartitionCache("test", "table");
+    }
+
+    @Test
+    public void testAsyncListPartitionNamesAfterExecutorShutdown(@Mocked IcebergCatalog icebergCatalog) {
+        PartitionSpec spec = Mockito.mock(PartitionSpec.class);
+        Mockito.when(spec.isUnpartitioned()).thenReturn(false);
+        Table nativeTable = createBaseTableWithManifests(1, 0, spec);
+        new Expectations() {
+            {
+                icebergCatalog.getPartitions((IcebergTable) any, anyLong, null);
+                result = new HashMap<String, Partition>();
+                minTimes = 0;
+            }
+        };
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(CATALOG_NAME, icebergCatalog,
+                DEFAULT_CATALOG_PROPERTIES, executor);
+        executor.shutdown();
+        IcebergTable table = IcebergTable.builder().setSrTableName("test")
+                .setCatalogDBName("db").setCatalogTableName("test").setNativeTable(nativeTable).build();
+        ConnectorMetadataRequestContext requestContext = new ConnectorMetadataRequestContext();
+        SessionVariable sv = ConnectContext.getSessionVariableOrDefault();
+        boolean previous = sv.isEnableConnectorAsyncListPartitions();
+        sv.setEnableConnectorAsyncListPartitions(true);
+        requestContext.setQueryMVRewrite(true);
+        try {
+            // A rejected background refresh falls back to the synchronous path instead of failing the query.
+            Assertions.assertEquals(0, cachingIcebergCatalog.listPartitionNames(table, requestContext, null).size());
+        } finally {
+            sv.setEnableConnectorAsyncListPartitions(previous);
+        }
     }
 
     @Test
@@ -341,6 +377,35 @@ public class CachingIcebergCatalogTest {
         Mockito.when(currentSnapshot.allManifests(Mockito.any())).thenReturn(manifests);
 
         return new BaseTable(ops, "db.tbl");
+    }
+
+    @Test
+    public void testFindCachedDataFilesOnlyFromCompleteEntries(@Mocked IcebergCatalog icebergCatalog) {
+        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(CATALOG_NAME, icebergCatalog,
+                DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
+        Cache<String, Set<DataFile>> dataFileCache = Deencapsulation.getField(cachingIcebergCatalog, "dataFileCache");
+        DataFile fileA = DataFiles.builder(PartitionSpec.unpartitioned())
+                .withPath("/data/a.parquet").withFileSizeInBytes(10).withRecordCount(1).build();
+        DataFile fileB = DataFiles.builder(PartitionSpec.unpartitioned())
+                .withPath("/data/b.parquet").withFileSizeInBytes(10).withRecordCount(1).build();
+        Set<String> wanted = Set.of("/data/a.parquet");
+
+        ManifestFile manifest = Mockito.mock(ManifestFile.class);
+        Mockito.when(manifest.path()).thenReturn("/metadata/m1.avro");
+        Mockito.when(manifest.partitionSpecId()).thenReturn(0);
+        Mockito.when(manifest.addedFilesCount()).thenReturn(1);
+        Mockito.when(manifest.existingFilesCount()).thenReturn(1);
+        Assertions.assertNull(cachingIcebergCatalog.findCachedDataFiles(manifest, wanted));
+
+        dataFileCache.put("/metadata/m1.avro", Sets.newHashSet(fileA));
+        Assertions.assertNull(cachingIcebergCatalog.findCachedDataFiles(manifest, wanted));
+
+        dataFileCache.put("/metadata/m1.avro", Sets.newHashSet(fileA, fileB));
+        Assertions.assertEquals(Map.of("/data/a.parquet", fileA),
+                cachingIcebergCatalog.findCachedDataFiles(manifest, wanted));
+
+        Mockito.when(manifest.existingFilesCount()).thenReturn(null);
+        Assertions.assertNull(cachingIcebergCatalog.findCachedDataFiles(manifest, wanted));
     }
 
     @Test

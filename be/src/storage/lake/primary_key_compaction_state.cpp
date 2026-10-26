@@ -1,0 +1,133 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#include "storage/lake/primary_key_compaction_state.h"
+
+#include "base/debug/trace.h"
+#include "column/chunk_factory.h"
+#include "common/config_exec_fwd.h"
+#include "common/config_lake_fwd.h"
+#include "gutil/strings/substitute.h"
+#include "runtime/current_thread.h"
+#include "storage/chunk_helper.h"
+#include "storage/lake/primary_key_manager.h"
+#include "storage/lake/rowset.h"
+#include "storage/tablet_manager.h"
+#include "storage_primitive/chunk_iterator.h"
+#include "storage_primitive/primary_key_encoder.h"
+
+namespace starrocks::lake {
+
+PrimaryKeyCompactionState::~PrimaryKeyCompactionState() {
+    if (_primary_key_manager != nullptr) {
+        _primary_key_manager->compaction_state_mem_tracker()->release(_memory_usage);
+    }
+}
+
+Status PrimaryKeyCompactionState::load_segments(Rowset* rowset, PrimaryKeyManager* primary_key_manager,
+                                                const TabletSchemaCSPtr& tablet_schema, uint32_t segment_id) {
+    CHECK_MEM_LIMIT("PrimaryKeyCompactionState::load_segments");
+    TRACE_COUNTER_SCOPE_LATENCY_US("load_segments_latency_us");
+    std::lock_guard<std::mutex> lg(_state_lock);
+    if (pk_cols.empty() && rowset->num_segments() > 0) {
+        pk_cols.resize(rowset->num_segments());
+    } else {
+        DCHECK(pk_cols.size() == rowset->num_segments());
+    }
+    _primary_key_manager = primary_key_manager;
+    _tablet_id = rowset->tablet_id();
+    if (segment_id >= pk_cols.size() && pk_cols.size() != 0) {
+        std::string msg = strings::Substitute("Error segment id: $0 vs $1", segment_id, pk_cols.size());
+        LOG(WARNING) << msg;
+        return Status::InternalError(msg);
+    }
+    if (pk_cols.size() == 0 || pk_cols[segment_id] != nullptr) {
+        return Status::OK();
+    }
+    return _load_segments(rowset, tablet_schema, segment_id);
+}
+
+Status PrimaryKeyCompactionState::_load_segments(Rowset* rowset, const TabletSchemaCSPtr& tablet_schema,
+                                                 uint32_t segment_id) {
+    vector<uint32_t> pk_columns;
+    pk_columns.reserve(tablet_schema->num_key_columns());
+    for (size_t i = 0; i < tablet_schema->num_key_columns(); i++) {
+        pk_columns.push_back(static_cast<uint32_t>(i));
+    }
+
+    Schema pkey_schema = ChunkHelper::convert_schema(tablet_schema, pk_columns);
+
+    MutableColumnPtr pk_column;
+    ASSIGN_OR_RETURN(auto pk_encoding_type, rowset->tablet_schema()->primary_key_encoding_type_or_error());
+    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, pk_encoding_type));
+
+    if (_segment_iters.empty()) {
+        ASSIGN_OR_RETURN(_segment_iters, rowset->get_each_segment_iterator(pkey_schema, false, &_stats));
+    }
+    RETURN_ERROR_IF_FALSE(_segment_iters.size() == rowset->num_segments());
+
+    // only hold pkey, so can use larger chunk size
+    auto chunk_shared_ptr = ChunkFactory::new_chunk(pkey_schema, config::vector_chunk_size);
+    auto chunk = chunk_shared_ptr.get();
+
+    auto itr = _segment_iters[segment_id].get();
+    auto& dest = pk_cols[segment_id];
+    auto col = pk_column->clone();
+    if (itr != nullptr) {
+        while (true) {
+            chunk->reset();
+            auto st = itr->get_next(chunk);
+            if (st.is_end_of_file()) {
+                break;
+            } else if (!st.ok()) {
+                return st;
+            } else {
+                TRY_CATCH_BAD_ALLOC(PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), col.get(),
+                                                              pk_encoding_type));
+            }
+        }
+        itr->close();
+    } else {
+        // A null iterator only appears for a physically-lost segment that get_each_segment_iterator
+        // dropped under experimental_lake_ignore_lost_segment; with the flag off it is an unexpected bug,
+        // so fail loudly. When tolerated, leave the encoded PK column empty (it contributes no rows to the
+        // index) instead of leaving pk_cols[segment_id] null, which the compaction-publish caller
+        // dereferences (pk_col->size() / index.try_replace(*pk_col, ...)).
+        RETURN_ERROR_IF_FALSE(config::experimental_lake_ignore_lost_segment,
+                              strings::Substitute("unexpected null segment iterator at position $0 during "
+                                                  "compaction state collection",
+                                                  segment_id));
+    }
+    dest = std::move(col);
+    _memory_usage += dest->memory_usage();
+    _primary_key_manager->compaction_state_mem_tracker()->consume(dest->memory_usage());
+    return Status::OK();
+}
+
+void PrimaryKeyCompactionState::release_segments(uint32_t segment_id) {
+    std::lock_guard<std::mutex> lg(_state_lock);
+    if (segment_id >= pk_cols.size() || pk_cols[segment_id] == nullptr) {
+        return;
+    }
+    _memory_usage -= pk_cols[segment_id]->memory_usage();
+    _primary_key_manager->compaction_state_mem_tracker()->release(pk_cols[segment_id]->memory_usage());
+    // reset ptr to release memory immediately
+    pk_cols[segment_id].reset();
+}
+
+std::string PrimaryKeyCompactionState::to_string() const {
+    return strings::Substitute("PrimaryKeyCompactionState tablet:$0", _tablet_id);
+}
+
+} // namespace starrocks::lake

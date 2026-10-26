@@ -20,8 +20,10 @@
 
 #include <filesystem>
 #include <memory>
+#include <random>
 
 #include "base/testutil/assert.h"
+#include "base/time/timezone_utils.h"
 #include "column/array_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
@@ -30,6 +32,7 @@
 #include "column/struct_column.h"
 #include "common/config_exec_fwd.h"
 #include "formats/parquet/file_reader.h"
+#include "formats/parquet/level_builder.h"
 #include "formats/parquet/parquet_test_util/util.h"
 #include "fs/fs.h"
 #include "fs/fs_memory.h"
@@ -443,6 +446,66 @@ TEST_F(ParquetFileWriterTest, TestWriteDatetimeCompatibleWithHiveReader) {
     ASSERT_TRUE(read_chunk != nullptr);
     ASSERT_EQ(read_chunk->num_rows(), 5);
     parquet::Utils::assert_equal_chunk(chunk.get(), read_chunk.get());
+}
+
+// DATETIME values written as INT96 are shifted to UTC by the offset in force at 00:00 of their day read as UTC (the
+// writer's model, kept as is), and as INT64 they are stored as they are, for random values across DST changes and
+// null rows, in DST zones and a fixed one.
+TEST(ParquetLevelBuilderTest, DatetimeOffsetsMatchReference) {
+    std::mt19937_64 rng(37);
+    const size_t n = 3000;
+    auto data = TimestampColumn::create();
+    auto nulls = NullColumn::create();
+    for (size_t i = 0; i < n; i++) {
+        TimestampValue tv;
+        tv.from_unix_second(static_cast<int64_t>(rng() % 4000000000ULL) - 1000000000LL,
+                            static_cast<int64_t>(rng() % 1000000));
+        data->append(tv);
+        nulls->append(i % 9 == 4);
+    }
+    ColumnPtr column = NullableColumn::create(std::move(data), std::move(nulls));
+    const auto& values =
+            down_cast<const TimestampColumn*>(down_cast<const NullableColumn*>(column.get())->data_column().get())
+                    ->get_data();
+
+    for (const std::string zone : {"America/Los_Angeles", "Europe/London", "Asia/Shanghai", "-03:00"}) {
+        cctz::time_zone ctz;
+        ASSERT_TRUE(TimezoneUtils::find_cctz_time_zone(zone, ctz));
+        for (bool int96 : {true, false}) {
+            SCOPED_TRACE(zone + (int96 ? " INT96" : " INT64"));
+            auto node =
+                    int96 ? ::parquet::schema::PrimitiveNode::Make("c0", ::parquet::Repetition::OPTIONAL,
+                                                                   ::parquet::Type::INT96)
+                          : ::parquet::schema::PrimitiveNode::Make(
+                                    "c0", ::parquet::Repetition::OPTIONAL,
+                                    ::parquet::LogicalType::Timestamp(false, ::parquet::LogicalType::TimeUnit::MICROS),
+                                    ::parquet::Type::INT64);
+            parquet::LevelBuilder builder(TypeDescriptor::from_logical_type(TYPE_DATETIME), node, zone, false, int96);
+            ASSERT_OK(builder.init());
+            bool called = false;
+            ASSERT_OK(builder.write(parquet::LevelBuilderContext(n), column, [&](const parquet::LevelBuilderResult& r) {
+                called = true;
+                for (size_t i = 0; i < n; i++) {
+                    if (i % 9 == 4) {
+                        continue;
+                    }
+                    Timestamp ts = values[i].timestamp();
+                    if (int96) {
+                        int offset = timestamp::get_timezone_offset_by_timestamp(ts, ctz);
+                        Timestamp utc = timestamp::sub<TimeUnit::SECOND>(ts, offset);
+                        const auto* v = reinterpret_cast<const ::parquet::Int96*>(r.values) + i;
+                        ASSERT_EQ(timestamp::to_julian(utc), *reinterpret_cast<const int32_t*>(&v->value[2])) << i;
+                        ASSERT_EQ(timestamp::to_time(utc) * 1000, *reinterpret_cast<const int64_t*>(&v->value[0])) << i;
+                    } else {
+                        int64_t want = static_cast<int64_t>(timestamp::to_julian(ts)) * USECS_PER_DAY +
+                                       timestamp::to_time(ts) - timestamp::UNIX_EPOCH_SECONDS * USECS_PER_SEC;
+                        ASSERT_EQ(want, reinterpret_cast<const int64_t*>(r.values)[i]) << i;
+                    }
+                }
+            }));
+            ASSERT_TRUE(called);
+        }
+    }
 }
 
 TEST_F(ParquetFileWriterTest, TestWriteVarchar) {

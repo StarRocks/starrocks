@@ -198,12 +198,6 @@ public:
         return Status::OK();
     }
 
-    StatusOr<MutableColumnPtr> upgrade_if_overflow() override;
-
-    StatusOr<MutableColumnPtr> downgrade() override { return nullptr; }
-
-    bool has_large_column() const override { return false; }
-
     void check_or_die() const override {}
 
     void build_slices(Buffer<uint8_t>& buffer, Buffer<Slice>& slices) const;

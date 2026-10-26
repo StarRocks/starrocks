@@ -288,6 +288,39 @@ public class CommitRateLimiterTest {
     }
 
     @Test
+    public void testShadowRewriteTxn() throws CommitRateExceededException {
+        long partitionId = 54321;
+        long currentTimeMs = System.currentTimeMillis();
+        Set<Long> partitions = new HashSet<>(Collections.singletonList(partitionId));
+
+        new MockUp<CommitRateLimiter>() {
+            @Mock
+            long compactionScoreUpperBound() {
+                return (long) (threshold + 10);
+            }
+        };
+        // Above both the slowdown threshold and the upper bound, as on a table whose compaction is skipped
+        // while an online-rewrite schema change runs.
+        compactionMgr.handleLoadingFinished(new PartitionIdentifier(dbId, tableId, partitionId), 3, currentTimeMs,
+                Quantiles.compute(Lists.newArrayList(threshold + 20)));
+
+        // A client load is delayed, then rejected by the upper bound.
+        transactionState.setPrepareTime(currentTimeMs - 100);
+        transactionState.setWriteEndTimeMs(currentTimeMs);
+        CommitRateExceededException e =
+                Assertions.assertThrows(CommitRateExceededException.class, () -> limiter.check(partitions, currentTimeMs));
+        Assertions.assertThrows(CommitFailedException.class, () -> limiter.check(partitions, e.getAllowCommitTime()));
+
+        // The rewrite commits right away, even after a write long enough to be delayed past its own timeout.
+        TransactionState rewriteTxn = new TransactionState(dbId, Lists.newArrayList(tableId), 123457L, "rewrite",
+                null, TransactionState.LoadJobSourceType.SHADOW_REWRITE, null, 0, timeoutMs);
+        rewriteTxn.setPrepareTime(currentTimeMs - 50_000);
+        rewriteTxn.setWriteEndTimeMs(currentTimeMs);
+        new CommitRateLimiter(compactionMgr, rewriteTxn, tableId).check(partitions, currentTimeMs);
+        Assertions.assertEquals(-1, rewriteTxn.getAllowCommitTimeMs());
+    }
+
+    @Test
     public void testCompactionUpperBoundLimit01() {
         long partitionId = 54321;
         Set<Long> partitions = new HashSet<>(Collections.singletonList(partitionId));
@@ -353,5 +386,44 @@ public class CommitRateLimiterTest {
         // This time commit should be denied by the lake_compaction_score_upper_bound
         Assertions.assertThrows(CommitFailedException.class,
                 () -> limiter.check(partitions, newCurrentTimeMs));
+    }
+
+    @Test
+    public void testThrottlesIngestion() {
+        boolean oldSlowdown = Config.lake_enable_ingest_slowdown;
+        long oldThreshold = Config.lake_ingest_slowdown_threshold;
+        double oldMinScore = Config.lake_compaction_score_selector_min_score;
+        double oldRatio = Config.lake_ingest_slowdown_ratio;
+        long oldUpperBound = Config.lake_compaction_score_upper_bound;
+        try {
+            Config.lake_enable_ingest_slowdown = true;
+            Config.lake_ingest_slowdown_threshold = 100;
+            Config.lake_compaction_score_selector_min_score = 10;
+            Config.lake_ingest_slowdown_ratio = 0.1;
+            Config.lake_compaction_score_upper_bound = 2000;
+            // Commits are delayed only above the slowdown threshold.
+            Assertions.assertFalse(CommitRateLimiter.throttlesIngestion(100));
+            Assertions.assertTrue(CommitRateLimiter.throttlesIngestion(101));
+
+            // Without a positive ratio nothing is delayed, but commits are still rejected above the upper bound.
+            Config.lake_ingest_slowdown_ratio = 0;
+            Assertions.assertFalse(CommitRateLimiter.throttlesIngestion(101));
+            Assertions.assertFalse(CommitRateLimiter.throttlesIngestion(2000));
+            Assertions.assertTrue(CommitRateLimiter.throttlesIngestion(2001));
+            Config.lake_compaction_score_upper_bound = 0;
+            Assertions.assertFalse(CommitRateLimiter.throttlesIngestion(5000));
+
+            // With ingestion slowdown disabled the limiter does not run at all.
+            Config.lake_ingest_slowdown_ratio = 0.1;
+            Config.lake_compaction_score_upper_bound = 2000;
+            Config.lake_enable_ingest_slowdown = false;
+            Assertions.assertFalse(CommitRateLimiter.throttlesIngestion(5000));
+        } finally {
+            Config.lake_enable_ingest_slowdown = oldSlowdown;
+            Config.lake_ingest_slowdown_threshold = oldThreshold;
+            Config.lake_compaction_score_selector_min_score = oldMinScore;
+            Config.lake_ingest_slowdown_ratio = oldRatio;
+            Config.lake_compaction_score_upper_bound = oldUpperBound;
+        }
     }
 }

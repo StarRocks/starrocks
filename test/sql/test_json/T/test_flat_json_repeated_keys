@@ -1,0 +1,37 @@
+-- name: test_flat_json_repeated_keys
+-- Stored JSON keeps repeated keys. Aggregate and unique key tables read the JSON columns of a
+-- non-flat segment through a flattener, which used to add one value per copy of a repeated key and
+-- failed the query with "pruned_col_size ... != column size". They must return what a duplicate key
+-- table returns for the same rows.
+create table t_dup_${uuid0}(id int, j json) duplicate key(id)
+  distributed by hash(id) buckets 1
+  properties("replication_num"="1","flat_json.enable"="false");
+create table t_agg_${uuid0}(id int, j json replace) aggregate key(id)
+  distributed by hash(id) buckets 1
+  properties("replication_num"="1","flat_json.enable"="false");
+create table t_uniq_${uuid0}(id int, j json) unique key(id)
+  distributed by hash(id) buckets 1
+  properties("replication_num"="1","flat_json.enable"="false");
+insert into t_dup_${uuid0} values
+  (1, parse_json('{"a":1,"b":10,"c":100,"x":{"y":1,"z":2}}')),
+  (2, parse_json('{"a":2,"a":22,"b":20,"c":200}')),
+  (3, parse_json('{"a":3,"a":33}')),
+  (4, parse_json('{"x":{"y":5},"x":{"z":6},"a":4}')),
+  (5, parse_json('{"x":{"y":7,"y":8,"z":9}}')),
+  (6, parse_json('{"a":6,"b":60,"c":600}'));
+insert into t_agg_${uuid0} select * from t_dup_${uuid0};
+insert into t_uniq_${uuid0} select * from t_dup_${uuid0};
+select id, j->'a', j->'b', j->'c', j->'x.y', j->'x.z' from t_agg_${uuid0} order by id;
+select id, j->'a', j->'b', j->'c', j->'x.y', j->'x.z' from t_uniq_${uuid0} order by id;
+select id, cast(j as string) from t_agg_${uuid0} order by id;
+select count(*) from t_agg_${uuid0} a join t_dup_${uuid0} d on a.id = d.id
+  where cast(a.j->'a' as string) <=> cast(d.j->'a' as string)
+    and cast(a.j->'x.y' as string) <=> cast(d.j->'x.y' as string)
+    and cast(a.j->'x.z' as string) <=> cast(d.j->'x.z' as string);
+select count(*) from t_uniq_${uuid0} u join t_dup_${uuid0} d on u.id = d.id
+  where cast(u.j->'a' as string) <=> cast(d.j->'a' as string)
+    and cast(u.j->'x.y' as string) <=> cast(d.j->'x.y' as string)
+    and cast(u.j->'x.z' as string) <=> cast(d.j->'x.z' as string);
+drop table t_dup_${uuid0} force;
+drop table t_agg_${uuid0} force;
+drop table t_uniq_${uuid0} force;

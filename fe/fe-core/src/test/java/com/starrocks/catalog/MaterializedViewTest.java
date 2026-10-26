@@ -578,6 +578,49 @@ public class MaterializedViewTest extends StarRocksTestBase {
     }
 
     @Test
+    public void testInferDistributionTwoArgUsesBaseTableEstimate() throws Exception {
+        // Without MaterializedView.inferDistribution(info, rf), the 2-arg call would dispatch to
+        // OlapTable and skip base-table estimation. Mock CatalogUtils so the two paths diverge.
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable base = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(testDb.getFullName(), "base_t1");
+        Assertions.assertNotNull(base);
+
+        new MockUp<CatalogUtils>() {
+            @Mock
+            public static int calAvgBucketNumOfRecentPartitions(OlapTable olapTable, int recentPartitionNum,
+                                                                boolean enableAutoTabletDistribution) {
+                // MV specialization uses this 3-arg form on base tables.
+                return 42;
+            }
+
+            @Mock
+            public static int calAvgBucketNumOfRecentPartitions(OlapTable olapTable, int recentPartitionNum,
+                                                                boolean enableAutoTabletDistribution,
+                                                                short replicationNum) {
+                // OlapTable 2-arg path uses this on the (empty) MV itself.
+                return 1;
+            }
+
+            @Mock
+            public static int calBucketNumAccordingToBackends(OlapTable olapTable, short replicationNum) {
+                return 1;
+            }
+        };
+
+        SinglePartitionInfo partitionInfo = new SinglePartitionInfo();
+        HashDistributionInfo defaultDist = new HashDistributionInfo(0, Lists.newArrayList(columns.get(0)));
+        MaterializedView mv = new MaterializedView(1000, testDb.getId(), "mv_infer_rf", columns, KeysType.AGG_KEYS,
+                partitionInfo, defaultDist, new MaterializedView.MvRefreshScheme());
+        mv.setBaseTableInfos(Lists.newArrayList(
+                new BaseTableInfo(testDb.getId(), testDb.getFullName(), base.getName(), base.getId())));
+
+        HashDistributionInfo toInfer = new HashDistributionInfo(0, Lists.newArrayList(columns.get(0)));
+        mv.inferDistribution(toInfer, (short) 1);
+        Assertions.assertEquals(42, toInfer.getBucketNum());
+    }
+
+    @Test
     public void testMvMysqlType() {
         MaterializedView mv = new MaterializedView();
         String mysqlType = mv.getMysqlType();

@@ -326,6 +326,17 @@ public class HudiTable extends Table {
         }
     }
 
+    /**
+     * Not a lock target, even when it lives in an internal database (ENGINE=HUDI from a resource). The data is
+     * in the metastore, and nothing writes to a published HudiTable: ALTER TABLE rejects it and a refresh does
+     * not touch its schema. So the reference a query resolves is already a consistent snapshot, and planning
+     * -- which reaches the metastore for statistics and partitions -- runs without the lock.
+     */
+    @Override
+    public boolean isMetaLockTarget() {
+        return false;
+    }
+
     @Override
     public boolean isSupported() {
         return true;

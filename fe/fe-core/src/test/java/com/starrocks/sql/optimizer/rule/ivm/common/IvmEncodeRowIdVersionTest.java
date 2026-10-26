@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.rule.ivm.common;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.TableName;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.IntLiteral;
@@ -62,7 +63,7 @@ public class IvmEncodeRowIdVersionTest {
     }
 
     private static void assertFingerprint(List<Expr> keys) {
-        Assertions.assertEquals(IvmOpUtils.ENCODE_ROW_ID_VERSION_FINGERPRINT,
+        Assertions.assertEquals(IvmOpUtils.ENCODE_ROW_ID_VERSION_FINGERPRINT_V2,
                 IvmOpUtils.deduceEncodeRowIdVersion(keys));
     }
 
@@ -133,6 +134,19 @@ public class IvmEncodeRowIdVersionTest {
     public void constantKeysUseFingerprint() {
         assertFingerprint(Lists.newArrayList(new IntLiteral(0), key(IntegerType.BIGINT)));
         assertFingerprint(Lists.newArrayList(new IntLiteral(7)));
+    }
+
+    /**
+     * The version is persisted on every mv and a refresh resolves it back to a function, so each stored value must
+     * keep naming the function its rows were keyed with.
+     */
+    @Test
+    public void storedVersionsKeepTheirFunction() {
+        Assertions.assertEquals(FunctionSet.ENCODE_SORT_KEY, IvmOpUtils.getEncodeRowIdFunctionNameChecked(0));
+        Assertions.assertEquals(FunctionSet.ENCODE_FINGERPRINT_SHA256, IvmOpUtils.getEncodeRowIdFunctionNameChecked(1));
+        Assertions.assertEquals(FunctionSet.ENCODE_FINGERPRINT_SHA256_V2,
+                IvmOpUtils.getEncodeRowIdFunctionNameChecked(2));
+        Assertions.assertThrows(IllegalArgumentException.class, () -> IvmOpUtils.getEncodeRowIdVersionChecked(3));
     }
 
     @Test

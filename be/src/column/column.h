@@ -85,8 +85,6 @@ public:
 
     virtual bool is_binary() const { return false; }
 
-    virtual bool is_large_binary() const { return false; }
-
     virtual bool is_decimal() const { return false; }
 
     virtual bool is_date() const { return false; }
@@ -133,24 +131,6 @@ public:
     virtual void reserve(size_t n) = 0;
 
     virtual void resize(size_t n) = 0;
-
-    // If the column has already overflowed, upgrade to one larger Column type,
-    // Return internal error if upgrade failed.
-    // Return null, if the column is not overflow.
-    // Return the new larger column, if upgrade success
-    // Current, only support upgrade BinaryColumn to LargeBinaryColumn
-    virtual StatusOr<MutablePtr> upgrade_if_overflow() = 0;
-
-    // Downgrade the column from large column to normal column.
-    // Return internal error if downgrade failed.
-    // Return null, if the column is already normal column, no need to downgrade.
-    // Return the new normal column, if downgrade success
-    // Current, only support downgrade LargeBinaryColumn to BinaryColumn
-    virtual StatusOr<MutablePtr> downgrade() = 0;
-
-    // Check if the column contains large column.
-    // Current, only used to check if it contains LargeBinaryColumn or BinaryColumn
-    virtual bool has_large_column() const = 0;
 
     virtual void resize_uninitialized(size_t n) { resize(n); }
 
@@ -299,6 +279,12 @@ public:
     // The bad thing is we couldn't get the string defined len from FE when query
     virtual uint32_t max_one_element_serialize_size() const = 0;
 
+    // Upper bound for the compact key encoding written by serialize_batch*(). Only
+    // BinaryColumn differs from the persisted encoding, because only it writes a length
+    // prefix; for every other column the two encodings are byte-identical. Note it is NOT
+    // always <= max_one_element_serialize_size(): a string of 255+ bytes costs one byte more.
+    virtual uint32_t max_one_element_serialize_size_compact() const { return max_one_element_serialize_size(); }
+
     // serialize one data,The memory must allocate firstly from mempool
     virtual uint32_t serialize(size_t idx, uint8_t* pos) const = 0;
 
@@ -332,8 +318,17 @@ public:
     virtual void deserialize_and_append_batch_nullable(Buffer<Slice>& srcs, size_t chunk_size,
                                                        Buffer<uint8_t>& is_nulls, bool& has_null) = 0;
 
+    // Per-element counterpart of the compact key encoding written by serialize_batch*(). The
+    // row-wise fallbacks in the hash-table key builders use this, so it MUST stay byte-identical
+    // to serialize_batch*(): mixing the two encodings in one hash table splits logical keys.
+    virtual uint32_t serialize_compact(size_t idx, uint8_t* pos) const { return serialize(idx, pos); }
+
     // deserialize one data and append to this column
     virtual const uint8_t* deserialize_and_append(const uint8_t* pos) = 0;
+
+    // Counterpart of the compact key encoding written by serialize_batch*(). Defaults to the
+    // persisted encoding, which is correct for every column that does not write a length prefix.
+    virtual const uint8_t* deserialize_compact_and_append(const uint8_t* pos) { return deserialize_and_append(pos); }
 
     virtual void deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) = 0;
 
@@ -488,17 +483,6 @@ public:
     }
 
 protected:
-    // Helper functions for downgrade and upgrade,
-    // if downgrade failed, return the error status.
-    // if upgrade success, always return nullptr.
-    // if downgrade's result is not nullptr, it will replace the input col with the new column.
-    static StatusOr<MutablePtr> downgrade_helper_func(Column* col);
-    // Helper functions for upgrade and downgrade,
-    // if upgrade failed, return the error status.
-    // if upgrade success, always return nullptr.
-    // if upgrade's result is not nullptr, it will replace the input col with the new column.
-    static StatusOr<MutablePtr> upgrade_helper_func(Column* col);
-
     DelCondSatisfied _delete_state = DEL_NOT_SATISFIED;
 };
 
@@ -546,7 +530,8 @@ public:
             is_nulls.emplace_back(null);
 
             if (null == 0) {
-                srcs[i].data = (char*)derived()->deserialize_and_append((uint8_t*)srcs[i].data);
+                // The bytes came from serialize_batch*(), i.e. the compact key encoding.
+                srcs[i].data = (char*)derived()->deserialize_compact_and_append((uint8_t*)srcs[i].data);
             } else {
                 has_null = true;
                 derived()->append_default();

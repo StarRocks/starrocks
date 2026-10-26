@@ -198,7 +198,9 @@ public:
               _value_node(std::move(value_node)),
               _null_branch(null_branch),
               _value_branch(value_branch),
-              _timezone(timezone) {}
+              _timezone(timezone) {
+        _offset_cache.bind(_timezone);
+    }
 
     Status read_field(avro::Decoder& decoder, AdaptiveNullableColumn* column) override {
         if (_node->type() == avro::AVRO_UNION) {
@@ -329,11 +331,13 @@ private:
         TimestampValue to{};
         switch (_value_node->logicalType().type()) {
         case avro::LogicalType::TIMESTAMP_MILLIS:
-            to.from_unixtime(from / 1000, (from % 1000) * 1000, _timezone);
+            to.from_unixtime_with_offset(from / 1000, (from % 1000) * 1000,
+                                         _offset_cache.offset_in_bound_zone(from / 1000));
             column->append(to);
             return Status::OK();
         case avro::LogicalType::TIMESTAMP_MICROS:
-            to.from_unixtime(from / 1000000, from % 1000000, _timezone);
+            to.from_unixtime_with_offset(from / 1000000, from % 1000000,
+                                         _offset_cache.offset_in_bound_zone(from / 1000000));
             column->append(to);
             return Status::OK();
         default:
@@ -378,6 +382,7 @@ private:
     size_t _null_branch;
     size_t _value_branch;
     cctz::time_zone _timezone;
+    TzOffsetCache _offset_cache;
     std::vector<uint8_t> _bytes_buf;
 };
 

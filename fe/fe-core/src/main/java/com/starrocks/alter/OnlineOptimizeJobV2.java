@@ -677,6 +677,10 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
             Set<Tablet> tmpTablets = Sets.newHashSet();
             if (getTmpPartitionIds() != null) {
                 for (long pid : getTmpPartitionIds()) {
+                    // A temp partition that was already swapped in keeps its id and is live now, so leave it alone.
+                    if (!targetTable.isTempPartition(pid)) {
+                        continue;
+                    }
                     LOG.info("optimize job {} drop temp partition:{}", jobId, pid);
 
                     Partition partition = targetTable.getPartition(pid);
@@ -818,6 +822,10 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
         targetTable.setState(OlapTableState.UPDATING_META);
         Set<Tablet> sourceTablets = Sets.newHashSet();
         for (long id : replayedJob.getTmpPartitionIds()) {
+            // The swaps were replayed before this entry and kept the temp partition ids, which are live now.
+            if (!targetTable.isTempPartition(id)) {
+                continue;
+            }
             Partition partition = targetTable.getPartition(id);
             if (partition != null) {
                 for (MaterializedIndex index : partition.getDefaultPhysicalPartition()
@@ -896,6 +904,21 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
             default:
                 break;
         }
+    }
+
+    /**
+     * Drops the per-partition data of a done job, which stays in memory only for SHOW ALTER: the rewrite tasks, the
+     * temp and source partition lists and the optimize clause. getInfo reads none of them, and a done job never runs
+     * again, so nothing reads the clause either. The rewrite still running after a cancel holds its own task. The lists
+     * are replaced, not cleared: replay shares them with the journal entry it came from.
+     */
+    @Override
+    public void pruneMeta() {
+        rewriteTasks = Lists.newArrayList();
+        tmpPartitionIds = Lists.newArrayList();
+        sourcePartitionNames = Lists.newArrayList();
+        tmpPartitionNames = Lists.newArrayList();
+        optimizeClause = null;
     }
 
     @Override

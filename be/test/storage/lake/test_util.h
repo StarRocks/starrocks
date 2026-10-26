@@ -24,6 +24,7 @@
 #include "base/failpoint/fail_point.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
+#include "base/testutil/sync_point.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/logging.h"
@@ -42,10 +43,10 @@
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/lake_persistent_index_parallel_compact_mgr.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reshard.h"
 #include "storage/lake/transactions.h"
-#include "storage/lake/update_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/storage_env.h"
 
@@ -77,6 +78,13 @@ std::vector<TScanRangeParams> create_scan_ranges_cloud(std::vector<TabletMetadat
 class TestBase : public ::testing::Test {
 public:
     ~TestBase() override {
+        // The parallel compaction manager is process-wide, so the pointer installed below
+        // outlives this fixture. Put back whatever was there, otherwise every later suite in
+        // the binary runs against a dangling TabletManager.
+        if (auto* parallel_compact_mgr = StorageEnv::GetInstance()->parallel_compact_mgr();
+            parallel_compact_mgr != nullptr) {
+            parallel_compact_mgr->TEST_set_tablet_mgr(_previous_parallel_compact_tablet_mgr);
+        }
         PFailPointTriggerMode trigger_mode;
         trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
         auto fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get(
@@ -84,6 +92,13 @@ public:
         if (fp != nullptr) {
             fp->setMode(trigger_mode);
         }
+        // SyncPoint is a process-wide singleton and LoadDependency() has no scoped form, so a
+        // dependency graph loaded by one test stays live for the rest of the binary. A later
+        // test that reaches a point with an unmet predecessor then blocks in Process()
+        // forever. Reset it here so each fixture starts from a clean graph.
+        SyncPoint::GetInstance()->LoadDependency({});
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+        SyncPoint::GetInstance()->DisableProcessing();
         // Wait for all vacuum tasks finished processing before destroying
         // _tablet_mgr.
         StorageEngine::instance()->wait_storage_cleanup_tasks();
@@ -96,12 +111,13 @@ protected:
               _parent_tracker(std::make_unique<MemTracker>(-1)),
               _mem_tracker(std::make_unique<MemTracker>(10 * 1024 * 1024, "", _parent_tracker.get())),
               _lp(std::make_shared<FixedLocationProvider>(_test_dir)),
-              _update_mgr(std::make_unique<UpdateManager>(_lp, _mem_tracker.get())),
-              _tablet_mgr(std::make_unique<TabletManager>(_lp, _update_mgr.get(), cache_limit,
+              _primary_key_mgr(std::make_unique<PrimaryKeyManager>(_lp, _mem_tracker.get())),
+              _tablet_mgr(std::make_unique<TabletManager>(_lp, _primary_key_mgr.get(), cache_limit,
                                                           PlatformEnv::GetInstance()->store_path_registry())) {
         if (auto* parallel_compact_mgr = StorageEnv::GetInstance()->parallel_compact_mgr();
             parallel_compact_mgr != nullptr) {
-            _update_mgr->set_parallel_compact_mgr(parallel_compact_mgr);
+            _primary_key_mgr->set_parallel_compact_mgr(parallel_compact_mgr);
+            _previous_parallel_compact_tablet_mgr = parallel_compact_mgr->TEST_tablet_mgr();
             parallel_compact_mgr->TEST_set_tablet_mgr(_tablet_mgr.get());
         }
         PFailPointTriggerMode trigger_mode;
@@ -112,6 +128,8 @@ protected:
             fp->setMode(trigger_mode);
         }
     }
+
+    TabletManager* _previous_parallel_compact_tablet_mgr = nullptr;
 
     void remove_test_dir_or_die() { ASSERT_OK(fs::remove_all(_test_dir)); }
 
@@ -139,7 +157,7 @@ protected:
     std::unique_ptr<MemTracker> _parent_tracker;
     std::unique_ptr<MemTracker> _mem_tracker;
     std::shared_ptr<LocationProvider> _lp;
-    std::unique_ptr<UpdateManager> _update_mgr;
+    std::unique_ptr<PrimaryKeyManager> _primary_key_mgr;
     std::unique_ptr<TabletManager> _tablet_mgr;
 };
 

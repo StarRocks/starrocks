@@ -14,6 +14,7 @@
 
 package com.starrocks.common.util.concurrent.lock;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.common.Config;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -79,7 +80,8 @@ public class LockInvariantViolations {
      * Deliberately not {@code FeConstants.runningUnitTest}: that flag is opt-in per test class
      * (every one of its uses in main code means "skip this when testing", none means "be stricter
      * when testing"), so it is set for far too few tests to be a usable gate. This property is set
-     * once for the whole surefire JVM in {@code fe-core/pom.xml}.
+     * once for the whole surefire JVM in {@code fe-core/pom.xml}, from {@code lock.invariant.strict}
+     * (default {@code true}).
      * <p>
      * {@code off} and an explicit {@code error} pass through untouched — code that means to lock a
      * synthetic id has to turn the check off and say why.
@@ -88,14 +90,13 @@ public class LockInvariantViolations {
 
     /**
      * The same escalation for the blocking-call rule, on its own property because the two rules are
-     * at different stages. The lock-target rule has a known-empty violation set and is enforced;
-     * the blocking-call rule is still <em>collecting</em> one, and until that set has stopped
-     * growing, escalating here would fail whichever tests happen to cover a site -- a fact about
-     * test coverage, not about the defect.
+     * switched separately: either can be backed out of the test JVM without disarming the other.
+     * {@code fe-core/pom.xml} sets it from {@code lock.blocking.strict} (default {@code true}).
      * <p>
-     * Not set anywhere yet, on purpose. Set it in {@code fe-core/pom.xml} next to the other one
-     * once the reported sites are fixed; that is what turns the rule from a report into a
-     * regression barrier, and it is a separate change with its own evidence.
+     * What an armed blocking-call rule proves is narrower than it reads: the connectors in unit
+     * tests are mocks that never reach a real transport, so a green run means no <em>test</em>
+     * went through a door under a lock, not that no <em>code</em> does. Production coverage still
+     * comes from the {@code warn} log.
      */
     private static final boolean BLOCKING_STRICT_IN_TEST =
             Boolean.getBoolean("starrocks.lock.blocking.strict.in.test");
@@ -148,10 +149,12 @@ public class LockInvariantViolations {
 
     private static final class ModeCache {
         private final String raw;
+        private final boolean strictInTest;
         private final Mode mode;
 
-        private ModeCache(String raw, Mode mode) {
+        private ModeCache(String raw, boolean strictInTest, Mode mode) {
             this.raw = raw;
+            this.strictInTest = strictInTest;
             this.mode = mode;
         }
     }
@@ -163,23 +166,26 @@ public class LockInvariantViolations {
      * redundant parse.
      */
     private static final class ModeGate {
-        private final boolean strictInTest;
+        private final boolean armedByProperty;
+        private volatile boolean strictInTest;
         private volatile ModeCache cache;
 
-        private ModeGate(boolean strictInTest) {
-            this.strictInTest = strictInTest;
+        private ModeGate(boolean armedByProperty) {
+            this.armedByProperty = armedByProperty;
+            this.strictInTest = armedByProperty;
         }
 
         private Mode resolve(String configured) {
+            boolean strict = strictInTest;
             ModeCache cached = cache;
-            if (cached != null && cached.raw == configured) {
+            if (cached != null && cached.raw == configured && cached.strictInTest == strict) {
                 return cached.mode;
             }
             Mode mode = Mode.parse(configured);
-            if (mode == Mode.WARN && strictInTest) {
+            if (mode == Mode.WARN && strict) {
                 mode = Mode.ERROR;
             }
-            cache = new ModeCache(configured, mode);
+            cache = new ModeCache(configured, strict, mode);
             return mode;
         }
     }
@@ -208,6 +214,25 @@ public class LockInvariantViolations {
 
     public static Mode effectiveBlockingCallMode(String configured) {
         return BLOCKING_CALL_GATE.resolve(configured);
+    }
+
+    /**
+     * Lets {@code warn} mean {@code warn} again inside an armed test JVM, for a test of the warn
+     * path itself -- one that asserts a violation is counted and the call proceeds, or reads the
+     * reported call site. Such a test cannot be written against the escalated mode, and switching
+     * the rule {@code off} would skip the very code under test.
+     * <p>
+     * Not an opt-out for a test that trips the rule: that test is reporting a real site. Pair with
+     * {@link #restoreBlockingCallTestEscalation()} in teardown.
+     */
+    @VisibleForTesting
+    public static void suspendBlockingCallTestEscalation() {
+        BLOCKING_CALL_GATE.strictInTest = false;
+    }
+
+    @VisibleForTesting
+    public static void restoreBlockingCallTestEscalation() {
+        BLOCKING_CALL_GATE.strictInTest = BLOCKING_CALL_GATE.armedByProperty;
     }
 
     /**

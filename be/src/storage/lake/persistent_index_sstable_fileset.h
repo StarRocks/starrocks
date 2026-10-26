@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <functional>
 #include <map>
 #include <memory>
 #include <string>
@@ -62,6 +63,8 @@ public:
     bool contains_sst(const std::string& filename) const;
 
     size_t memory_usage() const;
+
+    void for_each_sstable(const std::function<void(const PersistentIndexSstable&)>& fn) const;
 
     void print_debug_info(std::stringstream& ss);
 

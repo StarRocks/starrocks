@@ -40,6 +40,14 @@ public abstract class GroupProvider {
         this.properties = properties;
     }
 
+    /**
+     * For Gson, which restores providers from the image. Without a no-arg constructor anywhere in the
+     * hierarchy Gson allocates the object without running any constructor, so the field initializers of a
+     * subclass never run and its runtime state (caches, schedules) starts out null.
+     */
+    protected GroupProvider() {
+    }
+
     public void init() throws DdlException {
 
     }

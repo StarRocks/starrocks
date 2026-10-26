@@ -18,7 +18,6 @@
 #include <utility>
 
 #include "column/chunk.h"
-#include "column/segmented_chunk.h"
 
 namespace starrocks {
 
@@ -64,31 +63,7 @@ ChunkUniquePtr ChunkSliceTemplate<Ptr>::cutoff(size_t required_rows) {
     return res;
 }
 
-// Specialized for SegmentedChunkPtr.
-template <>
-ChunkUniquePtr ChunkSliceTemplate<SegmentedChunkPtr>::cutoff(size_t required_rows) {
-    DCHECK(!empty());
-    // Cutoff a chunk from current segment; if it doesn't meet the requirement just let it be.
-    ChunkPtr segment = chunk->segments()[segment_id];
-    size_t segment_offset = offset % chunk->segment_size();
-    size_t cut_rows = std::min(segment->num_rows() - segment_offset, required_rows);
-
-    auto res = segment->clone_empty(cut_rows);
-    res->append(*segment, segment_offset, cut_rows);
-    offset += cut_rows;
-
-    // Move to next segment.
-    segment_id = offset / chunk->segment_size();
-
-    if (empty()) {
-        chunk->reset();
-        offset = 0;
-    }
-    return res;
-}
-
 template struct ChunkSliceTemplate<ChunkPtr>;
 template struct ChunkSliceTemplate<ChunkUniquePtr>;
-template struct ChunkSliceTemplate<SegmentedChunkPtr>;
 
 } // namespace starrocks

@@ -14,6 +14,7 @@
 
 #include "exec_primitive/runtime_filter/runtime_filter_probe.h"
 
+#include <algorithm>
 #include <sstream>
 
 #include "base/simd/simd.h"
@@ -144,6 +145,23 @@ void RuntimeFilterProbeDescriptor::add_observer(RuntimeState* state, ReadyObserv
 
 static const int default_runtime_filter_wait_timeout_ms = 1000;
 
+static bool only_reference_existent_slots(ExprContext* expr, const Chunk* chunk) {
+    std::vector<SlotId> slot_ids;
+    expr->root()->get_slot_ids(&slot_ids);
+    return std::ranges::all_of(slot_ids, [chunk](SlotId id) { return chunk->is_slot_exist(id); });
+}
+
+// A runtime filter attached to an operator whose output does not carry every column it references
+// (e.g. a partitioned global filter on a hash join whose partition_exprs span tables joined later)
+// cannot be evaluated there.
+static bool can_evaluate_on_chunk(RuntimeFilterProbeDescriptor* rf_desc, const Chunk* chunk) {
+    if (!only_reference_existent_slots(rf_desc->probe_expr_ctx(), chunk)) {
+        return false;
+    }
+    return std::ranges::all_of(*rf_desc->partition_by_expr_contexts(),
+                               [chunk](ExprContext* expr) { return only_reference_existent_slots(expr, chunk); });
+}
+
 RuntimeFilterProbeCollector::RuntimeFilterProbeCollector() : _wait_timeout_ms(default_runtime_filter_wait_timeout_ms) {}
 
 RuntimeFilterProbeCollector::RuntimeFilterProbeCollector(RuntimeFilterProbeCollector&& that) noexcept
@@ -265,32 +283,15 @@ void RuntimeFilterProbeCollector::do_evaluate_partial_chunk(Chunk* partial_chunk
             continue;
         }
 
-        auto only_reference_existent_slots = [&](ExprContext* expr) {
-            std::vector<SlotId> slot_ids;
-            int n = expr->root()->get_slot_ids(&slot_ids);
-            DCHECK(slot_ids.size() == n);
-
-            // do not allow struct subfield
-            if (expr->root()->get_subfields(nullptr) > 0) {
-                return false;
-            }
-
-            for (auto slot_id : slot_ids) {
-                if (!partial_chunk->is_slot_exist(slot_id)) {
-                    return false;
-                }
-            }
-
-            return true;
-        };
-
         auto* probe_expr = rf_desc->probe_expr_ctx();
         auto* partition_by_exprs = rf_desc->partition_by_expr_contexts();
 
-        bool can_use_rf_on_partial_chunk = only_reference_existent_slots(probe_expr);
+        // do not allow struct subfield
+        bool can_use_rf_on_partial_chunk = probe_expr->root()->get_subfields(nullptr) == 0;
         for (auto* part_by_expr : *partition_by_exprs) {
-            can_use_rf_on_partial_chunk &= only_reference_existent_slots(part_by_expr);
+            can_use_rf_on_partial_chunk &= part_by_expr->root()->get_subfields(nullptr) == 0;
         }
+        can_use_rf_on_partial_chunk &= can_evaluate_on_chunk(rf_desc, partial_chunk);
 
         // skip runtime filter that references a non-existent column for the partial chunk
         if (!can_use_rf_on_partial_chunk) {
@@ -440,6 +441,10 @@ void RuntimeFilterProbeCollector::update_selectivity(Chunk* chunk, RuntimeMember
         // unimplemented stub that throws "not supported". Never evaluate IN filters per-chunk
         // here (regardless of has_push_down_to_storage()).
         if (filter->type() == RuntimeFilterSerializeType::IN_FILTER) {
+            continue;
+        }
+        // do_evaluate only runs filters chosen here, so this check covers it as well.
+        if (!can_evaluate_on_chunk(rf_desc, chunk)) {
             continue;
         }
         auto& selection = eval_context.running_context.use_merged_selection

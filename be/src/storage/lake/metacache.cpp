@@ -275,6 +275,17 @@ bool Metacache::update_segment_cache_size(std::string_view key, size_t mem_cost,
     return _cache->update_charge_if(CacheKey(key), mem_cost, segment_ptr_matches, segment);
 }
 
+bool Metacache::replace_segment_if_matches(std::string_view key, const Segment* expected,
+                                           const std::shared_ptr<Segment>& replacement) {
+    const auto mem_cost = replacement->mem_usage();
+    auto value = std::make_unique<CacheValue>(replacement);
+    if (!_cache->replace_if(CacheKey(key), value.get(), mem_cost, cache_value_deleter, segment_ptr_matches, expected)) {
+        return false;
+    }
+    (void)value.release(); // ownership moved into the cache
+    return true;
+}
+
 void Metacache::cache_delvec(std::string_view key, std::shared_ptr<const DelVector> delvec) {
     auto mem_cost = delvec->memory_usage();
     auto value = std::make_unique<CacheValue>(std::move(delvec));

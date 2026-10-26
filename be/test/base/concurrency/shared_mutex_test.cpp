@@ -13,9 +13,14 @@
 // limitations under the License.
 
 #include <bthread/bthread.h>
+#include <butil/time.h>
 #include <gtest/gtest.h>
 
+#include <cerrno>
+#include <chrono>
+#include <future>
 #include <shared_mutex>
+#include <type_traits>
 
 #include "base/concurrency/bthread_shared_mutex.h"
 
@@ -177,6 +182,60 @@ static void* mixture_mutex_test(void* args) {
 
 TEST(BThreadSharedMutex, rw_mutex) {
     run_ut(mixture_mutex_test);
+}
+
+template <typename Mutex>
+static int timed_shared_lock_with_blocker(bthreads::BThreadSharedMutex& mutex, Mutex& blocker) {
+    std::promise<void> locked;
+    auto ready = locked.get_future();
+    std::promise<void> release;
+    auto released = release.get_future();
+    auto holder = std::async(std::launch::async, [&] {
+        std::unique_lock lock(blocker);
+        locked.set_value();
+        // Bound the hold even if the timed API regresses into an untimed wait.
+        released.wait_for(std::chrono::seconds(5));
+    });
+    EXPECT_EQ(std::future_status::ready, ready.wait_for(std::chrono::seconds(5)));
+    // Keep this call on run_ut's current context, covering both pthread and bthread waits.
+    const int rc = mutex.lock_shared_until(butil::milliseconds_from_now(20));
+    if (rc == 0) mutex.unlock_shared();
+    if constexpr (std::is_same_v<Mutex, bthreads::BThreadSharedMutex>) {
+        std::lock_guard lock(mutex._mutex);
+        EXPECT_TRUE(mutex.has_writer());
+        EXPECT_EQ(0U, mutex.num_readers());
+    }
+    release.set_value();
+    holder.get();
+    return rc;
+}
+
+static void* timed_reader_writer_timeout(void* args) {
+    bthreads::BThreadSharedMutex mutex;
+    EXPECT_EQ(ETIMEDOUT, timed_shared_lock_with_blocker(mutex, mutex));
+    const int rc = mutex.lock_shared_until(butil::milliseconds_from_now(1000));
+    EXPECT_EQ(0, rc);
+    if (rc == 0) mutex.unlock_shared();
+    std::unique_lock after_timeout(mutex, std::try_to_lock);
+    EXPECT_TRUE(after_timeout.owns_lock());
+    return args;
+}
+
+TEST(BThreadSharedMutex, timed_reader_timeout_preserves_writer_and_allows_reuse) {
+    run_ut(timed_reader_writer_timeout);
+}
+
+static void* timed_reader_internal_mutex_timeout(void* args) {
+    bthreads::BThreadSharedMutex mutex;
+    // Existing base UTs are built with -fno-access-control; no production hook is needed.
+    EXPECT_EQ(ETIMEDOUT, timed_shared_lock_with_blocker(mutex, mutex._mutex));
+    std::unique_lock writer(mutex, std::try_to_lock);
+    EXPECT_TRUE(writer.owns_lock());
+    return args;
+}
+
+TEST(BThreadSharedMutex, timed_reader_obeys_deadline_for_internal_mutex) {
+    run_ut(timed_reader_internal_mutex_timeout);
 }
 
 } // namespace starrocks

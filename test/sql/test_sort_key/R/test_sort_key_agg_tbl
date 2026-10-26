@@ -1,4 +1,4 @@
--- name: test_sort_key_agg_tbl;
+-- name: test_sort_key_agg_tbl; @native
 show backends;
 create database sort_key_test_agg;
 -- result:

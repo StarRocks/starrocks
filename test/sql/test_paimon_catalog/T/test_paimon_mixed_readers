@@ -1,0 +1,28 @@
+-- name: test_paimon_mixed_readers
+create external catalog paimon_boundaries_${uuid0}
+properties (
+"type" = "paimon",
+"paimon.catalog.type" = "filesystem",
+"paimon.catalog.warehouse" = "oss://${oss_bucket}/ci_catalog_test_data/paimon/",
+"aws.s3.access_key" = "${oss_ak}",
+"aws.s3.secret_key" = "${oss_sk}",
+"aws.s3.endpoint" = "${oss_endpoint}"
+);
+set time_zone = 'UTC';
+set enable_count_star_optimization = false;
+set paimon_reader_mode = 'auto';
+[ORDER]select id,v,p from paimon_boundaries_${uuid0}.paimon_test.reader_mixed_partitions_v1 order by id;
+function: assert_paimon_readers("select id,v,p from paimon_boundaries_${uuid0}.paimon_test.reader_mixed_partitions_v1 order by id", "reader_mixed_partitions_v1", "starrocks,native", "RAW_FILES,NATIVE_SUPPORTED")
+select count(*),count(distinct id),sum(v) from paimon_boundaries_${uuid0}.paimon_test.reader_mixed_partitions_v1;
+function: assert_paimon_native_profile("select id,v,p from paimon_boundaries_${uuid0}.paimon_test.reader_mixed_partitions_v1 order by id")
+set paimon_reader_mode = 'native';
+[ORDER]select id,v,p from paimon_boundaries_${uuid0}.paimon_test.reader_mixed_partitions_v1 order by id;
+function: assert_paimon_readers("select id,v,p from paimon_boundaries_${uuid0}.paimon_test.reader_mixed_partitions_v1 order by id", "reader_mixed_partitions_v1", "starrocks,native", "RAW_FILES,NATIVE_SUPPORTED")
+select count(*),count(distinct id),sum(v) from paimon_boundaries_${uuid0}.paimon_test.reader_mixed_partitions_v1;
+function: assert_paimon_native_profile("select id,v,p from paimon_boundaries_${uuid0}.paimon_test.reader_mixed_partitions_v1 order by id")
+set paimon_reader_mode = 'jni';
+[ORDER]select id,v,p from paimon_boundaries_${uuid0}.paimon_test.reader_mixed_partitions_v1 order by id;
+function: assert_paimon_readers("select id,v,p from paimon_boundaries_${uuid0}.paimon_test.reader_mixed_partitions_v1 order by id", "reader_mixed_partitions_v1", "jni", "EXPLICIT_MODE")
+select count(*),count(distinct id),sum(v) from paimon_boundaries_${uuid0}.paimon_test.reader_mixed_partitions_v1;
+set catalog default_catalog;
+drop catalog paimon_boundaries_${uuid0};

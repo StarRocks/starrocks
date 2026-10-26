@@ -86,6 +86,8 @@ public:
     RuntimeFilterMerger(const RuntimeServices* runtime_services, const RpcServices* rpc_services,
                         const UniqueId& query_id, const TQueryOptions& query_options, bool is_pipeline);
     Status init(const TRuntimeFilterParams& params);
+    // Size limit of the merged filters; runtime_filter_max_size <= 0 or unset means no limit.
+    static size_t resolve_max_size(const TRuntimeFilterParams& params);
     void merge_runtime_filter(PTransmitRuntimeFilterParams& params);
     void store_skew_broadcast_join_runtime_filter(PTransmitRuntimeFilterParams& params);
 

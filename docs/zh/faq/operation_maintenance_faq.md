@@ -84,7 +84,7 @@ SET GLOBAL wait_timeout = 3600;
 ## StarRocks 支持带有嵌套子查询的 DELETE 吗？
 
 从 v2.3 开始，主键表支持完整的 DELETE WHERE 语法。
-详情请参见 [Reference - DELETE](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/table_bucket_part_index/DELETE/)。
+详情请参见 [Reference - DELETE](../sql-reference/sql-statements/table_bucket_part_index/DELETE.md)。
 
 ## 对于动态分区，如果不希望旧分区自动清理，可以简单省略 dynamic_partition.start 吗？
 
@@ -188,7 +188,7 @@ BE 进程仍在运行。终止守护进程并重新启动。
 ## 分区和桶的数量有限制吗？
 
 - 对于分区，默认限制为 `4096`（可通过 FE 配置 `max_partitions_in_one_batch` 进行配置）。
-- 对于桶，没有限制。每个桶的推荐大小为 1 GB。
+- 对于桶，没有限制。每个桶的推荐大小为 1 GB。v4.1 及以后版本的存算分离集群已支持大容量 tablet，每个桶的推荐大小为 10 GB ~ 50 GB，最大不超过 100 GB。
 
 ## 如何手动切换 FE leader？
 

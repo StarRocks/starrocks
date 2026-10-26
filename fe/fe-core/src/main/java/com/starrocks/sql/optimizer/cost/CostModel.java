@@ -63,7 +63,6 @@ import com.starrocks.sql.optimizer.skew.DataSkew;
 import com.starrocks.sql.optimizer.skew.DataSkewInfo;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
-import com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient;
 import com.starrocks.statistic.StatisticUtils;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
@@ -431,10 +430,16 @@ public class CostModel {
                     result = CostEstimate.of(outputSize * aliveBackendNumber,
                             outputSize * beNum,
                             Math.max(outputSize * beNum, 1));
-                    if (outputSize > sessionVariable.getMaxExecMemByte()) {
-                        result = result.multiplyBy(StatisticsEstimateCoefficient.BROADCAST_JOIN_MEM_EXCEED_PENALTY);
+                    long broadcastMemThreshold = sessionVariable.getBroadcastMemThreshold();
+                    double broadcastMemExceededPenaltyFactor =
+                            sessionVariable.getBroadcastMemExceededPenaltyFactor();
+                    if (outputSize > broadcastMemThreshold) {
+                        result = result.multiplyBy(broadcastMemExceededPenaltyFactor);
                     }
-                    LOG.debug("beNum: {}, aliveBeNum: {}, outputSize: {}.", aliveBackendNumber, beNum, outputSize);
+                    LOG.debug("beNum: {}, aliveBeNum: {}, outputSize: {}, broadcastMemThreshold: {}, " +
+                                    "broadcastMemExceededPenaltyFactor: {}.",
+                            beNum, aliveBackendNumber, outputSize, broadcastMemThreshold,
+                            broadcastMemExceededPenaltyFactor);
                     break;
                 case SHUFFLE:
                     // This is used to generate "ScanNode->LocalShuffle->OnePhaseLocalAgg" for the single backend,

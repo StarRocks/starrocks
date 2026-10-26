@@ -164,16 +164,13 @@ struct TryCreateRuntimeBitsetFilter {
     }
 };
 
-RuntimeFilter* RuntimeFilterFactory::create_join_filter(ObjectPool* pool, LogicalType type, int8_t join_mode,
-                                                        const Columns& columns, size_t column_offset,
-                                                        size_t row_count) {
+RuntimeFilter* RuntimeFilterFactory::try_create_bitset_filter(ObjectPool* pool, LogicalType type,
+                                                              const Columns& columns, size_t column_offset,
+                                                              size_t row_count) {
     RuntimeFilter* filter =
             type_dispatch_bitset_filter(type, static_cast<RuntimeFilter*>(nullptr), TryCreateRuntimeBitsetFilter(),
                                         columns, column_offset, row_count);
-    if (filter == nullptr) {
-        return create_bloom_filter(pool, type, join_mode);
-    }
-    if (pool != nullptr) {
+    if (filter != nullptr && pool != nullptr) {
         return pool->add(filter);
     }
     return filter;

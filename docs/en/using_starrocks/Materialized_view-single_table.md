@@ -165,6 +165,39 @@ GROUP BY store_id;
 > - Currently, StarRocks does not support creating multiple synchronous materialized views at the same time. A new synchronous materialized view can only be created when the previous one is completed.
 > - Materialized view can only be created in default_catalog. You could either create it with default_catalog.database.mv, or switch to default_catalog through `set catalog <default_catalog>` statement.
 
+### On shared-data range tables
+
+You can use ordinary `CREATE MATERIALIZED VIEW ... AS SELECT` on eligible shared-data tables with [range distribution](../table_design/data_distribution/Data_distribution.md). Omit `DISTRIBUTED BY` when creating the range base table. The following view groups by `store_id`, although the base table is sorted by `id`; the filter column does not need to appear in the view's output.
+
+```sql
+SET enable_range_distribution = true;
+
+CREATE TABLE range_sales (
+    id BIGINT NOT NULL,
+    store_id INT NOT NULL,
+    amount BIGINT,
+    is_valid INT
+)
+DUPLICATE KEY(id)
+ORDER BY(id);
+
+CREATE MATERIALIZED VIEW range_store_amount AS
+SELECT store_id, SUM(amount)
+FROM range_sales
+WHERE is_valid > 0
+GROUP BY store_id;
+```
+
+The view owns its range tablet layout and sort keys. For an aggregate view, all grouping keys are sort keys; they do not need to match the base table's `ORDER BY`. Historical data is built online, and subsequent INSERT and load operations maintain the view synchronously. Base-table and view tablets support splitting and merging through `ALTER TABLE ... SPLIT TABLETS` and `ALTER TABLE ... MERGE TABLETS`. To target a view's layout, use its tablet IDs. Merge eligibility still requires source tablets to be free of shared files; compaction can remove files shared by a split. Wait for the creation job to reach `FINISHED` before creating another sibling view or rollup.
+
+The existing single-table, expression and base-table model restrictions still apply. Range synchronous views do not support shared-nothing clusters, Primary Key base tables, colocated base tables, or base tables with `AUTO_INCREMENT`. Each logical partition must have exactly one physical partition during creation; multiple logical partitions are supported. Complete a coordinated upgrade of all FEs before creating these views: older FEs cannot safely reconstruct their range-view metadata. Upgrade all CNs before splitting or merging tablets of these views.
+
+Range synchronous views reject expressions whose generated MV column name conflicts with a real base-table column. For example, `SUM(v)` cannot be used if the base table already contains `mv_sum_v`. Rename the conflicting base column or use a different expression alias where applicable. Directly selecting a real base-table column whose name starts with `mv_` is supported.
+
+A schema change or column rename is rejected if it would leave a surviving MV expression or `WHERE` clause unresolved or change its stored aggregate-state signature, including removing a referenced struct field. Adding fields and removing unreferenced fields remain supported. Drop the affected view first. Dropping a column only from a named view does not drop its base-table source.
+
+Base-table columns referenced by a range synchronous view's projections, expressions, or `WHERE` clause cannot be renamed. Drop the affected views before renaming these columns. This restriction does not apply to columns that the views do not reference.
+
 ## Check the building status of a synchronous materialized view
 
 Creating a synchronous materialized view is an asynchronous operation. Executing CREATE MATERIALIZED VIEW successfully indicates that the task of creating the materialized view is submitted successfully. You can view the building status of the synchronous materialized view in a database via [SHOW ALTER MATERIALIZED VIEW](../sql-reference/sql-statements/materialized_view/SHOW_ALTER_MATERIALIZED_VIEW.md).

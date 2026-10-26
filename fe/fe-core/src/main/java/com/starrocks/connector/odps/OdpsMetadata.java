@@ -46,6 +46,8 @@ import com.starrocks.catalog.OdpsTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.tvr.TvrVersionRange;
+import com.starrocks.common.util.concurrent.lock.BlockingCallValidator;
+import com.starrocks.common.util.concurrent.lock.LockInvariantViolationException;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.ConnectorTableId;
@@ -162,6 +164,10 @@ public class OdpsMetadata implements ConnectorMetadata {
 
     @Override
     public List<String> listDbNames(ConnectContext context) {
+        // Uncached: a "whoami" security-manager query plus a project listing, both HTTP to the
+        // MaxCompute endpoint. ODPS holds a third-party Odps object and calls it directly, so the
+        // doors are the methods that call it -- the same shape as KuduMetadata.
+        BlockingCallValidator.validateNotUnderLock("odps", catalogName);
         ImmutableList.Builder<String> builder = ImmutableList.builder();
         try {
             if (StringUtils.isNullOrEmpty(catalogOwner)) {
@@ -207,6 +213,9 @@ public class OdpsMetadata implements ConnectorMetadata {
     }
 
     private Set<String> loadProjects(String dbName) {
+        // A cache loader, so it runs only on a miss -- Guava's asyncReloading defers the refresh of an
+        // entry that already exists, never the first load, which happens on the calling thread.
+        BlockingCallValidator.validateNotUnderLock("odps", catalogName);
         ImmutableSet.Builder<String> builder = ImmutableSet.builder();
         Iterator<com.aliyun.odps.Table> iterator = OdpsUtils.getOdpsTablesIterator(odps, dbName);
         while (iterator.hasNext()) {
@@ -221,6 +230,8 @@ public class OdpsMetadata implements ConnectorMetadata {
     }
 
     private OdpsTable loadTable(OdpsTableName odpsTableName) {
+        // tableCache's loader; table.reload() below is the request.
+        BlockingCallValidator.validateNotUnderLock("odps", catalogName);
         com.aliyun.odps.Table table = OdpsUtils.getOdpsTable(odps, odpsTableName);
         try {
             table.reload();
@@ -300,6 +311,8 @@ public class OdpsMetadata implements ConnectorMetadata {
     }
 
     private List<Partition> loadPartitions(OdpsTableName odpsTableName) {
+        // partitionCache's loader; listing a table's partitions is one request per call.
+        BlockingCallValidator.validateNotUnderLock("odps", catalogName);
         return OdpsUtils.getOdpsTablePartitions(odps, odpsTableName);
     }
 
@@ -388,6 +401,10 @@ public class OdpsMetadata implements ConnectorMetadata {
             remoteFileInfo.setFiles(remoteFileDescs);
             return Lists.newArrayList(remoteFileInfo);
         } catch (Exception e) {
+            // The doors are in the two split methods below, which only a valid policy reaches -- so an
+            // unrecognized one is still answered by the switch above without any report. In error mode the
+            // refusal has to come out as itself rather than as "Encounter error when try to split".
+            LockInvariantViolationException.rethrowIfRefusal(e);
             LOG.error("getRemoteFileInfos error", e);
             throw new StarRocksConnectorException("Encounter error when try to split the maxcompute table: " + e.getMessage(), e);
         }
@@ -395,6 +412,10 @@ public class OdpsMetadata implements ConnectorMetadata {
 
     private OdpsSplitsInfo callSizeSplitsInfo(TableReadSessionBuilder tableReadSessionBuilder)
             throws IOException {
+        // Creating a batch read session is a request, and getInputSplitAssigner another. No cache in
+        // front of either: split planning runs on every scan. Reached only for a policy the switch in
+        // getRemoteFiles recognized, which is why the door is here and not before that switch.
+        BlockingCallValidator.validateNotUnderLock("odps", catalogName);
         Map<String, String> splitProperties = new HashMap<>();
         splitProperties.put("tunnel_endpoint", properties.get(OdpsProperties.TUNNEL_ENDPOINT));
         splitProperties.put("quota_name", properties.get(OdpsProperties.TUNNEL_QUOTA));
@@ -410,6 +431,8 @@ public class OdpsMetadata implements ConnectorMetadata {
 
     private OdpsSplitsInfo callRowOffsetSplitsInfo(TableReadSessionBuilder tableReadSessionBuilder, long limit)
             throws IOException {
+        // As above, plus getTotalRowCount and a getSplitByRowOffset per split.
+        BlockingCallValidator.validateNotUnderLock("odps", catalogName);
         Map<String, String> splitProperties = new HashMap<>();
         splitProperties.put("tunnel_endpoint", properties.get(OdpsProperties.TUNNEL_ENDPOINT));
         splitProperties.put("quota_name", properties.get(OdpsProperties.TUNNEL_QUOTA));
@@ -460,6 +483,11 @@ public class OdpsMetadata implements ConnectorMetadata {
         try {
             return cache.get(key);
         } catch (Exception e) {
+            // A miss loads on this thread, and the loaders below are guarded. Guava wraps whatever they
+            // throw, and answering null to a refusal would turn it into "no such table" or an empty
+            // partition list -- a wrong answer instead of a refused remote call, which is the one outcome
+            // the check must never produce.
+            LockInvariantViolationException.rethrowIfRefusal(e);
             return null;
         }
     }

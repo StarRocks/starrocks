@@ -6,7 +6,7 @@ sidebar_position: 1
 
 # Version Release Guide
 
-バージョン命名については、[versioning](../introduction/versioning.md) ドキュメントで詳しく説明されています。**major**、**minor**、**patch** バージョニングを理解するために、まずそのページを読んでください。
+バージョン命名については、[versioning](../maturity/release_numbering.md) ドキュメントで詳しく説明されています。**major**、**minor**、**patch** バージョニングを理解するために、まずそのページを読んでください。
 
 ## Release Plan
 - マイナーバージョンは、およそ  ヶ月ごとにリリースします。

@@ -228,6 +228,18 @@ public class MysqlTable extends Table {
         return Math.abs((int) adler32.getValue());
     }
 
+    /**
+     * Not a lock target, although it lives in an internal database. The data is in MySQL, and nothing writes to
+     * a published MysqlTable: its fields are only set while it is constructed, ALTER TABLE rejects it, and the
+     * ODBC resource it may name is read afresh by every getter rather than cached on the object. Planning does
+     * not reach MySQL either. So the reference a query resolves is already a consistent snapshot, and it does
+     * not drag the other tables of the statement into a whole-phase lock.
+     */
+    @Override
+    public boolean isMetaLockTarget() {
+        return false;
+    }
+
     @Override
     public boolean isSupported() {
         return true;

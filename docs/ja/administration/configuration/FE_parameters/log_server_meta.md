@@ -429,6 +429,33 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：内部アペンダー (`fe.internal.log`) に対して保持するローテーションされた内部 FE ログファイルの最大数。この値は Log4j DefaultRolloverStrategy の `max` 属性として使用されます。ロールオーバーが発生すると、StarRocks は最大で `internal_log_roll_num` 個のアーカイブファイルを保持し、古いファイルを削除します (`internal_log_delete_age` によって管理されます)。値を小さくするとディスク使用量が減りますが、ログ履歴が短くなります。値を大きくすると、より多くの履歴内部ログが保持されます。この項目は、`internal_log_dir`、`internal_log_roll_interval`、および `internal_roll_maxsize` (ソースにタイプミス、おそらく `log_roll_size_mb`) と連携して機能します。
 - 導入時期：v3.2.4
 
+### `lock_blocking_call_validation_mode`
+
+- デフォルト：warn
+- タイプ：String
+- 単位：-
+- 変更可能：Yes
+- 説明：FE がメタデータロックを保持したまま、Hive Metastore、JDBC データソース、Iceberg REST catalog、thrift のピアといった外部システムに接続したときの動作。この場合ロックの保持時間はその外部システムのラウンドトリップ時間となり、同じロックを待つすべての処理がその代償を払います。チェックは FE 自身のコードがネットワークリクエストを発行する直前の層に置かれているため、キャッシュヒットはここに到達せず、報告される違反はすべて実際に送信されたリクエストです。有効な値：`off`（チェックしない）、`warn`（違反した呼び出し元のスタックトレース付きでログに記録し、呼び出しはそのまま続行する）、`error`（その呼び出しを拒否する）。認識できない値は `warn` として扱われます。`lock_target_validation_mode` と異なり、このチェックは正常に動作しているクラスターでも違反を報告します。対象となる呼び出し箇所の移行が進行中であるためです。したがって `warn` はそれらをトランスポートごとに集計できるログに変えるためのものであり、`error` はそのログがクリーンになってから初めて適切になります。`warn` モードでは各違反が `LOCK_INVARIANT_VIOLATION` タグと `kind=blocking_call_under_lock` を付けた 1 行として出力されます。ログ量は `lock_invariant_violation_log_interval_ms` で制御します。
+- 導入時期：v26.2
+
+### `lock_invariant_violation_log_interval_ms`
+
+- デフォルト：10000
+- タイプ：Long
+- 単位：Milliseconds
+- 変更可能：Yes
+- 説明：同一の呼び出し箇所から出力されるロック不変条件違反のログ行の最小間隔。スロットリングはグローバルではなく呼び出し箇所ごとに行われるため、違反頻度の高い箇所が他の箇所をログから締め出すことはありません。調査時には `0` に設定すると、すべての違反がログに出力されます。`lock_target_validation_mode` または `lock_blocking_call_validation_mode` が `warn` の場合にのみ有効です。
+- 導入時期：v26.2
+
+### `lock_target_validation_mode`
+
+- デフォルト：warn
+- タイプ：String
+- 単位：-
+- 変更可能：Yes
+- 説明：internal catalog が所有していないオブジェクト（external catalog のデータベースや、プレースホルダーのテーブル ID など）に対してメタデータロックが要求されたときの FE の動作。そのような識別子はロックマネージャーが保護できる対象を何も指しておらず、他のロックと決して競合しないか、同種のすべてのロックと競合するかのいずれかになります。有効な値：`off`（チェックしない）、`warn`（スタックトレース付きで違反をログに記録し、処理はそのまま続行する）、`error`（その処理を拒否する）。認識できない値は `warn` として扱われます。この項目は変更可能なため、クラスターはまず `warn` で運用してログがクリーンであることを確認し、再起動なしで `error` に引き締めることができます。`warn` モードでは各違反が `LOCK_INVARIANT_VIOLATION` というタグを付けた 1 行として出力され、違反した呼び出し元のスタックトレースが付きます。ログ量は `lock_invariant_violation_log_interval_ms` で制御します。
+- 導入時期：v26.2
+
 ### `log_cleaner_audit_log_min_retention_days`
 
 - デフォルト：3
@@ -806,6 +833,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 <EditionSpecificFEItem />
 
+### `arrow_flight_max_header_size`
+
+- デフォルト：32768
+- タイプ：Int
+- 単位：Bytes
+- 変更可能：No
+- 説明：Arrow Flight SQL サーバーが受け付けるリクエストヘッダーの合計サイズの上限（バイト）。1 つの gRPC リクエストのすべてのヘッダーを合計して数えます。Arrow Flight SQL セッションの最初のリクエストはクライアントの認証情報をヘッダーで運び、ユーザーの所属グループを列挙した JWT はグループ数に応じて大きくなります。Microsoft Entra ID が 1 つのトークンに入れるグループ ID は最大 200 個で、約 10 KB になります。gRPC のデフォルトの 8 KB では認証が始まる前にこのようなリクエストが拒否されるため、デフォルト値は `http_max_header_size` に合わせています。クライアントがより大きなトークンを送る場合は値を大きくしてください。変更後は FE の再起動が必要です。
+- 導入時期：v4.2
+
 ### `brpc_idle_wait_max_time`
 
 - デフォルト：10000
@@ -959,9 +995,22 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 導入時期：v4.2.0
 - 説明：true の場合、ほとんどの外部 FE HTTP エンドポイントで HTTP Basic 認証が必要になります。資格情報は `AuthenticationHandler.authenticate()` を介してユーザーストアと照合されるため、LDAP / security integration による認証も MySQL プロトコルと同様に HTTP 経路で機能します。次のエンドポイントは常に除外されます：
   - 公開プローブ / 可観測性：`/api/bootstrap`、`/api/oauth2`。
-  - ハンドラ内で IP ホワイトリストまたはトークンで認証する FE 間 / コントロールプレーン経路：`/image`、`/check`、`/journal_id`、`/info`、`/role`、`/dump`、`/dump_starmgr`、`/service_id`、`/static`、`/api/_meta_replay_state`、`/api/get_small_file`。
+  - ハンドラ内で IP ホワイトリストまたはトークンで認証する FE 間 / コントロールプレーン経路：`/image`、`/check`、`/journal_id`、`/info`、`/role`、`/static`、`/api/get_small_file`。
 
-  特権エンドポイントでは追加でセッション内に**有効化された** SYSTEM レベル RBAC 権限（`OPERATE` / `NODE`）が必要です。付与済みでデフォルトに設定されていないロールを使う場合は `SET DEFAULT ROLE <roles> TO <user>;` を実行するか、グローバル変数 `activate_all_roles_on_login=true` を設定してログイン時に有効化してください。LDAP / security integration のグループ → ロールマッピングは自動的に有効化されます。
+  `/dump`、`/dump_starmgr`、`/service_id` は除外されません：この設定にかかわらず、認証済みの管理者のみがアクセスできます。認証には HTTP Basic 認証、または FE Web コンソールへのログインで取得したセッション Cookie を使用できます。次のいずれかを満たすユーザーが管理者として扱われます：ログイン時に有効なロールを通じて SYSTEM レベルの `NODE` 権限を持つ（例：組み込みロール `cluster_admin` をユーザーのデフォルトロールに設定する。`activate_all_roles_on_login` が `true` の場合は付与されている任意のロールが対象）；`root` ユーザーである、または `root` ロールを持つ；`db_admin` ロールと `user_admin` ロールの両方を持つ。
+
+  `/api/_meta_replay_state` も除外されません：この設定にかかわらず、`root` ユーザー、`root` ロールを持つユーザー、または `db_admin` ロールと `user_admin` ロールの両方を持つユーザーによる HTTP Basic 認証が必要です。`NODE` 権限だけではアクセスできません。
+
+  この設定で制御されるその他の特権エンドポイント（`/dump`、`/dump_starmgr`、`/service_id`、`/api/_meta_replay_state` は対象外）では追加でセッション内に**有効化された** SYSTEM レベル RBAC 権限（`OPERATE` / `NODE`）が必要です。付与済みでデフォルトに設定されていないロールを使う場合は `SET DEFAULT ROLE <roles> TO <user>;` を実行するか、グローバル変数 `activate_all_roles_on_login=true` を設定してログイン時に有効化してください。LDAP / security integration のグループ → ロールマッピングは自動的に有効化されます。
+
+### `enable_rest_bearer_authentication`
+
+- デフォルト：true
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：MySQL 以外のチャネル（HTTP、Arrow Flight、BE 直結の Stream Load）における Bearer トークン認証のマスタースイッチ。`false` に設定すると、これらのチャネルは `Authorization: Bearer ...` を含むリクエストをすべて HTTP 401 で拒否し、「トークン認証は MySQL プロトコルのみ」という以前の動作に戻ります。Basic 認証と既存の Arrow Flight UUID セッショントークンは影響を受けません。MySQL プロトコルの認証がこのスイッチで制限されることはありません。
+- 導入時期：v4.2
 
 ### `http_web_page_display_hardware`
 
@@ -1054,6 +1103,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
   1. `select version();`
   2. ハンドシェイクパケットバージョン
   3. グローバル変数 `version` の値 (`show variables like 'version';`)
+- 導入時期：-
+
+### `mysql_service_compression_enabled`
+
+- デフォルト：true
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：FE が接続ハンドシェイクで MySQL 圧縮プロトコル (zlib および zstd) を提供するかどうか。圧縮を要求したクライアントのみが圧縮された通信を使用します (例: `mysql --compression-algorithms=zstd` や JDBC `useCompression=true`)。その他のクライアントには影響しません。`false` に設定すると、FE は圧縮を提供しなくなります。変更は新しい接続にのみ適用されます。
 - 導入時期：-
 
 ### `mysql_service_io_threads_num`
@@ -1197,7 +1255,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Int
 - 単位：Milliseconds
 - 変更可能：No
-- 説明：アイドル状態のクライアント接続がタイムアウトするまでの時間。
+- 説明：アイドル状態のクライアント接続がタイムアウトするまでの時間。FE の Thrift サーバーは、この時間アイドル状態が続いたクライアント接続をクローズします。そのため FE は、他の FE へのプール接続のアイドル時間がこの値の 80% に達すると、次の使用前に新しい接続に置き換えます。これにより、接続先がすでにクローズした可能性のある接続でリクエストを送信することを避けます。すべての FE で同じ値を設定することを推奨します。
 - 導入時期：-
 
 ### `thrift_rpc_max_body_size`
@@ -1746,6 +1804,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：未知のログ ID を無視するかどうか。FE がロールバックされた場合、以前のバージョンの FE は一部のログ ID を認識できない可能性があります。値が `TRUE` の場合、FE は未知のログ ID を無視します。値が `FALSE` の場合、FE は終了します。
 - 導入時期：-
 
+### `offheap_deflate_buffer_pool_max_bytes`
+
+- デフォルト：128L * 1024 * 1024 (134217728)
+- タイプ：Long
+- 単位：Bytes
+- 変更可能：Yes
+- 説明：FE が gzip および zlib 圧縮（たとえば、クエリプロファイルを `ProfileManager` に格納する前の圧縮）のために保持するオフヒープバッファの合計サイズの上限。オフヒープバッファ間で圧縮することで、圧縮中に JVM がガベージコレクションをブロックすることを防ぎます。そうしないと、ヒープにまだ回収可能な領域がある場合でも、メモリ割り当てが `OutOfMemoryError` で失敗することがあります。データサイズに関係なく、進行中の圧縮はそれぞれ 256 KB のバッファを 2 つ使用するため、デフォルト値では同時に 256 個の圧縮が可能です。この上限内で利用可能なバッファがない場合、データは従来どおりヒープ上で圧縮されます。実行時にこの値を小さくすると、バッファが返却される時点で反映されます。`0` に設定するとオフヒープ圧縮が無効になります。すべてのデータはヒープ上で小さなチャンク単位で圧縮され、すでに割り当てられたオフヒープバッファは解放されます。
+- 導入時期：-
+
 ### `profile_info_format`
 
 - デフォルト：default
@@ -1818,7 +1885,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Int
 - 単位：-
 - 変更可能：Yes
-- 説明：Thrift RPC 呼び出しが行う合計試行回数を制御します。この値は `ThriftRPCRequestExecutor` (および `NodeMgr` や `VariableMgr` などの呼び出し元) によって再試行のループカウントとして使用されます。つまり、値 3 は初期試行を含めて最大 3 回の試行を許可します。`TTransportException` の場合、エグゼキューターは接続を再開してこの回数まで再試行します。原因が `SocketTimeoutException` の場合や再開が失敗した場合は再試行しません。各試行は `thrift_rpc_timeout_ms` で設定された試行ごとのタイムアウトの対象となります。この値を増やすと、一時的な接続障害に対する回復力は向上しますが、全体の RPC レイテンシーとリソース使用量が増加する可能性があります。
+- 説明：Thrift RPC 呼び出しが行う合計試行回数を制御します。この値は `ThriftRPCRequestExecutor` (および `NodeMgr` や `VariableMgr` などの呼び出し元) によって再試行のループカウントとして使用されます。つまり、値 3 は初期試行を含めて最大 3 回の試行を許可します。`TTransportException` の場合、エグゼキューターは接続を再開してこの回数まで再試行します。原因が `SocketTimeoutException` の場合や再開が失敗した場合は再試行しません。各再試行の前に、エグゼキューターはランダムな時間だけ待機してから接続を再開します。待機時間は最初の再試行で 100～200 ミリ秒、以降は再試行ごとに下限と上限がともに倍増し、500～1000 ミリ秒に達するとそれ以上は増えません。これにより、同時に接続を失った複数の呼び出し元が一斉に再接続することを防ぎます。各試行は `thrift_rpc_timeout_ms` で設定された試行ごとのタイムアウトの対象となります。この値を増やすと、一時的な接続障害に対する回復力は向上しますが、全体の RPC レイテンシーとリソース使用量が増加する可能性があります。
 - 導入時期：v3.2.0
 
 ### `thrift_rpc_strict_mode`

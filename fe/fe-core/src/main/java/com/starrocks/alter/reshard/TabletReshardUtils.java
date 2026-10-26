@@ -19,7 +19,9 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.Tuple;
 import com.starrocks.common.Config;
+import com.starrocks.common.Range;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.GlobalStateMgr;
@@ -489,5 +491,23 @@ public class TabletReshardUtils {
             sb.append(" (first ").append(shown).append(" of ").append(tablets.size()).append(')');
         }
         return sb.toString();
+    }
+
+    // Bounds are compared by value: a bound decoded from the compute node can carry a different scalar
+    // type than the FE tuple for the same value, which Tuple.equals would treat as different.
+    static boolean sameLowerBound(Range<Tuple> a, Range<Tuple> b) {
+        if (a.isMinimum() || b.isMinimum()) {
+            return a.isMinimum() && b.isMinimum();
+        }
+        return a.getLowerBound().compareTo(b.getLowerBound()) == 0
+                && a.isLowerBoundIncluded() == b.isLowerBoundIncluded();
+    }
+
+    static boolean sameUpperBound(Range<Tuple> a, Range<Tuple> b) {
+        if (a.isMaximum() || b.isMaximum()) {
+            return a.isMaximum() && b.isMaximum();
+        }
+        return a.getUpperBound().compareTo(b.getUpperBound()) == 0
+                && a.isUpperBoundIncluded() == b.isUpperBoundIncluded();
     }
 }

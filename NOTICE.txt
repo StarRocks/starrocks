@@ -2,6 +2,9 @@ StarRocks
 
 Copyright 2021-present, StarRocks Inc.
 
+This product includes H3, Copyright 2017-2021 Uber Technologies, Inc.,
+licensed under the Apache License, Version 2.0.
+
 ---------------------------
 apache-doris-incubating NOTICE
 ---------------------------

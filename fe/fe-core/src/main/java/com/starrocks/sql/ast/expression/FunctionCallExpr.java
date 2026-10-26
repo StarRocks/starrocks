@@ -55,7 +55,7 @@ public class FunctionCallExpr extends Expr {
     private FunctionRef fnRef;
     // private BuiltinAggregateFunction.Operator aggOp;
     private FunctionParams fnParams;
-    private final String aiModelConfigId;
+    private final String aiProviderId;
 
     // check analytic function
     private boolean isAnalyticFnCall = false;
@@ -115,7 +115,7 @@ public class FunctionCallExpr extends Expr {
     // only used restore from readFields.
     private FunctionCallExpr() {
         super(NodePosition.ZERO);
-        aiModelConfigId = null;
+        aiProviderId = null;
     }
 
     public FunctionCallExpr(String functionName, List<Expr> params) {
@@ -143,8 +143,8 @@ public class FunctionCallExpr extends Expr {
     }
 
     /** Constructor for planner-created AI calls carrying immutable, credential-free wire metadata. */
-    public FunctionCallExpr(String fnName, FunctionParams params, String aiModelConfigId) {
-        this(createFunctionRef(fnName, NodePosition.ZERO), params, false, NodePosition.ZERO, aiModelConfigId);
+    public FunctionCallExpr(String fnName, FunctionParams params, String aiProviderId) {
+        this(createFunctionRef(fnName, NodePosition.ZERO), params, false, NodePosition.ZERO, aiProviderId);
     }
 
     public FunctionCallExpr(FunctionRef fnRef, FunctionParams params) {
@@ -162,12 +162,12 @@ public class FunctionCallExpr extends Expr {
 
     private FunctionCallExpr(
             FunctionRef fnRef, FunctionParams params, boolean isMergeAggFn, NodePosition pos,
-            String aiModelConfigId) {
+            String aiProviderId) {
         super(pos);
         this.fnRef = fnRef;
         fnParams = params;
         this.isMergeAggFn = isMergeAggFn;
-        this.aiModelConfigId = aiModelConfigId;
+        this.aiProviderId = aiProviderId;
         if (params.exprs() != null) {
             children.addAll(params.exprs());
         }
@@ -197,17 +197,17 @@ public class FunctionCallExpr extends Expr {
         // Just inherit the function object from 'e'.
         fn = e.fn;
         this.isMergeAggFn = e.isMergeAggFn;
-        this.aiModelConfigId = e.aiModelConfigId;
+        this.aiProviderId = e.aiProviderId;
         if (params.exprs() != null) {
             children.addAll(params.exprs());
         }
     }
 
     protected FunctionCallExpr(FunctionCallExpr other) {
-        this(other, other.aiModelConfigId);
+        this(other, other.aiProviderId);
     }
 
-    private FunctionCallExpr(FunctionCallExpr other, String aiModelConfigId) {
+    private FunctionCallExpr(FunctionCallExpr other, String aiProviderId) {
         super(other);
         fn = other.fn;
         fnRef = other.fnRef;
@@ -221,18 +221,21 @@ public class FunctionCallExpr extends Expr {
             fnParams = FunctionParams.createStarParam();
         } else {
             fnParams = new FunctionParams(other.fnParams.isDistinct(), children, other.fnParams.getOrderByElements());
+            if (other.fnParams.getExprsNames() != null) {
+                fnParams.setExprsNames(List.copyOf(other.fnParams.getExprsNames()));
+            }
         }
         this.isMergeAggFn = other.isMergeAggFn;
-        this.aiModelConfigId = aiModelConfigId;
+        this.aiProviderId = aiProviderId;
     }
 
     /** Copies a planner-created execution call with its immutable, credential-free configuration ID. */
-    public FunctionCallExpr withAiModelConfigId(String aiModelConfigId) {
-        return new FunctionCallExpr(this, aiModelConfigId);
+    public FunctionCallExpr withAIProviderId(String aiProviderId) {
+        return new FunctionCallExpr(this, aiProviderId);
     }
 
-    public String getAiModelConfigId() {
-        return aiModelConfigId;
+    public String getAIProviderId() {
+        return aiProviderId;
     }
 
     public static final Set<String> NULLABLE_SAME_WITH_CHILDREN_FUNCTIONS =

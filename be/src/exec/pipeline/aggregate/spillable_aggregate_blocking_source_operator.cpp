@@ -16,6 +16,7 @@
 
 #include <algorithm>
 
+#include "base/uid_util.h"
 #include "common/status.h"
 #include "compute_env/spill/mem_tracker_guard.h"
 #include "exec/pipeline/aggregate/aggregate_blocking_source_operator.h"
@@ -40,6 +41,9 @@ void SpillableAggregateBlockingSourceOperator::close(RuntimeState* state) {
 
 bool SpillableAggregateBlockingSourceOperator::has_output() const {
     if (_is_finished) {
+        return false;
+    }
+    if (_aggregator->spiller() == nullptr) {
         return false;
     }
     bool has_spilled = _aggregator->spiller()->spilled();
@@ -70,6 +74,15 @@ bool SpillableAggregateBlockingSourceOperator::is_finished() const {
     if (_is_finished) {
         return true;
     }
+    // Defensive: the aggregator's spiller is set when the sink operator is created and only released in
+    // Aggregator::close(). A production crash (SIGSEGV in this function, null spiller) shows a polled
+    // driver can still observe it released; there is nothing left to restore then, so report finished
+    // instead of dereferencing a null shared_ptr.
+    if (_aggregator->spiller() == nullptr) {
+        LOG(WARNING) << "spillable aggregate source sees a released spiller, treat it as finished. query_id="
+                     << print_id(get_factory()->runtime_state()->query_id());
+        return true;
+    }
     if (!_aggregator->spiller()->spilled()) {
         return AggregateBlockingSourceOperator::is_finished();
     }
@@ -83,7 +96,7 @@ bool SpillableAggregateBlockingSourceOperator::is_finished() const {
 }
 
 Status SpillableAggregateBlockingSourceOperator::set_finishing(RuntimeState* state) {
-    if (state->is_cancelled()) {
+    if (state->is_cancelled() && _aggregator->spiller() != nullptr) {
         _aggregator->spiller()->cancel();
     }
     return Status::OK();

@@ -34,13 +34,13 @@
 #include "storage/lake/lake_primary_key_recover.h"
 #include "storage/lake/lake_proto_normalizer.h"
 #include "storage/lake/meta_file.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/table_schema_service.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/tablet_range_helper.h"
 #include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/tablet_write_log_manager.h"
-#include "storage/lake/update_manager.h"
 #include "storage/tablet_schema.h"
 
 namespace starrocks::lake {
@@ -444,7 +444,7 @@ public:
 
     Status check_meta_version() {
         // check tablet meta
-        RETURN_IF_ERROR(_tablet.update_mgr()->check_meta_version(_tablet, _base_version));
+        RETURN_IF_ERROR(_tablet.primary_key_mgr()->check_meta_version(_tablet, _base_version));
         return Status::OK();
     }
 
@@ -457,9 +457,9 @@ public:
             // 2. and then release guard
             _guard.reset(nullptr);
             // 3. remove index from cache to save resource
-            _tablet.update_mgr()->remove_primary_index_cache(_index_entry);
+            _tablet.primary_key_mgr()->remove_primary_index_cache(_index_entry);
         } else {
-            _tablet.update_mgr()->release_primary_index_cache(_index_entry);
+            _tablet.primary_key_mgr()->release_primary_index_cache(_index_entry);
         }
         _index_entry = nullptr;
     }
@@ -477,7 +477,7 @@ public:
             _metadata->clear_sstable_meta();
             _guard.reset(nullptr);
             _index_entry = nullptr;
-            ASSIGN_OR_RETURN(_index_entry, _tablet.update_mgr()->rebuild_primary_index(
+            ASSIGN_OR_RETURN(_index_entry, _tablet.primary_key_mgr()->rebuild_primary_index(
                                                    _metadata, &_builder, _base_version, _new_version, _guard));
             _rebuild_pindex = false;
         }
@@ -492,7 +492,7 @@ public:
 
         SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(true);
         SCOPED_THREAD_LOCAL_SINGLETON_CHECK_MEM_TRACKER_SETTER(
-                config::enable_pk_strict_memcheck ? _tablet.update_mgr()->mem_tracker() : nullptr);
+                config::enable_pk_strict_memcheck ? _tablet.primary_key_mgr()->mem_tracker() : nullptr);
         _max_txn_id = std::max(_max_txn_id, log.txn_id());
         if (log.has_partition_id()) {
             _partition_id = log.partition_id();
@@ -542,7 +542,7 @@ public:
 
         SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(true);
         SCOPED_THREAD_LOCAL_SINGLETON_CHECK_MEM_TRACKER_SETTER(
-                config::enable_pk_strict_memcheck ? _tablet.update_mgr()->mem_tracker() : nullptr);
+                config::enable_pk_strict_memcheck ? _tablet.primary_key_mgr()->mem_tracker() : nullptr);
 
         // Pre-check: only accept op_write operations
         for (const auto& log : txn_logs) {
@@ -569,29 +569,27 @@ public:
         RETURN_IF_ERROR(check_rebuild_index());
 
         // At this point, all logs contain only op_write operations
-        _tablet.update_mgr()->lock_shard_pk_index_shard(_tablet.id());
-        DeferOp defer([&]() { _tablet.update_mgr()->unlock_shard_pk_index_shard(_tablet.id()); });
+        _tablet.primary_key_mgr()->lock_shard_pk_index_shard(_tablet.id());
+        DeferOp defer([&]() { _tablet.primary_key_mgr()->unlock_shard_pk_index_shard(_tablet.id()); });
 
-        RETURN_IF_ERROR(prepare_primary_index());
-
-        // Collect all write operations data
-        for (const auto& log : txn_logs) {
-            if (log->has_op_write()) {
-                const auto& op_write = log->op_write();
-                RETURN_IF_ERROR(update_metadata_schema(op_write, log->txn_id(), _metadata, _tablet.tablet_mgr()));
-                if (is_column_mode_partial_update(op_write)) {
-                    RETURN_IF_ERROR(_tablet.update_mgr()->publish_column_mode_partial_update(
-                            op_write, log->txn_id(), _metadata, &_tablet, _index_entry, &_builder, _base_version));
-                } else {
-                    RETURN_IF_ERROR(_tablet.update_mgr()->publish_primary_key_tablet(op_write, log->txn_id(), _metadata,
-                                                                                     &_tablet, _index_entry, &_builder,
-                                                                                     _base_version, true));
-                }
-            }
+        // The batch's rowset reaches _metadata only in set_final_rowset, after every log is applied, so recover
+        // cannot see any part of the batch whichever flag the failure raised. Roll back to the state before the
+        // batch, recover from it, and apply the whole batch again. The rollback needs a snapshot because a
+        // failed attempt also writes to _metadata directly: del stats, schema, and column-mode partial updates.
+        std::unique_ptr<TabletMetadata> before_batch;
+        if (config::enable_primary_key_recover) {
+            before_batch = std::make_unique<TabletMetadata>(*_metadata);
         }
-        RETURN_IF_ERROR(_builder.set_final_rowset());
-
-        return Status::OK();
+        auto ret = batch_apply_write_logs(txn_logs);
+        if (before_batch != nullptr && need_recover(ret)) {
+            LOG(WARNING) << "Batch apply needs recover, tablet_id: " << _tablet.id() << " status: " << ret;
+            _metadata->CopyFrom(*before_batch);
+            _builder.reset_pending_rowset_for_recover();
+            RETURN_IF_ERROR(recover());
+            _builder.set_recover_flag(RecoverFlag::OK);
+            ret = batch_apply_write_logs(txn_logs);
+        }
+        return ret;
     }
 
     Status finish() override {
@@ -601,15 +599,15 @@ public:
 
         SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(true);
         SCOPED_THREAD_LOCAL_SINGLETON_CHECK_MEM_TRACKER_SETTER(
-                config::enable_pk_strict_memcheck ? _tablet.update_mgr()->mem_tracker() : nullptr);
+                config::enable_pk_strict_memcheck ? _tablet.primary_key_mgr()->mem_tracker() : nullptr);
         // Still need to prepare the primary index even when this iteration produced no rowset changes
         // (legacy "empty compaction" or admin no-op publish). The old companion condition -- a LOCAL
         // persistent index, which had to be loaded so that its index version could be updated -- went
         // away with the LOCAL implementation itself.
         if (_index_entry == nullptr && _has_no_op_apply) {
             // get lock to avoid gc
-            _tablet.update_mgr()->lock_shard_pk_index_shard(_tablet.id());
-            DeferOp defer([&]() { _tablet.update_mgr()->unlock_shard_pk_index_shard(_tablet.id()); });
+            _tablet.primary_key_mgr()->lock_shard_pk_index_shard(_tablet.id());
+            DeferOp defer([&]() { _tablet.primary_key_mgr()->unlock_shard_pk_index_shard(_tablet.id()); });
             RETURN_IF_ERROR(prepare_primary_index());
         }
 
@@ -618,7 +616,7 @@ public:
         // if `_index_entry` is null, do nothing.
         if (_index_entry != nullptr) {
             RETURN_IF_ERROR(_index_entry->value().commit(&_builder));
-            _tablet.update_mgr()->index_cache().update_object_size(_index_entry, _index_entry->value().memory_usage());
+            _tablet.primary_key_mgr()->update_index_cache_size(_index_entry);
             // Record publish-phase SST flush stats
             if (config::enable_tablet_write_log) {
                 int32_t sst_count = _index_entry->value().publish_sst_flush_count();
@@ -645,22 +643,25 @@ private:
         return mode == PartialUpdateMode::COLUMN_UPDATE_MODE || mode == PartialUpdateMode::COLUMN_UPSERT_MODE;
     }
 
+    // Rebuild the delvecs and the primary index from the rowsets in _metadata.
+    Status recover() {
+        TRACE_COUNTER_SCOPE_LATENCY_US("primary_key_recover");
+        LOG(INFO) << "Primary Key recover begin, tablet_id: " << _tablet.id() << " base_ver: " << _base_version;
+        // release and remove index entry's reference
+        _tablet.primary_key_mgr()->release_primary_index_cache(_index_entry);
+        _guard.reset(nullptr);
+        _index_entry = nullptr;
+        // rebuild delvec and pk index
+        LakePrimaryKeyRecover recover(&_builder, &_tablet, _metadata);
+        RETURN_IF_ERROR(recover.recover());
+        LOG(INFO) << "Primary Key recover finish, tablet_id: " << _tablet.id() << " base_ver: " << _base_version;
+        return Status::OK();
+    }
+
     Status check_and_recover(const std::function<Status()>& publish_func) {
         auto ret = publish_func();
         if (config::enable_primary_key_recover && need_recover(ret)) {
-            {
-                TRACE_COUNTER_SCOPE_LATENCY_US("primary_key_recover");
-                LOG(INFO) << "Primary Key recover begin, tablet_id: " << _tablet.id() << " base_ver: " << _base_version;
-                // release and remove index entry's reference
-                _tablet.update_mgr()->release_primary_index_cache(_index_entry);
-                _guard.reset(nullptr);
-                _index_entry = nullptr;
-                // rebuild delvec and pk index
-                LakePrimaryKeyRecover recover(&_builder, &_tablet, _metadata);
-                RETURN_IF_ERROR(recover.recover());
-                LOG(INFO) << "Primary Key recover finish, tablet_id: " << _tablet.id()
-                          << " base_ver: " << _base_version;
-            }
+            RETURN_IF_ERROR(recover());
             if (need_re_publish(ret)) {
                 _builder.set_recover_flag(RecoverFlag::OK);
                 // duplicate primary key happen when prepare index, so we need to re-publish it.
@@ -678,7 +679,7 @@ private:
     // in `TxnLogApplier.init`, because we have to build primary index after apply `schema_change_log` finish.
     Status prepare_primary_index() {
         if (_index_entry == nullptr) {
-            ASSIGN_OR_RETURN(_index_entry, _tablet.update_mgr()->prepare_primary_index(
+            ASSIGN_OR_RETURN(_index_entry, _tablet.primary_key_mgr()->prepare_primary_index(
                                                    _metadata, &_builder, _base_version, _new_version, _guard));
             // Reset publish SST stats so we only count SSTs flushed during this publish session
             _index_entry->value().reset_publish_sst_stats();
@@ -701,11 +702,33 @@ private:
         return Status::OK();
     }
 
+    // Apply the op_writes of a multi-statement transaction as one rowset. The caller holds the pk index shard lock.
+    Status batch_apply_write_logs(const TxnLogVector& txn_logs) {
+        RETURN_IF_ERROR(prepare_primary_index());
+
+        // Collect all write operations data
+        for (const auto& log : txn_logs) {
+            if (log->has_op_write()) {
+                const auto& op_write = log->op_write();
+                RETURN_IF_ERROR(update_metadata_schema(op_write, log->txn_id(), _metadata, _tablet.tablet_mgr()));
+                if (is_column_mode_partial_update(op_write)) {
+                    RETURN_IF_ERROR(_tablet.primary_key_mgr()->publish_column_mode_partial_update(
+                            op_write, log->txn_id(), _metadata, &_tablet, _index_entry, &_builder, _base_version));
+                } else {
+                    RETURN_IF_ERROR(_tablet.primary_key_mgr()->publish_primary_key_tablet(
+                            op_write, log->txn_id(), _metadata, &_tablet, _index_entry, &_builder, _base_version,
+                            true));
+                }
+            }
+        }
+        return _builder.set_final_rowset();
+    }
+
     Status apply_write_log(const TxnLogPB_OpWrite& op_write, int64_t txn_id) {
         RETURN_IF_ERROR(update_metadata_schema(op_write, txn_id, _metadata, _tablet.tablet_mgr()));
         // get lock to avoid gc
-        _tablet.update_mgr()->lock_shard_pk_index_shard(_tablet.id());
-        DeferOp defer([&]() { _tablet.update_mgr()->unlock_shard_pk_index_shard(_tablet.id()); });
+        _tablet.primary_key_mgr()->lock_shard_pk_index_shard(_tablet.id());
+        DeferOp defer([&]() { _tablet.primary_key_mgr()->unlock_shard_pk_index_shard(_tablet.id()); });
 
         // Ask the segments, not just the rowset-level count: a cross publish apportions that count
         // across the siblings, so a rowset whose segments hold this tablet's rows can arrive with
@@ -717,18 +740,18 @@ private:
         }
         RETURN_IF_ERROR(prepare_primary_index());
         if (is_column_mode_partial_update(op_write)) {
-            return _tablet.update_mgr()->publish_column_mode_partial_update(op_write, txn_id, _metadata, &_tablet,
-                                                                            _index_entry, &_builder, _base_version);
+            return _tablet.primary_key_mgr()->publish_column_mode_partial_update(
+                    op_write, txn_id, _metadata, &_tablet, _index_entry, &_builder, _base_version);
         } else {
-            return _tablet.update_mgr()->publish_primary_key_tablet(op_write, txn_id, _metadata, &_tablet, _index_entry,
-                                                                    &_builder, _base_version);
+            return _tablet.primary_key_mgr()->publish_primary_key_tablet(op_write, txn_id, _metadata, &_tablet,
+                                                                         _index_entry, &_builder, _base_version);
         }
     }
 
     Status apply_compaction_log(const TxnLogPB_OpCompaction& op_compaction, int64_t txn_id) {
         // get lock to avoid gc
-        _tablet.update_mgr()->lock_shard_pk_index_shard(_tablet.id());
-        DeferOp defer([&]() { _tablet.update_mgr()->unlock_shard_pk_index_shard(_tablet.id()); });
+        _tablet.primary_key_mgr()->lock_shard_pk_index_shard(_tablet.id());
+        DeferOp defer([&]() { _tablet.primary_key_mgr()->unlock_shard_pk_index_shard(_tablet.id()); });
 
         if (op_compaction.input_rowsets().empty()) {
             DCHECK(!op_compaction.has_output_rowset() || op_compaction.output_rowset().num_rows() == 0);
@@ -745,8 +768,8 @@ private:
         RETURN_IF_ERROR(prepare_primary_index());
 
         // Single output compaction
-        return _tablet.update_mgr()->publish_primary_compaction(op_compaction, txn_id, _metadata, _tablet, _index_entry,
-                                                                &_builder, _base_version);
+        return _tablet.primary_key_mgr()->publish_primary_compaction(op_compaction, txn_id, _metadata, _tablet,
+                                                                     _index_entry, &_builder, _base_version);
     }
 
     // Apply parallel compaction log: process multiple subtask compactions
@@ -754,8 +777,8 @@ private:
     // Reuses publish_primary_compaction for each subtask, with pre-check to skip failed subtasks.
     Status apply_parallel_compaction_log(const TxnLogPB_OpParallelCompaction& op_parallel, int64_t txn_id) {
         // get lock to avoid gc
-        _tablet.update_mgr()->lock_shard_pk_index_shard(_tablet.id());
-        DeferOp defer([&]() { _tablet.update_mgr()->unlock_shard_pk_index_shard(_tablet.id()); });
+        _tablet.primary_key_mgr()->lock_shard_pk_index_shard(_tablet.id());
+        DeferOp defer([&]() { _tablet.primary_key_mgr()->unlock_shard_pk_index_shard(_tablet.id()); });
 
         RETURN_IF_ERROR(prepare_primary_index());
 
@@ -780,8 +803,8 @@ private:
             // Reuse publish_primary_compaction for each subtask
             // - Internal conflict check is performed per subtask
             // - Primary index and metadata are updated
-            RETURN_IF_ERROR(_tablet.update_mgr()->publish_primary_compaction(subtask_op, txn_id, _metadata, _tablet,
-                                                                             _index_entry, &_builder, _base_version));
+            RETURN_IF_ERROR(_tablet.primary_key_mgr()->publish_primary_compaction(
+                    subtask_op, txn_id, _metadata, _tablet, _index_entry, &_builder, _base_version));
             applied_rowsets = true;
         }
 
@@ -1031,7 +1054,7 @@ private:
             collect_dcg_orphan_files(old_dcg_meta, new_referenced_files, _metadata.get());
             collect_idg_orphan_files(old_idg_meta, new_referenced_files, _metadata.get());
 
-            _tablet.update_mgr()->unload_primary_index(_tablet.id());
+            _tablet.primary_key_mgr()->unload_primary_index(_tablet.id());
             LOG(INFO) << "Apply pk full replication log finish. tablet_id: " << _tablet.id()
                       << ", base_version: " << _base_version << ", new_version: " << _new_version
                       << ", txn_id: " << txn_id;
@@ -1218,7 +1241,7 @@ public:
         merged_rowset->set_num_rows(total_num_rows);
         merged_rowset->set_data_size(total_data_size);
         merged_rowset->set_overlapped(all_segment_metas.size() > 1);
-        // MERGE dedup identity: adopt the first log's uid. All logs of one txn share a producer
+        // Logical rowset identity: adopt the first log's uid. All logs of one txn share a producer
         // version and uids are CopyFrom-preserved across cross-publish, so this is stable across
         // cross-published split children.
         tablet_reshard_helper::inherit_or_set_uid(merged_rowset, txn_logs.front()->op_write().rowset());

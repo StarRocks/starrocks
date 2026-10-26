@@ -42,17 +42,24 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.ThreadUtil;
+import com.starrocks.persist.OperationType;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
 import com.starrocks.sql.analyzer.DDLTestBase;
 import com.starrocks.sql.ast.AddRollupClause;
 import com.starrocks.sql.ast.AlterClause;
+import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.task.AgentTaskQueue;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.logging.log4j.LogManager;
@@ -72,6 +79,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -92,6 +103,7 @@ public class RollupJobV2Test extends DDLTestBase {
         };
 
         DDLTestBase.beforeAll();
+        UtFrameUtils.setUpForPersistTest();
     }
 
     @BeforeEach
@@ -332,5 +344,174 @@ public class RollupJobV2Test extends DDLTestBase {
         rollupJob.setWaitingCreatingReplica(true);
         rollupJob.cancel("");
         rollupJob.setWaitingCreatingReplica(false);
+    }
+
+    @Test
+    public void testCancelSkipsReplicaLatchAlreadyDropped() throws Exception {
+        OlapTable table = createTable("t_rollup_cancel_no_latch");
+        RollupJobV2 job = addRollup(new MaterializedViewHandler(), table, "r_cancel_no_latch");
+        // A cancel can see the replica wait in progress and then find no latch: the wait has ended since.
+        job.setWaitingCreatingReplica(true);
+
+        assertTrue(job.cancel("cancel"));
+
+        assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+    }
+
+    @Test
+    public void testLeaderPrunesFinishedJob() throws Exception {
+        OlapTable table = createTable("t_rollup_prune_finished");
+        UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
+        RollupJobV2 job = addRollup(new MaterializedViewHandler(), table, "r_prune_finished");
+        assertFalse(job.getPartitionIdToRollupIndex().isEmpty());
+
+        // The handler is never started, so only run() can prune the job.
+        runToFinished(job);
+
+        assertPruned(job);
+        assertRollupIndexVisible(table, "r_prune_finished");
+        List<RollupJobV2> entries = readJournaledEntries(job.getJobId());
+        for (RollupJobV2 entry : entries) {
+            assertFalse(entry.getPartitionIdToRollupIndex().isEmpty());
+        }
+        RollupJobV2 finishedEntry = entries.get(entries.size() - 1);
+        assertEquals(AlterJobV2.JobState.FINISHED, finishedEntry.getJobState());
+        List<List<Comparable>> rowBefore = new ArrayList<>();
+        finishedEntry.getInfo(rowBefore);
+        finishedEntry.pruneMeta();
+        assertPruned(finishedEntry);
+        List<List<Comparable>> rowAfter = new ArrayList<>();
+        finishedEntry.getInfo(rowAfter);
+        assertEquals(rowBefore, rowAfter);
+    }
+
+    @Test
+    public void testLeaderPrunesCancelledJob() throws Exception {
+        OlapTable table = createTable("t_rollup_prune_cancelled");
+        UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
+        RollupJobV2 job = addRollup(new MaterializedViewHandler(), table, "r_prune_cancelled");
+        job.runPendingJob();
+        job.runWaitingTxnJob();
+        assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
+        assertTrue(job.rollupBatchTask.getTaskNum() > 0);
+        assertNotNull(Deencapsulation.getField(job, "createReplicaLatch"));
+
+        assertTrue(job.cancel("cancel"));
+
+        assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+        assertPruned(job);
+        assertFalse(table.hasMaterializedIndex("r_prune_cancelled"));
+        List<RollupJobV2> entries = readJournaledEntries(job.getJobId());
+        assertEquals(AlterJobV2.JobState.CANCELLED, entries.get(entries.size() - 1).getJobState());
+        for (RollupJobV2 entry : entries) {
+            assertFalse(entry.getPartitionIdToRollupIndex().isEmpty());
+        }
+    }
+
+    @Test
+    public void testFollowerReplayPrunesFinishedJob() throws Exception {
+        OlapTable table = createTable("t_rollup_prune_follower");
+        // The follower starts from the catalog as it was before the rollup.
+        UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
+        UtFrameUtils.PseudoImage initialImage = new UtFrameUtils.PseudoImage();
+        GlobalStateMgr.getCurrentState().getLocalMetastore().save(initialImage.getImageWriter());
+
+        RollupJobV2 job = addRollup(new MaterializedViewHandler(), table, "r_prune_follower");
+        runToFinished(job);
+        List<RollupJobV2> entries = readJournaledEntries(job.getJobId());
+
+        LocalMetastore followerMetastore = new LocalMetastore(GlobalStateMgr.getCurrentState(), null, null);
+        SRMetaBlockReader blockReader = new SRMetaBlockReaderV2(initialImage.getJsonReader());
+        followerMetastore.load(blockReader);
+        blockReader.close();
+        MaterializedViewHandler followerHandler = new MaterializedViewHandler();
+        LocalMetastore leaderMetastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        try {
+            GlobalStateMgr.getCurrentState().setLocalMetastore(followerMetastore);
+            for (RollupJobV2 entry : entries) {
+                followerHandler.replayAlterJobV2(entry);
+            }
+        } finally {
+            GlobalStateMgr.getCurrentState().setLocalMetastore(leaderMetastore);
+        }
+
+        // The handler keeps the first replayed entry and applies the later ones to it.
+        RollupJobV2 retained = entries.get(0);
+        assertSame(retained, followerHandler.getAlterJobsV2().get(job.getJobId()));
+        assertEquals(AlterJobV2.JobState.FINISHED, retained.getJobState());
+        assertPruned(retained);
+        for (RollupJobV2 entry : entries.subList(1, entries.size())) {
+            assertFalse(entry.getPartitionIdToRollupIndex().isEmpty());
+        }
+        Database followerDb = followerMetastore.getDb(GlobalStateMgrTestUtil.testDb1);
+        OlapTable followerTable = (OlapTable) followerMetastore.getTable(followerDb.getFullName(), table.getName());
+        assertEquals(OlapTableState.NORMAL, followerTable.getState());
+        assertRollupIndexVisible(followerTable, "r_prune_follower");
+    }
+
+    private static OlapTable createTable(String tableName) throws Exception {
+        starRocksAssert.withTable("CREATE TABLE " + tableName + "(k1 INT, v1 INT, v2 INT) DUPLICATE KEY(k1) " +
+                "DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES ('replication_num' = '1')");
+        return (OlapTable) starRocksAssert.getTable(GlobalStateMgrTestUtil.testDb1, tableName);
+    }
+
+    /**
+     * Submits ADD ROLLUP through a handler whose daemon is never started, so only the test runs the job.
+     */
+    private static RollupJobV2 addRollup(MaterializedViewHandler handler, OlapTable table, String rollupName)
+            throws Exception {
+        AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(
+                "ALTER TABLE " + table.getName() + " ADD ROLLUP " + rollupName + "(k1, v1)", starRocksAssert.getCtx());
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
+        handler.process(stmt.getAlterClauseList(), db, table);
+        assertEquals(1, handler.getAlterJobsV2().size());
+        return (RollupJobV2) handler.getAlterJobsV2().values().iterator().next();
+    }
+
+    private static void runToFinished(AlterJobV2 job) throws Exception {
+        long deadlineMs = System.currentTimeMillis() + 60_000L;
+        while (!job.isDone()) {
+            assertTrue(System.currentTimeMillis() < deadlineMs, "job is still " + job.getJobState());
+            job.run();
+            Thread.sleep(100);
+        }
+        assertEquals(AlterJobV2.JobState.FINISHED, job.getJobState(), job.errMsg);
+    }
+
+    /**
+     * Reads the journal entries of the job, from the one that submitted it to the one of its final state.
+     */
+    private static List<RollupJobV2> readJournaledEntries(long jobId) throws Exception {
+        List<RollupJobV2> entries = new ArrayList<>();
+        BatchAlterJobPersistInfo submitted = (BatchAlterJobPersistInfo) UtFrameUtils.PseudoJournalReplayer
+                .replayNextJournal(OperationType.OP_BATCH_ADD_ROLLUP_V2);
+        assertEquals(1, submitted.getAlterJobV2List().size());
+        AlterJobV2 entry = submitted.getAlterJobV2List().get(0);
+        while (true) {
+            assertEquals(jobId, entry.getJobId());
+            entries.add((RollupJobV2) entry);
+            if (entry.isDone()) {
+                return entries;
+            }
+            entry = (AlterJobV2) UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_ALTER_JOB_V2);
+        }
+    }
+
+    private static void assertPruned(RollupJobV2 job) {
+        assertTrue(job.getPartitionIdToRollupIndex().isEmpty());
+        Map<Long, Map<Long, Long>> baseTabletIds =
+                Deencapsulation.getField(job, "physicalPartitionIdToBaseRollupTabletIdMap");
+        assertTrue(baseTabletIds.isEmpty());
+        assertEquals(0, job.rollupBatchTask.getTaskNum());
+        assertNull(Deencapsulation.getField(job, "createReplicaLatch"));
+    }
+
+    private static void assertRollupIndexVisible(OlapTable table, String rollupName) {
+        long rollupIndexMetaId = table.getIndexMetaIdByName(rollupName);
+        for (PhysicalPartition physicalPartition : table.getAllPhysicalPartitions()) {
+            MaterializedIndex rollupIndex = physicalPartition.getLatestIndex(rollupIndexMetaId);
+            assertNotNull(rollupIndex);
+            assertEquals(MaterializedIndex.IndexState.NORMAL, rollupIndex.getState());
+        }
     }
 }

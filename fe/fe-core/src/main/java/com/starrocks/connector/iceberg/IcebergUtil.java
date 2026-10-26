@@ -211,6 +211,12 @@ public final class IcebergUtil {
             if (!nullValueCounts.containsKey(field.fieldId()) || !valueCounts.containsKey(field.fieldId())) {
                 continue;
             }
+            // BE substitutes min/max only when it does not read the file at all; once one column must be read,
+            // substituting the others per batch is wrong, so give up the whole file.
+            if (isPromotedDateBound(type, lowerBounds.get(field.fieldId())) ||
+                    isPromotedDateBound(type, upperBounds.get(field.fieldId()))) {
+                return new HashMap<>();
+            }
             // create the min/max value object to put into map
             MinMaxValue minMaxValue = new MinMaxValue();
             minMaxValues.put(field.fieldId(), minMaxValue);
@@ -238,6 +244,14 @@ public final class IcebergUtil {
             }
         }
         return minMaxValues;
+    }
+
+    // A date column promoted to timestamp (Iceberg v3) keeps 4-byte day-count bounds in files written before the
+    // promotion. Conversions.fromByteBuffer reads such a buffer as microseconds, giving values near 1970, so
+    // callers drop these bounds.
+    public static boolean isPromotedDateBound(Type type, ByteBuffer bound) {
+        return bound != null && bound.remaining() < 8 &&
+                (type.typeId() == Type.TypeID.TIMESTAMP || type.typeId() == Type.TypeID.TIMESTAMP_NANO);
     }
 
     private static long adjustTimestampMicrosToSessionTz(long micros) {
@@ -339,15 +353,23 @@ public final class IcebergUtil {
         return cloudConfiguration;
     }
 
-    public static void checkFileFormatSupportedDelete(FileScanTask fileScanTask, boolean uedForDelete) {
-        // Check file format for DELETE operations
-        // Only Parquet format is supported for Iceberg DELETE operations now
-        if (uedForDelete && fileScanTask.file().format() != FileFormat.PARQUET) {
-            throw new StarRocksConnectorException(
-                    String.format("Delete operations on Iceberg tables are only supported for " +
-                                    "Parquet format files. Found %s format file: %s",
-                            fileScanTask.file().format(), fileScanTask.file().location()));
-
+    // DELETE / UPDATE / MERGE read the target rows' _file and _pos, which the parquet and ORC scanners produce. The
+    // ORC scanner does not produce the v3 row lineage columns, so a scan that reads them needs parquet data files.
+    public static void checkFileFormatSupportedDelete(FileScanTask fileScanTask, boolean usedForDelete,
+                                                      boolean readsRowLineage) {
+        if (!usedForDelete) {
+            return;
         }
+        FileFormat format = fileScanTask.file().format();
+        if (format == FileFormat.PARQUET || (format == FileFormat.ORC && !readsRowLineage)) {
+            return;
+        }
+        String location = fileScanTask.file().location();
+        if (format == FileFormat.ORC) {
+            throw new StarRocksConnectorException(
+                    "Iceberg row lineage is not supported on ORC data files yet. Found ORC format file: " + location);
+        }
+        throw new StarRocksConnectorException(String.format("Delete operations on Iceberg tables are only supported " +
+                "for Parquet and ORC format files. Found %s format file: %s", format, location));
     }
 }

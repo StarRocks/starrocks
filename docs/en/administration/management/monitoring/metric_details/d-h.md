@@ -67,6 +67,30 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Bytes
 - Description: Memory used by the DECIMAL column pool.
 
+## `default_cache_hit_bytes`
+
+- Unit: Bytes
+- Type: Cumulative
+- Description: Cumulative bytes read from the Data Cache instance `default_cache` on cache hits. In a shared-data cluster where [`datacache_unified_instance_enable`](../../../configuration/BE_parameters/shared_lake_other.md#datacache_unified_instance_enable) is `true` (default), this instance also caches the data of cloud-native tables, and for cloud-native tables this metric counts the same reads as `fslib_open_cache_hits`. Data Cache reads of external tables on the same node are also counted. If `datacache_unified_instance_enable` is `false`, cloud-native tables use a separate cache instance, whose metrics are exported as `cloud_cache_hit_bytes`, `cloud_cache_miss_bytes`, `cloud_cache_hit_count`, and `cloud_cache_miss_count`. This metric is exported only when the BE configuration item `dump_metrics_with_bvar` is `true` (default). It is exported with the Prometheus type `gauge`, but its value only increases until the BE or CN restarts, so use `rate()` on it. The byte-based cache hit ratio is `sum(rate(default_cache_hit_bytes[5m])) / (sum(rate(default_cache_hit_bytes[5m])) + sum(rate(default_cache_miss_bytes[5m])))`. Unlike the count-based hit ratio calculated from `fslib_open_cache_hits` and `fslib_open_cache_misses`, it is not lowered much by many small misses.
+
+## `default_cache_hit_count`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Cumulative number of cache hits of the Data Cache instance `default_cache`. For cloud-native tables, it counts the same reads as `fslib_open_cache_hits`. For the scope and export conditions, see `default_cache_hit_bytes`.
+
+## `default_cache_miss_bytes`
+
+- Unit: Bytes
+- Type: Cumulative
+- Description: Cumulative bytes requested from the Data Cache instance `default_cache` on cache misses. It is the size that the read requested, not the size then read from object storage, which is aligned to cache blocks. A miss on a cached file size entry adds 0. For the scope and export conditions, see `default_cache_hit_bytes`.
+
+## `default_cache_miss_count`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Cumulative number of cache misses of the Data Cache instance `default_cache`. For cloud-native tables, it counts the same reads as `fslib_open_cache_misses`. For the scope and export conditions, see `default_cache_hit_bytes`.
+
 ## `delta_column_group_get_hit_cache`
 
 - Unit: Count
@@ -395,6 +419,20 @@ For more information on how to build a monitoring service for your StarRocks clu
 
 - Unit: Count
 - Description: Total fragment instances executing on a BE (for non-pipeline engine).
+
+## `fslib_open_cache_hits`
+
+- Unit: Count
+- Type: Counter
+- Labels: `fstype` (`cachefs`)
+- Description: Cumulative number of Data Cache hits when reading the files of cloud-native tables in a shared-data cluster. Each read covers at most one cache block. Because every read counts as one regardless of its size, many small misses, such as metadata reads, can lower the hit ratio calculated from this metric and `fslib_open_cache_misses` even when most bytes are still read from the cache. For the byte-based metrics, see `default_cache_hit_bytes`.
+
+## `fslib_open_cache_misses`
+
+- Unit: Count
+- Type: Counter
+- Labels: `fstype` (`cachefs`)
+- Description: Cumulative number of Data Cache misses when reading the files of cloud-native tables in a shared-data cluster. Each read covers at most one cache block. For the byte-based metrics, see `default_cache_miss_bytes`.
 
 ## `hive_write_bytes`
 

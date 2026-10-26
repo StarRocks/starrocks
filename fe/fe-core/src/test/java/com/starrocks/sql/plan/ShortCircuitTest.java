@@ -100,6 +100,79 @@ public class ShortCircuitTest extends PlanTestBase {
     }
 
     @Test
+    public void testShortCircuitDeduplicatesRepeatedInLiterals() throws Exception {
+        // An IN list is set membership, so a value repeated in it must still select the row once.
+        // Each literal becomes a key tuple for the point lookup, and the lookup returns a row per
+        // tuple, so without dedup `pk1 in (20, 20)` returned the row twice under
+        // enable_short_circuit while count(*) over the same predicate returned one.
+        boolean oldShortCircuit = connectContext.getSessionVariable().isEnableShortCircuit();
+        boolean oldUnitTest = FeConstants.runningUnitTest;
+        connectContext.getSessionVariable().setEnableShortCircuit(true);
+        FeConstants.runningUnitTest = true;
+        try {
+            assertKeyTupleCount("select * from tprimary1 where pk1 in (20, 20)", 1);
+            assertKeyTupleCount("select * from tprimary1 where pk1 in (20, 20, 20)", 1);
+            // distinct keys must still produce one tuple each
+            assertKeyTupleCount("select * from tprimary1 where pk1 in (20, 30)", 2);
+            assertKeyTupleCount("select * from tprimary1 where pk1 in (20, 30, 20)", 2);
+            assertKeyTupleCount("select * from tprimary1 where pk1 in (20)", 1);
+            // a composite key dedups per column before the tuples are crossed
+            assertKeyTupleCount("select * from tprimary_bool where pk1 in (33, 33) and pk2 = true", 1);
+        } finally {
+            connectContext.getSessionVariable().setEnableShortCircuit(oldShortCircuit);
+            FeConstants.runningUnitTest = oldUnitTest;
+        }
+    }
+
+    @Test
+    public void testShortCircuitKeepsDatetimeKeysThatDifferBelowDoublePrecision() throws Exception {
+        // A DATETIME key column stores microseconds, and two values a microsecond apart are two
+        // rows. The dedup above must not merge them: LiteralExpr.equals goes through
+        // DateLiteral.compareLiteral, which compares getDoubleValue(), and at the 10^13 magnitude
+        // of yyyyMMddHHmmss a double's ulp is about 0.004 -- so every sub-millisecond difference,
+        // and most differences up to a few milliseconds, compares equal. Merging them would drop a
+        // key tuple and silently lose a row, which is worse than the duplicate this dedup fixes.
+        starRocksAssert.withTable("CREATE TABLE `tprimary_dt` (\n" +
+                "  `pk1` datetime NOT NULL COMMENT \"\",\n" +
+                "  `v1` int NOT NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "PRIMARY KEY(`pk1`)\n" +
+                "DISTRIBUTED BY HASH(`pk1`) BUCKETS 1\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");");
+        boolean oldShortCircuit = connectContext.getSessionVariable().isEnableShortCircuit();
+        boolean oldUnitTest = FeConstants.runningUnitTest;
+        connectContext.getSessionVariable().setEnableShortCircuit(true);
+        FeConstants.runningUnitTest = true;
+        try {
+            assertKeyTupleCount("select * from tprimary_dt where pk1 in " +
+                    "('2025-01-01 00:00:00.000001', '2025-01-01 00:00:00.000002')", 2);
+            // a millisecond apart is still inside one ulp
+            assertKeyTupleCount("select * from tprimary_dt where pk1 in " +
+                    "('2025-01-01 00:00:00.001000', '2025-01-01 00:00:00.002000')", 2);
+            // the same instant written twice is still one key
+            assertKeyTupleCount("select * from tprimary_dt where pk1 in " +
+                    "('2025-01-01 00:00:00.000001', '2025-01-01 00:00:00.000001')", 1);
+            // and so is a whole second written two ways
+            assertKeyTupleCount("select * from tprimary_dt where pk1 in " +
+                    "('2025-01-01 00:00:00', '2025-01-01 00:00:00.000000')", 1);
+        } finally {
+            connectContext.getSessionVariable().setEnableShortCircuit(oldShortCircuit);
+            FeConstants.runningUnitTest = oldUnitTest;
+            starRocksAssert.dropTable("tprimary_dt");
+        }
+    }
+
+    private void assertKeyTupleCount(String sql, int expected) throws Exception {
+        ExecPlan plan = getExecPlan(sql);
+        OlapScanNode scan = (OlapScanNode) plan.getScanNodes().stream()
+                .filter(node -> node instanceof OlapScanNode)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("no OlapScanNode for: " + sql));
+        Assertions.assertEquals(expected, scan.getRowStoreKeyLiterals().size(),
+                "wrong number of point-lookup key tuples for: " + sql);
+    }
+
+    @Test
     public void testShortCircuitForShareData() throws Exception {
         new MockUp<WarehouseManager>() {
             @Mock

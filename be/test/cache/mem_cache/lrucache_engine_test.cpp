@@ -171,4 +171,74 @@ TEST_F(LRUCacheEngineTest, test_shutdown) {
     ASSERT_OK(_cache->shutdown());
     ASSERT_EQ(_cache->mem_usage(), 0);
 }
+
+// With a low evict probability, writes into free space must still be accepted.
+TEST_F(LRUCacheEngineTest, test_low_evict_probability_writes_into_free_space) {
+    _write_opt.evict_probability = 0;
+    int* ptr = (int*)malloc(_value_size);
+    *ptr = 1;
+    MemCacheHandlePtr handle = nullptr;
+    ASSERT_OK(_cache->insert(_int_to_string(6, 1), (void*)ptr, _value_size, &Deleter, &handle, _write_opt));
+    _cache->release(handle);
+    _check_found(1);
+}
+
+// Once a shard is full, a write that may not evict is rejected and evicts nothing.
+TEST_F(LRUCacheEngineTest, test_low_evict_probability_never_evicts) {
+    _write_opt.evict_probability = 0;
+    // 256 entries exceed the total capacity, so at least one shard must fill up.
+    ASSERT_GT(_kv_size * 256, _capacity);
+    int rejected = 0;
+    for (int i = 0; i < 256; i++) {
+        int* ptr = (int*)malloc(_value_size);
+        *ptr = i;
+        MemCacheHandlePtr handle = nullptr;
+        Status st = _cache->insert(_int_to_string(6, i), (void*)ptr, _value_size, &Deleter, &handle, _write_opt);
+        if (st.ok()) {
+            _cache->release(handle);
+        } else {
+            free(ptr);
+            rejected++;
+        }
+    }
+    ASSERT_GT(rejected, 0);
+    ASSERT_EQ(_cache->insert_evict_count(), 0);
+}
+
+// "Full" is judged per shard: a write that may not evict is rejected once its shard is full,
+// even while the cache as a whole still has room.
+TEST_F(LRUCacheEngineTest, test_low_evict_probability_full_shard_rejects) {
+    _write_opt.evict_probability = 0;
+    // Only write keys that land in the same shard, so the other shards stay empty.
+    auto shard_of = [](const std::string& key) {
+        CacheKey cache_key(key);
+        return ShardedLRUCache::_shard(cache_key.hash(cache_key.data(), cache_key.size(), 0));
+    };
+    const uint32_t target = shard_of(_int_to_string(6, 0));
+    int accepted = 0;
+    int rejected = 0;
+    for (int i = 0; i < 100000 && rejected == 0; i++) {
+        std::string key = _int_to_string(6, i);
+        if (shard_of(key) != target) {
+            continue;
+        }
+        int* ptr = (int*)malloc(_value_size);
+        *ptr = i;
+        MemCacheHandlePtr handle = nullptr;
+        Status st = _cache->insert(key, (void*)ptr, _value_size, &Deleter, &handle, _write_opt);
+        if (st.ok()) {
+            _cache->release(handle);
+            accepted++;
+        } else {
+            free(ptr);
+            rejected++;
+        }
+    }
+    // The shard took writes until it filled up, then rejected one.
+    ASSERT_GT(accepted, 0);
+    ASSERT_EQ(rejected, 1);
+    ASSERT_EQ(_cache->mem_usage(), _kv_size * accepted);
+    // The cache as a whole still had room for the rejected entry.
+    ASSERT_LT(_cache->mem_usage() + _kv_size, _cache->mem_quota());
+}
 } // namespace starrocks

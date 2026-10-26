@@ -16,6 +16,7 @@
 package com.starrocks.leader;
 
 import com.google.common.collect.Sets;
+import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -28,6 +29,8 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.task.AgentTaskQueue;
+import com.starrocks.task.AlterReplicaTask;
 import com.starrocks.thrift.TBackend;
 import com.starrocks.thrift.TFinishTaskRequest;
 import com.starrocks.thrift.TMasterResult;
@@ -35,14 +38,18 @@ import com.starrocks.thrift.TReportRequest;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTaskType;
+import mockit.Delegate;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import mockit.Verifications;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.Set;
 
 import static com.starrocks.catalog.Replica.ReplicaState.NORMAL;
@@ -72,6 +79,11 @@ public class LeaderImplTest {
         tabletId = 13L;
         replicaId = 14L;
         backendId = 15L;
+    }
+
+    @AfterEach
+    public void tearDown() {
+        AgentTaskQueue.clearAllTasks();
     }
 
     @Test
@@ -203,5 +215,165 @@ public class LeaderImplTest {
         Assertions.assertEquals(TStatusCode.LEADER_TRANSFERRED, result.getStatus().getStatus_code());
         Assertions.assertNotNull(result.getStatus().getError_msgs());
         Assertions.assertTrue(result.getStatus().getError_msgs().get(0).contains("leader is transferring"));
+    }
+
+    private static final String ALTER_BE_HOST = "172.26.80.3";
+    private static final int ALTER_BE_PORT = 9060;
+    private static final long ALTER_BE_ID = 10002L;
+    private static final long OLD_JOB_ID = 100L;
+    private static final long NEW_JOB_ID = 200L;
+
+    private void expectLeaderAcceptingAlterFinish(GlobalStateMgr globalStateMgr, NodeMgr nodeMgr,
+                                                  SystemInfoService clusterInfo,
+                                                  SchemaChangeHandler schemaChangeHandler) {
+        Backend backend = new Backend(ALTER_BE_ID, ALTER_BE_HOST, 9050);
+        backend.setBePort(ALTER_BE_PORT);
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                minTimes = 0;
+
+                globalStateMgr.isLeader();
+                result = true;
+                minTimes = 0;
+
+                globalStateMgr.isLeaderDemoting();
+                result = false;
+                minTimes = 0;
+
+                globalStateMgr.isLeaderWorkAdmissionOpen();
+                result = true;
+                minTimes = 0;
+
+                globalStateMgr.getNodeMgr();
+                result = nodeMgr;
+                minTimes = 0;
+
+                nodeMgr.getClusterInfo();
+                result = clusterInfo;
+                minTimes = 0;
+
+                clusterInfo.getBackendWithBePort(ALTER_BE_HOST, ALTER_BE_PORT);
+                result = backend;
+                minTimes = 0;
+
+                globalStateMgr.getSchemaChangeHandler();
+                result = schemaChangeHandler;
+                minTimes = 0;
+            }
+        };
+    }
+
+    private AlterReplicaTask newAlterTask(long jobId) {
+        return AlterReplicaTask.alterLocalTablet(ALTER_BE_ID, dbId, tableId, partitionId, indexId, tabletId,
+                tabletId - 1, replicaId, 0, 0, 1L, jobId, null, null);
+    }
+
+    private TFinishTaskRequest alterFinishRequest(TStatusCode statusCode, Long alterJobId) {
+        TFinishTaskRequest request = new TFinishTaskRequest(new TBackend(ALTER_BE_HOST, ALTER_BE_PORT, 8040),
+                TTaskType.ALTER, tabletId, new TStatus(statusCode));
+        if (alterJobId != null) {
+            request.setAlter_job_id(alterJobId);
+        }
+        return request;
+    }
+
+    @Test
+    public void testAlterFinishOfAnotherJobLeavesQueuedTaskAlone(@Mocked GlobalStateMgr globalStateMgr,
+                                                                 @Mocked NodeMgr nodeMgr,
+                                                                 @Mocked SystemInfoService clusterInfo,
+                                                                 @Mocked SchemaChangeHandler schemaChangeHandler) {
+        expectLeaderAcceptingAlterFinish(globalStateMgr, nodeMgr, clusterInfo, schemaChangeHandler);
+        AlterReplicaTask newJobTask = newAlterTask(NEW_JOB_ID);
+        Assertions.assertTrue(AgentTaskQueue.addTask(newJobTask));
+
+        // The report of a stale copy left by an older job on the same tablet, successful and failed.
+        for (TStatusCode statusCode : List.of(TStatusCode.OK, TStatusCode.INTERNAL_ERROR)) {
+            TMasterResult result = leader.finishTask(alterFinishRequest(statusCode, OLD_JOB_ID));
+            Assertions.assertEquals(TStatusCode.CANCELLED, result.getStatus().getStatus_code(), statusCode.toString());
+        }
+
+        Assertions.assertSame(newJobTask, AgentTaskQueue.getTask(ALTER_BE_ID, TTaskType.ALTER, tabletId));
+        Assertions.assertEquals(0, newJobTask.getFailedTimes());
+        Assertions.assertFalse(newJobTask.isFinished());
+        new Verifications() {
+            {
+                schemaChangeHandler.handleFinishAlterTask((AlterReplicaTask) any);
+                times = 0;
+            }
+        };
+    }
+
+    @Test
+    public void testAlterFinishOfSameJobFinishesTask(@Mocked GlobalStateMgr globalStateMgr,
+                                                     @Mocked NodeMgr nodeMgr,
+                                                     @Mocked SystemInfoService clusterInfo,
+                                                     @Mocked SchemaChangeHandler schemaChangeHandler) {
+        expectLeaderAcceptingAlterFinish(globalStateMgr, nodeMgr, clusterInfo, schemaChangeHandler);
+        AlterReplicaTask task = newAlterTask(NEW_JOB_ID);
+        Assertions.assertTrue(AgentTaskQueue.addTask(task));
+
+        TMasterResult result = leader.finishTask(alterFinishRequest(TStatusCode.OK, NEW_JOB_ID));
+
+        Assertions.assertEquals(TStatusCode.OK, result.getStatus().getStatus_code());
+        Assertions.assertNull(AgentTaskQueue.getTask(ALTER_BE_ID, TTaskType.ALTER, tabletId));
+        new Verifications() {
+            {
+                schemaChangeHandler.handleFinishAlterTask(task);
+                times = 1;
+            }
+        };
+    }
+
+    @Test
+    public void testAlterFinishWithoutJobIdMatchesBySignature(@Mocked GlobalStateMgr globalStateMgr,
+                                                              @Mocked NodeMgr nodeMgr,
+                                                              @Mocked SystemInfoService clusterInfo,
+                                                              @Mocked SchemaChangeHandler schemaChangeHandler) {
+        expectLeaderAcceptingAlterFinish(globalStateMgr, nodeMgr, clusterInfo, schemaChangeHandler);
+        AlterReplicaTask task = newAlterTask(NEW_JOB_ID);
+        Assertions.assertTrue(AgentTaskQueue.addTask(task));
+
+        // A backend that does not send alter_job_id.
+        TMasterResult result = leader.finishTask(alterFinishRequest(TStatusCode.OK, null));
+
+        Assertions.assertEquals(TStatusCode.OK, result.getStatus().getStatus_code());
+        Assertions.assertNull(AgentTaskQueue.getTask(ALTER_BE_ID, TTaskType.ALTER, tabletId));
+        new Verifications() {
+            {
+                schemaChangeHandler.handleFinishAlterTask(task);
+                times = 1;
+            }
+        };
+    }
+
+    @Test
+    public void testAlterFinishKeepsTaskQueuedInItsPlace(@Mocked GlobalStateMgr globalStateMgr,
+                                                         @Mocked NodeMgr nodeMgr,
+                                                         @Mocked SystemInfoService clusterInfo,
+                                                         @Mocked SchemaChangeHandler schemaChangeHandler) {
+        expectLeaderAcceptingAlterFinish(globalStateMgr, nodeMgr, clusterInfo, schemaChangeHandler);
+        AlterReplicaTask oldJobTask = newAlterTask(OLD_JOB_ID);
+        AlterReplicaTask newJobTask = newAlterTask(NEW_JOB_ID);
+        Assertions.assertTrue(AgentTaskQueue.addTask(oldJobTask));
+        // While the report is handled, the old job ends and a new job queues a task under the same signature.
+        new Expectations() {
+            {
+                schemaChangeHandler.handleFinishAlterTask(oldJobTask);
+                result = new Delegate<Void>() {
+                    @SuppressWarnings("unused")
+                    void handleFinishAlterTask(AlterReplicaTask task) {
+                        AgentTaskQueue.removeTask(ALTER_BE_ID, TTaskType.ALTER, tabletId);
+                        Assertions.assertTrue(AgentTaskQueue.addTask(newJobTask));
+                    }
+                };
+            }
+        };
+
+        TMasterResult result = leader.finishTask(alterFinishRequest(TStatusCode.OK, OLD_JOB_ID));
+
+        Assertions.assertEquals(TStatusCode.OK, result.getStatus().getStatus_code());
+        Assertions.assertSame(newJobTask, AgentTaskQueue.getTask(ALTER_BE_ID, TTaskType.ALTER, tabletId));
     }
 }

@@ -251,7 +251,7 @@ public:
     void output_detail(FunctionContext* ctx, ConstAggDataPtr __restrict state, Columns& to,
                        Column* count) const override {
         if constexpr (lt_is_string_or_binary<LT>) {
-            DCHECK(to[0]->is_binary() || to[0]->is_large_binary());
+            DCHECK(to[0]->is_binary());
         } else {
             DCHECK(to[0]->is_numeric());
         }

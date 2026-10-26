@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <functional>
 #include <string>
 
@@ -66,6 +67,9 @@ public:
                            const TNetworkAddress& address) noexcept;
 
 private:
+    // retry_index is zero-based; the configured interval is the first jitter ceiling.
+    static int64_t retry_backoff_ceiling_ms(int64_t retry_interval_ms, int retry_index);
+
     template <typename T>
     static ClientCache<T>* client_cache();
 

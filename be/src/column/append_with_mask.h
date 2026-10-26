@@ -35,7 +35,6 @@ public:
 
     Status do_visit(NullableColumn* column);
     Status do_visit(BinaryColumn* column);
-    Status do_visit(LargeBinaryColumn* column);
 
     template <typename T>
     Status do_visit(FixedLengthColumnBase<T>* column) {
@@ -55,11 +54,7 @@ private:
     template <typename T>
     Status append_fixed_length(FixedLengthColumnBase<T>* column);
 
-    template <typename T>
-    Status append_binary_impl(BinaryColumnBase<T>* column);
-
-    Status append_binary(BinaryColumn* column) { return append_binary_impl(column); }
-    Status append_binary(LargeBinaryColumn* column) { return append_binary_impl(column); }
+    Status append_binary(BinaryColumn* column);
 
     Status apply(Column* dst, const Column* src);
 

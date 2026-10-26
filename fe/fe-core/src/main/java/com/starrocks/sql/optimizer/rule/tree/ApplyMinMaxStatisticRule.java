@@ -166,8 +166,8 @@ public class ApplyMinMaxStatisticRule implements TreeRewriteRule {
                 && !infos.containsKey(column.getId());
     }
 
-    // Emit (0, dictSize) min/max for every group-by key backed by a global dict on this scan — both
-    // the projection's DictMappingOperator form and bare scan columns. Shared by the OLAP and
+    // Emit min/max for every group-by key on this scan that holds global dict codes: both
+    // the projection's DictDefine mappings and bare scan columns. Shared by the OLAP and
     // iceberg branches so their dict handling stays identical.
     private static void collectDictGroupByMinMax(PhysicalScanOperator scan, ColumnRefSet groupByRefSets,
             Map<Integer, ColumnDict> globalDicts, Map<Integer, Pair<ConstantOperator, ConstantOperator>> infos) {
@@ -175,6 +175,11 @@ public class ApplyMinMaxStatisticRule implements TreeRewriteRule {
             for (var entry : scan.getProjection().getColumnRefMap().entrySet()) {
                 if (groupByRefSets.contains(entry.getKey())
                         && entry.getValue() instanceof DictMappingOperator mappingOperator) {
+                    // A mapping that keeps its expression's type (DictDecode) outputs the expression's
+                    // values, not codes of a derived dict, so the dict size says nothing about its range.
+                    if (mappingOperator.getType().matchesType(mappingOperator.getOriginScalaOperator().getType())) {
+                        continue;
+                    }
                     ColumnRefOperator column = mappingOperator.getDictColumn();
                     if (isNumericOrDate(column) && globalDicts.containsKey(column.getId())) {
                         // A dict-mapping expression maps each input code, including the dict's NULL

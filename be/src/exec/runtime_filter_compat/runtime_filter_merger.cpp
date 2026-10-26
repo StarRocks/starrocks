@@ -16,6 +16,7 @@
 
 #include <exec/pipeline/hashjoin/hash_joiner_fwd.h>
 
+#include <limits>
 #include <utility>
 
 #include "base/time/time.h"
@@ -52,13 +53,22 @@ RuntimeFilterMerger::RuntimeFilterMerger(const RuntimeServices* runtime_services
           _query_options(query_options),
           _is_pipeline(is_pipeline) {}
 
+size_t RuntimeFilterMerger::resolve_max_size(const TRuntimeFilterParams& params) {
+    // FE sends global_runtime_filter_build_max_size as is, and <= 0 means no limit, the same as HashJoinNode.
+    if (params.__isset.runtime_filter_max_size && params.runtime_filter_max_size > 0) {
+        return params.runtime_filter_max_size;
+    }
+    return std::numeric_limits<size_t>::max();
+}
+
 Status RuntimeFilterMerger::init(const TRuntimeFilterParams& params) {
     _targets = params.id_to_prober_params;
+    const size_t max_size = resolve_max_size(params);
     for (const auto& it : params.runtime_filter_builder_number) {
         int32_t filter_id = it.first;
         RuntimeFilterMergerStatus status;
         status.expect_number = it.second;
-        status.max_size = params.runtime_filter_max_size;
+        status.max_size = max_size;
         status.current_size = 0;
         status.stop = false;
         if (params.skew_join_runtime_filters.contains(filter_id)) {

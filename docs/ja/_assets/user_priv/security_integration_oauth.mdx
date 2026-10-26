@@ -14,7 +14,9 @@ PROPERTIES (
     "jwks_url" = "",
     "principal_field" = "",
     "required_issuer" = "",
-    "required_audience" = ""
+    "required_audience" = "",
+    "group_source" = "",
+    "group_claim" = "",
     "comment" = ""
 )
 ```
@@ -75,6 +77,23 @@ PROPERTIES (
 
 - 必須: いいえ
 - 説明: JWT 内の受信者 (`aud`) を識別するために使用される文字列のリスト。リスト内のいずれかの値が JWT 受信者と一致する場合にのみ、JWT は有効と見なされます。
+
+##### group_source
+
+- 必須: いいえ
+- 説明: このセキュリティインテグレーションで認証されたユーザーのグループの取得元。有効な値:
+  - `group_provider`（デフォルト）: `group_provider` で設定された Group Provider のみを使用します。以前のバージョンと同じ動作です。
+  - `claim`: 検証済みトークンのうち `group_claim` で指定した claim のみを使用します。`group_provider` で設定された Group Provider は無視されますが設定は保持されるため、元に戻すには `ALTER SECURITY INTEGRATION` 1 回で済みます。
+  - `both`: 両方の和集合。
+
+  トークンからグループを取得できることが、LDAP ディレクトリーを持たない ID プロバイダーでも権限を付与できる前提になります。解決されたグループは、Group Provider のグループと同様に、`GRANT ... TO EXTERNAL GROUP` によるロールマッピング、`permitted_groups` のログインチェック、`current_group()`、および Apache Ranger の認可に参加します。 OAuth 2.0 インテグレーションでは、MySQL プロトコル経由のブラウザーログインにも適用されます。この経路ではユーザーがブラウザーでサインインした後にトークンが StarRocks に届くため、グループは ID トークンの到着時に読み取られ、`permitted_groups` も接続確立時ではなくブラウザーログイン後の最初のステートメントで確認されます。`group_source` が `group_provider` のままの場合は変わらず、グループと確認は接続確立時に決まります。v4.2 以降でサポートされます。
+
+##### group_claim
+
+- 必須: `group_source` が `claim` または `both` の場合は必須です。それ以外の `group_source` と組み合わせて設定すると、効果がないため拒否されます。
+- 説明: ユーザーのグループを保持するトークンの claim。他のオブジェクトの中にネストされた claim はドット区切りで指定します。たとえば、トップレベルの claim は `groups`、Keycloak の realm ロールは `realm_access.roles`、その client ロールは `resource_access.<client_id>.roles` です。claim は文字列の配列であることが想定されますが、単一の文字列も 1 つのグループとして受け付けます。各グループ名の前後の空白は除去されます。それ以外は書き換えられません。大文字小文字も先頭のスラッシュもそのまま保持されます。グループ名は Apache Ranger にそのまま渡され、Ranger は厳密に照合するためです。大文字小文字だけが異なる `GRANT ... TO EXTERNAL GROUP` や `permitted_groups` のエントリーと一致するかどうかは、FE 設定項目 `authentication_group_case_insensitive` で決まります（デフォルトでは大文字小文字を無視します。ID プロバイダーが大文字小文字の異なるグループを別のグループとして扱う場合は `false` に設定してください）。
+
+  デフォルト値は意図的に設けていません。ID プロバイダーが発行する claim はプロバイダーごとに異なり、推測を誤ると明確なエラーにならずに「ログインできるが権限がない」状態になるためです。claim は署名、`required_issuer`、`required_audience` の検証がすべて通った後にのみ読み取られるため、トークンの保持者が自分でグループを選ぶことはできません。トークンに claim が存在しない場合でもログインは成功し、グループは空になり、その理由はログに記録されます（認証失敗として扱われません）。Microsoft Entra ID は 200 を超えるグループに所属するユーザーに対して claim 全体を省略するため、claim が存在しない状態は正しい設定でも発生します。また、ほとんどの ID プロバイダーは既定ではグループをトークンに含めません。Keycloak ではクライアントに group membership mapper を追加し、Entra ID ではトークン設定に groups claim を追加する必要があります。v4.2 以降でサポートされます。
 
 ##### comment
 

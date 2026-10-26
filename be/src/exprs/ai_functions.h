@@ -19,7 +19,7 @@
 
 namespace starrocks {
 
-class AiFunctions {
+class AIFunctions {
 public:
     DEFINE_VECTORIZED_FN(ai_query);
 };

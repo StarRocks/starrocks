@@ -2000,6 +2000,170 @@ TEST_F(SegmentIteratorTest, PreparedRowRangeAndSeekHelpers) {
     ASSERT_EQ(1u, rowid_ranges.size());
 }
 
+// A stream-provided IO snapshot must reach the footer and short-key index statistics exactly once,
+// including both the local and remote parts. MemoryFileSystem itself does not report an IO breakdown.
+TEST_F(SegmentIteratorTest, FooterAndIndexReadsReportStreamStatsOnce) {
+    using namespace starrocks::test;
+
+    class ReadStatsStream : public io::SeekableInputStreamWrapper {
+    public:
+        explicit ReadStatsStream(std::unique_ptr<RandomAccessFile> file)
+                : io::SeekableInputStreamWrapper(std::move(file)) {}
+
+        io::IoStatsSnapshot get_io_stats_snapshot() const override {
+            return {.bytes_read_local_disk = 128,
+                    .bytes_read_remote = 256,
+                    .io_count_local_disk = 2,
+                    .io_count_remote = 3,
+                    .io_ns_read_local_disk = 1000,
+                    .io_ns_read_remote = 2000};
+        }
+    };
+    class ReadStatsFileSystem : public MemoryFileSystem {
+    public:
+        StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
+                                                                           const std::string& path) override {
+            ASSIGN_OR_RETURN(auto file, MemoryFileSystem::new_random_access_file(opts, path));
+            return std::make_unique<RandomAccessFile>(std::make_shared<ReadStatsStream>(std::move(file)), path);
+        }
+    };
+
+    auto fs = std::make_shared<ReadStatsFileSystem>();
+    const std::string file_name = "/prepare_read_stats.dat";
+    ASSIGN_OR_ABORT(auto wfile, fs->new_writable_file(file_name));
+    TabletSchemaBuilder builder;
+    std::shared_ptr<TabletSchema> tablet_schema =
+            builder.create(1, false, TYPE_INT, true).create(2, false, TYPE_INT).build();
+    SegmentWriter writer(std::move(wfile), 0, tablet_schema, SegmentWriterOptions{});
+    TabletDataBuilder data(writer, tablet_schema, config::vector_chunk_size, 100);
+    ASSERT_OK(data.append(0, [](int32_t i) { return i; }));
+    ASSERT_OK(data.append(1, [](int32_t i) { return i * 2; }));
+    ASSERT_OK(data.finalize_footer());
+    auto segment = std::make_shared<Segment>(fs, FileInfo{file_name}, 0, tablet_schema, nullptr);
+
+    auto expect_stream_stats = [](const OlapReaderStatistics& stats) {
+        EXPECT_EQ(128, stats.compressed_bytes_read_local_disk);
+        EXPECT_EQ(256, stats.compressed_bytes_read_remote);
+        EXPECT_EQ(384, stats.compressed_bytes_read);
+        EXPECT_EQ(2, stats.io_count_local_disk);
+        EXPECT_EQ(3, stats.io_count_remote);
+        EXPECT_EQ(5, stats.io_count);
+        EXPECT_EQ(1000, stats.io_ns_read_local_disk);
+        EXPECT_EQ(2000, stats.io_ns_remote);
+        EXPECT_GT(stats.io_ns, 0);
+    };
+    LakeIOOptions io_opts;
+    io_opts.use_page_cache = false;
+    OlapReaderStatistics footer_stats;
+    ASSERT_OK(segment->open(nullptr, nullptr, io_opts, &footer_stats));
+    EXPECT_EQ(1, footer_stats.segments_opened);
+    EXPECT_EQ(100, segment->num_rows());
+    expect_stream_stats(footer_stats);
+    OlapReaderStatistics index_stats;
+    ASSERT_OK(segment->load_index(io_opts, &index_stats));
+    EXPECT_EQ(0, index_stats.segments_opened);
+    EXPECT_EQ(1, index_stats.io_count_request);
+    expect_stream_stats(index_stats);
+
+    OlapReaderStatistics repeated_stats;
+    ASSERT_OK(segment->open(nullptr, nullptr, io_opts, &repeated_stats));
+    ASSERT_OK(segment->load_index(io_opts, &repeated_stats));
+    EXPECT_EQ(0, repeated_stats.segments_opened);
+    EXPECT_EQ(0, repeated_stats.io_count);
+    EXPECT_EQ(0, repeated_stats.compressed_bytes_read);
+    EXPECT_EQ(0, repeated_stats.io_ns);
+    EXPECT_EQ(0, repeated_stats.io_count_request);
+
+    // Corrupt real footer/index bytes after writing a valid segment. Reads before the parse error
+    // still reach the caller; an unsuccessful footer open must not count as an opened segment.
+    ASSIGN_OR_ABORT(auto original_file, fs->new_random_access_file(RandomAccessFileOptions{}, file_name));
+    ASSIGN_OR_ABORT(auto original_bytes, original_file->read_all());
+    SegmentFooterPB original_footer;
+    ASSERT_TRUE(Segment::parse_segment_footer(original_file.get(), &original_footer, nullptr, nullptr).ok());
+    auto write_corrupt_file = [&](const std::string& path, size_t offset) {
+        std::string bytes = original_bytes;
+        ASSERT_LT(offset, bytes.size());
+        bytes[offset] ^= 1;
+        ASSIGN_OR_ABORT(auto file, fs->new_writable_file(path));
+        ASSERT_OK(file->append(Slice(bytes)));
+        ASSERT_OK(file->close());
+    };
+    const std::string bad_footer_path = "/bad_prepare_footer.dat";
+    ASSERT_NO_FATAL_FAILURE(write_corrupt_file(bad_footer_path, original_bytes.size() - 1));
+    auto bad_footer = std::make_shared<Segment>(fs, FileInfo{bad_footer_path}, 0, tablet_schema, nullptr);
+    OlapReaderStatistics failed_footer_stats;
+    EXPECT_TRUE(bad_footer->open(nullptr, nullptr, io_opts, &failed_footer_stats).is_corruption());
+    EXPECT_EQ(0, failed_footer_stats.segments_opened);
+    expect_stream_stats(failed_footer_stats);
+
+    const std::string bad_index_path = "/bad_prepare_index.dat";
+    ASSERT_NO_FATAL_FAILURE(write_corrupt_file(bad_index_path, original_footer.short_key_index_page().offset()));
+    auto bad_index = std::make_shared<Segment>(fs, FileInfo{bad_index_path}, 0, tablet_schema, nullptr);
+    ASSERT_OK(bad_index->open(nullptr, nullptr, io_opts));
+    OlapReaderStatistics failed_index_stats;
+    EXPECT_TRUE(bad_index->load_index(io_opts, &failed_index_stats).is_corruption());
+    EXPECT_EQ(1, failed_index_stats.io_count_request);
+    expect_stream_stats(failed_index_stats);
+}
+
+// load_index and segment_seek_ranges_to_rowid_ranges report their reads to the statistics they are given:
+// the short key index page to the call that loads it, the key column pages to the range resolution.
+TEST_F(SegmentIteratorTest, IndexLoadAndSeekRangeResolutionReportTheirReads) {
+    using namespace starrocks::test;
+
+    // segment_seek_ranges_to_rowid_ranges derives its FileSystem from the segment path, so the segment
+    // has to live on a real (posix) path.
+    const std::string dir = "/tmp/sr_index_load_and_seek_reads";
+    const std::string file_name = dir + "/seg.dat";
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(file_name));
+    (void)fs->delete_dir_recursive(dir);
+    ASSERT_OK(fs->create_dir_recursive(dir));
+    DeferOp cleanup([&] { (void)fs->delete_dir_recursive(dir); });
+
+    TabletSchemaBuilder builder;
+    std::shared_ptr<TabletSchema> tablet_schema =
+            builder.create(1, false, TYPE_INT, true).create(2, false, TYPE_INT).build();
+    const size_t num_rows = 100;
+    auto write_schema = ChunkHelper::convert_schema(tablet_schema);
+    auto chunk = ChunkFactory::new_chunk(write_schema, num_rows);
+    for (int32_t i = 0; i < num_rows; ++i) {
+        chunk->get_column_by_index(0)->as_mutable_ptr()->append_datum(Datum(i));
+        chunk->get_column_by_index(1)->as_mutable_ptr()->append_datum(Datum(i * 2));
+    }
+    // Write both columns together so each short-key index entry describes the same row.
+    auto segment = write_and_open_segment(fs, file_name, tablet_schema, *chunk, 10);
+    ASSERT_EQ(num_rows, segment->num_rows());
+
+    // Only the call that loads the index reads its page.
+    OlapReaderStatistics index_stats;
+    ASSERT_OK(segment->load_index(LakeIOOptions{}, &index_stats));
+    EXPECT_EQ(1, index_stats.total_pages_num);
+    EXPECT_EQ(1, index_stats.io_count_request);
+    EXPECT_GT(index_stats.compressed_bytes_read_request, 0);
+    EXPECT_GT(index_stats.io_ns, 0);
+    OlapReaderStatistics reload_stats;
+    ASSERT_OK(segment->load_index(LakeIOOptions{}, &reload_stats));
+    EXPECT_EQ(0, reload_stats.total_pages_num);
+    EXPECT_EQ(0, reload_stats.io_count_request);
+
+    Schema key_schema(std::vector<FieldPtr>{write_schema.field(0)});
+    std::vector<SeekRange> seek_ranges;
+    seek_ranges.emplace_back(SeekTuple(key_schema, {Datum(10)}), SeekTuple(key_schema, {Datum(50)}));
+    seek_ranges.back().set_inclusive_lower(true);
+
+    // The exact bounds are found by reading the key column.
+    OlapReaderStatistics seek_stats;
+    ASSIGN_OR_ABORT(auto rowid_ranges,
+                    segment_seek_ranges_to_rowid_ranges(segment, seek_ranges, LakeIOOptions{}, &seek_stats));
+    ASSERT_EQ(1u, rowid_ranges.size());
+    ASSERT_TRUE(rowid_ranges[0].has_value());
+    EXPECT_EQ(10, rowid_ranges[0]->begin());
+    EXPECT_EQ(50, rowid_ranges[0]->end());
+    EXPECT_GT(seek_stats.io_count_request, 0);
+    EXPECT_GT(seek_stats.compressed_bytes_read_request, 0);
+    EXPECT_GT(seek_stats.io_ns, 0);
+}
+
 // A primary-key tablet's range is expressed over its key columns. When the sort key is separate,
 // the segment is not ordered that way, so the range cannot be turned into a rowid interval --
 // feeding it to the short-key binary search compares an INT datum against a VARCHAR sort column and

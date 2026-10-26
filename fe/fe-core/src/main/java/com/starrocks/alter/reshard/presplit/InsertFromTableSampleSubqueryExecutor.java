@@ -60,7 +60,10 @@ final class InsertFromTableSampleSubqueryExecutor extends AbstractSqlSampleSubqu
                 request.getSortKey(),
                 request.getPartitionSourceColumns(),
                 context.sourceTotalRows(),
-                context.wherePredicateSql() != null);
+                context.wherePredicateSql() != null,
+                /*scannedInputBytes*/ context.sourceTotalBytes(),
+                /*partitionSourceBytes*/ List.of(),
+                context.sessionSemantics());
     }
 
     /**
@@ -90,20 +93,20 @@ final class InsertFromTableSampleSubqueryExecutor extends AbstractSqlSampleSubqu
 
     /**
      * Projects target columns (a sort key -- base or rollup -- or the partition columns): each by the
-     * source-table column that backs it, or -- when the SELECT feeds it a literal -- by that literal
-     * cast to the column type ({@link InsertSelectSourceColumns#projections}). Throws (-&gt; the
-     * sample fails -&gt; the load proceeds without pre-split) if a column is backed by neither, so a
-     * boundary is never computed against the wrong source column. {@code prepare} gates this at
-     * admission time; the throw remains as the fail-safe for a metadata race between prepare and
-     * sampling.
+     * source-table column that backs it, or -- when the SELECT feeds it a literal or computes it, or it
+     * is a generated column -- by that literal or expression cast to the column type
+     * ({@link InsertSelectSourceColumns#projections}). Throws (-&gt; the sample fails -&gt; the load
+     * proceeds without pre-split) if a column is backed by none of them, so a boundary is never
+     * computed against the wrong source column. {@code prepare} gates this at admission time; the
+     * throw remains as the fail-safe for a metadata race between prepare and sampling.
      */
     private static List<String> projections(
             List<Column> targetColumns, InsertFromTableScanContext context) throws StarRocksException {
-        List<String> projections = InsertSelectSourceColumns.projections(
-                targetColumns, context.targetToSourceColumnNames(), context.targetToConstantSql());
+        List<String> projections = InsertSelectSourceColumns.projections(targetColumns,
+                context.targetToSourceColumnNames(), context.targetToConstantSql(), context.targetToExpressionSql());
         if (projections == null) {
-            throw new StarRocksException(
-                    ERROR_PREFIX + "a projected column has no source-table column mapping and is not a literal");
+            throw new StarRocksException(ERROR_PREFIX
+                    + "a projected column has no source-table column mapping, literal, or expression");
         }
         return projections;
     }

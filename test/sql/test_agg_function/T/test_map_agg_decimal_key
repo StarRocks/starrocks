@@ -1,0 +1,25 @@
+-- name: test_map_agg_decimal_key
+-- map_agg over a decimal key used to type its result with the wildcard decimal (precision -1),
+-- which the BE cannot build a result column for.
+CREATE TABLE t_map_agg_dec_${uuid0} (
+    k INT,
+    d32 DECIMAL(9, 3),
+    d64 DECIMAL(18, 4),
+    d128 DECIMAL(38, 10)
+) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 3
+PROPERTIES("replication_num" = "1");
+
+INSERT INTO t_map_agg_dec_${uuid0} VALUES
+    (1, 1.125, 10.5, 100.0000000001),
+    (2, 2.250, 20.25, 200.5),
+    (3, NULL, NULL, NULL);
+
+SELECT array_sort(map_keys(map_agg(d32, k))) FROM t_map_agg_dec_${uuid0};
+SELECT array_sort(map_keys(map_agg(d64, k))) FROM t_map_agg_dec_${uuid0};
+SELECT array_sort(map_keys(map_agg(d128, k))) FROM t_map_agg_dec_${uuid0};
+SELECT map_size(map_agg(4.4, k)) FROM t_map_agg_dec_${uuid0};
+SELECT map_agg(d32, k)[1.125], map_agg(d64, k)[20.25] FROM t_map_agg_dec_${uuid0};
+SELECT k, map_agg(d32, d64) FROM t_map_agg_dec_${uuid0} GROUP BY k ORDER BY k;
+
+DROP TABLE t_map_agg_dec_${uuid0};

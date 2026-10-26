@@ -343,8 +343,8 @@ public class CloudNativeFastSchemaEvolutionV2Test extends LakeFastSchemaChangeTe
                 db.getId(), List.of(table.getId()), UUIDUtil.genUUID().toString(), coordinator,
                 TransactionState.LoadJobSourceType.BACKEND_STREAMING, 60000L);
 
-        // What the fast path's FINISHED flip does: snapshot the metas it is about to re-stamp, then
-        // re-stamp them. Both are the production calls, in the production order.
+        // What the fast path's FINISHED flip does: snapshot the metas it is about to re-stamp, re-stamp
+        // them, and finish the job. The first two are the production calls, in the production order.
         LakeTableAddIndexJob job = new LakeTableAddIndexJob(
                 GlobalStateMgr.getCurrentState().getNextId(), db.getId(), table.getId(), table.getName(),
                 60000L, List.of(), List.of());
@@ -352,6 +352,7 @@ public class CloudNativeFastSchemaEvolutionV2Test extends LakeFastSchemaChangeTe
                 baseMeta.getSchemaVersion() + 1);
         job.historySchema = AlterJobV2.buildHistorySchema(table, List.of(baseIndexMetaId));
         job.applyCatalogMutation(table);
+        job.setJobState(AlterJobV2.JobState.FINISHED);
         GlobalStateMgr.getCurrentState().getSchemaChangeHandler().addAlterJobV2(job);
 
         // The retired id really did leave the catalog...
@@ -424,6 +425,7 @@ public class CloudNativeFastSchemaEvolutionV2Test extends LakeFastSchemaChangeTe
                 baseMeta.getSchemaVersion() + 1);
         job.historySchema = AlterJobV2.buildHistorySchema(table, List.of(baseIndexMetaId));
         job.applyCatalogMutation(table);
+        job.setJobState(AlterJobV2.JobState.FINISHED);
         GlobalStateMgr.getCurrentState().getSchemaChangeHandler().addAlterJobV2(job);
 
         // The DatabaseTransactionMgr scan on its own reports "nothing running" -- this is the blind spot.

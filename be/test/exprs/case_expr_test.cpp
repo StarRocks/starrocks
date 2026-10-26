@@ -1124,6 +1124,83 @@ TEST_F(VectorizedCaseExprTest, simpleCaseReturnsVariant) {
     assert_case_variant_result(result, {"100", "201", "302", "303"});
 }
 
+// `CASE v WHEN v1 THEN ... END` over VARIANT: the WHEN comparison itself runs on VariantColumn, so the
+// factory must dispatch WhenType == TYPE_VARIANT. The columns here are shredded, which is the case that
+// ColumnViewer<TYPE_VARIANT> cannot serve -- the rows live outside ObjectColumn::_pool, so the equality
+// has to go through VariantColumn::equals on the row-wise path.
+TEST_F(VectorizedCaseExprTest, simpleCaseWithVariantWhenType) {
+    expr_node.case_expr.has_case_expr = true;
+    expr_node.case_expr.has_else_expr = true;
+    expr_node.child_type = TPrimitiveType::VARIANT;
+    expr_node.type = TypeDescriptor(TYPE_VARIANT).to_thrift();
+
+    std::unique_ptr<Expr> expr(VectorizedCaseExprFactory::from_thrift(expr_node, TYPE_VARIANT, TYPE_VARIANT));
+    ASSERT_NE(nullptr, expr);
+
+    MockExpr case_expr(TypeDescriptor(TYPE_VARIANT), create_case_variant_column({"1", "2", "3", "4"}));
+    MockExpr when1(TypeDescriptor(TYPE_VARIANT), create_case_variant_column({"1", "1", "1", "1"}));
+    MockExpr when2(TypeDescriptor(TYPE_VARIANT), create_case_variant_column({"2", "2", "2", "2"}));
+
+    MockExpr then1(TypeDescriptor(TYPE_VARIANT), create_case_variant_column({"100", "101", "102", "103"}));
+    MockExpr then2(TypeDescriptor(TYPE_VARIANT), create_case_variant_column({"200", "201", "202", "203"}));
+    MockExpr else_expr(TypeDescriptor(TYPE_VARIANT), create_case_variant_column({"300", "301", "302", "303"}));
+
+    expr->_children.push_back(&case_expr);
+    expr->_children.push_back(&when1);
+    expr->_children.push_back(&then1);
+    expr->_children.push_back(&when2);
+    expr->_children.push_back(&then2);
+    expr->_children.push_back(&else_expr);
+
+    Chunk chunk;
+    ColumnPtr result = expr->evaluate(nullptr, &chunk);
+    // row0 == when1, row1 == when2, rows 2/3 match neither.
+    assert_case_variant_result(result, {"100", "201", "302", "303"});
+}
+
+// Same dispatch, but with a flat result type: the WHEN side forces the row-wise branch while the result
+// column is a plain Int32Column, so the branch must build the result through Column::append() too.
+TEST_F(VectorizedCaseExprTest, simpleCaseWithVariantWhenTypeAndIntResult) {
+    expr_node.case_expr.has_case_expr = true;
+    expr_node.case_expr.has_else_expr = true;
+    expr_node.child_type = TPrimitiveType::VARIANT;
+    expr_node.type = TypeDescriptor(TYPE_INT).to_thrift();
+
+    std::unique_ptr<Expr> expr(VectorizedCaseExprFactory::from_thrift(expr_node, TYPE_INT, TYPE_VARIANT));
+    ASSERT_NE(nullptr, expr);
+
+    MockExpr case_expr(TypeDescriptor(TYPE_VARIANT), create_case_variant_column({"1", "2", "3", "4"}));
+    MockExpr when1(TypeDescriptor(TYPE_VARIANT), create_case_variant_column({"1", "1", "1", "1"}));
+    MockExpr when2(TypeDescriptor(TYPE_VARIANT), create_case_variant_column({"2", "2", "2", "2"}));
+
+    auto make_int_column = [](const std::vector<int32_t>& values) {
+        auto column = Int32Column::create();
+        for (int32_t v : values) {
+            column->append(v);
+        }
+        return column;
+    };
+    MockExpr then1(TypeDescriptor(TYPE_INT), make_int_column({100, 101, 102, 103}));
+    MockExpr then2(TypeDescriptor(TYPE_INT), make_int_column({200, 201, 202, 203}));
+    MockExpr else_expr(TypeDescriptor(TYPE_INT), make_int_column({300, 301, 302, 303}));
+
+    expr->_children.push_back(&case_expr);
+    expr->_children.push_back(&when1);
+    expr->_children.push_back(&then1);
+    expr->_children.push_back(&when2);
+    expr->_children.push_back(&then2);
+    expr->_children.push_back(&else_expr);
+
+    Chunk chunk;
+    ColumnPtr result = expr->evaluate(nullptr, &chunk);
+    ASSERT_EQ(4, result->size());
+    auto viewer = ColumnViewer<TYPE_INT>(result);
+    EXPECT_EQ(100, viewer.value(0));
+    EXPECT_EQ(201, viewer.value(1));
+    EXPECT_EQ(302, viewer.value(2));
+    EXPECT_EQ(303, viewer.value(3));
+}
+
 // The selective-evaluation path (config::case_when_selective_eval_ratio > 0) must produce exactly the
 // same column as evaluating every THEN over the whole chunk. WHEN/THEN read real slots so the branch
 // actually takes the gather/scatter path instead of falling back.

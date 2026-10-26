@@ -24,6 +24,7 @@ import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.type.CharType;
 import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.VarcharType;
@@ -84,6 +85,25 @@ public class KuduPredicateConverterTest {
         ScalarOperator op = new BinaryPredicateOperator(BinaryType.EQ, F0_CAST, value);
         List<KuduPredicate> result = CONVERTER.convert(op);
         Assertions.assertEquals(result.get(0).toString(), "`f0` = 5");
+    }
+
+    @Test
+    public void testTruncatingCharCastIsNotPushedDown() {
+        ConstantOperator value = ConstantOperator.createVarchar("hello");
+        CastOperator explicitCast = new CastOperator(new CharType(5), F1);
+        ScalarOperator equality = new BinaryPredicateOperator(BinaryType.EQ, explicitCast, value);
+        Assertions.assertTrue(CONVERTER.convert(equality).isEmpty());
+        Assertions.assertTrue(CONVERTER.convert(new InPredicateOperator(false, explicitCast, value)).isEmpty());
+
+        ScalarOperator safeEquality = new BinaryPredicateOperator(BinaryType.EQ, F0,
+                ConstantOperator.createInt(5));
+        ScalarOperator conjunction = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND,
+                equality, safeEquality);
+        Assertions.assertEquals("`f0` = 5", CONVERTER.convert(conjunction).get(0).toString());
+
+        CastOperator implicitCast = new CastOperator(new CharType(5), F1, true);
+        ScalarOperator implicitEquality = new BinaryPredicateOperator(BinaryType.EQ, implicitCast, value);
+        Assertions.assertEquals("`f1` = \"hello\"", CONVERTER.convert(implicitEquality).get(0).toString());
     }
 
     @Test

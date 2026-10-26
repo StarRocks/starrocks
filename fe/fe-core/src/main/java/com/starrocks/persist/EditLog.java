@@ -303,6 +303,11 @@ public class EditLog {
                     globalStateMgr.getAlterJobMgr().replayModifyPartition(info);
                     break;
                 }
+                case OperationType.OP_MODIFY_PARTITION_VACUUM_STATE: {
+                    PartitionVacuumStateInfo info = (PartitionVacuumStateInfo) journal.data();
+                    globalStateMgr.getLocalMetastore().replayModifyPartitionVacuumState(info);
+                    break;
+                }
                 case OperationType.OP_BATCH_MODIFY_PARTITION: {
                     BatchModifyPartitionsInfo info = (BatchModifyPartitionsInfo) journal.data();
                     for (ModifyPartitionInfo modifyPartitionInfo : info.getModifyPartitionInfos()) {
@@ -855,6 +860,11 @@ public class EditLog {
                         default:
                             break;
                     }
+                    break;
+                }
+                case OperationType.OP_RELEASE_ALTER_JOB_HISTORY_SCHEMA: {
+                    ReleaseAlterJobHistorySchemaLog log = (ReleaseAlterJobHistorySchemaLog) journal.data();
+                    globalStateMgr.getSchemaChangeHandler().replayReleaseHistorySchema(log);
                     break;
                 }
                 case OperationType.OP_ALTER_ROUTINE_LOAD_JOB: {
@@ -1764,6 +1774,10 @@ public class EditLog {
         logJsonObject(OperationType.OP_MODIFY_PARTITION_V2, info, walApplier);
     }
 
+    public void logModifyPartitionVacuumState(PartitionVacuumStateInfo info) {
+        logJsonObject(OperationType.OP_MODIFY_PARTITION_VACUUM_STATE, info);
+    }
+
     public void logBatchModifyPartition(BatchModifyPartitionsInfo info, WALApplier walApplier) {
         logJsonObject(OperationType.OP_BATCH_MODIFY_PARTITION, info, walApplier);
     }
@@ -2132,6 +2146,10 @@ public class EditLog {
 
     public void logRemoveExpiredAlterJobV2(RemoveAlterJobV2OperationLog log, WALApplier walApplier) {
         logJsonObject(OperationType.OP_REMOVE_ALTER_JOB_V2, log, walApplier);
+    }
+
+    public void logReleaseAlterJobHistorySchema(ReleaseAlterJobHistorySchemaLog log, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_RELEASE_ALTER_JOB_HISTORY_SCHEMA, log, walApplier);
     }
 
     public void logAlterRoutineLoadJob(AlterRoutineLoadJobOperationLog log, WALApplier walApplier) {

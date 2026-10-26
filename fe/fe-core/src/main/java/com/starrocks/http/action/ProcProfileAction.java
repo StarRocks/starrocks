@@ -15,6 +15,7 @@
 package com.starrocks.http.action;
 
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Iterables;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -28,9 +29,12 @@ import com.starrocks.http.HttpUtils;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
+import com.starrocks.system.SystemInfoService;
 import io.netty.handler.codec.http.HttpMethod;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.owasp.encoder.Encode;
 
 import java.io.File;
 import java.text.SimpleDateFormat;
@@ -99,11 +103,11 @@ public class ProcProfileAction extends WebBaseAction {
             if (!backend.isAlive()) {
                 continue;
             }
-            String beNodeId = "BE:" + backend.getHost() + ":" + backend.getHttpPort();
+            String beNodeId = toNodeId(backend);
             String beClass = beNodeId.equals(selectedNode) ? "active" : "";
             buffer.append("<li class=\"").append(beClass).append("\">");
-            buffer.append("<a href=\"/proc_profile?node=").append(beNodeId).append("\">");
-            buffer.append("BE: ").append(backend.getHost()).append(":").append(backend.getHttpPort());
+            buffer.append("<a href=\"/proc_profile?node=").append(Encode.forUriComponent(beNodeId)).append("\">");
+            buffer.append("BE: ").append(Encode.forHtml(backend.getHost() + ":" + backend.getHttpPort()));
             buffer.append("</a>");
             buffer.append("</li>");
         }
@@ -118,11 +122,13 @@ public class ProcProfileAction extends WebBaseAction {
         List<ProfileFileInfo> profileFiles;
         if ("FE".equals(nodeParam)) {
             profileFiles = getProfileFiles();
-        } else if (nodeParam.startsWith("BE:")) {
-            profileFiles = getProfileFilesFromBE(nodeParam);
         } else {
-            buffer.append("<p>Invalid node parameter: ").append(nodeParam).append("</p>");
-            return;
+            ComputeNode node = findNode(nodeParam);
+            if (node == null) {
+                buffer.append("<p>Invalid node parameter: ").append(Encode.forHtml(nodeParam)).append("</p>");
+                return;
+            }
+            profileFiles = getProfileFilesFromBE(node.getHost(), node.getHttpPort());
         }
 
         if (profileFiles.isEmpty()) {
@@ -212,24 +218,25 @@ public class ProcProfileAction extends WebBaseAction {
         buffer.append("</tr></thead>");
     }
 
-    private List<ProfileFileInfo> getProfileFilesFromBE(String beNodeId) {
+    private static String toNodeId(ComputeNode node) {
+        return "BE:" + node.getHost() + ":" + node.getHttpPort();
+    }
+
+    // Resolves "BE:<host>:<httpPort>" to a backend or compute node of this cluster, the same nodes that
+    // /proc_profile/file accepts. A node parameter that matches none is rejected, so it can neither make the FE
+    // fetch from an arbitrary address nor feed attacker-chosen profile names into the page.
+    private static ComputeNode findNode(String nodeParam) {
+        SystemInfoService clusterInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        for (ComputeNode node : Iterables.concat(clusterInfo.getBackends(), clusterInfo.getComputeNodes())) {
+            if (toNodeId(node).equals(nodeParam)) {
+                return node;
+            }
+        }
+        return null;
+    }
+
+    private List<ProfileFileInfo> getProfileFilesFromBE(String host, int port) {
         List<ProfileFileInfo> profileFiles = new ArrayList<>();
-
-        // Parse BE node: "BE:host:port"
-        String[] parts = beNodeId.substring(3).split(":");
-        if (parts.length != 2) {
-            LOG.warn("Invalid BE node format: {}", beNodeId);
-            return profileFiles;
-        }
-
-        String host = parts[0];
-        int port;
-        try {
-            port = Integer.parseInt(parts[1]);
-        } catch (NumberFormatException e) {
-            LOG.warn("Invalid BE port: {}", parts[1]);
-            return profileFiles;
-        }
 
         try {
             String url = "http://" + host + ":" + port + "/api/proc_profile/list";
@@ -275,25 +282,26 @@ public class ProcProfileAction extends WebBaseAction {
         return profileFiles;
     }
 
+    // Profile types and file names come from the profile directory or a BE response, so they are encoded.
     private void appendProfileTableBody(StringBuilder buffer, List<ProfileFileInfo> profileFiles, String nodeParam) {
         buffer.append("<tbody>");
         SimpleDateFormat displayFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
 
         for (ProfileFileInfo profile : profileFiles) {
             buffer.append("<tr>");
-            buffer.append("<td>").append(profile.type).append("</td>");
+            buffer.append("<td>").append(Encode.forHtml(profile.type)).append("</td>");
             buffer.append("<td>").append(displayFormat.format(profile.timestamp)).append("</td>");
             buffer.append("<td>").append(DebugUtil.getPrettyStringBytes(profile.fileSize)).append("</td>");
             buffer.append("<td>");
             if ("FE".equals(nodeParam)) {
                 buffer.append("<a href=\"/proc_profile/file?filename=")
-                        .append(profile.fileName)
+                        .append(Encode.forUriComponent(profile.fileName))
                         .append("\" target=\"_blank\">View</a>");
             } else {
                 buffer.append("<a href=\"/proc_profile/file?node=")
-                        .append(nodeParam)
-                        .append("&filename=")
-                        .append(profile.fileName)
+                        .append(Encode.forUriComponent(nodeParam))
+                        .append("&amp;filename=")
+                        .append(Encode.forUriComponent(profile.fileName))
                         .append("\" target=\"_blank\">View</a>");
             }
             buffer.append("</td>");

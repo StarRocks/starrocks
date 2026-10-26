@@ -29,13 +29,15 @@
 namespace starrocks::io {
 
 S3OutputStream::S3OutputStream(std::shared_ptr<Aws::S3::S3Client> client, std::string bucket, std::string object,
-                               int64_t max_single_part_size, int64_t min_upload_part_size, std::string content_type)
+                               int64_t max_single_part_size, int64_t min_upload_part_size, std::string content_type,
+                               bool equal_part_size)
         : _client(std::move(client)),
           _bucket(std::move(bucket)),
           _object(std::move(object)),
           _max_single_part_size(max_single_part_size),
           _min_upload_part_size(min_upload_part_size),
           _content_type(std::move(content_type)),
+          _equal_part_size(equal_part_size),
           _buffer(),
           _upload_id(),
           _etags() {
@@ -50,9 +52,13 @@ Status S3OutputStream::write(const void* data, int64_t size) {
         RETURN_IF_ERROR(create_multipart_upload());
         DCHECK(!_upload_id.empty());
     }
-    if (!_upload_id.empty() && _buffer.size() >= _min_upload_part_size) {
-        RETURN_IF_ERROR(multipart_upload());
-        _buffer.clear();
+    if (!_upload_id.empty()) {
+        if (_equal_part_size) {
+            RETURN_IF_ERROR(upload_equal_parts());
+        } else if (_buffer.size() >= _min_upload_part_size) {
+            RETURN_IF_ERROR(multipart_upload());
+            _buffer.clear();
+        }
     }
     IOProfiler::add_write(size, watch.elapsed_time());
     return Status::OK();
@@ -88,6 +94,11 @@ Status S3OutputStream::close() {
     if (_upload_id.empty()) {
         RETURN_IF_ERROR(singlepart_upload());
     } else {
+        if (_equal_part_size) {
+            // get_direct_buffer_and_advance() grows the buffer without going through write(), so it
+            // may still hold full parts here. Cut them first, the remainder is the last part.
+            RETURN_IF_ERROR(upload_equal_parts());
+        }
         RETURN_IF_ERROR(multipart_upload());
         RETURN_IF_ERROR(complete_multipart_upload());
     }
@@ -130,8 +141,32 @@ Status S3OutputStream::singlepart_upload() {
 }
 
 Status S3OutputStream::multipart_upload() {
+    return upload_part(_buffer.data(), _buffer.size());
+}
+
+Status S3OutputStream::upload_equal_parts() {
+    if (UNLIKELY(_min_upload_part_size <= 0)) {
+        return Status::InvalidArgument(
+                fmt::format("S3: invalid multipart part size {} for {}/{}", _min_upload_part_size, _bucket, _object));
+    }
+    const auto part_size = static_cast<size_t>(_min_upload_part_size);
+    size_t offset = 0;
+    Status st;
+    while (_buffer.size() - offset >= part_size) {
+        st = upload_part(_buffer.data() + offset, part_size);
+        if (!st.ok()) {
+            break;
+        }
+        offset += part_size;
+    }
+    // Keep the bytes not uploaded yet, they start the next part.
+    _buffer.erase(0, offset);
+    return st;
+}
+
+Status S3OutputStream::upload_part(const char* data, size_t size) {
     VLOG(12) << "Uploading s3://" << _bucket << "/" << _object << " via multipart upload";
-    if (_buffer.empty()) {
+    if (size == 0) {
         return Status::OK();
     }
     Aws::S3::Model::UploadPartRequest req;
@@ -139,8 +174,8 @@ Status S3OutputStream::multipart_upload() {
     req.SetKey(_object);
     req.SetPartNumber(static_cast<int>(_etags.size() + 1));
     req.SetUploadId(_upload_id);
-    req.SetContentLength(static_cast<int64_t>(_buffer.size()));
-    req.SetBody(Aws::MakeShared<S3ZeroCopyIOStream>(AWS_ALLOCATE_TAG, _buffer.data(), _buffer.size()));
+    req.SetContentLength(static_cast<int64_t>(size));
+    req.SetBody(Aws::MakeShared<S3ZeroCopyIOStream>(AWS_ALLOCATE_TAG, data, size));
     auto outcome = _client->UploadPart(req);
     if (outcome.IsSuccess()) {
         _etags.push_back(outcome.GetResult().GetETag());

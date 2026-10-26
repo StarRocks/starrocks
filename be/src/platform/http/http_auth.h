@@ -33,4 +33,11 @@ bool parse_basic_auth(const HttpRequest& req, std::string* user, std::string* pa
 
 bool parse_basic_auth(const HttpRequest& req, AuthInfo* auth);
 
+// Parse the Authorization header into AuthInfo, dispatching on the scheme:
+//   - "Bearer <token>": the token is carried in AuthInfo::passwd and auth_type is set to
+//     AuthInfo::AUTH_TYPE_BEARER; user is left empty (a Bearer credential has no declared user).
+//   - "Basic ...": delegates to parse_basic_auth (auth_type left empty == basic).
+// Returns false when the header is missing or its scheme is neither Basic nor Bearer.
+bool parse_auth(const HttpRequest& req, AuthInfo* auth);
+
 } // namespace starrocks

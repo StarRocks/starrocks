@@ -1,0 +1,142 @@
+-- name: test_insert_generated_partition_column_pre_split @cloud @sequential
+admin set frontend config ("tablet_pre_split_target_size" = "1048576");
+-- result:
+-- !result
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table src (account_id bigint, activity_date datetime, tenant_id bigint) properties('replication_num' = '1');
+-- result:
+-- !result
+insert into src
+select x, hours_add(days_add(cast('2025-11-01 00:00:00' as datetime), x % 60), x % 24), 1 + x % 2
+from table(generate_series(1, 400000)) as g(x);
+-- result:
+-- !result
+insert into src values (400001, NULL, 1);
+-- result:
+-- !result
+select count(*), sum(account_id), count(activity_date) from src;
+-- result:
+400001	80000600001	400000
+-- !result
+set enable_range_distribution = true;
+-- result:
+-- !result
+create table dst (
+    account_id bigint not null,
+    activity_date datetime null,
+    tenant_id bigint not null,
+    activity_date_month datetime null as date_trunc('month', activity_date)
+) duplicate key(account_id, activity_date)
+partition by (tenant_id, activity_date_month)
+order by (account_id, activity_date)
+properties('replication_num' = '1');
+-- result:
+-- !result
+create table dst_overwrite (
+    account_id bigint not null,
+    activity_date datetime null,
+    tenant_id bigint not null,
+    activity_date_month datetime null as date_trunc('month', activity_date)
+) duplicate key(account_id, activity_date)
+partition by (tenant_id, activity_date_month)
+order by (account_id, activity_date)
+properties('replication_num' = '1');
+-- result:
+-- !result
+set enable_range_distribution = false;
+-- result:
+-- !result
+insert into dst (account_id, activity_date, tenant_id) select account_id, activity_date, tenant_id from src;
+-- result:
+-- !result
+SELECT PARTITION_NAME, BUCKETS > 1 AS pre_split_widened_the_partition
+FROM information_schema.partitions_meta
+WHERE DB_NAME = 'db_${uuid0}' AND TABLE_NAME = 'dst' AND IS_TEMP = false
+  AND PARTITION_NAME IN ('p1_20251101000000', 'p1_20251201000000', 'p2_20251101000000', 'p2_20251201000000')
+ORDER BY PARTITION_NAME;
+-- result:
+p1_20251101000000	1
+p1_20251201000000	1
+p2_20251101000000	1
+p2_20251201000000	1
+-- !result
+select tenant_id, activity_date_month, count(*) from dst group by tenant_id, activity_date_month
+order by tenant_id, activity_date_month;
+-- result:
+1	None	1
+1	2025-11-01 00:00:00	100004
+1	2025-12-01 00:00:00	99996
+2	2025-11-01 00:00:00	100005
+2	2025-12-01 00:00:00	99995
+-- !result
+select count(*), sum(account_id), count(activity_date) from dst;
+-- result:
+400001	80000600001	400000
+-- !result
+select count(*) from dst partition (p1_20251101000000)
+where tenant_id != 1 or activity_date_month != '2025-11-01 00:00:00';
+-- result:
+0
+-- !result
+set enable_tablet_pre_split = false;
+-- result:
+-- !result
+insert into dst_overwrite (account_id, activity_date, tenant_id)
+select account_id, activity_date, tenant_id from src where account_id in (1, 2, 31, 32);
+-- result:
+-- !result
+set enable_tablet_pre_split = true;
+-- result:
+-- !result
+SELECT PARTITION_NAME, BUCKETS FROM information_schema.partitions_meta
+WHERE DB_NAME = 'db_${uuid0}' AND TABLE_NAME = 'dst_overwrite' AND IS_TEMP = false AND PARTITION_NAME LIKE 'p%'
+ORDER BY PARTITION_NAME;
+-- result:
+p1_20251101000000	1
+p1_20251201000000	1
+p2_20251101000000	1
+p2_20251201000000	1
+-- !result
+insert overwrite dst_overwrite partition (p1_20251101000000, p2_20251101000000) (account_id, activity_date, tenant_id)
+select account_id, activity_date, tenant_id from src
+where activity_date >= '2025-11-01 00:00:00' and activity_date < '2025-12-01 00:00:00';
+-- result:
+-- !result
+SELECT PARTITION_NAME, BUCKETS > 1 AS pre_split_widened_the_partition
+FROM information_schema.partitions_meta
+WHERE DB_NAME = 'db_${uuid0}' AND TABLE_NAME = 'dst_overwrite' AND IS_TEMP = false AND PARTITION_NAME LIKE 'p%'
+ORDER BY PARTITION_NAME;
+-- result:
+p1_20251101000000	1
+p1_20251201000000	0
+p2_20251101000000	1
+p2_20251201000000	0
+-- !result
+select tenant_id, activity_date_month, count(*), sum(account_id) from dst_overwrite
+group by tenant_id, activity_date_month order by tenant_id, activity_date_month;
+-- result:
+1	2025-11-01 00:00:00	100004	20000399970
+1	2025-12-01 00:00:00	1	32
+2	2025-11-01 00:00:00	100005	20000499975
+2	2025-12-01 00:00:00	1	31
+-- !result
+admin set frontend config ("tablet_pre_split_target_size" = "0");
+-- result:
+-- !result
+drop table dst_overwrite;
+-- result:
+-- !result
+drop table dst;
+-- result:
+-- !result
+drop table src;
+-- result:
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result

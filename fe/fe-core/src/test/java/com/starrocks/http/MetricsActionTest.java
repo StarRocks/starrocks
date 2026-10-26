@@ -14,15 +14,26 @@
 
 package com.starrocks.http;
 
+import com.starrocks.authentication.AuthCredentialKind;
+import com.starrocks.authentication.AuthCredentials;
+import com.starrocks.authentication.AuthenticationException;
+import com.starrocks.authentication.AuthenticationHandler;
+import com.starrocks.authorization.PrivilegeBuiltinConstants;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.http.rest.MetricsAction;
+import com.starrocks.qe.ConnectContext;
 import io.netty.handler.codec.http.DefaultHttpHeaders;
 import io.netty.handler.codec.http.DefaultHttpRequest;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpVersion;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import okhttp3.Credentials;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+
+import java.util.Set;
 
 public class MetricsActionTest {
     public static class MockMetricsAction extends MetricsAction {
@@ -253,5 +264,92 @@ public class MetricsActionTest {
             Assertions.assertFalse(params.isMinifyTableMetrics());
             Assertions.assertTrue(params.isCollectUserConnMetrics());
         }
+    }
+
+    /**
+     * A security-integration user owns no roles of its own: db_admin and user_admin arrive through
+     * its groups and sit on the context authentication wrote to. /metrics must authorize on that
+     * context; the user-owned role table does not even know the user.
+     */
+    @Test
+    public void testAnAdminRoleMappedFromAGroupUnlocksTheTableMetrics() {
+        MockMetricsAction action = new MockMetricsAction(new ActionController());
+        new MockUp<AuthenticationHandler>() {
+            @Mock
+            public UserIdentity authenticate(ConnectContext ctx, AuthCredentials cred) {
+                UserIdentity siUser = UserIdentity.createEphemeralUserIdent("si_admin", "%");
+                ctx.setCurrentUserIdentity(siUser);
+                ctx.setQualifiedUser("si_admin");
+                ctx.setCurrentRoleIds(Set.of(PrivilegeBuiltinConstants.DB_ADMIN_ROLE_ID,
+                        PrivilegeBuiltinConstants.USER_ADMIN_ROLE_ID));
+                return siUser;
+            }
+        };
+
+        DefaultHttpHeaders headers = new DefaultHttpHeaders();
+        headers.add("Authorization", "Bearer good.jwt.token");
+        BaseRequest request = new BaseRequest(null, new DefaultHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET,
+                "/metrics?with_table_metrics=all", headers));
+        new Expectations(request) {
+            {
+                request.getHostString();
+                result = "127.0.0.1";
+                minTimes = 0;
+            }
+        };
+        Assertions.assertTrue(action.callParseRequestParams(request).isCollectTableMetrics(),
+                "the roles on the authenticated context decide, not the user-owned role table");
+    }
+
+    @Test
+    public void testBearerTokenUnlocksTableMetricsAndABadOneDegradesSilently() {
+        // TC-L3-46-08: /metrics reads Basic or Bearer through the same parser as every other FE
+        // endpoint. A verified token grants the table metrics; a refused one falls back to the base
+        // metrics without an error, exactly as a wrong Basic password always has.
+        ActionController controller = new ActionController();
+        MockMetricsAction action = new MockMetricsAction(controller);
+        new MockUp<AuthenticationHandler>() {
+            @Mock
+            public UserIdentity authenticate(ConnectContext ctx, AuthCredentials cred) throws AuthenticationException {
+                if (cred.kind() != AuthCredentialKind.BEARER_TOKEN || !"good.jwt.token".equals(cred.tokenString())) {
+                    throw new AuthenticationException("refused");
+                }
+                ctx.setCurrentUserIdentity(UserIdentity.ROOT);
+                ctx.setQualifiedUser("root");
+                return UserIdentity.ROOT;
+            }
+        };
+        new MockUp<MetricsAction>() {
+            @Mock
+            protected void checkUserOwnsAdminRole(UserIdentity currentUser) {
+            }
+        };
+
+        DefaultHttpHeaders good = new DefaultHttpHeaders();
+        good.add("Authorization", "Bearer good.jwt.token");
+        BaseRequest okRequest = new BaseRequest(null, new DefaultHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET,
+                "/metrics?with_table_metrics=all", good));
+        new Expectations(okRequest) {
+            {
+                okRequest.getHostString();
+                result = "127.0.0.1";
+                minTimes = 0;
+            }
+        };
+        Assertions.assertTrue(action.callParseRequestParams(okRequest).isCollectTableMetrics());
+
+        DefaultHttpHeaders bad = new DefaultHttpHeaders();
+        bad.add("Authorization", "Bearer forged.jwt.token");
+        BaseRequest badRequest = new BaseRequest(null, new DefaultHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET,
+                "/metrics?with_table_metrics=all", bad));
+        new Expectations(badRequest) {
+            {
+                badRequest.getHostString();
+                result = "127.0.0.1";
+                minTimes = 0;
+            }
+        };
+        Assertions.assertFalse(action.callParseRequestParams(badRequest).isCollectTableMetrics(),
+                "a refused token degrades to the base metrics, it does not fail the scrape");
     }
 }

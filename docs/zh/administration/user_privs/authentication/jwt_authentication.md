@@ -74,3 +74,9 @@ mysql -h <hostname> -P <query_port> --authentication-openid-connect-client-id-to
 ```Bash
 mysql -h 127.0.0.1 -P 9030 --authentication-openid-connect-client-id-token-file=/path/to/token/file -u tom
 ```
+
+## 使用 JWT 通过 HTTP 或 Arrow Flight 连接
+
+JWT 安全集成的用户还可以把 token 放在 `Authorization: Bearer <token>` 请求头中访问 HTTP API（SQL API、Stream Load、Web UI）和 Arrow Flight SQL，无需提供用户名。参见[通过 HTTP 和 Arrow Flight 连接](./security_integration.md#通过-http-和-arrow-flight-连接)。
+
+> 用 `IDENTIFIED WITH authentication_jwt` 创建的用户只能在 MySQL 协议上出示 token，因为那里的握手包带用户名。要在 HTTP API 或 Arrow Flight SQL 上使用 JWT，请改为创建 JWT [安全集成](./security_integration.md)，并参见[各认证方式在哪些入口可用](./authentication.mdx#各认证方式在哪些入口可用)。

@@ -99,6 +99,11 @@ public class SchemaChangeProcDir implements ProcDirInterface {
             return null;
         }
 
+        if (!(job instanceof SchemaChangeJobV2)) {
+            throw new AnalysisException("Not support showing detail of alter job " + jobId + " of type "
+                    + job.getClass().getSimpleName());
+        }
+
         return new SchemaChangeJobProcNode((SchemaChangeJobV2) job);
     }
 }

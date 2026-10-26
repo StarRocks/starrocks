@@ -627,7 +627,7 @@ struct AggHashSetOfSerializedKey : public AggHashSet<HashSet, AggHashSetOfSerial
     size_t get_max_serialize_size(const Columns& key_columns) {
         size_t max_size = 0;
         for (const auto& key_column : key_columns) {
-            max_size += key_column->max_one_element_serialize_size();
+            max_size += key_column->max_one_element_serialize_size_compact();
         }
         return max_size;
     }
@@ -641,8 +641,8 @@ struct AggHashSetOfSerializedKey : public AggHashSet<HashSet, AggHashSetOfSerial
             // deserialize by row
             for (size_t i = 0; i < chunk_size; i++) {
                 for (auto& key_column : key_columns) {
-                    keys[i].data =
-                            (char*)(key_column->deserialize_and_append(reinterpret_cast<const uint8_t*>(keys[i].data)));
+                    keys[i].data = (char*)(key_column->deserialize_compact_and_append(
+                            reinterpret_cast<const uint8_t*>(keys[i].data)));
                 }
             }
         } else {

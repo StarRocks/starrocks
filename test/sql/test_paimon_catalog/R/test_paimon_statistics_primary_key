@@ -1,0 +1,105 @@
+-- name: test_paimon_statistics_primary_key
+create external catalog paimon_static_${uuid0}
+properties (
+"type" = "paimon",
+"paimon.catalog.type" = "filesystem",
+"paimon.catalog.warehouse" = "oss://${oss_bucket}/ci_catalog_test_data/paimon/",
+"enable_get_stats_from_external_metadata" = "true",
+"aws.s3.access_key" = "${oss_ak}",
+"aws.s3.secret_key" = "${oss_sk}",
+"aws.s3.endpoint" = "${oss_endpoint}"
+);
+-- result:
+-- !result
+set disable_table_stats_from_metadata_for_single_table = false;
+-- result:
+-- !result
+set enable_paimon_column_statistics = true;
+-- result:
+-- !result
+function: assert_explain_costs_contains("select id, amount, flag from paimon_static_${uuid0}.paimon_test.pk_parquet_unmerged_v1", "cardinality: 3", "stats source: TABLE_METADATA")
+-- result:
+None
+-- !result
+function: get_col_stats_from_explain_costs("select id, amount, flag from paimon_static_${uuid0}.paimon_test.pk_parquet_unmerged_v1", "id")
+-- result:
+id-->[1.0, 4.0, 0.0, 4.0, 3.0] ESTIMATE
+-- !result
+function: get_col_stats_from_explain_costs("select id, amount, flag from paimon_static_${uuid0}.paimon_test.pk_parquet_unmerged_v1", "amount")
+-- result:
+amount-->[40.0, 100.0, 0.3333333333333333, 4.0, 2.0] ESTIMATE
+-- !result
+function: get_col_stats_from_explain_costs("select id, amount, flag from paimon_static_${uuid0}.paimon_test.pk_parquet_unmerged_v1", "flag")
+-- result:
+flag-->[0.0, 1.0, 0.0, 1.0, 2.0] ESTIMATE
+-- !result
+select count(*), count(amount) from paimon_static_${uuid0}.paimon_test.pk_parquet_unmerged_v1;
+-- result:
+3	2
+-- !result
+function: assert_explain_costs_contains("select id, amount, flag from paimon_static_${uuid0}.paimon_test.pk_parquet_compacted_v1", "cardinality: 3", "stats source: TABLE_METADATA")
+-- result:
+None
+-- !result
+function: get_col_stats_from_explain_costs("select id, amount, flag from paimon_static_${uuid0}.paimon_test.pk_parquet_compacted_v1", "id")
+-- result:
+id-->[1.0, 4.0, 0.0, 4.0, 3.0] ESTIMATE
+-- !result
+function: get_col_stats_from_explain_costs("select id, amount, flag from paimon_static_${uuid0}.paimon_test.pk_parquet_compacted_v1", "amount")
+-- result:
+amount-->[40.0, 100.0, 0.3333333333333333, 4.0, 2.0] ESTIMATE
+-- !result
+function: get_col_stats_from_explain_costs("select id, amount, flag from paimon_static_${uuid0}.paimon_test.pk_parquet_compacted_v1", "flag")
+-- result:
+flag-->[0.0, 1.0, 0.0, 1.0, 2.0] ESTIMATE
+-- !result
+select count(*), count(amount) from paimon_static_${uuid0}.paimon_test.pk_parquet_compacted_v1;
+-- result:
+3	2
+-- !result
+function: assert_explain_costs_contains("select id, amount, flag from paimon_static_${uuid0}.paimon_test.pk_orc_unmerged_v1", "cardinality: 3", "stats source: TABLE_METADATA")
+-- result:
+None
+-- !result
+function: get_col_stats_from_explain_costs("select id, amount, flag from paimon_static_${uuid0}.paimon_test.pk_orc_unmerged_v1", "id")
+-- result:
+id-->[1.0, 4.0, 0.0, 4.0, 3.0] ESTIMATE
+-- !result
+function: get_col_stats_from_explain_costs("select id, amount, flag from paimon_static_${uuid0}.paimon_test.pk_orc_unmerged_v1", "amount")
+-- result:
+amount-->[40.0, 100.0, 0.3333333333333333, 4.0, 2.0] ESTIMATE
+-- !result
+function: get_col_stats_from_explain_costs("select id, amount, flag from paimon_static_${uuid0}.paimon_test.pk_orc_unmerged_v1", "flag")
+-- result:
+flag-->[0.0, 1.0, 0.0, 1.0, 2.0] ESTIMATE
+-- !result
+select count(*), count(amount) from paimon_static_${uuid0}.paimon_test.pk_orc_unmerged_v1;
+-- result:
+3	2
+-- !result
+function: assert_explain_costs_contains("select id, amount, flag from paimon_static_${uuid0}.paimon_test.pk_orc_compacted_v1", "cardinality: 3", "stats source: TABLE_METADATA")
+-- result:
+None
+-- !result
+function: get_col_stats_from_explain_costs("select id, amount, flag from paimon_static_${uuid0}.paimon_test.pk_orc_compacted_v1", "id")
+-- result:
+id-->[1.0, 4.0, 0.0, 4.0, 3.0] ESTIMATE
+-- !result
+function: get_col_stats_from_explain_costs("select id, amount, flag from paimon_static_${uuid0}.paimon_test.pk_orc_compacted_v1", "amount")
+-- result:
+amount-->[40.0, 100.0, 0.3333333333333333, 4.0, 2.0] ESTIMATE
+-- !result
+function: get_col_stats_from_explain_costs("select id, amount, flag from paimon_static_${uuid0}.paimon_test.pk_orc_compacted_v1", "flag")
+-- result:
+flag-->[0.0, 1.0, 0.0, 1.0, 2.0] ESTIMATE
+-- !result
+select count(*), count(amount) from paimon_static_${uuid0}.paimon_test.pk_orc_compacted_v1;
+-- result:
+3	2
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+drop catalog paimon_static_${uuid0};
+-- result:
+-- !result

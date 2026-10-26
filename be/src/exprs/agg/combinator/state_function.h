@@ -47,7 +47,10 @@ public:
         Columns new_columns;
         new_columns.reserve(columns.size());
         for (auto i = 0; i < columns.size(); i++) {
-            ASSIGN_OR_RETURN(ColumnPtr new_column, _convert_to_nullable_column(columns[i], _arg_nullables[i], false));
+            // Follow Aggregator::evaluate_agg_input_column: the data argument is expanded because the
+            // aggregate implementations down_cast it to a concrete data column, while the trailing
+            // arguments keep a constant column, which functions such as percentile_approx require.
+            ASSIGN_OR_RETURN(ColumnPtr new_column, _convert_to_nullable_column(columns[i], _arg_nullables[i], i == 0));
             new_columns.emplace_back(new_column);
         }
 

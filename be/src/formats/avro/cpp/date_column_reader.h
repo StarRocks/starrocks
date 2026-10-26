@@ -16,6 +16,7 @@
 
 #include <cctz/time_zone.h>
 
+#include "base/time/tz_offset_cache.h"
 #include "column/fixed_length_column.h"
 #include "formats/avro/cpp/column_reader.h"
 #include "types/date_value.h"
@@ -47,7 +48,9 @@ class DatetimeColumnReader final : public ColumnReader {
 public:
     explicit DatetimeColumnReader(std::string_view col_name, const TypeDescriptor& type_desc,
                                   const cctz::time_zone& timezone)
-            : ColumnReader(col_name, type_desc), _timezone(timezone) {}
+            : ColumnReader(col_name, type_desc), _timezone(timezone) {
+        _offset_cache.bind(_timezone);
+    }
     ~DatetimeColumnReader() override = default;
 
     Status read_datum(const avro::GenericDatum& datum, Column* column) override;
@@ -57,6 +60,7 @@ private:
     Status read_string_value(const avro::GenericDatum& datum, FixedLengthColumn<TimestampValue>* column);
 
     const cctz::time_zone& _timezone;
+    TzOffsetCache _offset_cache;
 };
 
 } // namespace starrocks::avrocpp

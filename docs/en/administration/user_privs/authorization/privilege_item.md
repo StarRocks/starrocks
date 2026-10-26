@@ -26,6 +26,16 @@ This section describes privileges that are available on different objects.
 
 <PrivCreateWarehouse />
 
+### AI FUNCTION / AI PROVIDER {/* #ai-function-privileges */}
+
+| Object | Privilege | Purpose |
+| --- | --- | --- |
+| AI FUNCTION | USAGE | Use the specified AI function. |
+| AI PROVIDER | USAGE | Use the specified AI Provider. |
+
+> Note: Calling an AI function requires USAGE on both the function and the selected Provider, including the default Provider. Managing Providers requires SYSTEM OPERATE.
+
+
 ### RESOURCE GROUP
 
 | Privilege | Description                                       |
@@ -100,6 +110,7 @@ This section describes privileges that are available on different objects.
 | Privilege | Description                             |
 | --------- | --------------------------------------- |
 | SELECT    | Queries data in a view.                 |
+| EXPORT    | Only supports granting/revoking EXPORT; EXPORT TABLE is not supported yet. |
 | ALTER     | Modifies the definition of a view.      |
 | DROP      | Deletes a logical view.                 |
 | ALL       | Has all the above privileges on a view. |
@@ -109,6 +120,7 @@ This section describes privileges that are available on different objects.
 | Privilege | Description                                          |
 | --------- | ---------------------------------------------------- |
 | SELECT    | Queries a materialized view to accelerate queries.   |
+| EXPORT    | Only supports granting/revoking EXPORT; EXPORT TABLE is not supported yet. |
 | ALTER     | Changes a materialized view.                         |
 | REFRESH   | Refreshes a materialized view.                       |
 | DROP      | Deletes a materialized view.                         |

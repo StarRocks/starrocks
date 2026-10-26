@@ -43,6 +43,7 @@ import com.starrocks.sql.ast.CreateSyncMVStmt;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.MVColumnItem;
 import com.starrocks.sql.ast.OrderByElement;
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectList;
@@ -116,6 +117,7 @@ public class CreateSyncMVStmtAnalyzer {
         } finally {
             context.getSessionVariable().setSqlSelectLimit(originSelectLimit);
         }
+        verifyNoAIFunctions(queryStatement);
 
         boolean hasTemporaryTable = AnalyzerUtils.hasTemporaryTables(queryStatement);
         if (hasTemporaryTable) {
@@ -192,6 +194,13 @@ public class CreateSyncMVStmtAnalyzer {
         }
         // analyze table if it has alias
         analyzeExprWithTableAlias(context, stmt.getDBName(), table, stmt.getMVColumnItemList());
+    }
+
+    /** Rollup jobs evaluate scalar expressions without the AIProject operator required by AI functions. */
+    private static void verifyNoAIFunctions(ParseNode node) {
+        if (ResolvedAIFunctionDetector.contains(node)) {
+            throw new SemanticException("Synchronous materialized view expressions cannot contain AI functions", node.getPos());
+        }
     }
 
     // NOTE: This method is used to replay persistent MaterializedViewMeta,

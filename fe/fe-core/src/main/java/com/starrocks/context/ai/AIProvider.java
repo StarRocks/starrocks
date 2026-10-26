@@ -17,6 +17,10 @@ package com.starrocks.context.ai;
 import com.google.common.base.Strings;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
+import com.starrocks.common.util.CredentialMask;
+import com.starrocks.thrift.TAIProvider;
+import com.starrocks.thrift.TAIProviderProtocol;
+import com.starrocks.thrift.TAIProviderType;
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -33,8 +37,6 @@ import java.util.Map;
  * (handled centrally in {@code AIProviderMgr.gsonPostProcess} and in legacy edit-log replay).
  */
 public class AIProvider implements Writable {
-
-    public static final String CREDENTIAL_MASK = "******";
 
     // Common params (all types)
     public static final String PROPERTY_ENDPOINT = "endpoint";
@@ -83,6 +85,24 @@ public class AIProvider implements Writable {
         this.type = other.type;
         this.params = new LinkedHashMap<>(other.params);
         this.comment = other.comment;
+    }
+
+    public TAIProvider toThrift() {
+        TAIProvider result = new TAIProvider();
+        result.setId(id);
+        result.setName(name);
+        result.setType(switch (getType()) {
+            case EMBEDDING -> TAIProviderType.EMBEDDING;
+            case CHAT -> TAIProviderType.CHAT;
+            case RERANK -> TAIProviderType.RERANK;
+        });
+        result.setProtocol(switch (getProtocol()) {
+            case OPENAI -> TAIProviderProtocol.OPENAI;
+            case ANTHROPIC -> TAIProviderProtocol.ANTHROPIC;
+            case COHERE -> TAIProviderProtocol.COHERE;
+        });
+        result.setParams(getParams());
+        return result;
     }
 
     public String getId() {
@@ -175,7 +195,7 @@ public class AIProvider implements Writable {
 
     public static void addMaskForCredential(Map<String, String> params) {
         if (params.containsKey(PROPERTY_API_KEY)) {
-            params.put(PROPERTY_API_KEY, CREDENTIAL_MASK);
+            params.put(PROPERTY_API_KEY, CredentialMask.LONG);
         }
     }
 

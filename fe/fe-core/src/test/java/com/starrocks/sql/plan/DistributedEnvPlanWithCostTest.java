@@ -27,6 +27,13 @@ import com.starrocks.planner.AggregationNode;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.VariableMgr;
+import com.starrocks.sql.analyzer.SetStmtAnalyzer;
+import com.starrocks.sql.ast.SetStmt;
+import com.starrocks.sql.ast.SetType;
+import com.starrocks.sql.ast.SystemVariable;
+import com.starrocks.sql.ast.expression.FloatLiteral;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
@@ -365,13 +372,117 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
     }
 
     @Test
-    public void testBroadcastHintExceedMaxExecMemByte() throws Exception {
-        long maxMemExec = connectContext.getSessionVariable().getMaxExecMemByte();
-        connectContext.getSessionVariable().setMaxExecMemByte(200);
-        String sql = "select l_orderkey from lineitem join[broadcast] orders where l_orderkey = o_orderkey";
-        String plan = getFragmentPlan(sql);
-        assertContains(plan, "join op: INNER JOIN (BROADCAST)");
-        connectContext.getSessionVariable().setMaxExecMemByte(maxMemExec);
+    public void testBroadcastHintExceedThreshold() throws Exception {
+        long threshold = connectContext.getSessionVariable().getBroadcastMemThreshold();
+        try {
+            connectContext.getSessionVariable().setBroadcastMemThreshold(0);
+            String sql = "select l_orderkey from lineitem join[broadcast] orders where l_orderkey = o_orderkey";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "join op: INNER JOIN (BROADCAST)");
+        } finally {
+            connectContext.getSessionVariable().setBroadcastMemThreshold(threshold);
+        }
+    }
+
+    @Test
+    public void testBroadcastThresholdIndependentOfExecMemLimit() throws Exception {
+        long threshold = connectContext.getSessionVariable().getBroadcastMemThreshold();
+        long execMemLimit = connectContext.getSessionVariable().getMaxExecMemByte();
+        // Nation has only 25 rows and remains cheaper to broadcast even with the penalty.
+        String sql = "select l_orderkey from lineitem join part on l_partkey = p_partkey";
+        try {
+            connectContext.getSessionVariable().setBroadcastMemThreshold(2147483648L);
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "join op: INNER JOIN (BROADCAST)");
+            connectContext.getSessionVariable().setMaxExecMemByte(1);
+            Assertions.assertEquals(plan, getFragmentPlan(sql));
+            connectContext.getSessionVariable().setBroadcastMemThreshold(0);
+            assertNotContains(getFragmentPlan(sql), "join op: INNER JOIN (BROADCAST)");
+        } finally {
+            connectContext.getSessionVariable().setBroadcastMemThreshold(threshold);
+            connectContext.getSessionVariable().setMaxExecMemByte(execMemLimit);
+        }
+    }
+
+    @Test
+    public void testBroadcastCostMultiplierSelectionAndHint() throws Exception {
+        long threshold = connectContext.getSessionVariable().getBroadcastMemThreshold();
+        double multiplier = connectContext.getSessionVariable().getBroadcastMemExceededPenaltyFactor();
+        // The build side needs enough rows for the penalty to change the chosen distribution.
+        String sql = "select l_orderkey from lineitem join part on l_partkey = p_partkey";
+        try {
+            connectContext.getSessionVariable().setBroadcastMemThreshold(1);
+            connectContext.getSessionVariable().setBroadcastMemExceededPenaltyFactor(1000.0);
+            assertNotContains(getFragmentPlan(sql), "join op: INNER JOIN (BROADCAST)");
+            connectContext.getSessionVariable().setBroadcastMemExceededPenaltyFactor(1.0);
+            assertContains(getFragmentPlan(sql), "join op: INNER JOIN (BROADCAST)");
+
+            connectContext.getSessionVariable().setBroadcastMemExceededPenaltyFactor(1000.0);
+            String hintSql = "select /*+ SET_VAR(broadcast_mem_exceeded_penalty_factor=1.0) */ " +
+                    "l_orderkey from lineitem join part on l_partkey = p_partkey";
+            assertContains(getFragmentPlan(hintSql), "join op: INNER JOIN (BROADCAST)");
+            Assertions.assertEquals(1000.0,
+                    connectContext.getSessionVariable().getBroadcastMemExceededPenaltyFactor());
+        } finally {
+            connectContext.getSessionVariable().setBroadcastMemThreshold(threshold);
+            connectContext.getSessionVariable().setBroadcastMemExceededPenaltyFactor(multiplier);
+        }
+    }
+
+    @Test
+    public void testBroadcastOnlyCrossJoinAtMaximumPenaltyFactor() throws Exception {
+        assertBroadcastOnlyJoinAtMaximumPenaltyFactor(
+                "select l_orderkey, o_orderkey from lineitem cross join orders", "CROSS JOIN");
+    }
+
+    @Test
+    public void testBroadcastOnlyNonEquiJoinAtMaximumPenaltyFactor() throws Exception {
+        assertBroadcastOnlyJoinAtMaximumPenaltyFactor(
+                "select l_orderkey, o_orderkey from lineitem join orders on l_orderkey < o_orderkey", "INNER JOIN");
+    }
+
+    @Test
+    public void testBroadcastOnlyJoinChainAtMaximumPenaltyFactor() throws Exception {
+        String plan = assertBroadcastOnlyJoinAtMaximumPenaltyFactor(
+                "select l_orderkey, o_orderkey, p_partkey from lineitem cross join orders cross join part", "CROSS JOIN");
+        Assertions.assertEquals(2, plan.split("NESTLOOP JOIN", -1).length - 1);
+    }
+
+    private String assertBroadcastOnlyJoinAtMaximumPenaltyFactor(String sql, String joinType) throws Exception {
+        SessionVariable session = connectContext.getSessionVariable();
+        double maxMultiplier = SessionVariable.MAX_BROADCAST_MEM_EXCEEDED_PENALTY_FACTOR;
+        long threshold = session.getBroadcastMemThreshold();
+        double multiplier = session.getBroadcastMemExceededPenaltyFactor();
+        try {
+            session.setBroadcastMemThreshold(4096);
+            // Establish that the same broadcast-only query plans with the default multiplier.
+            session.setBroadcastMemExceededPenaltyFactor(1000.0);
+            String baseline = getFragmentPlan(sql);
+            assertContains(baseline, "NESTLOOP JOIN", "join op: " + joinType);
+
+            SystemVariable variable = new SystemVariable(SetType.SESSION,
+                    SessionVariable.BROADCAST_MEM_EXCEEDED_PENALTY_FACTOR, new FloatLiteral(maxMultiplier));
+            SetStmtAnalyzer.analyze(new SetStmt(List.of(variable)), connectContext);
+            new VariableMgr().setSystemVariable(session, variable, false);
+            Assertions.assertEquals(maxMultiplier, session.getBroadcastMemExceededPenaltyFactor());
+
+            // No join hint: cross joins and inner non-equi joins require broadcast naturally.
+            String plan = Assertions.assertDoesNotThrow(() -> getFragmentPlan(sql),
+                    "An accepted penalty factor must not eliminate the only executable join plan");
+            assertContains(plan, "NESTLOOP JOIN", "join op: " + joinType);
+
+            session.setBroadcastMemExceededPenaltyFactor(1000.0);
+            String hintSql = "select /*+ SET_VAR(broadcast_mem_exceeded_penalty_factor=" + maxMultiplier + ") */ " +
+                    sql.substring("select ".length());
+            String hintPlan = Assertions.assertDoesNotThrow(() -> getFragmentPlan(hintSql),
+                    "SET_VAR must also preserve an executable broadcast-only join plan");
+            assertContains(hintPlan, "NESTLOOP JOIN", "join op: " + joinType);
+            Assertions.assertEquals(1000.0, connectContext.getSessionVariable().getBroadcastMemExceededPenaltyFactor());
+            return plan;
+        } finally {
+            session.setBroadcastMemThreshold(threshold);
+            session.setBroadcastMemExceededPenaltyFactor(multiplier);
+        }
     }
 
     @Test

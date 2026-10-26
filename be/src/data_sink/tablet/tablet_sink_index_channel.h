@@ -343,6 +343,7 @@ private:
     struct {
         std::unordered_set<std::string> invalid_dict_cache_column_set;
         std::unordered_map<std::string, int64_t> valid_dict_cache_column_set;
+        std::unordered_map<std::string, int64_t> content_identities;
     } _valid_dict_cache_info;
 
     AddBatchCounter _add_batch_counter;

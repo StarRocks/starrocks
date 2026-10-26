@@ -48,6 +48,8 @@ import com.starrocks.authentication.OAuth2SecurityIntegration;
 import com.starrocks.authentication.SecurityIntegration;
 import com.starrocks.authentication.SimpleLDAPSecurityIntegration;
 import com.starrocks.authentication.UnixGroupProvider;
+import com.starrocks.authorization.AIFunctionPEntryObject;
+import com.starrocks.authorization.AIProviderPEntryObject;
 import com.starrocks.authorization.CatalogPEntryObject;
 import com.starrocks.authorization.DbPEntryObject;
 import com.starrocks.authorization.FunctionPEntryObject;
@@ -327,6 +329,8 @@ public class RuntimeTypeAdapterTypes {
 
         final RuntimeTypeAdapterFactory<PEntryObject> p_entry_object_runtime_type_adapter_factory =
                 RuntimeTypeAdapterFactory.of(PEntryObject.class, "clazz")
+                        .registerSubtype(AIFunctionPEntryObject.class, "AIFunctionPEntryObject")
+                        .registerSubtype(AIProviderPEntryObject.class, "AIProviderPEntryObject")
                         .registerSubtype(DbPEntryObject.class, "DbPEntryObject")
                         .registerSubtype(TablePEntryObject.class, "TablePEntryObject")
                         .registerSubtype(UserPEntryObject.class, "UserPEntryObject")

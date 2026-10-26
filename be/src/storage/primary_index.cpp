@@ -1072,21 +1072,21 @@ PrimaryIndex::~PrimaryIndex() {
     }
 }
 
-PrimaryIndex::PrimaryIndex(const Schema& pk_schema) {
-    _set_schema(pk_schema);
+PrimaryIndex::PrimaryIndex(const Schema& pk_schema, PrimaryKeyEncodingType encoding_type) {
+    _set_schema(pk_schema, encoding_type);
 }
 
-void PrimaryIndex::_set_schema(const Schema& pk_schema) {
+void PrimaryIndex::_set_schema(const Schema& pk_schema, PrimaryKeyEncodingType encoding_type) {
     _pk_schema = pk_schema;
     std::vector<ColumnId> sort_key_idxes(pk_schema.num_fields());
     for (ColumnId i = 0; i < pk_schema.num_fields(); ++i) {
         sort_key_idxes[i] = i;
     }
-    // _enc_pk_type is only use for share nothing mode now and share nothing always
-    // use ORIGINAL encoding type to keep the original way
-    _enc_pk_type = PrimaryKeyEncoder::encoded_primary_key_type(_pk_schema, sort_key_idxes,
-                                                               PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1);
-    _key_size = PrimaryKeyEncoder::get_encoded_fixed_size(_pk_schema, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1);
+    // The hash index reads the keys in the form |encoding_type| gives them: under V1 a single fixed-length
+    // key stays a native column, under V2 every key is a binary string. Shared-nothing tablets are always V1;
+    // the shared-data primary key recover passes its tablet's encoding.
+    _enc_pk_type = PrimaryKeyEncoder::encoded_primary_key_type(_pk_schema, sort_key_idxes, encoding_type);
+    _key_size = PrimaryKeyEncoder::get_encoded_fixed_size(_pk_schema, encoding_type);
     _pkey_to_rssid_rowid = create_hash_index(_enc_pk_type, _key_size);
 }
 
@@ -1201,7 +1201,7 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
         pk_columns[i] = (ColumnId)i;
     }
     auto pkey_schema = ChunkHelper::convert_schema(tablet_schema_ptr, pk_columns);
-    _set_schema(pkey_schema);
+    _set_schema(pkey_schema, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1);
 
     // load persistent index if enable persistent index meta
 
@@ -1338,7 +1338,7 @@ Status PrimaryIndex::_build_persistent_values(uint32_t rssid, const vector<uint3
 
 StatusOr<const Slice*> PrimaryIndex::build_persistent_keys(const Column& pks, size_t key_size, uint32_t idx_begin,
                                                            uint32_t idx_end, Buffer<Slice>* key_slices) {
-    if (pks.is_binary() || pks.is_large_binary()) {
+    if (pks.is_binary()) {
         ColumnHelper::build_slices(&pks, *key_slices);
         return key_slices->data() + idx_begin;
     } else {
@@ -1620,7 +1620,7 @@ std::string PrimaryIndex::to_string() const {
 }
 
 std::unique_ptr<PrimaryIndex> TEST_create_primary_index(const Schema& pk_schema) {
-    return std::make_unique<PrimaryIndex>(pk_schema);
+    return std::make_unique<PrimaryIndex>(pk_schema, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1);
 }
 
 Status PrimaryIndex::major_compaction(DataDir* data_dir, int64_t tablet_id, std::shared_timed_mutex* mutex,
@@ -1648,7 +1648,7 @@ Status PrimaryIndex::reset(Tablet* tablet, EditVersion version, PersistentIndexM
         pk_columns[i] = (ColumnId)i;
     }
     auto pkey_schema = ChunkHelper::convert_schema(tablet_schema_ptr, pk_columns);
-    _set_schema(pkey_schema);
+    _set_schema(pkey_schema, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1);
 
     if (tablet->get_enable_persistent_index()) {
         if (_persistent_index != nullptr) {

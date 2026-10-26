@@ -67,6 +67,30 @@ description: "Alphabetical d - h"
 - 单位：字节
 - 描述：DECIMAL 列池使用的内存。
 
+## `default_cache_hit_bytes`
+
+- 单位：字节
+- 类型：累计
+- 描述：Data Cache 实例 `default_cache` 缓存命中时读取的累计字节数。在存算分离集群中，如果 [`datacache_unified_instance_enable`](../../../configuration/BE_parameters/shared_lake_other.md#datacache_unified_instance_enable) 为 `true`（默认），云原生表的数据也缓存在该实例中；对云原生表而言，该指标与 `fslib_open_cache_hits` 统计的是同一批读取。同一节点上外表的 Data Cache 读取也计入该指标。如果 `datacache_unified_instance_enable` 为 `false`，云原生表使用单独的缓存实例，对应指标为 `cloud_cache_hit_bytes`、`cloud_cache_miss_bytes`、`cloud_cache_hit_count` 和 `cloud_cache_miss_count`。仅当 BE 配置项 `dump_metrics_with_bvar` 为 `true`（默认）时才导出该指标。该指标以 Prometheus `gauge` 类型导出，但在 BE 或 CN 重启前只增不减，请使用 `rate()` 计算。按字节计算的缓存命中率为 `sum(rate(default_cache_hit_bytes[5m])) / (sum(rate(default_cache_hit_bytes[5m])) + sum(rate(default_cache_miss_bytes[5m])))`。按次数计算的命中率（由 `fslib_open_cache_hits` 和 `fslib_open_cache_misses` 算出）会被大量小块读取的未命中明显拉低，按字节计算的命中率则基本不受影响。
+
+## `default_cache_hit_count`
+
+- 单位：个
+- 类型：累计
+- 描述：Data Cache 实例 `default_cache` 的累计缓存命中次数。对云原生表而言，与 `fslib_open_cache_hits` 统计的是同一批读取。统计范围和导出条件参见 `default_cache_hit_bytes`。
+
+## `default_cache_miss_bytes`
+
+- 单位：字节
+- 类型：累计
+- 描述：Data Cache 实例 `default_cache` 缓存未命中时请求读取的累计字节数。计入的是读取请求的大小，而非随后从对象存储读取的大小（后者按缓存块对齐）。缓存中的文件大小条目未命中时计为 0。统计范围和导出条件参见 `default_cache_hit_bytes`。
+
+## `default_cache_miss_count`
+
+- 单位：个
+- 类型：累计
+- 描述：Data Cache 实例 `default_cache` 的累计缓存未命中次数。对云原生表而言，与 `fslib_open_cache_misses` 统计的是同一批读取。统计范围和导出条件参见 `default_cache_hit_bytes`。
+
 ## `delta_column_group_get_hit_cache`
 
 - 单位：计数
@@ -395,6 +419,20 @@ description: "Alphabetical d - h"
 
 - 单位: 计数
 - 描述: 在 BE 上执行的片段实例总数（适用于非流水线引擎）。
+
+## `fslib_open_cache_hits`
+
+- 单位：个
+- 类型：计数器
+- 标签：`fstype`（`cachefs`）
+- 描述：存算分离集群读取云原生表文件时 Data Cache 的累计命中次数。每次读取最多涉及一个缓存块。由于每次读取无论大小都计为一次，大量小块读取（如元数据读取）未命中时，即使大部分字节仍从缓存读取，由该指标和 `fslib_open_cache_misses` 算出的命中率也会明显下降。按字节统计的指标参见 `default_cache_hit_bytes`。
+
+## `fslib_open_cache_misses`
+
+- 单位：个
+- 类型：计数器
+- 标签：`fstype`（`cachefs`）
+- 描述：存算分离集群读取云原生表文件时 Data Cache 的累计未命中次数。每次读取最多涉及一个缓存块。按字节统计的指标参见 `default_cache_miss_bytes`。
 
 ## `hive_write_bytes`
 

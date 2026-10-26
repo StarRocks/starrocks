@@ -51,10 +51,10 @@ import com.starrocks.catalog.combinator.StateMergeCombinator;
 import com.starrocks.catalog.combinator.StateUnionCombinator;
 import com.starrocks.sql.analyzer.PolymorphicFunctionAnalyzer;
 import com.starrocks.sql.ast.expression.ArithmeticExpr;
-import com.starrocks.thrift.TAIModelSource;
 import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.type.AnyArrayType;
 import com.starrocks.type.AnyElementType;
+import com.starrocks.type.AnyGeometryType;
 import com.starrocks.type.AnyMapType;
 import com.starrocks.type.AnyStructType;
 import com.starrocks.type.ArrayType;
@@ -83,6 +83,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
@@ -194,6 +195,7 @@ public class FunctionSet {
     // NOTE: those functions are used to encode the fingerprint of the data, it is used to identify the data in the database.
     // Don't change the implementation of these functions, otherwise it may cause compatibility issues for incrmental mvs.
     public static final String ENCODE_FINGERPRINT_SHA256 = "encode_fingerprint_sha256";
+    public static final String ENCODE_FINGERPRINT_SHA256_V2 = "encode_fingerprint_sha256_v2";
 
     // Vector Index functions:
     public static final String APPROX_COSINE_SIMILARITY = "approx_cosine_similarity";
@@ -205,6 +207,17 @@ public class FunctionSet {
     public static final String ST_ASWKT = "st_aswkt";
     public static final String ST_CIRCLE = "st_circle";
     public static final String ST_CENTROID = "st_centroid";
+    public static final String ST_BUFFER = "st_buffer";
+    public static final String ST_SIMPLIFY_PRESERVE_TOPOLOGY = "st_simplifypreservetopology";
+    public static final String ST_COVERAGE_SIMPLIFY = "st_coveragesimplify";
+    public static final String ST_INTERSECTION = "st_intersection";
+    public static final String ST_UNION = "st_union";
+    public static final String ST_DIFFERENCE = "st_difference";
+    public static final String ST_SYMDIFFERENCE = "st_symdifference";
+    public static final String H3_TOBOUNDARY = "h3_toboundary";
+    public static final String ST_SRID = "st_srid";
+    public static final String ST_SETSRID = "st_setsrid";
+    public static final String ST_TRANSFORM = "st_transform";
     public static final String ST_CONTAINS = "st_contains";
     public static final String ST_DISTANCE_SPHERE = "st_distance_sphere";
     public static final String ST_GEOMETRYFROMTEXT = "st_geometryfromtext";
@@ -270,7 +283,6 @@ public class FunctionSet {
     public static final String SUBSTRING_INDEX = "substring_index";
     public static final String FIELD = "field";
     public static final String HTTP_REQUEST = "http_request";
-    public static final String AI_COMPLETE = "ai_complete";
 
     // Json functions:
     public static final String JSON_ARRAY = "json_array";
@@ -295,6 +307,7 @@ public class FunctionSet {
     // Variant functions:
     public static final String VARIANT_QUERY = "variant_query";
     public static final String VARIANT_TYPEOF = "variant_typeof";
+    public static final String IS_VARIANT_NULL = "is_variant_null";
     public static final String GET_VARIANT_BOOL = "get_variant_bool";
     public static final String GET_VARIANT_INT = "get_variant_int";
     public static final String GET_VARIANT_DOUBLE = "get_variant_double";
@@ -761,13 +774,13 @@ public class FunctionSet {
 
     // This contains the nullable functions, which cannot return NULL result directly for the NULL parameter.
     // This does not contain any user defined functions. All UDFs handle null values by themselves.
-    // AI functions with options treat a top-level NULL map as an empty option set.
-    // ai_translate accepts a NULL source language for automatic detection.
     private final ImmutableSet<String> notAlwaysNullResultWithNullParamFunctions =
-            ImmutableSet.of(IF, CONCAT_WS, IFNULL, NULLIF, NULL_OR_EMPTY, COALESCE, BITMAP_HASH, BITMAP_HASH64,
-                    PERCENTILE_HASH, HLL_HASH, JSON_ARRAY, JSON_OBJECT, ROW, STRUCT, NAMED_STRUCT, AES_ENCRYPT, AES_DECRYPT,
-                    ENCODE_FINGERPRINT_SHA256, ENCODE_SORT_KEY, AI_COMPLETE,
-                    "ai_embed", "ai_custom_query", "ai_custom_embedding", "ai_translate");
+            ImmutableSet.<String>builder()
+                    .add(IF, CONCAT_WS, IFNULL, NULLIF, NULL_OR_EMPTY, COALESCE, BITMAP_HASH, BITMAP_HASH64,
+                            PERCENTILE_HASH, HLL_HASH, JSON_ARRAY, JSON_OBJECT, ROW, STRUCT, NAMED_STRUCT, AES_ENCRYPT,
+                            AES_DECRYPT, ENCODE_FINGERPRINT_SHA256, ENCODE_FINGERPRINT_SHA256_V2, ENCODE_SORT_KEY)
+                    .addAll(VectorizedBuiltinFunctions.AI_FUNCTION_NAMES)
+                    .build();
 
     // If low cardinality string column with global dict, for some string functions,
     // we could evaluate the function only with the dict content, not all string column data.
@@ -806,6 +819,7 @@ public class FunctionSet {
                     .add(FunctionSet.EXCHANGE_SPEED)
                     .add(FunctionSet.FIELD)
                     .add(FunctionSet.SPLIT_PART)
+                    .add(FunctionSet.IS_VARIANT_NULL)
                     .build();
 
     public static final Set<String> DECIMAL_ROUND_FUNCTIONS =
@@ -874,6 +888,7 @@ public class FunctionSet {
             .add(FunctionSet.LAST_VALUE)
             .add(FunctionSet.FIRST_VALUE_REWRITE)
             .add(FunctionSet.SESSION_NUMBER)
+            .add(FunctionSet.ST_COVERAGE_SIMPLIFY)
             .build();
 
     public static final Set<String> VARIANCE_FUNCTIONS = ImmutableSet.<String>builder()
@@ -1201,6 +1216,22 @@ public class FunctionSet {
         return null;
     }
 
+    /** Returns the public AI family name shared by its overloads, or null for a non-grantable name. */
+    public String getGrantableAIFunctionFamily(String name) {
+        if (name == null || name.contains(".")) {
+            return null;
+        }
+        String canonicalName = name.toLowerCase(Locale.ROOT);
+        List<Function> family = vectorizedFunctions.get(canonicalName);
+        if (family == null || family.isEmpty()) {
+            return null;
+        }
+        if (family.stream().anyMatch(fn -> !fn.isAI() || !fn.isUserVisible())) {
+            return null;
+        }
+        return canonicalName;
+    }
+
     public Function getFunction(Function desc, Function.CompareMode mode) {
         List<Function> fns = vectorizedFunctions.get(desc.functionName());
         if (desc.hasNamedArg() && fns != null && !fns.isEmpty()) {
@@ -1254,14 +1285,10 @@ public class FunctionSet {
         addVectorizedBuiltin(ScalarFunction.createVectorizedBuiltin(fid, fnName, argsType, varArgs, retType));
     }
 
-    public void addVectorizedAIScalarBuiltin(long fid, String fnName, boolean varArgs,
-                                             TAIModelSource modelSource, Type retType, Type... args) {
-        Preconditions.checkState(nonDeterministicFunctions.contains(fnName),
-                "AI function %s must be non-deterministic", fnName);
-        List<Type> argsType = Arrays.stream(args).collect(Collectors.toList());
-        ScalarFunction fn = ScalarFunction.createVectorizedBuiltin(fid, fnName, argsType, varArgs, retType);
+    public void addVectorizedAIBuiltin(Function fn) {
+        Preconditions.checkState(nonDeterministicFunctions.contains(fn.functionName()),
+                "AI function %s must be non-deterministic", fn.functionName());
         fn.setBinaryType(TFunctionBinaryType.AI);
-        fn.setAiModelSource(modelSource);
         addVectorizedBuiltin(fn);
     }
 
@@ -1605,6 +1632,14 @@ public class FunctionSet {
                 IntegerType.INT, ArrayType.ARRAY_BIGINT, false, false, false));
 
         // analytic functions
+        Type coverageGeometry = AnyGeometryType.GEOMETRY;
+        AggregateFunction coverageTwo = AggregateFunction.createAnalyticBuiltin(ST_COVERAGE_SIMPLIFY,
+                Lists.newArrayList(coverageGeometry, FloatType.DOUBLE), coverageGeometry, VarbinaryType.VARBINARY);
+        addBuiltin(coverageTwo);
+        AggregateFunction coverageThree = AggregateFunction.createAnalyticBuiltin(ST_COVERAGE_SIMPLIFY,
+                Lists.newArrayList(coverageGeometry, FloatType.DOUBLE, BooleanType.BOOLEAN),
+                coverageGeometry, VarbinaryType.VARBINARY);
+        addBuiltin(coverageThree);
         // Rank
         addBuiltin(AggregateFunction.createAnalyticBuiltin(RANK,
                 Collections.emptyList(), IntegerType.BIGINT, VarbinaryType.VARBINARY));

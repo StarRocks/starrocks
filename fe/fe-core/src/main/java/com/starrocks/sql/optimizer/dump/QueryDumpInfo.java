@@ -76,6 +76,15 @@ public class QueryDumpInfo implements DumpInfo {
     // record it (unlike hive's hms scanRowCount), and without it replay falls back to a tiny default that
     // clamps every column NDV and cardinality. Only emitted by newer dumps.
     private final Map<String, Long> externalTableRowCountMap = new LinkedHashMap<>();
+    // db.table -> column -> row count of that column's ANALYZE statistics (ConnectorTableColumnStats), for the
+    // external tables whose scan statistics came from ANALYZE rather than from the connector. On that path the
+    // scan row count is the max over the scanned columns, each SAMPLE-analyzed column extrapolated from its own
+    // sampled partitions, so no single table-level count can reproduce it. Presence also tells replay that the
+    // statistics came from ANALYZE. Only emitted by newer dumps.
+    private final Map<String, Map<String, Long>> externalColumnRowCountMap = new LinkedHashMap<>();
+    // db.table -> iceberg table format version. Replay rebuilds the table with it, since some rewrites depend on
+    // it (e.g. global late materialization needs V3). Only emitted by newer dumps; replay defaults to V1.
+    private final Map<String, Integer> externalTableFormatVersionMap = new LinkedHashMap<>();
     // db.table -> iceberg partition-spec transforms (e.g. "lo_orderdate" for identity, "day(dt)"), so replay
     // rebuilds a real PartitionSpec instead of an empty (unpartitioned) one.
     private final Map<String, List<String>> externalTablePartitionSpecMap = new LinkedHashMap<>();
@@ -367,6 +376,32 @@ public class QueryDumpInfo implements DumpInfo {
 
     public Map<String, Long> getExternalTableRowCountMap() {
         return externalTableRowCountMap;
+    }
+
+    @Override
+    public void addExternalColumnRowCount(Table table, String column, long rowCount) {
+        addExternalColumnRowCount(getTableName(table.getId()), column, rowCount);
+    }
+
+    public void addExternalColumnRowCount(String dbAndTable, String column, long rowCount) {
+        externalColumnRowCountMap.computeIfAbsent(dbAndTable, k -> new LinkedHashMap<>()).put(column, rowCount);
+    }
+
+    public Map<String, Map<String, Long>> getExternalColumnRowCountMap() {
+        return externalColumnRowCountMap;
+    }
+
+    @Override
+    public void addExternalTableFormatVersion(Table table, int formatVersion) {
+        externalTableFormatVersionMap.put(getTableName(table.getId()), formatVersion);
+    }
+
+    public void addExternalTableFormatVersion(String dbAndTable, int formatVersion) {
+        externalTableFormatVersionMap.put(dbAndTable, formatVersion);
+    }
+
+    public Map<String, Integer> getExternalTableFormatVersionMap() {
+        return externalTableFormatVersionMap;
     }
 
     public void addExternalTablePartitions(Table table, List<String> partitionSpec, List<String> partitionNames) {

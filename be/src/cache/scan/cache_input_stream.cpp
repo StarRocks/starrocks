@@ -168,8 +168,11 @@ Status CacheInputStream::_read_from_cache(const int64_t offset, const int64_t si
     }
 
     if (res.ok()) {
-        if (_enable_block_buffer) {
+        // Peer reads always fill block.buffer, even when local reads write directly to out.
+        if (_enable_block_buffer || try_peer_cache) {
             block.buffer.copy_to(out, size, shift);
+        }
+        if (_enable_block_buffer) {
             block.offset = block_offset;
             _block_map[block_id] = block;
         }

@@ -228,6 +228,20 @@ Status IcebergDeleteBuilder::build_orc(const TIcebergDeleteFile& delete_file) co
     return build(delete_file, ORC);
 }
 
+Status IcebergDeleteBuilder::build_position_delete(const TIcebergDeleteFile& delete_file,
+                                                   THdfsFileFormat::type data_file_format) const {
+    auto format = delete_file.__isset.file_format ? delete_file.file_format : data_file_format;
+    switch (format) {
+    case THdfsFileFormat::PARQUET:
+        return build_parquet(delete_file);
+    case THdfsFileFormat::ORC:
+        return build_orc(delete_file);
+    default:
+        return Status::NotSupported(
+                strings::Substitute("Unsupported iceberg position delete file format: $0", static_cast<int>(format)));
+    }
+}
+
 SlotDescriptor IcebergDeleteFileMeta::gen_slot_helper(const IcebergColumnMeta& meta) {
     TSlotDescriptor desc;
     desc.__set_id(meta.id);

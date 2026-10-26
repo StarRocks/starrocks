@@ -134,30 +134,19 @@ sub-phases; only `WITH PAUSE` on one of the hooks below can stop the job there.
 
 Every hook returns an `InternalError` when armed `ENABLE` (the reshard publish task fails and the
 frontend retries) and parks the thread when armed `WITH PAUSE`. The "reached when" column matters:
-only three are unconditional, and each of those is unconditional **within its own path**, not on every
+only two are unconditional, and each of those is unconditional **within its own path**, not on every
 reshard.
 
 | Failpoint | Phase it stops at | Reached when |
 |---|---|---|
 | `tablet_reshard_between_metadata_writes` | inside the loop that persists the new tablet metadatas, after one has been written | every reshard publish (split, merge, identical) |
-| `tablet_merge_after_rssid_reassign` | merge phase 1 done: per-source rowset-id offsets and the merged range are computed, nothing projected yet | every merge |
 | `tablet_reshard_after_identical_pk_flush` | identical reshard, right after the PK-index flush wrote its sstables and before any metadata references them | every identical reshard |
-| `tablet_merge_before_delete_predicate_range` | a delete-predicate rowset has been copied into the merged metadata but not yet confined to its source tablet's range | a merge where some source rowset carries a delete predicate, i.e. a `DELETE` ran on a source tablet (DUP / AGG / UNIQUE; primary-key tables use delvecs instead) |
-| `tablet_merge_after_write_delvec` | the merged delvec file is written, metadata not yet updated | primary-key table with delete/update history (the phase is skipped when there is no source delvec and no synthesized gap) |
-| `tablet_merge_after_write_dcg_cols` | a rebuilt `.cols` segment is written, metadata not yet updated | two delta-column-group entries claim the **same** column id for the same segment, i.e. a partial-column update on both merge sources touching one column |
+| `tablet_merge_after_write_delvec` | the merged delvec file is written, metadata not yet updated | primary-key table with delete/update history (the phase is skipped when no source has a live delete-vector page) |
 
-The two `after_write_*` hooks are the orphan-file windows: the file is durable and unreferenced.
-They differ in what an armed `ENABLE` leaves behind, and the difference matters if you are counting
-orphan files.
-
-- **`tablet_merge_after_write_dcg_cols` does not.** Its caller records the rebuilt path only *after*
-  the rebuild returns successfully, so an injected error returns before the caller learns the
-  filename and the `.cols` file is left for ordinary orphan-file vacuum.
-- **`tablet_merge_after_write_delvec` does not either.** Nothing arms a cleanup guard over the merged
-  delvec file, so an injected error leaves it for vacuum as well.
-
-Do not expect a whole-tablet garbage-file check to read zero straight after an armed `ENABLE`: an
-error at either hook leaves its newly written file for ordinary orphan-file vacuum.
+`tablet_merge_after_write_delvec` is the orphan-file window: the file is durable and unreferenced.
+Nothing arms a cleanup guard over the merged delvec file, so an injected error leaves it for ordinary
+orphan-file vacuum. Do not expect a whole-tablet garbage-file check to read zero straight after an
+armed `ENABLE`.
 
 ### Frontend rules (in `conf/failpoint.btm`)
 

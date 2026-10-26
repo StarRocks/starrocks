@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer.operator.physical;
 
+import com.starrocks.catalog.EsTable;
 import com.starrocks.connector.elasticsearch.EsShardPartitions;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -25,10 +26,16 @@ import java.util.List;
 
 public class PhysicalEsScanOperator extends PhysicalScanOperator {
     private final List<EsShardPartitions> selectedIndex;
+    private final EsTable.MetaSnapshot metaSnapshot;
 
     public PhysicalEsScanOperator(LogicalEsScanOperator scanOperator) {
         super(OperatorType.PHYSICAL_ES_SCAN, scanOperator);
         this.selectedIndex = scanOperator.getSelectedIndex();
+        this.metaSnapshot = scanOperator.getMetaSnapshot();
+    }
+
+    public EsTable.MetaSnapshot getMetaSnapshot() {
+        return this.metaSnapshot;
     }
 
     public List<EsShardPartitions> getSelectedIndex() {

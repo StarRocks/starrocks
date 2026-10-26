@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.statistics;
 
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
@@ -21,6 +22,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.ColumnStatsMeta;
@@ -40,6 +42,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -234,5 +237,70 @@ public class ConnectorAnalyzeTaskTest {
         Assertions.assertTrue(result.get() instanceof ExternalAnalyzeStatus);
         externalAnalyzeStatusResult = (ExternalAnalyzeStatus) result.get();
         Assertions.assertSame(externalAnalyzeStatusResult.getType(), StatsConstants.AnalyzeType.SAMPLE);
+    }
+
+    @Test
+    public void testAnIncompleteColumnIsCollectedAgainEvenOnAQuietTable() {
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(ctx, "hive0",
+                "partitioned_db", "orders");
+        String tableUUID = table.getUUID();
+        Triple<String, Database, Table> tableTriple = StatisticsUtils.getTableTripleByUUID(ctx, tableUUID);
+        new MockUp<ExternalFullStatisticsCollectJob>() {
+            @Mock
+            public void collect(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
+            }
+        };
+        // The table has not been written since the statistics were collected, which normally means there
+        // is nothing to do.
+        new MockUp<StatisticUtils>() {
+            @Mock
+            public LocalDateTime getTableLastUpdateTime(Table table) {
+                return LocalDateTime.now().minusDays(1);
+            }
+        };
+
+        // A complete column is left alone, as before.
+        putColumnMeta(tableUUID, "o_orderkey", 100, 100);
+        Assertions.assertTrue(new ConnectorAnalyzeTask(tableTriple, Sets.newHashSet("o_orderkey")).run().isEmpty());
+
+        // A column whose last collection reached only part of what it asked for is collected again: a
+        // table that is never written to again would otherwise keep its incomplete statistics forever.
+        putColumnMeta(tableUUID, "o_orderkey", 40, 100);
+        Optional<AnalyzeStatus> result = new ConnectorAnalyzeTask(tableTriple, Sets.newHashSet("o_orderkey")).run();
+        Assertions.assertTrue(result.isPresent());
+    }
+
+    private static void putColumnMeta(String tableUUID, String column, int collected, int requested) {
+        Set<Long> collectedPartitions = new HashSet<>();
+        for (int i = 0; i < collected; i++) {
+            collectedPartitions.add((long) i);
+        }
+        ExternalBasicStatsMeta meta = new ExternalBasicStatsMeta("hive0", "partitioned_db", "orders",
+                Lists.newArrayList(column), StatsConstants.AnalyzeType.SAMPLE, LocalDateTime.now(), Maps.newHashMap());
+        meta.setTableUUID(tableUUID);
+        meta.addColumnStatsMeta(new ColumnStatsMeta(column, StatsConstants.AnalyzeType.SAMPLE, LocalDateTime.now(),
+                collectedPartitions, requested, requested));
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().replayAddExternalBasicStatsMeta(meta);
+    }
+
+    @Test
+    public void testUnreadableUpdateTimeDoesNotStopTheWholeTableFromBeingTriggered() {
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(ctx, "hive0",
+                "partitioned_db", "orders");
+        String tableUUID = table.getUUID();
+
+        // One column carries a timestamp that cannot be parsed - an unset thrift field reaches this as
+        // null. Letting the parse throw would abandon the whole batch, so no column of this table would
+        // ever be triggered, and the exception would disappear into the async callback that calls this.
+        Map<ConnectorTableColumnKey, Optional<ConnectorTableColumnStats>> columnStats = Maps.newHashMap();
+        columnStats.put(new ConnectorTableColumnKey(tableUUID, "o_orderkey"),
+                Optional.of(new ConnectorTableColumnStats(ColumnStatistic.unknown(), 100, null)));
+        columnStats.put(new ConnectorTableColumnKey(tableUUID, "o_custkey"),
+                Optional.of(new ConnectorTableColumnStats(ColumnStatistic.unknown(), 100, "not a timestamp")));
+
+        ConnectorTableTriggerAnalyzeMgr mgr = new ConnectorTableTriggerAnalyzeMgr();
+        Assertions.assertDoesNotThrow(() -> mgr.checkAndUpdateTableStats(columnStats));
+        // Both columns are treated as due rather than silently dropped.
+        Assertions.assertEquals(1, mgr.getConnectorAnalyzeTaskQueue().getPendingTaskSize());
     }
 }

@@ -1,0 +1,51 @@
+// SelfClosingBr.tengo
+//
+// Detect <br> line-break tags that are not self-closing, outside code blocks.
+//
+// Docusaurus compiles pages with MDX, which parses HTML as JSX. A bare <br>
+// is an unclosed JSX element and fails the build; </br> is a closing tag with
+// no opening tag and fails the same way. Write the tag as self-closing:
+//   Bad:  first line<br>second line
+//   Bad:  first line</br>second line
+//   Good: first line<br />second line
+//
+// <br/> is also self-closing and is not flagged.
+//
+// Code regions excluded from flagging:
+//   - Backtick fenced code blocks:  ```[lang]\n...\n```
+//   - Tilde fenced code blocks:     ~~~[lang]\n...\n~~~
+//   - Inline code spans:            `...`
+
+text := import("text")
+
+code_regions := []
+
+for groups in text.re_find("(?s)```[^\n]*\n.*?\n[ \t]*```[ \t]*(?:\n|$)", scope, -1) {
+    m := groups[0]
+    code_regions = append(code_regions, [m.begin, m.end])
+}
+
+for groups in text.re_find("(?s)~~~[^\n]*\n.*?\n[ \t]*~~~[ \t]*(?:\n|$)", scope, -1) {
+    m := groups[0]
+    code_regions = append(code_regions, [m.begin, m.end])
+}
+
+for groups in text.re_find("`+[^`\n]+`+", scope, -1) {
+    m := groups[0]
+    code_regions = append(code_regions, [m.begin, m.end])
+}
+
+matches := []
+for groups in text.re_find(`(?i)</?br\b[^>/]*>`, scope, -1) {
+    hit := groups[0]
+    inside := false
+    for r in code_regions {
+        if hit.begin >= r[0] && hit.begin < r[1] {
+            inside = true
+            break
+        }
+    }
+    if !inside {
+        matches = append(matches, {begin: hit.begin, end: hit.end})
+    }
+}

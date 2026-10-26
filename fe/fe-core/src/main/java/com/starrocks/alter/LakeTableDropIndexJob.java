@@ -185,7 +185,7 @@ public class LakeTableDropIndexJob extends LakeTableIndexFastPathJobBase {
                 if (col == null) {
                     continue;
                 }
-                remaining.remove(ColumnId.create(col.getName()));
+                remaining.remove(col.getColumnId());
             }
             if (remaining.isEmpty()) {
                 // Dropping the last BF column clears the table-level fpp too

@@ -21,9 +21,49 @@
 #include "column/column_helper.h"
 #include "storage_primitive/aggregate_type.h"
 #include "storage_primitive/column_aggregate_func.h"
+#include "types/decimalv2_value.h"
+#include "types/type_descriptor.h"
 #include "types/type_info.h"
 
 namespace starrocks {
+
+TEST(ColumnAggregator, testLegacyDecimalAggregation) {
+    for (LogicalType type : {TYPE_DECIMAL, TYPE_DECIMALV2}) {
+        for (bool nullable : {false, true}) {
+            for (StorageAggregateType method : {STORAGE_AGGREGATE_MIN, STORAGE_AGGREGATE_MAX, STORAGE_AGGREGATE_SUM}) {
+                SCOPED_TRACE(::testing::Message()
+                             << "type=" << type << ", nullable=" << nullable << ", method=" << method);
+                auto field = std::make_shared<Field>(1, "decimal", type, nullable);
+                field->set_aggregate_method(method);
+                ASSERT_EQ(-1, field->type()->precision());
+                ASSERT_EQ(-1, field->type()->scale());
+
+                auto result = ColumnAggregatorFactory::create_value_column_aggregator(field);
+                ASSERT_TRUE(result.ok()) << result.status();
+                auto aggregator = std::move(result).value();
+                auto type_desc = TypeDescriptor::create_decimalv2_type(27, 9);
+                auto src = ColumnHelper::create_column(type_desc, nullable);
+                src->append_datum(Datum(DecimalV2Value("1.25")));
+                src->append_datum(Datum(DecimalV2Value("2.5")));
+                if (nullable) {
+                    src->append_datum(Datum());
+                }
+                auto dst = ColumnHelper::create_column(type_desc, nullable);
+                aggregator->update_aggregate(dst.get());
+                aggregator->update_source(src);
+                uint32_t loops[] = {static_cast<uint32_t>(src->size())};
+                aggregator->aggregate_values(0, 1, loops, false);
+                aggregator->finalize();
+
+                ASSERT_EQ(1, dst->size());
+                ASSERT_FALSE(dst->is_null(0));
+                const char* expected =
+                        method == STORAGE_AGGREGATE_MIN ? "1.25" : method == STORAGE_AGGREGATE_MAX ? "2.5" : "3.75";
+                ASSERT_EQ(DecimalV2Value(expected), dst->get(0).get_decimal());
+            }
+        }
+    }
+}
 
 TEST(ColumnAggregator, testIntSum) {
     FieldPtr field = std::make_shared<Field>(1, "test", LogicalType::TYPE_INT, false);

@@ -14,18 +14,34 @@
 
 package com.starrocks.connector.statistics;
 
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
+import com.starrocks.statistic.AnalyzeStatus;
+import com.starrocks.statistic.ExternalAnalyzeStatus;
+import com.starrocks.statistic.StatsConstants;
 import com.starrocks.utframe.UtFrameUtils;
 import io.trino.hive.$internal.org.apache.commons.lang3.tuple.Triple;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+
+import java.time.LocalDateTime;
+import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.IntSupplier;
 
 public class ConnectorAnalyzeTaskQueueTest {
     private static ConnectContext ctx;
@@ -94,7 +110,219 @@ public class ConnectorAnalyzeTaskQueueTest {
         queue.schedulePendingTask();
         Assertions.assertEquals(1, queue.getPendingTaskSize());
         Config.connector_table_query_trigger_analyze_max_running_task_num = 2;
+        // task2 is kept pending until task1 of the same table finishes
+        waitUntil(queue::getRunningTaskSize, 0);
         queue.schedulePendingTask();
         Assertions.assertEquals(0, queue.getPendingTaskSize());
+    }
+
+    private static class BlockingTask extends ConnectorAnalyzeTask {
+        private final CountDownLatch latch = new CountDownLatch(1);
+        private final AtomicInteger runCount;
+
+        BlockingTask(Triple<String, Database, Table> tableTriple, Set<String> columns, AtomicInteger runCount) {
+            super(tableTriple, columns);
+            this.runCount = runCount;
+        }
+
+        @Override
+        public Optional<AnalyzeStatus> run() {
+            runCount.incrementAndGet();
+            try {
+                latch.await(60, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            return Optional.empty();
+        }
+
+        void finish() {
+            latch.countDown();
+        }
+    }
+
+    private static void waitUntil(IntSupplier actual, int expected) {
+        for (int i = 0; i < 1000 && actual.getAsInt() != expected; i++) {
+            try {
+                Thread.sleep(10);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
+        Assertions.assertEquals(expected, actual.getAsInt());
+    }
+
+    private static Triple<String, Database, Table> getOrdersTableTriple() {
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(ctx, "hive0",
+                "partitioned_db", "orders");
+        return StatisticsUtils.getTableTripleByUUID(ctx, table.getUUID());
+    }
+
+    @Test
+    public void testScheduleSameTableWhileRunning() {
+        Triple<String, Database, Table> tableTriple = getOrdersTableTriple();
+        String tableUUID = tableTriple.getRight().getUUID();
+        int oldLimit = Config.connector_table_query_trigger_analyze_max_running_task_num;
+        Config.connector_table_query_trigger_analyze_max_running_task_num = 2;
+        ExecutorService pool = ThreadPoolManager.newDaemonFixedThreadPoolWithAbortPolicy(2, 2,
+                "connector-trigger-analyze-test-pool", false);
+        try {
+            ConnectorAnalyzeTaskQueue queue = new ConnectorAnalyzeTaskQueue(pool);
+            AtomicInteger runCount = new AtomicInteger();
+            BlockingTask task1 = new BlockingTask(tableTriple, Sets.newHashSet("o_orderkey"), runCount);
+            queue.addPendingTask(tableUUID, task1);
+            queue.schedulePendingTask();
+            waitUntil(runCount::get, 1);
+            Assertions.assertEquals(1, queue.getRunningTaskSize());
+
+            // a task for the same table with remaining columns is accepted while task1 is running,
+            // but it must not be dispatched (and must not overwrite the running entry) until task1 finishes
+            BlockingTask task2 = new BlockingTask(tableTriple, Sets.newHashSet("o_orderkey", "o_custkey"), runCount);
+            Assertions.assertTrue(queue.addPendingTask(tableUUID, task2));
+            queue.schedulePendingTask();
+            Assertions.assertEquals(1, queue.getPendingTaskSize());
+            Assertions.assertEquals(1, queue.getRunningTaskSize());
+            Assertions.assertEquals(1, runCount.get());
+
+            task1.finish();
+            waitUntil(queue::getRunningTaskSize, 0);
+
+            queue.schedulePendingTask();
+            Assertions.assertEquals(0, queue.getPendingTaskSize());
+            waitUntil(runCount::get, 2);
+            Assertions.assertEquals(1, queue.getRunningTaskSize());
+
+            task2.finish();
+            waitUntil(queue::getRunningTaskSize, 0);
+        } finally {
+            Config.connector_table_query_trigger_analyze_max_running_task_num = oldLimit;
+            pool.shutdownNow();
+        }
+    }
+
+    @Test
+    public void testScheduleRejectedBySubmitPool() {
+        Triple<String, Database, Table> tableTriple = getOrdersTableTriple();
+        String tableUUID = tableTriple.getRight().getUUID();
+        int oldLimit = Config.connector_table_query_trigger_analyze_max_running_task_num;
+        Config.connector_table_query_trigger_analyze_max_running_task_num = 2;
+        try {
+            ConnectorAnalyzeTaskQueue queue = new ConnectorAnalyzeTaskQueue(command -> {
+                throw new RejectedExecutionException("mock rejected");
+            });
+            AtomicInteger runCount = new AtomicInteger();
+            queue.addPendingTask(tableUUID, new BlockingTask(tableTriple, Sets.newHashSet("o_orderkey"), runCount));
+
+            // rejected task must not leak in running tasks and must be kept pending for the next round
+            Assertions.assertDoesNotThrow(queue::schedulePendingTask);
+            Assertions.assertEquals(0, queue.getRunningTaskSize());
+            Assertions.assertEquals(1, queue.getPendingTaskSize());
+            Assertions.assertFalse(queue.isMaxRunningConcurrencyReached());
+
+            // retried in the next round, still not leaked
+            Assertions.assertDoesNotThrow(queue::schedulePendingTask);
+            Assertions.assertEquals(0, queue.getRunningTaskSize());
+            Assertions.assertEquals(1, queue.getPendingTaskSize());
+            Assertions.assertEquals(0, runCount.get());
+        } finally {
+            Config.connector_table_query_trigger_analyze_max_running_task_num = oldLimit;
+        }
+    }
+
+    private static AnalyzeStatus statusWith(StatsConstants.ScheduleStatus scheduleStatus, String tableUUID) {
+        AnalyzeStatus status = new ExternalAnalyzeStatus(1L, "hive0", "partitioned_db", "orders", tableUUID,
+                Lists.newArrayList("o_orderkey"), StatsConstants.AnalyzeType.FULL,
+                StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), LocalDateTime.now());
+        status.setStatus(scheduleStatus);
+        return status;
+    }
+
+    @Test
+    public void testFailedAnalyzeIsNotRetriedOnEveryTick() {
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(ctx, "hive0",
+                "partitioned_db", "orders");
+        String tableUUID = table.getUUID();
+        Triple<String, Database, Table> tableTriple = StatisticsUtils.getTableTripleByUUID(ctx, tableUUID);
+
+        ConnectorAnalyzeTaskQueue queue = new ConnectorAnalyzeTaskQueue();
+        queue.recordOutcome(tableUUID, Optional.of(statusWith(StatsConstants.ScheduleStatus.FAILED, tableUUID)), null);
+
+        // The statistics this job failed to collect are still missing, so the next query asks for them
+        // again right away. Without a cooldown that request would be accepted every schedule tick.
+        Assertions.assertFalse(queue.addPendingTask(tableUUID,
+                new ConnectorAnalyzeTask(tableTriple, Sets.newHashSet("o_orderkey"))));
+        Assertions.assertEquals(0, queue.getPendingTaskSize());
+    }
+
+    @Test
+    public void testCooldownLengthensWhileFailuresContinue() {
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(ctx, "hive0",
+                "partitioned_db", "orders");
+        String tableUUID = table.getUUID();
+
+        ConnectorAnalyzeTaskQueue queue = new ConnectorAnalyzeTaskQueue();
+        queue.recordOutcome(tableUUID, Optional.of(statusWith(StatsConstants.ScheduleStatus.FAILED, tableUUID)), null);
+        long afterFirst = queue.cooldownRemainingMs(tableUUID);
+        queue.recordOutcome(tableUUID, Optional.of(statusWith(StatsConstants.ScheduleStatus.FAILED, tableUUID)), null);
+        long afterSecond = queue.cooldownRemainingMs(tableUUID);
+
+        Assertions.assertTrue(afterFirst > 0);
+        Assertions.assertTrue(afterSecond > afterFirst,
+                "expected the wait to grow, got " + afterFirst + " then " + afterSecond);
+        Assertions.assertTrue(afterSecond <=
+                Config.connector_table_query_trigger_analyze_failure_backoff_max_second * 1000L);
+    }
+
+    @Test
+    public void testSuccessClearsTheCooldown() {
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(ctx, "hive0",
+                "partitioned_db", "orders");
+        String tableUUID = table.getUUID();
+        Triple<String, Database, Table> tableTriple = StatisticsUtils.getTableTripleByUUID(ctx, tableUUID);
+
+        ConnectorAnalyzeTaskQueue queue = new ConnectorAnalyzeTaskQueue();
+        queue.recordOutcome(tableUUID, Optional.of(statusWith(StatsConstants.ScheduleStatus.FAILED, tableUUID)), null);
+        queue.recordOutcome(tableUUID, Optional.of(statusWith(StatsConstants.ScheduleStatus.FINISH, tableUUID)), null);
+
+        Assertions.assertTrue(queue.cooldownRemainingMs(tableUUID) <= 0);
+        Assertions.assertTrue(queue.addPendingTask(tableUUID,
+                new ConnectorAnalyzeTask(tableTriple, Sets.newHashSet("o_orderkey"))));
+    }
+
+    @Test
+    public void testAnAttemptThatFoundNothingToDoIsNeitherFailureNorSuccess() {
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(ctx, "hive0",
+                "partitioned_db", "orders");
+        String tableUUID = table.getUUID();
+
+        ConnectorAnalyzeTaskQueue queue = new ConnectorAnalyzeTaskQueue();
+        queue.recordOutcome(tableUUID, Optional.of(statusWith(StatsConstants.ScheduleStatus.FAILED, tableUUID)), null);
+        long beforeEmpty = queue.cooldownRemainingMs(tableUUID);
+        // An analyze that was skipped because one was already running says nothing either way, so it must
+        // not clear the cooldown a real failure just set.
+        queue.recordOutcome(tableUUID, Optional.empty(), null);
+
+        Assertions.assertTrue(queue.cooldownRemainingMs(tableUUID) > 0);
+        Assertions.assertTrue(queue.cooldownRemainingMs(tableUUID) <= beforeEmpty);
+    }
+
+    @Test
+    public void testCooldownCanBeTurnedOff() {
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(ctx, "hive0",
+                "partitioned_db", "orders");
+        String tableUUID = table.getUUID();
+        Triple<String, Database, Table> tableTriple = StatisticsUtils.getTableTripleByUUID(ctx, tableUUID);
+
+        ConnectorAnalyzeTaskQueue queue = new ConnectorAnalyzeTaskQueue();
+        queue.recordOutcome(tableUUID, Optional.of(statusWith(StatsConstants.ScheduleStatus.FAILED, tableUUID)), null);
+        long saved = Config.connector_table_query_trigger_analyze_failure_backoff_max_second;
+        try {
+            Config.connector_table_query_trigger_analyze_failure_backoff_max_second = 0;
+            Assertions.assertTrue(queue.addPendingTask(tableUUID,
+                    new ConnectorAnalyzeTask(tableTriple, Sets.newHashSet("o_orderkey"))));
+        } finally {
+            Config.connector_table_query_trigger_analyze_failure_backoff_max_second = saved;
+        }
     }
 }

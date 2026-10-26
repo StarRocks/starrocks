@@ -136,16 +136,6 @@ TEST(ObjectColumnTest, HLL_test_filter_range) {
 }
 
 // NOLINTNEXTLINE
-TEST(ObjectColumnTest, test_object_column_upgrade_if_overflow) {
-    auto c = HyperLogLogColumn::create();
-    c->append(HyperLogLog());
-
-    auto ret = c->upgrade_if_overflow();
-    ASSERT_TRUE(ret.ok());
-    ASSERT_TRUE(ret.value() == nullptr);
-}
-
-// NOLINTNEXTLINE
 TEST(ObjectColumnTest, test_append_value_multiple_times) {
     auto src_col = BitmapColumn::create();
     auto copy_col = BitmapColumn::create();
@@ -163,17 +153,6 @@ TEST(ObjectColumnTest, test_append_value_multiple_times) {
     for (size_t i = 0; i < 4; i++) {
         ASSERT_EQ(copy_col->get_object(0)->cardinality(), 64);
     }
-}
-
-// NOLINTNEXTLINE
-TEST(ObjectColumnTest, test_object_column_downgrade) {
-    auto c = HyperLogLogColumn::create();
-    c->append(HyperLogLog());
-
-    auto ret = c->downgrade();
-    ASSERT_TRUE(ret.ok());
-    ASSERT_TRUE(ret.value() == nullptr);
-    ASSERT_FALSE(c->has_large_column());
 }
 
 // NOLINTNEXTLINE

@@ -22,6 +22,9 @@ import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MvRefreshArbiter;
+import com.starrocks.catalog.MvUpdateInfo;
+import com.starrocks.catalog.mv.MVTimelinessArbiter;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.tvr.TvrDeltaStats;
@@ -50,6 +53,7 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.transaction.TransactionState;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
@@ -455,6 +459,37 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
                                     "  |  equal join conjunct: 9: __ROW_ID__ = 17: from_binary");
                 }
         );
+    }
+
+    @Test
+    public void testAggregateIVMOfATransparentMvReadsItsOwnState() throws Exception {
+        // An incremental refresh of an aggregate MV reads its own hidden state columns back. With
+        // transparent_mv_rewrite_mode = 'true' that scan must not be rewritten, whether the timeliness check succeeds
+        // or fails: the MV's defined query outputs none of those columns.
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `test`.`test_mv1` " +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"refresh_mode\" = \"incremental\",\n" +
+                "\"transparent_mv_rewrite_mode\" = \"true\"" +
+                ")\n" +
+                "AS SELECT date, sum(id), approx_count_distinct(data) " +
+                "FROM `iceberg0`.`partitioned_db`.`t1` as a group by date;");
+        MaterializedView mv = getMv("test_mv1");
+        seedTvrBaselineAtVersionZero(mv);
+        Assertions.assertNotNull(getIVMRefreshedExecPlan(mv));
+        advanceTableVersionTo(2);
+        new MockUp<MvRefreshArbiter>() {
+            @Mock
+            public MvUpdateInfo getMVTimelinessUpdateInfo(MaterializedView ignored,
+                                                          MVTimelinessArbiter.QueryRewriteParams params) {
+                throw new NullPointerException("partition dropped mid-check");
+            }
+        };
+        ExecPlan execPlan = getIVMRefreshedExecPlan(mv);
+        Assertions.assertNotNull(execPlan);
+        String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+        PlanTestBase.assertContains(plan, "TABLE: test_mv1");
+        PlanTestBase.assertContains(plan, "__ROW_ID__");
     }
 
     @Test
@@ -1475,7 +1510,8 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
         // Build a callback + capture owner A via beforeCommitted.
         IVMInsertLoadTxnCallback callback =
                 new IVMInsertLoadTxnCallback(mv.getMvId().getDbId(), mv.getId());
-        callback.beforeCommitted(null);
+        TransactionState txnState = insertTxnState();
+        callback.beforeCommitted(txnState);
 
         // Simulate a newer job taking over ownership between beforeCommitted and afterCommitted.
         String ownerB = "jobB-" + com.starrocks.common.util.UUIDUtil.genUUID();
@@ -1484,7 +1520,7 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
 
         // afterCommitted must detect the owner change and skip clearTempBaseTableInfoTvrDeltaState
         // so the newer job's pending state survives.
-        callback.afterCommitted(null);
+        callback.afterCommitted(txnState);
 
         MaterializedView afterMv = getMv("test_mv1");
         MaterializedView.AsyncRefreshContext ctxAfter = afterMv.getRefreshScheme().getAsyncRefreshContext();

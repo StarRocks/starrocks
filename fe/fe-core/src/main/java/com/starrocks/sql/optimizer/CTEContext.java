@@ -101,10 +101,8 @@ public class CTEContext {
     }
 
     public Optional<Statistics> getCTEStatistics(int cteId) {
-        if (produceStatistics.containsKey(cteId)) {
-            return Optional.of(produceStatistics.get(cteId));
-        }
-        return Optional.empty();
+        // A producer whose input had no statistics registers null; report that as absent, not as an NPE.
+        return Optional.ofNullable(produceStatistics.get(cteId));
     }
 
     public int getCTEConsumeNum(int cteId) {

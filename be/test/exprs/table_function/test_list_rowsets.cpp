@@ -26,6 +26,11 @@ namespace starrocks {
 class ListRowsetsTableFunctionTest : public ::testing::Test {
 public:
     void SetUp() override {
+        // destroy() clears the spill dir manager, and init() does not put it back -- it is
+        // injected from outside (init_test_env.h / starrocks_be.cpp). Without saving it here,
+        // every later suite in this binary that writes through a delta writer fails with
+        // "LoadSpillBlockManager requires local spill dir manager".
+        _previous_spill_dir_mgr = StorageEnv::GetInstance()->spill_dir_mgr();
         StorageEnv::GetInstance()->stop();
         StorageEnv::GetInstance()->destroy();
         _state = new ListRowsets::MyState();
@@ -41,11 +46,13 @@ public:
         storage_env_options.lake_metadata_cache_limit = config::lake_metadata_cache_limit;
         storage_env_options.lake_location_provider_mode = LakeLocationProviderMode::kFixed;
         ASSERT_OK(StorageEnv::GetInstance()->init(storage_env_options));
+        StorageEnv::GetInstance()->set_spill_dir_mgr(_previous_spill_dir_mgr);
     }
 
 protected:
     ListRowsets::MyState* _state;
     RuntimeState* _runtimeState;
+    spill::DirManager* _previous_spill_dir_mgr = nullptr;
 };
 
 TEST_F(ListRowsetsTableFunctionTest, basic_test) {

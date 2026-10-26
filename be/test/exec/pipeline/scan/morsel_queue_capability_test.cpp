@@ -27,52 +27,63 @@
 
 namespace starrocks::pipeline {
 
+namespace {
+
+// Production code discovers these capabilities through a MorselQueue*, so query them the same way. Casting the
+// concrete (final) queue type directly lets the compiler fold the result and warn that the cast can never succeed.
+template <class Capability>
+Capability* query_capability(MorselQueue* queue) {
+    return dynamic_cast<Capability*>(queue);
+}
+
+} // namespace
+
 class MorselQueueCapabilityTest : public ::testing::Test {};
 
 TEST_F(MorselQueueCapabilityTest, primitive_fixed_queue_has_no_olap_or_ticket_capability) {
     FixedMorselQueue queue(Morsels{});
 
-    EXPECT_EQ(nullptr, dynamic_cast<OlapMorselQueue*>(&queue));
-    EXPECT_EQ(nullptr, dynamic_cast<TicketedMorselQueue*>(&queue));
+    EXPECT_EQ(nullptr, query_capability<OlapMorselQueue>(&queue));
+    EXPECT_EQ(nullptr, query_capability<TicketedMorselQueue>(&queue));
 }
 
 TEST_F(MorselQueueCapabilityTest, primitive_dynamic_queue_has_ticket_capability_only) {
     DynamicMorselQueue queue(Morsels{}, false);
 
-    EXPECT_EQ(nullptr, dynamic_cast<OlapMorselQueue*>(&queue));
-    EXPECT_NE(nullptr, dynamic_cast<TicketedMorselQueue*>(&queue));
+    EXPECT_EQ(nullptr, query_capability<OlapMorselQueue>(&queue));
+    EXPECT_NE(nullptr, query_capability<TicketedMorselQueue>(&queue));
 }
 
 TEST_F(MorselQueueCapabilityTest, fixed_queue_is_olap_capable_only) {
     OlapFixedMorselQueue queue(Morsels{});
 
-    EXPECT_NE(nullptr, dynamic_cast<OlapMorselQueue*>(&queue));
-    EXPECT_EQ(nullptr, dynamic_cast<TicketedMorselQueue*>(&queue));
+    EXPECT_NE(nullptr, query_capability<OlapMorselQueue>(&queue));
+    EXPECT_EQ(nullptr, query_capability<TicketedMorselQueue>(&queue));
 }
 
 TEST_F(MorselQueueCapabilityTest, dynamic_queue_is_olap_and_ticket_capable) {
     OlapDynamicMorselQueue queue(Morsels{}, false);
 
-    EXPECT_NE(nullptr, dynamic_cast<OlapMorselQueue*>(&queue));
-    EXPECT_NE(nullptr, dynamic_cast<TicketedMorselQueue*>(&queue));
+    EXPECT_NE(nullptr, query_capability<OlapMorselQueue>(&queue));
+    EXPECT_NE(nullptr, query_capability<TicketedMorselQueue>(&queue));
 }
 
 TEST_F(MorselQueueCapabilityTest, split_queues_are_olap_and_ticket_capable) {
     PhysicalSplitMorselQueue physical_queue(Morsels{}, 1, 1024);
     LogicalSplitMorselQueue logical_queue(Morsels{}, 1, 1024);
 
-    EXPECT_NE(nullptr, dynamic_cast<OlapMorselQueue*>(&physical_queue));
-    EXPECT_NE(nullptr, dynamic_cast<TicketedMorselQueue*>(&physical_queue));
-    EXPECT_NE(nullptr, dynamic_cast<OlapMorselQueue*>(&logical_queue));
-    EXPECT_NE(nullptr, dynamic_cast<TicketedMorselQueue*>(&logical_queue));
+    EXPECT_NE(nullptr, query_capability<OlapMorselQueue>(&physical_queue));
+    EXPECT_NE(nullptr, query_capability<TicketedMorselQueue>(&physical_queue));
+    EXPECT_NE(nullptr, query_capability<OlapMorselQueue>(&logical_queue));
+    EXPECT_NE(nullptr, query_capability<TicketedMorselQueue>(&logical_queue));
 }
 
 TEST_F(MorselQueueCapabilityTest, bucket_sequence_queue_is_olap_and_ticket_capable) {
     auto nested_queue = std::make_unique<OlapFixedMorselQueue>(Morsels{});
     BucketSequenceMorselQueue queue(std::move(nested_queue));
 
-    EXPECT_NE(nullptr, dynamic_cast<OlapMorselQueue*>(&queue));
-    auto* ticketed_queue = dynamic_cast<TicketedMorselQueue*>(&queue);
+    EXPECT_NE(nullptr, query_capability<OlapMorselQueue>(&queue));
+    auto* ticketed_queue = query_capability<TicketedMorselQueue>(&queue);
     ASSERT_NE(nullptr, ticketed_queue);
     EXPECT_TRUE(ticketed_queue->should_attach_ticket_checker(false));
     EXPECT_TRUE(ticketed_queue->should_attach_ticket_checker(true));

@@ -90,3 +90,9 @@ StarRocks 支持 MySQL 协议。您可以自定义 MySQL 插件以自动启动�
 - 初次连接时，StarRocks 返回一个认证 URL；
 - 用户需手动访问该 URL，在 Web 浏览器完成认证流程；
 - 认证完成即可开始正常交互。
+
+## 使用 OAuth 2.0 通过 HTTP 或 Arrow Flight 连接
+
+OAuth 2.0 提供方颁发的 access token 也可以放在 `Authorization: Bearer <token>` 请求头中访问 HTTP API 和 Arrow Flight SQL。StarRocks 按 OAuth 2.0 安全集成的 `jwks_url`、`required_issuer` 和 `required_audience` 校验该 token，无需经过浏览器。参见[通过 HTTP 和 Arrow Flight 连接](./security_integration.md#通过-http-和-arrow-flight-连接)。
+
+> 用 `IDENTIFIED WITH authentication_oauth2` 创建的用户只能在 MySQL 协议上走浏览器流。要在 HTTP API 或 Arrow Flight SQL 上接受 access token，请创建 OAuth 2.0 [安全集成](./security_integration.md)（它作为 Resource Server 工作），并参见[各认证方式在哪些入口可用](./authentication.mdx#各认证方式在哪些入口可用)。

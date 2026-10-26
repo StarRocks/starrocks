@@ -257,7 +257,7 @@ public abstract class ScanNode extends PlanNode {
                 this instanceof HudiScanNode || this instanceof DeltaLakeScanNode ||
                 this instanceof FileTableScanNode || this instanceof PaimonScanNode ||
                 this instanceof OdpsScanNode || this instanceof IcebergMetadataScanNode ||
-                this instanceof FlussScanNode;
+                this instanceof FlussScanNode || this instanceof LanceScanNode;
     }
 
     protected String explainColumnDict(String prefix) {

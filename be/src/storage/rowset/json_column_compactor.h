@@ -18,6 +18,8 @@
 #include "storage/rowset/json_column_writer.h"
 
 namespace starrocks {
+class JsonColumn;
+
 class FlatJsonColumnCompactor final : public FlatJsonColumnWriter {
 public:
     FlatJsonColumnCompactor(const ColumnWriterOptions& opts, TypeInfoPtr type_info, WritableFile* wfile,
@@ -28,12 +30,24 @@ public:
 
     Status finish() override;
 
+    uint64_t estimate_buffer_size() override;
+
 private:
+    // A segment whose buffered input outgrows streaming_threshold_bytes() while every chunk so far has
+    // the same flat layout switches to writing chunks as they arrive, with that layout, instead of
+    // buffering the whole output segment to re-derive one at finish(). See _start_streaming().
+    Status _start_streaming();
+    Status _stream_write(const Column& column, const JsonColumn& json_col);
+
     Status _compact_columns(MutableColumns& json_datas);
 
     Status _merge_columns(MutableColumns& json_datas);
 
     Status _flatten_columns(MutableColumns& json_datas);
+
+    bool _streaming = false;
+    // Every chunk buffered so far is flat with the first chunk's layout.
+    bool _uniform_flat_layout = true;
 };
 
 class JsonColumnCompactor final : public ColumnWriter {

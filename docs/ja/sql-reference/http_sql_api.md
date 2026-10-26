@@ -52,6 +52,14 @@ Authorization: Basic <credentials>
 
 基本認証が使用されます。つまり、`credentials` に対してユーザー名とパスワードを入力します（`-u '<username>:<password>'`）。ユーザー名にパスワードが設定されていない場合、`<username>:` のみを渡し、パスワードを空のままにすることができます。たとえば、root アカウントを使用する場合、`-u 'root:'` と入力できます。
 
+JWT または OAuth 2.0 の[セキュリティインテグレーション](../administration/user_privs/authentication/security_integration.md)を設定している場合、ID プロバイダーが発行したトークンも使えます:
+
+```shell
+Authorization: Bearer <token>
+```
+
+トークンではユーザー名を送りません。StarRocks はセキュリティインテグレーションの `principal_field` が指すクレームから読み取ります。どの種類のユーザーがどの認証情報を送れるかは、[各認証方式が使えるエントリポイント](../administration/user_privs/authentication/authentication.mdx#各認証方式が使えるエントリポイント) を参照してください。
+
 ### リクエストボディ
 
 ```shell

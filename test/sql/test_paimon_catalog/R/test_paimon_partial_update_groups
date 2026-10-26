@@ -1,0 +1,398 @@
+-- name: test_paimon_partial_update_groups
+create external catalog paimon_boundaries_${uuid0}
+properties (
+"type" = "paimon",
+"paimon.catalog.type" = "filesystem",
+"paimon.catalog.warehouse" = "oss://${oss_bucket}/ci_catalog_test_data/paimon/",
+"aws.s3.access_key" = "${oss_ak}",
+"aws.s3.secret_key" = "${oss_sk}",
+"aws.s3.endpoint" = "${oss_endpoint}"
+);
+-- result:
+-- !result
+set time_zone = 'UTC';
+-- result:
+-- !result
+set enable_count_star_optimization = false;
+-- result:
+-- !result
+set enable_prune_complex_types = true;
+-- result:
+-- !result
+set paimon_reader_mode = 'auto';
+-- result:
+-- !result
+[ORDER]select id,v,w,seq1,seq2,group_seq from paimon_boundaries_${uuid0}.paimon_test.reader_partial_groups_v1 order by id;
+-- result:
+1	12	1100	10	2	110
+2	20	2100	10	1	101
+-- !result
+function: assert_paimon_readers("select id,v,w,seq1,seq2,group_seq from paimon_boundaries_${uuid0}.paimon_test.reader_partial_groups_v1 order by id", "reader_partial_groups_v1", "native", "NATIVE_SUPPORTED")
+-- result:
+None
+-- !result
+[ORDER]select v,w from paimon_boundaries_${uuid0}.paimon_test.reader_partial_groups_v1 order by id;
+-- result:
+12	1100
+20	2100
+-- !result
+function: assert_paimon_readers("select v,w from paimon_boundaries_${uuid0}.paimon_test.reader_partial_groups_v1 order by id", "reader_partial_groups_v1", "native", "NATIVE_SUPPORTED")
+-- result:
+None
+-- !result
+function: assert_paimon_native_profile("select v,w from paimon_boundaries_${uuid0}.paimon_test.reader_partial_groups_v1 order by id")
+-- result:
+None
+-- !result
+set paimon_reader_mode = 'native';
+-- result:
+-- !result
+[ORDER]select id,v,w,seq1,seq2,group_seq from paimon_boundaries_${uuid0}.paimon_test.reader_partial_groups_v1 order by id;
+-- result:
+1	12	1100	10	2	110
+2	20	2100	10	1	101
+-- !result
+function: assert_paimon_readers("select id,v,w,seq1,seq2,group_seq from paimon_boundaries_${uuid0}.paimon_test.reader_partial_groups_v1 order by id", "reader_partial_groups_v1", "native", "NATIVE_SUPPORTED")
+-- result:
+None
+-- !result
+[ORDER]select v,w from paimon_boundaries_${uuid0}.paimon_test.reader_partial_groups_v1 order by id;
+-- result:
+12	1100
+20	2100
+-- !result
+function: assert_paimon_readers("select v,w from paimon_boundaries_${uuid0}.paimon_test.reader_partial_groups_v1 order by id", "reader_partial_groups_v1", "native", "NATIVE_SUPPORTED")
+-- result:
+None
+-- !result
+function: assert_paimon_native_profile("select v,w from paimon_boundaries_${uuid0}.paimon_test.reader_partial_groups_v1 order by id")
+-- result:
+None
+-- !result
+set paimon_reader_mode = 'jni';
+-- result:
+-- !result
+[ORDER]select id,v,w,seq1,seq2,group_seq from paimon_boundaries_${uuid0}.paimon_test.reader_partial_groups_v1 order by id;
+-- result:
+1	12	1100	10	2	110
+2	20	2100	10	1	101
+-- !result
+function: assert_paimon_readers("select id,v,w,seq1,seq2,group_seq from paimon_boundaries_${uuid0}.paimon_test.reader_partial_groups_v1 order by id", "reader_partial_groups_v1", "jni", "EXPLICIT_MODE")
+-- result:
+None
+-- !result
+[ORDER]select v,w from paimon_boundaries_${uuid0}.paimon_test.reader_partial_groups_v1 order by id;
+-- result:
+12	1100
+20	2100
+-- !result
+function: assert_paimon_readers("select v,w from paimon_boundaries_${uuid0}.paimon_test.reader_partial_groups_v1 order by id", "reader_partial_groups_v1", "jni", "EXPLICIT_MODE")
+-- result:
+None
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+drop catalog paimon_boundaries_${uuid0};
+-- result:
+-- !result
+-- name: test_paimon_partial_update_retract
+create external catalog paimon_boundaries_${uuid0}
+properties (
+"type" = "paimon",
+"paimon.catalog.type" = "filesystem",
+"paimon.catalog.warehouse" = "oss://${oss_bucket}/ci_catalog_test_data/paimon/",
+"aws.s3.access_key" = "${oss_ak}",
+"aws.s3.secret_key" = "${oss_sk}",
+"aws.s3.endpoint" = "${oss_endpoint}"
+);
+-- result:
+-- !result
+set time_zone = 'UTC';
+-- result:
+-- !result
+set enable_count_star_optimization = false;
+-- result:
+-- !result
+set enable_prune_complex_types = true;
+-- result:
+-- !result
+set paimon_reader_mode = 'auto';
+-- result:
+-- !result
+[ORDER]select id,v,w,seq1,seq2,group_seq from paimon_boundaries_${uuid0}.paimon_test.reader_partial_retract_v1 order by id;
+-- result:
+1	12	None	10	2	110
+2	20	2100	10	1	101
+-- !result
+function: assert_paimon_readers("select id,v,w,seq1,seq2,group_seq from paimon_boundaries_${uuid0}.paimon_test.reader_partial_retract_v1 order by id", "reader_partial_retract_v1", "native", "NATIVE_SUPPORTED")
+-- result:
+None
+-- !result
+[ORDER]select v,w from paimon_boundaries_${uuid0}.paimon_test.reader_partial_retract_v1 order by id;
+-- result:
+12	None
+20	2100
+-- !result
+function: assert_paimon_readers("select v,w from paimon_boundaries_${uuid0}.paimon_test.reader_partial_retract_v1 order by id", "reader_partial_retract_v1", "native", "NATIVE_SUPPORTED")
+-- result:
+None
+-- !result
+function: assert_paimon_native_profile("select v,w from paimon_boundaries_${uuid0}.paimon_test.reader_partial_retract_v1 order by id")
+-- result:
+None
+-- !result
+set paimon_reader_mode = 'native';
+-- result:
+-- !result
+[ORDER]select id,v,w,seq1,seq2,group_seq from paimon_boundaries_${uuid0}.paimon_test.reader_partial_retract_v1 order by id;
+-- result:
+1	12	None	10	2	110
+2	20	2100	10	1	101
+-- !result
+function: assert_paimon_readers("select id,v,w,seq1,seq2,group_seq from paimon_boundaries_${uuid0}.paimon_test.reader_partial_retract_v1 order by id", "reader_partial_retract_v1", "native", "NATIVE_SUPPORTED")
+-- result:
+None
+-- !result
+[ORDER]select v,w from paimon_boundaries_${uuid0}.paimon_test.reader_partial_retract_v1 order by id;
+-- result:
+12	None
+20	2100
+-- !result
+function: assert_paimon_readers("select v,w from paimon_boundaries_${uuid0}.paimon_test.reader_partial_retract_v1 order by id", "reader_partial_retract_v1", "native", "NATIVE_SUPPORTED")
+-- result:
+None
+-- !result
+function: assert_paimon_native_profile("select v,w from paimon_boundaries_${uuid0}.paimon_test.reader_partial_retract_v1 order by id")
+-- result:
+None
+-- !result
+set paimon_reader_mode = 'jni';
+-- result:
+-- !result
+[ORDER]select id,v,w,seq1,seq2,group_seq from paimon_boundaries_${uuid0}.paimon_test.reader_partial_retract_v1 order by id;
+-- result:
+1	12	None	10	2	110
+2	20	2100	10	1	101
+-- !result
+function: assert_paimon_readers("select id,v,w,seq1,seq2,group_seq from paimon_boundaries_${uuid0}.paimon_test.reader_partial_retract_v1 order by id", "reader_partial_retract_v1", "jni", "EXPLICIT_MODE")
+-- result:
+None
+-- !result
+[ORDER]select v,w from paimon_boundaries_${uuid0}.paimon_test.reader_partial_retract_v1 order by id;
+-- result:
+12	None
+20	2100
+-- !result
+function: assert_paimon_readers("select v,w from paimon_boundaries_${uuid0}.paimon_test.reader_partial_retract_v1 order by id", "reader_partial_retract_v1", "jni", "EXPLICIT_MODE")
+-- result:
+None
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+drop catalog paimon_boundaries_${uuid0};
+-- result:
+-- !result
+-- name: test_paimon_partial_update_remove_record
+create external catalog paimon_boundaries_${uuid0}
+properties (
+"type" = "paimon",
+"paimon.catalog.type" = "filesystem",
+"paimon.catalog.warehouse" = "oss://${oss_bucket}/ci_catalog_test_data/paimon/",
+"aws.s3.access_key" = "${oss_ak}",
+"aws.s3.secret_key" = "${oss_sk}",
+"aws.s3.endpoint" = "${oss_endpoint}"
+);
+-- result:
+-- !result
+set time_zone = 'UTC';
+-- result:
+-- !result
+set enable_count_star_optimization = false;
+-- result:
+-- !result
+set enable_prune_complex_types = true;
+-- result:
+-- !result
+set paimon_reader_mode = 'auto';
+-- result:
+-- !result
+[ORDER]select id,v,seq from paimon_boundaries_${uuid0}.paimon_test.reader_partial_delete_v1 order by id;
+-- result:
+2	20	250
+3	30	300
+-- !result
+function: assert_paimon_readers("select id,v,seq from paimon_boundaries_${uuid0}.paimon_test.reader_partial_delete_v1 order by id", "reader_partial_delete_v1", "native", "NATIVE_SUPPORTED")
+-- result:
+None
+-- !result
+[ORDER]select v from paimon_boundaries_${uuid0}.paimon_test.reader_partial_delete_v1 order by id;
+-- result:
+20
+30
+-- !result
+function: assert_paimon_readers("select v from paimon_boundaries_${uuid0}.paimon_test.reader_partial_delete_v1 order by id", "reader_partial_delete_v1", "native", "NATIVE_SUPPORTED")
+-- result:
+None
+-- !result
+function: assert_paimon_native_profile("select v from paimon_boundaries_${uuid0}.paimon_test.reader_partial_delete_v1 order by id")
+-- result:
+None
+-- !result
+set paimon_reader_mode = 'native';
+-- result:
+-- !result
+[ORDER]select id,v,seq from paimon_boundaries_${uuid0}.paimon_test.reader_partial_delete_v1 order by id;
+-- result:
+2	20	250
+3	30	300
+-- !result
+function: assert_paimon_readers("select id,v,seq from paimon_boundaries_${uuid0}.paimon_test.reader_partial_delete_v1 order by id", "reader_partial_delete_v1", "native", "NATIVE_SUPPORTED")
+-- result:
+None
+-- !result
+[ORDER]select v from paimon_boundaries_${uuid0}.paimon_test.reader_partial_delete_v1 order by id;
+-- result:
+20
+30
+-- !result
+function: assert_paimon_readers("select v from paimon_boundaries_${uuid0}.paimon_test.reader_partial_delete_v1 order by id", "reader_partial_delete_v1", "native", "NATIVE_SUPPORTED")
+-- result:
+None
+-- !result
+function: assert_paimon_native_profile("select v from paimon_boundaries_${uuid0}.paimon_test.reader_partial_delete_v1 order by id")
+-- result:
+None
+-- !result
+set paimon_reader_mode = 'jni';
+-- result:
+-- !result
+[ORDER]select id,v,seq from paimon_boundaries_${uuid0}.paimon_test.reader_partial_delete_v1 order by id;
+-- result:
+2	20	250
+3	30	300
+-- !result
+function: assert_paimon_readers("select id,v,seq from paimon_boundaries_${uuid0}.paimon_test.reader_partial_delete_v1 order by id", "reader_partial_delete_v1", "jni", "EXPLICIT_MODE")
+-- result:
+None
+-- !result
+[ORDER]select v from paimon_boundaries_${uuid0}.paimon_test.reader_partial_delete_v1 order by id;
+-- result:
+20
+30
+-- !result
+function: assert_paimon_readers("select v from paimon_boundaries_${uuid0}.paimon_test.reader_partial_delete_v1 order by id", "reader_partial_delete_v1", "jni", "EXPLICIT_MODE")
+-- result:
+None
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+drop catalog paimon_boundaries_${uuid0};
+-- result:
+-- !result
+-- name: test_paimon_partial_update_ignore_delete
+create external catalog paimon_boundaries_${uuid0}
+properties (
+"type" = "paimon",
+"paimon.catalog.type" = "filesystem",
+"paimon.catalog.warehouse" = "oss://${oss_bucket}/ci_catalog_test_data/paimon/",
+"aws.s3.access_key" = "${oss_ak}",
+"aws.s3.secret_key" = "${oss_sk}",
+"aws.s3.endpoint" = "${oss_endpoint}"
+);
+-- result:
+-- !result
+set time_zone = 'UTC';
+-- result:
+-- !result
+set enable_count_star_optimization = false;
+-- result:
+-- !result
+set enable_prune_complex_types = true;
+-- result:
+-- !result
+set paimon_reader_mode = 'auto';
+-- result:
+-- !result
+[ORDER]select id,v,seq from paimon_boundaries_${uuid0}.paimon_test.reader_partial_ignore_delete_v1 order by id;
+-- result:
+1	10	101
+2	200	200
+3	30	300
+-- !result
+function: assert_paimon_readers("select id,v,seq from paimon_boundaries_${uuid0}.paimon_test.reader_partial_ignore_delete_v1 order by id", "reader_partial_ignore_delete_v1", "native", "NATIVE_SUPPORTED")
+-- result:
+None
+-- !result
+[ORDER]select v from paimon_boundaries_${uuid0}.paimon_test.reader_partial_ignore_delete_v1 order by id;
+-- result:
+10
+200
+30
+-- !result
+function: assert_paimon_readers("select v from paimon_boundaries_${uuid0}.paimon_test.reader_partial_ignore_delete_v1 order by id", "reader_partial_ignore_delete_v1", "native", "NATIVE_SUPPORTED")
+-- result:
+None
+-- !result
+function: assert_paimon_native_profile("select v from paimon_boundaries_${uuid0}.paimon_test.reader_partial_ignore_delete_v1 order by id")
+-- result:
+None
+-- !result
+set paimon_reader_mode = 'native';
+-- result:
+-- !result
+[ORDER]select id,v,seq from paimon_boundaries_${uuid0}.paimon_test.reader_partial_ignore_delete_v1 order by id;
+-- result:
+1	10	101
+2	200	200
+3	30	300
+-- !result
+function: assert_paimon_readers("select id,v,seq from paimon_boundaries_${uuid0}.paimon_test.reader_partial_ignore_delete_v1 order by id", "reader_partial_ignore_delete_v1", "native", "NATIVE_SUPPORTED")
+-- result:
+None
+-- !result
+[ORDER]select v from paimon_boundaries_${uuid0}.paimon_test.reader_partial_ignore_delete_v1 order by id;
+-- result:
+10
+200
+30
+-- !result
+function: assert_paimon_readers("select v from paimon_boundaries_${uuid0}.paimon_test.reader_partial_ignore_delete_v1 order by id", "reader_partial_ignore_delete_v1", "native", "NATIVE_SUPPORTED")
+-- result:
+None
+-- !result
+function: assert_paimon_native_profile("select v from paimon_boundaries_${uuid0}.paimon_test.reader_partial_ignore_delete_v1 order by id")
+-- result:
+None
+-- !result
+set paimon_reader_mode = 'jni';
+-- result:
+-- !result
+[ORDER]select id,v,seq from paimon_boundaries_${uuid0}.paimon_test.reader_partial_ignore_delete_v1 order by id;
+-- result:
+1	10	101
+2	200	200
+3	30	300
+-- !result
+function: assert_paimon_readers("select id,v,seq from paimon_boundaries_${uuid0}.paimon_test.reader_partial_ignore_delete_v1 order by id", "reader_partial_ignore_delete_v1", "jni", "EXPLICIT_MODE")
+-- result:
+None
+-- !result
+[ORDER]select v from paimon_boundaries_${uuid0}.paimon_test.reader_partial_ignore_delete_v1 order by id;
+-- result:
+10
+200
+30
+-- !result
+function: assert_paimon_readers("select v from paimon_boundaries_${uuid0}.paimon_test.reader_partial_ignore_delete_v1 order by id", "reader_partial_ignore_delete_v1", "jni", "EXPLICIT_MODE")
+-- result:
+None
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+drop catalog paimon_boundaries_${uuid0};
+-- result:
+-- !result

@@ -28,7 +28,7 @@
 #include "base/statusor.h"
 #include "fiu/fiu-control.h"
 #include "fiu/fiu.h"
-#include "gen_cpp/internal_service.pb.h"
+#include "gen_cpp/failpoint.pb.h"
 
 namespace starrocks::failpoint {
 
@@ -180,7 +180,7 @@ bool init_failpoint_from_conf(const std::string& conf_file);
 // Lift PUpdateFailPointStatusRequest's request-level pause discriminator into the trigger mode that
 // gets stored. Lives here rather than inline in the brpc handler so it can be unit-tested, and so
 // there is exactly one place that knows the request encoding. Uses only
-// gen_cpp/internal_service.pb.h, which this header already includes, so it does not breach the
+// gen_cpp/failpoint.pb.h, which this header already includes, so it does not breach the
 // be/src/base layering rule.
 PFailPointTriggerMode trigger_mode_from_request(const PUpdateFailPointStatusRequest& request);
 

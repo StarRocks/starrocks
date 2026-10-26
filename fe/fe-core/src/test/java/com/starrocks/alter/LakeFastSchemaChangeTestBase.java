@@ -24,6 +24,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -45,6 +46,8 @@ import com.starrocks.transaction.TransactionState;
 import com.starrocks.type.DateType;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
 import com.starrocks.utframe.StarRocksTestBase;
@@ -93,6 +96,102 @@ public abstract class LakeFastSchemaChangeTestBase extends StarRocksTestBase {
     }
 
     protected abstract boolean isFastSchemaEvolutionV2();
+
+    @Test
+    public void testNoopBloomFilterRemovalWithVarcharWidenUsesFastSchemaEvolution() throws Exception {
+        for (String keys : new String[] {"DUPLICATE KEY(k)", "PRIMARY KEY(k)"}) {
+            String name = "t_bf_noop_remove_" + keys.charAt(0);
+            LakeTable table = createTable(connectContext, String.format("""
+                    CREATE TABLE %s (k BIGINT NOT NULL, x VARCHAR(16)) %s
+                    DISTRIBUTED BY HASH(k) BUCKETS 1
+                    PROPERTIES('fast_schema_evolution'='true',
+                        'cloud_native_fast_schema_evolution_v2'='%s')
+                    """, name, keys, isFastSchemaEvolutionV2()));
+            executeAlterAndWaitFinish(table, "ALTER TABLE " + name + " MODIFY COLUMN x VARCHAR(32) "
+                    + "PROPERTIES ('bloom_filter_columns'='')", true);
+            Assertions.assertEquals(32, ((ScalarType) table.getColumn("x").getType()).getLength());
+            Assertions.assertTrue(table.getBfColumnIds() == null || table.getBfColumnIds().isEmpty());
+            Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+        }
+    }
+
+    @Test
+    public void testRemoveBloomFilterWithFastTypeChangeUsesRewrite() throws Exception {
+        LakeTable table = createTable(connectContext, String.format("""
+                CREATE TABLE t_bf_remove_with_type (k BIGINT NOT NULL, x INT)
+                DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+                PROPERTIES('bloom_filter_columns'='x', 'fast_schema_evolution'='true',
+                    'cloud_native_fast_schema_evolution_v2'='%s')
+                """, isFastSchemaEvolutionV2()));
+        AlterJobV2 job = executeAlterAndWaitFinish(table,
+                "ALTER TABLE t_bf_remove_with_type MODIFY COLUMN x DOUBLE "
+                        + "PROPERTIES ('bloom_filter_columns'='')", false);
+        Assertions.assertInstanceOf(LakeTableSchemaChangeJob.class, job);
+        Assertions.assertEquals(FloatType.DOUBLE, table.getColumn("x").getType());
+        Assertions.assertTrue(table.getBfColumnIds() == null || table.getBfColumnIds().isEmpty());
+        Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+    }
+
+    @Test
+    public void testModifyBloomFilterColumnToDoubleIsRejected() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
+        for (String keys : new String[] {"DUPLICATE KEY(k)", "PRIMARY KEY(k)"}) {
+            for (boolean fast : new boolean[] {false, true}) {
+                for (String source : new String[] {"INT", "VARCHAR(16)"}) {
+                    String name = "t_bf_reject_" + keys.charAt(0) + (fast ? "_fast_" : "_slow_")
+                            + source.charAt(0);
+                    LakeTable table = createTable(connectContext, String.format("""
+                            CREATE TABLE %s (k BIGINT NOT NULL, x %s) %s
+                            DISTRIBUTED BY HASH(k) BUCKETS 1
+                            PROPERTIES('bloom_filter_columns'='x', 'fast_schema_evolution'='%s',
+                                'cloud_native_fast_schema_evolution_v2'='%s')
+                            """, name, source, keys, fast, isFastSchemaEvolutionV2()));
+                    AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(
+                            "ALTER TABLE " + name + " MODIFY COLUMN x DOUBLE", connectContext);
+                    DdlException e = Assertions.assertThrows(DdlException.class,
+                            () -> schemaChangeHandler.process(stmt.getAlterClauseList(), db, table), name);
+                    Assertions.assertEquals("Invalid bloom filter column 'x': unsupported type DOUBLE",
+                            e.getMessage());
+                    Assertions.assertEquals(source.equals("INT") ? PrimitiveType.INT : PrimitiveType.VARCHAR,
+                            table.getColumn("x").getPrimitiveType());
+                    Assertions.assertTrue(table.getBfColumnNames().contains("x"));
+                    Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+                    Assertions.assertTrue(schemaChangeHandler.getAlterJobsV2().values().stream()
+                            .noneMatch(job -> job.getTableId() == table.getId()));
+                }
+            }
+        }
+    }
+
+    @Test
+    public void testModifyBloomFilterColumnToWritableDecimalIsAccepted() throws Exception {
+        LakeTable table = createTable(connectContext, String.format("""
+                CREATE TABLE t_bf_decimal (k BIGINT NOT NULL, x VARCHAR(16))
+                DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+                PROPERTIES('bloom_filter_columns'='x', 'fast_schema_evolution'='true',
+                    'cloud_native_fast_schema_evolution_v2'='%s')
+                """, isFastSchemaEvolutionV2()));
+        AlterJobV2 job = executeAlterAndWaitFinish(table,
+                "ALTER TABLE t_bf_decimal MODIFY COLUMN x DECIMAL(18,2)", false);
+        Assertions.assertInstanceOf(LakeTableSchemaChangeJob.class, job);
+        Assertions.assertEquals(PrimitiveType.DECIMAL64, table.getColumn("x").getPrimitiveType());
+        Assertions.assertTrue(table.getBfColumnNames().contains("x"));
+        Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+    }
+
+    @Test
+    public void testWidenBloomFilterVarcharColumn() throws Exception {
+        LakeTable table = createTable(connectContext, String.format("""
+                CREATE TABLE t_bf_widen (k BIGINT NOT NULL, x VARCHAR(16))
+                DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+                PROPERTIES('bloom_filter_columns'='x', 'fast_schema_evolution'='true',
+                    'cloud_native_fast_schema_evolution_v2'='%s')
+                """, isFastSchemaEvolutionV2()));
+        executeAlterAndWaitFinish(table, "ALTER TABLE t_bf_widen MODIFY COLUMN x VARCHAR(32)", true);
+        Assertions.assertEquals(32, ((ScalarType) table.getColumn("x").getType()).getLength());
+        Assertions.assertTrue(table.getBfColumnNames().contains("x"));
+        Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+    }
 
     protected AlterJobV2 executeAlterAndWaitFinish(
             LakeTable table, String sql, boolean expectFastSchemaEvolution) throws Exception {

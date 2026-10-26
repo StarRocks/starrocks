@@ -525,6 +525,16 @@ public class OlapTableFactory implements AbstractTableFactory {
                         PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD, true));
             }
 
+            if (properties != null &&
+                    properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_AUTO_COLLECT)) {
+                try {
+                    table.setEnableStatisticAutoCollect(PropertyAnalyzer.analyzeBooleanPropStrictly(properties,
+                            PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_AUTO_COLLECT, true));
+                } catch (SemanticException e) {
+                    throw new DdlException(e.getMessage(), e);
+                }
+            }
+
             try {
                 String forbiddenTimeRanges = PropertyAnalyzer.analyzeBaseCompactionForbiddenTimeRanges(properties);
                 CompactionControlScheduler.toQuartzExpression(forbiddenTimeRanges);

@@ -20,21 +20,28 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.OptimizerTraceUtil;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEProduceOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalHudiScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalRepeatOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -50,6 +57,7 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.common.AggregateFunctionRollupUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.common.AggregatePushDownUtils;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
@@ -63,6 +71,8 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static com.starrocks.sql.optimizer.operator.OpRuleBit.OP_PARTITION_PRUNED;
+
 /*
  * `PushDownAggregateGroupingSetsRule` will rewrite grouping sets. eg:
  *      select a, b, c, d, e sum(f) from t group by rollup(a, b, c, d, e);
@@ -73,6 +83,15 @@ import java.util.stream.Collectors;
  *      select a, b, c, d, null, sum(x) x from t group by rollup(a, b, c, d)
  */
 public class PushDownAggregateGroupingSetsRule extends TransformationRule {
+    // A repeat of exactly 3 grouping sets (a two-key ROLLUP) is below the static floor, so pushing it down
+    // changes a plan main builds today. Do it only when the estimate says the win is overwhelming, since the
+    // group-by estimate is biased toward pushing down: the 2nd key of a multi-key set is damped by 0.5625,
+    // so independent keys are underestimated ~1.78x, and the extra hash shuffle is not priced at all.
+    // The repeat input must be large enough for the expansion to matter...
+    private static final double MIN_INPUT_ROWS_TO_PUSH_DOWN_THREE_SETS = 1e8;
+    // ...and the full-key aggregate must cut it by an order of magnitude, far beyond the estimate's error.
+    private static final double MIN_REDUCTION_TO_PUSH_DOWN_THREE_SETS = 10;
+
     private static final List<String> SUPPORT_AGGREGATE_FUNCTIONS = Lists.newArrayList(FunctionSet.MAX,
             FunctionSet.MIN, FunctionSet.SUM, FunctionSet.AVG, FunctionSet.COUNT);
 
@@ -86,8 +105,22 @@ public class PushDownAggregateGroupingSetsRule extends TransformationRule {
     public boolean check(OptExpression input, OptimizerContext context) {
         LogicalAggregationOperator aggregate = (LogicalAggregationOperator) input.getOp();
         LogicalRepeatOperator repeatOperator = (LogicalRepeatOperator) input.inputAt(0).getOp();
-        if (aggregate.getType() != AggType.GLOBAL || repeatOperator.getRepeatColumnRef().size() <= 3
-                || repeatOperator.hasPushDown()) {
+        if (aggregate.getType() != AggType.GLOBAL || repeatOperator.getRepeatColumnRef().size() <= 2) {
+            return false;
+        }
+
+        // Each application peels the finest grouping set off the repeat and re-aggregates the rest from
+        // it, and the plan it produces matches this rule's own pattern again - so applying the rule
+        // repeatedly builds a cascade g_n -> g_n-1 -> ... instead of expanding every level from g_n.
+        // The depth is capped here: the level counter on the repeat grows by one per application, and
+        // a cascade level never goes down to 3 grouping sets (below), so the cascade always terminates.
+        if (repeatOperator.getPushDownLevel() >= cascadeLevelLimit(context)) {
+            return false;
+        }
+
+        // The estimate-gated push down of 3 grouping sets applies to the first application only; a
+        // cascade level stops at the static floor of more than 3 grouping sets.
+        if (repeatOperator.getPushDownLevel() > 0 && repeatOperator.getRepeatColumnRef().size() <= 3) {
             return false;
         }
 
@@ -123,8 +156,154 @@ public class PushDownAggregateGroupingSetsRule extends TransformationRule {
             refs.forEach(checkRefs::remove);
         }
 
+        // What is left in checkRefs is exactly buildSubRepeatConsume's `nullRefs`: the keys that the
+        // finest set has and no coarser set does, i.e. the keys this application would peel off.
+        //
+        // The first application is worth doing even when it peels nothing, because its real work is to
+        // put a full-key aggregate under the repeat so the remaining sets expand from aggregated rows
+        // instead of raw input. A *cascade* level that peels nothing is not: it would re-group by every
+        // key again for one more CTE, one more fragment and one more blocking stage. That is the normal
+        // shape for CUBE, where dropping the complete set still leaves sets whose union is every key -
+        // so this is what confines the cascade to prefix-nested (ROLLUP-shaped) sets, with no
+        // cardinality estimate involved.
+        if (repeatOperator.getPushDownLevel() > 0 && checkRefs.isEmpty()) {
+            return false;
+        }
+
         checkRefs.addAll(repeatOperator.getOutputGrouping());
-        return !checkRefs.containsAll(aggregate.getGroupingKeys());
+        if (checkRefs.containsAll(aggregate.getGroupingKeys())) {
+            return false;
+        }
+
+        // The static floor: more than 3 grouping sets are always pushed down.
+        if (repeatOperator.getRepeatColumnRef().size() > 3) {
+            return true;
+        }
+        // A repeat of 3 grouping sets is pushed down only on an overwhelming estimate.
+        // Checked last, since it estimates statistics over the whole input subtree.
+        return isOverwhelmingWinForThreeSets(input, context);
+    }
+
+    /**
+     * Whether pushing down a repeat of 3 grouping sets is a sure win: the repeat input is estimated at
+     * {@link #MIN_INPUT_ROWS_TO_PUSH_DOWN_THREE_SETS} rows or more, and the full-key aggregate is estimated to
+     * cut it at least {@link #MIN_REDUCTION_TO_PUSH_DOWN_THREE_SETS}x. The group count comes from the
+     * estimator the CBO itself uses for aggregates, which takes multi-column statistics when there are any
+     * and otherwise combines per-column NDVs. Anything the estimate cannot tell - statistics that cannot be
+     * derived, an unknown key statistic - keeps the static plan.
+     */
+    private static boolean isOverwhelmingWinForThreeSets(OptExpression input, OptimizerContext context) {
+        LogicalAggregationOperator aggregate = (LogicalAggregationOperator) input.getOp();
+        LogicalRepeatOperator repeat = (LogicalRepeatOperator) input.inputAt(0).getOp();
+        OptExpression repeatInput = input.inputAt(0).inputAt(0);
+        // A CTE consumer whose producer is outside this subtree takes its statistics from the producer's,
+        // which the tree rewrite phase has usually not derived yet. Estimating anyway throws inside
+        // Utils.calculateStatistics, which logs a WARN with a stack trace and leaves no statistics - and
+        // check() runs again on every iteration of the rewrite. Keep the static plan without the attempt.
+        if (consumesCteWithoutStatistics(repeatInput, context, new HashSet<>())) {
+            return skipThreeSets("the input reads a CTE consumer without statistics");
+        }
+        // This rule runs before partition pruning, and an unpruned scan cannot be estimated for what it will read:
+        // - a Hive or Hudi scan would be estimated over every partition of its table, a synchronous metadata
+        //   fetch the optimizer otherwise defers until after pruning;
+        // - a native list-partitioned scan counts the rows of every partition, while the statistics calculator
+        //   drops its partition predicate on the assumption that pruning already applied it, so a query that
+        //   reads one small partition of a large table would look large.
+        // Keep the static plan instead.
+        if (hasUnprunedPartitionedScan(repeatInput)) {
+            return skipThreeSets("the input scans a partitioned table before partition pruning");
+        }
+        // Re-derive the whole subtree: the tree rewrite phase does not keep cached statistics current, and a
+        // scan that still has cached statistics skips loading its base statistics and applies its predicate
+        // again on top of them, shrinking on every pass. Clearing also keeps a failed estimate (which
+        // Utils.calculateStatistics swallows) from being mistaken for a fresh one.
+        clearStatistics(repeatInput);
+        Utils.calculateStatistics(repeatInput, context);
+        Statistics statistics = repeatInput.getStatistics();
+        if (statistics == null) {
+            return skipThreeSets("the input statistics cannot be derived");
+        }
+
+        List<List<ColumnRefOperator>> groupingSets = repeat.getRepeatColumnRef();
+        List<ColumnRefOperator> keys = groupingSets.get(groupingSets.size() - 1).stream()
+                .filter(aggregate.getGroupingKeys()::contains)
+                .collect(Collectors.toList());
+        if (keys.stream().anyMatch(key -> statistics.getColumnStatistics().get(key) == null ||
+                statistics.getColumnStatistics().get(key).isUnknown())) {
+            return skipThreeSets("a grouping key has unknown statistics");
+        }
+        double inputRows = statistics.getOutputRowCount();
+        double groups = StatisticsCalculator.computeGroupByStatistics(keys, statistics, Maps.newHashMap());
+        boolean pushDown = inputRows >= MIN_INPUT_ROWS_TO_PUSH_DOWN_THREE_SETS &&
+                inputRows >= MIN_REDUCTION_TO_PUSH_DOWN_THREE_SETS * groups;
+        OptimizerTraceUtil.log("PushDownAggregateGroupingSetsRule: 3 grouping sets, estimated input rows %s, " +
+                "estimated full-key groups %s, push down %s", inputRows, groups, pushDown);
+        return pushDown;
+    }
+
+    private static boolean skipThreeSets(String reason) {
+        OptimizerTraceUtil.log("PushDownAggregateGroupingSetsRule: 3 grouping sets, no estimate, keep the plan: %s",
+                reason);
+        return false;
+    }
+
+    private static boolean hasUnprunedPartitionedScan(OptExpression expr) {
+        if (expr.getOp() instanceof LogicalOlapScanOperator) {
+            LogicalOlapScanOperator scan = (LogicalOlapScanOperator) expr.getOp();
+            if (!scan.isOpRuleBitSet(OP_PARTITION_PRUNED) && scan.getTable() instanceof OlapTable &&
+                    ((OlapTable) scan.getTable()).getPartitionInfo().isListPartition()) {
+                return true;
+            }
+        }
+        ScanOperatorPredicates predicates = null;
+        if (expr.getOp() instanceof LogicalHiveScanOperator) {
+            predicates = ((LogicalHiveScanOperator) expr.getOp()).getScanOperatorPredicates();
+        } else if (expr.getOp() instanceof LogicalHudiScanOperator) {
+            predicates = ((LogicalHudiScanOperator) expr.getOp()).getScanOperatorPredicates();
+        }
+        if (predicates != null && !((LogicalScanOperator) expr.getOp()).getTable().isUnPartitioned() &&
+                !predicates.hasPrunedPartition()) {
+            return true;
+        }
+        return expr.getInputs().stream().anyMatch(PushDownAggregateGroupingSetsRule::hasUnprunedPartitionedScan);
+    }
+
+    private static void clearStatistics(OptExpression expr) {
+        expr.getInputs().forEach(PushDownAggregateGroupingSetsRule::clearStatistics);
+        expr.setStatistics(null);
+    }
+
+    /**
+     * Whether estimating {@code expr} would reach a CTE consumer with no statistics to read: one without an
+     * inline child, whose producer is not visited first within {@code expr} (Utils.calculateStatistics
+     * walks children in order, and an anchor's producer is its first child) and has no statistics
+     * registered in the CTE context.
+     */
+    private static boolean consumesCteWithoutStatistics(OptExpression expr, OptimizerContext context,
+                                                        Set<Integer> producedCteIds) {
+        if (expr.getOp() instanceof LogicalCTEConsumeOperator && expr.getInputs().isEmpty()) {
+            int cteId = ((LogicalCTEConsumeOperator) expr.getOp()).getCteId();
+            return !producedCteIds.contains(cteId) && context.getCteContext().getCTEStatistics(cteId).isEmpty();
+        }
+        for (OptExpression child : expr.getInputs()) {
+            if (consumesCteWithoutStatistics(child, context, producedCteIds)) {
+                return true;
+            }
+        }
+        if (expr.getOp() instanceof LogicalCTEProduceOperator) {
+            producedCteIds.add(((LogicalCTEProduceOperator) expr.getOp()).getCteId());
+        }
+        return false;
+    }
+
+    /**
+     * Upper bound on how many times this rule may fire on one grouping-sets aggregate, i.e. how many
+     * levels of the cascade are built. 1 reproduces the historical single-split plan exactly, which
+     * makes it the rollback switch.
+     */
+    private static int cascadeLevelLimit(OptimizerContext context) {
+        int limit = context.getSessionVariable().getCboPushDownGroupingSetCascadeLevel();
+        return limit <= 0 ? 1 : limit;
     }
 
     @Override
@@ -332,8 +511,20 @@ public class PushDownAggregateGroupingSetsRule extends TransformationRule {
         // cte produce
         LogicalCTEProduceOperator produce = new LogicalCTEProduceOperator(cteId);
 
-        return OptExpression.create(produce,
+        OptExpression cteProduce = OptExpression.create(produce,
                 OptExpression.create(allColumnRefsAggregate, input.inputAt(0).getInputs()));
+
+        // Register this producer's statistics before returning, so the *next* cascade level can
+        // estimate through the LogicalCTEConsume this level just created. Without it,
+        // StatisticsCalculator.computeCTEConsume hits its `cannot obtain cte statistics`
+        // Preconditions check, Utils.calculateStatistics swallows the exception into a WARN with a
+        // stack trace (once per node), and this method then falls back to partitioning on every
+        // grouping key. That fallback is not merely noisy: partitioning the finest level on a single
+        // high-NDV column is what lets the coarser levels that still contain it aggregate node-local,
+        // which is most of the point of the cascade.
+        Utils.calculateStatistics(cteProduce, context);
+
+        return cteProduce;
     }
 
     /*
@@ -493,7 +684,7 @@ public class PushDownAggregateGroupingSetsRule extends TransformationRule {
                 .setOutputGrouping(outputGrouping)
                 .setRepeatColumnRefList(repeatRefs)
                 .setGroupingIds(groupingIds)
-                .setHasPushDown(true)
+                .setPushDownLevel(repeat.getPushDownLevel() + 1)
                 .setPredicate(repeatPredicate)
                 .build();
 
@@ -524,7 +715,11 @@ public class PushDownAggregateGroupingSetsRule extends TransformationRule {
                         sumFn = DecimalV3FunctionAnalyzer.rectifyAggregationFunction((AggregateFunction) sumFn,
                                 ref.getType(), ref.getType());
                     }
-                    ColumnRefOperator out = factory.create(ref, ref.getType(), ref.isNullable());
+                    // Nullable regardless of the input: this column holds a sum(), and sum() is
+                    // nullable even over a non-nullable input. Inheriting ref's flag declares a
+                    // non-nullable column that a nullable sum() writes, which the BE reads as a null
+                    // data pointer (see the matching note in the non-avg branch below).
+                    ColumnRefOperator out = factory.create(ref, ref.getType(), true);
                     aggregations.put(out, new CallOperator(FunctionSet.SUM, ref.getType(),
                             Lists.newArrayList(ref), sumFn));
                     return out;
@@ -534,7 +729,10 @@ public class PushDownAggregateGroupingSetsRule extends TransformationRule {
                     Function countFn = ExprUtils.getBuiltinFunction(FunctionSet.SUM,
                             new Type[] {ref.getType()}, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
                     Preconditions.checkState(countFn instanceof AggregateFunction);
-                    ColumnRefOperator out = factory.create(ref, ref.getType(), ref.isNullable());
+                    // Nullable for the same reason, and this is the one that actually bites: `ref` is
+                    // avg's count part, which is non-nullable, so the flag would say non-nullable while
+                    // the sum() writing it is nullable.
+                    ColumnRefOperator out = factory.create(ref, ref.getType(), true);
                     aggregations.put(out, new CallOperator(FunctionSet.SUM, ref.getType(),
                             Lists.newArrayList(ref), countFn));
                     return out;
@@ -558,7 +756,21 @@ public class PushDownAggregateGroupingSetsRule extends TransformationRule {
                 String fnName = rollupFnName != null ? rollupFnName : v.getFnName();
 
                 ColumnRefOperator x = rolledUp.computeIfAbsent(outputs.get(k), ref -> {
-                    ColumnRefOperator out = factory.create(k, k.getType(), k.isNullable());
+                    // Always nullable - do NOT inherit k's flag. Nullability belongs to the rollup
+                    // aggregation that writes this column, and it is not preserved by the rollup
+                    // mapping: count(*) is non-nullable while the sum() that rolls it up is nullable.
+                    // Inheriting k therefore declares a non-nullable column that a nullable
+                    // aggregation feeds. With a single push down that stays hidden, because the
+                    // level's input really is the non-nullable count(*) - but every further cascade
+                    // level reads the *previous* level's sum() output, and the BE then gets a nullable
+                    // column where the plan promised a non-nullable one and segfaults in
+                    // SumAggregateFunction::update_batch.
+                    //
+                    // Declaring nullable unconditionally is the safe direction and costs only an
+                    // unused null bitmap when the values happen never to be NULL; the reverse is a
+                    // crash. It is also plan-neutral in practice: every aggregate in
+                    // SUPPORT_AGGREGATE_FUNCTIONS except count already produces a nullable output.
+                    ColumnRefOperator out = factory.create(k, k.getType(), true);
                     Function aggFunc = ExprUtils.getBuiltinFunction(fnName, new Type[] {k.getType()},
                             Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
 

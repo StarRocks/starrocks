@@ -34,10 +34,10 @@
 #include "storage/lake/filenames.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_metadata.h"
-#include "storage/lake/update_manager.h"
 #include "storage/metadata_util.h"
 #include "storage/tablet_schema.h"
 
@@ -132,8 +132,8 @@ public:
     TableSchemaServiceTest() : _test_directory("test_table_schema_service") {
         _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
         _location_provider = std::make_shared<FixedLocationProvider>(_test_directory);
-        _update_manager = std::make_unique<UpdateManager>(_location_provider, _mem_tracker.get());
-        _tablet_manager = std::make_unique<TabletManager>(_location_provider, _update_manager.get(), 1024 * 1024);
+        _primary_key_manager = std::make_unique<PrimaryKeyManager>(_location_provider, _mem_tracker.get());
+        _tablet_manager = std::make_unique<TabletManager>(_location_provider, _primary_key_manager.get(), 1024 * 1024);
         _schema_service = _tablet_manager->table_schema_service();
     }
 
@@ -393,7 +393,7 @@ protected:
     std::string _test_directory;
     std::unique_ptr<MemTracker> _mem_tracker;
     std::shared_ptr<FixedLocationProvider> _location_provider;
-    std::unique_ptr<UpdateManager> _update_manager;
+    std::unique_ptr<PrimaryKeyManager> _primary_key_manager;
     std::unique_ptr<TabletManager> _tablet_manager;
     TableSchemaService* _schema_service;
 };

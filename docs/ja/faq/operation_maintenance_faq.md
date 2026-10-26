@@ -84,7 +84,7 @@ SET GLOBAL wait_timeout = 3600;
 ## StarRocks はネストされたサブクエリを使用した DELETE をサポートしていますか？
 
 バージョン 2.3 以降、主キーテーブルは完全な DELETE WHERE 構文をサポートしています。
-詳細は [Reference - DELETE](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/table_bucket_part_index/DELETE/) を参照してください。
+詳細は [Reference - DELETE](../sql-reference/sql-statements/table_bucket_part_index/DELETE.md) を参照してください。
 
 ## 動的パーティションで古いパーティションを自動的にクリーンアップしたくない場合、dynamic_partition.start を省略するだけでよいですか？
 
@@ -188,7 +188,7 @@ OS のファイルディスクリプタ制限を確認し、`cat /proc/$pid/limi
 ## パーティションとバケットの数に制限はありますか？
 
 - パーティションのデフォルト制限は `4096` です（FE 設定 `max_partitions_in_one_batch` で設定可能）。
-- バケットには制限がありません。各バケットの推奨サイズは 1 GB です。
+- バケットには制限がありません。各バケットの推奨サイズは 1 GB です。大容量タブレットをサポートする v4.1 以降の共有データクラスタでは、推奨サイズは 10 GB から 50 GB で、100 GB を超えないようにします。
 
 ## FE リーダーを手動で切り替えるにはどうすればよいですか？
 

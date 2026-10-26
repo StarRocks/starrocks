@@ -18,6 +18,7 @@
 
 #include <iostream>
 
+#include "base/testutil/assert.h"
 #include "cache/scan/shared_buffered_input_stream.h"
 #include "common/util/thrift_util.h"
 #include "connector/hive/scanner/hdfs_scanner.h"
@@ -166,6 +167,52 @@ TEST_F(ParquetPageReaderTest, ExtraBytes) {
     ASSERT_TRUE(reader.seek_to_offset(page_2_size).ok());
     st = reader.next_header();
     ASSERT_FALSE(st.ok());
+}
+
+// A page header larger than the first header-size guess (1KB) is still parsed: the guess doubles until
+// the header deserializes, and the header is followed by the right page.
+TEST_F(ParquetPageReaderTest, HeaderLargerThanFirstGuess) {
+    FormatScannerStats stats;
+    std::string buffer;
+    std::vector<size_t> page_offsets;
+    for (size_t min_max_size : {5000, 10}) {
+        tparquet::PageHeader page_header;
+        page_header.type = tparquet::PageType::DATA_PAGE;
+        page_header.uncompressed_page_size = static_cast<int32_t>(min_max_size);
+        page_header.compressed_page_size = 64;
+        tparquet::Statistics statistics;
+        statistics.__set_min_value(std::string(min_max_size, 'a'));
+        statistics.__set_max_value(std::string(min_max_size, 'z'));
+        tparquet::DataPageHeader data_page_header;
+        data_page_header.num_values = 10;
+        data_page_header.__set_statistics(statistics);
+        page_header.__set_data_page_header(data_page_header);
+
+        ThriftSerializer ser(true, 100);
+        uint32_t len = 0;
+        uint8_t* header_ser = nullptr;
+        CHECK(ser.serialize(&page_header, &len, &header_ser).ok());
+        page_offsets.push_back(buffer.size());
+        buffer.append((char*)header_ser, len);
+        buffer.resize(buffer.size() + page_header.compressed_page_size);
+    }
+    ASSERT_GT(page_offsets[1], 10000);
+    size_t total_size = buffer.size();
+
+    RandomAccessFile file(std::make_shared<io::StringInputStream>(std::move(buffer)), "string-file");
+    SharedBufferedInputStream stream(file.stream(), file.filename(), file.get_size().value());
+
+    ColumnReaderOptions opts;
+    opts.stats = &stats;
+    PageReader reader(&stream, 0, total_size, 20, opts, tparquet::CompressionCodec::UNCOMPRESSED);
+
+    ASSERT_OK(reader.next_header());
+    ASSERT_EQ(5000, reader.current_header()->uncompressed_page_size);
+    ASSERT_EQ(std::string(5000, 'z'), reader.current_header()->data_page_header.statistics.max_value);
+
+    reader.seek_to_offset(page_offsets[1]);
+    ASSERT_OK(reader.next_header());
+    ASSERT_EQ(10, reader.current_header()->uncompressed_page_size);
 }
 
 } // namespace starrocks::parquet

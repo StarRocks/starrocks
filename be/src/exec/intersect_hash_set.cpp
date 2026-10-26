@@ -187,7 +187,7 @@ size_t IntersectHashSet<HashSet>::_get_max_serialize_size(const ChunkPtr& chunkP
     size_t max_size = 0;
     for (auto* expr : exprs) {
         ColumnPtr key_column = EVALUATE_NULL_IF_ERROR(expr, expr->root(), chunkPtr.get());
-        max_size += key_column->max_one_element_serialize_size();
+        max_size += key_column->max_one_element_serialize_size_compact();
         if (!key_column->is_nullable()) {
             max_size += sizeof(bool);
         }
@@ -214,11 +214,11 @@ size_t IntersectHashSet<HashSet>::_serialize_one_row(const Columns& key_columns,
     uint8_t* cursor = _buffer;
     for (const auto& key_column : key_columns) {
         if (key_column->is_nullable()) {
-            cursor += key_column->serialize(idx, cursor);
+            cursor += key_column->serialize_compact(idx, cursor);
         } else {
             constexpr bool kNotNull = false;
             memcpy(cursor, &kNotNull, sizeof(bool));
-            cursor += sizeof(bool) + key_column->serialize(idx, cursor + sizeof(bool));
+            cursor += sizeof(bool) + key_column->serialize_compact(idx, cursor + sizeof(bool));
         }
     }
     return cursor - _buffer;

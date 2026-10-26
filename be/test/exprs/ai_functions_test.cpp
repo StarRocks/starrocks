@@ -119,7 +119,7 @@ TEST_F(AiFunctionsTest, AiQueryWrongArgumentCount) {
     prompt_col->append("Hello, how are you?");
     columns.emplace_back(prompt_col);
 
-    auto result = AiFunctions::ai_query(ctx.get(), columns);
+    auto result = AIFunctions::ai_query(ctx.get(), columns);
     ASSERT_FALSE(result.ok());
     ASSERT_TRUE(result.status().message().find("Ai_query function only call by ai_query(prompt, config)") !=
                 std::string::npos);
@@ -164,10 +164,10 @@ TEST_F(AiFunctionsTest, AiQueryBuiltinRegistrationPreservesNullRows) {
     EXPECT_TRUE(nullable_result->is_null(1));
 }
 
-TEST_F(AiFunctionsTest, AiCompleteIsExcludedFromOrdinaryBuiltinDescriptorTable) {
-    // ai_complete is dispatched asynchronously by AIProject and must not enter the ordinary synchronous
+TEST_F(AiFunctionsTest, AIProjectFunctionsAreExcludedFromOrdinaryBuiltinDescriptorTable) {
+    // AIProject functions are dispatched asynchronously and must not enter the ordinary synchronous
     // builtin descriptor table.
-    for (int64_t function_id : {200100, 200101, 200102, 200103}) {
+    for (int64_t function_id = 200001; function_id <= 200013; ++function_id) {
         EXPECT_EQ(nullptr, BuiltinFunctions::find_builtin_function(function_id));
     }
 }
@@ -199,7 +199,7 @@ TEST_F(AiFunctionsTest, AiQueryWithNullValues) {
     columns.emplace_back(json_col);
 
     // Test ai_query with null values
-    auto result = AiFunctions::ai_query(ctx.get(), columns);
+    auto result = AIFunctions::ai_query(ctx.get(), columns);
     ASSERT_TRUE(result.ok()) << "ai_query should handle null values gracefully: " << result.status().message();
 
     auto result_column = std::move(result.value());
@@ -240,7 +240,7 @@ TEST_F(AiFunctionsTest, DISABLED_SingleSentimentAnalysisCall) {
     auto config = createTestConfig(DEEPSEEK_ENDPOINT, DEEPSEEK_MODEL, TEST_API_KEY);
     createAiQueryColumns(columns, prompts, config);
 
-    auto result = AiFunctions::ai_query(ctx.get(), columns);
+    auto result = AIFunctions::ai_query(ctx.get(), columns);
     ASSERT_TRUE(result.ok());
 
     auto result_column = std::move(result.value());
@@ -267,7 +267,7 @@ TEST_F(AiFunctionsTest, DISABLED_MultipleSameSentimentAnalysisCalls) {
     auto config = createTestConfig(DEEPSEEK_ENDPOINT, DEEPSEEK_MODEL, TEST_API_KEY);
     createAiQueryColumns(columns, prompts, config);
 
-    auto result = AiFunctions::ai_query(ctx.get(), columns);
+    auto result = AIFunctions::ai_query(ctx.get(), columns);
     ASSERT_TRUE(result.ok());
 
     auto result_column = std::move(result.value());
@@ -301,7 +301,7 @@ TEST_F(AiFunctionsTest, DISABLED_DiverseSentimentAnalysisCalls) {
     auto config = createTestConfig(DEEPSEEK_ENDPOINT, DEEPSEEK_MODEL, TEST_API_KEY);
     createAiQueryColumns(columns, prompts, config);
 
-    auto result = AiFunctions::ai_query(ctx.get(), columns);
+    auto result = AIFunctions::ai_query(ctx.get(), columns);
     ASSERT_TRUE(result.ok());
 
     auto result_column = std::move(result.value());

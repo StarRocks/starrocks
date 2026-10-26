@@ -6,6 +6,9 @@ sidebar_position: 10
 
 # 本地身份验证
 
+import EditionSpecificDefaultAdminUser from '../../../_assets/commonMarkdown/Edition_Specific_Default_Admin_User.mdx'
+import EditionSpecificResetLostAdminPassword from '../../../_assets/commonMarkdown/Edition_Specific_Reset_Lost_Admin_Password.mdx'
+
 通过 SQL 命令在 StarRocks 中使用本地身份验证创建和管理用户。
 
 StarRocks 本地身份验证是一种基于密码的身份验证方法。此外，StarRocks 还支持与外部身份验证系统集成，如 LDAP。更多说明，请参见[通过安全集成认证用户](./security_integration.md)。
@@ -15,6 +18,8 @@ StarRocks 本地身份验证是一种基于密码的身份验证方法。此外�
 具有系统定义角色 `user_admin` 的用户可以在 StarRocks 中创建用户、修改用户和删除用户。
 
 :::
+
+<EditionSpecificDefaultAdminUser />
 
 ## 创建用户
 
@@ -60,7 +65,6 @@ ALTER USER 'jack' SET PROPERTIES ("max_user_connections" = "1000");
 > **NOTE**
 >
 > - 任何用户都可以在不需要任何权限的情况下重置自己的密码。
-> - 只有 `root` 用户本身可以设置其密码。如果您丢失了其密码并且无法连接到 StarRocks，请参见[重置遗失的 root 用户密码](#重置遗失的-root-用户密码) 获取更多说明。
 
 以下两个示例都将 `jack` 的密码重置为 `54321`：
 
@@ -76,53 +80,7 @@ ALTER USER 'jack' SET PROPERTIES ("max_user_connections" = "1000");
   ALTER USER jack@'172.10.1.10' IDENTIFIED BY '54321';
   ```
 
-#### 重置遗失的 root 用户密码
-
-如果您丢失了 `root` 用户的密码并且无法连接到 StarRocks，可以通过以下步骤重置：
-
-1. 在 **所有 FE 节点** 的配置文件 **fe/conf/fe.conf** 中添加以下配置项以禁用用户身份验证：
-
-   ```YAML
-   enable_auth_check = false
-   ```
-
-2. 重启 **所有 FE 节点** 以使配置生效。
-
-   ```Bash
-   ./fe/bin/stop_fe.sh
-   ./fe/bin/start_fe.sh
-   ```
-
-3. 从 MySQL 客户端通过 `root` 用户连接到 StarRocks。禁用用户身份验证时，无需指定密码。
-
-   ```Bash
-   mysql -h <fe_ip_or_fqdn> -P<fe_query_port> -uroot
-   ```
-
-4. 重置 `root` 用户的密码。
-
-   ```SQL
-   SET PASSWORD for root = PASSWORD('xxxxxx');
-   ```
-
-5. 通过在 **所有 FE 节点** 的配置文件 **fe/conf/fe.conf** 中将配置项 `enable_auth_check` 设置为 `true` 来重新启用用户身份验证。
-
-   ```YAML
-   enable_auth_check = true
-   ```
-
-6. 重启 **所有 FE 节点** 以使配置生效。
-
-   ```Bash
-   ./fe/bin/stop_fe.sh
-   ./fe/bin/start_fe.sh
-   ```
-
-7. 从 MySQL 客户端使用 `root` 用户和新密码连接到 StarRocks，以验证密码是否重置成功。
-
-   ```Bash
-   mysql -h <fe_ip_or_fqdn> -P<fe_query_port> -uroot -p<xxxxxx>
-   ```
+<EditionSpecificResetLostAdminPassword />
 
 ## 删除用户
 

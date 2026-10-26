@@ -255,6 +255,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.sql.plan.PlanFragmentBuilder;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeMgr;
 import com.starrocks.statistic.AnalyzeStatus;
@@ -790,6 +791,8 @@ public class StmtExecutor {
                 return "odps";
             case KUDU:
                 return "kudu";
+            case LANCE:
+                return "lance";
             case ELASTICSEARCH:
                 return "elasticsearch";
             default:
@@ -3417,6 +3420,10 @@ public class StmtExecutor {
                 } else {
                     QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
                 }
+                if (coord != null) {
+                    // Paths that bypass execute(), such as MV refresh DML, release scan resources here.
+                    coord.clearExternalResources();
+                }
             }
         }
     }
@@ -4121,6 +4128,9 @@ public class StmtExecutor {
 
     public Pair<List<TResultBatch>, Status> executeStmtWithExecPlan(ConnectContext context, ExecPlan plan) {
         List<TResultBatch> sqlResult = Lists.newArrayList();
+        // Set when the statement fails before a coordinator exists, e.g. while serializing the descriptor table.
+        Status failedBeforeScheduling = null;
+        coord = null;
         try {
             UUID uuid = context.getQueryId();
             context.setExecutionId(UUIDUtil.toTUniqueId(uuid));
@@ -4156,12 +4166,22 @@ public class StmtExecutor {
             } else {
                 LOG.warn("Failed to execute executeStmtWithExecPlan", e);
             }
-            coord.getExecStatus().setInternalErrorStatus(e.getMessage());
+            if (coord == null) {
+                failedBeforeScheduling = Status.internalError(e.getMessage());
+            } else {
+                coord.getExecStatus().setInternalErrorStatus(e.getMessage());
+            }
         } finally {
             QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
             recordExecStatsIntoContext();
+            if (coord != null) {
+                // Internal queries bypass execute() and publish no query-finished event; release scans here.
+                coord.clearExternalResources();
+            } else {
+                PlanFragmentBuilder.releaseScanResources(plan);
+            }
         }
-        return Pair.create(sqlResult, coord.getExecStatus());
+        return Pair.create(sqlResult, failedBeforeScheduling != null ? failedBeforeScheduling : coord.getExecStatus());
     }
 
     public List<ByteBuffer> getProxyResultBuffer() {

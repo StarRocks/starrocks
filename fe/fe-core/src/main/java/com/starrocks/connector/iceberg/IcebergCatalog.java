@@ -266,6 +266,10 @@ public interface IcebergCatalog extends MemoryTrackable {
     default void invalidateCache(String dbName, String tableName) {
     }
 
+    /** Releases clients and threads owned by this catalog; called when its connector shuts down. */
+    default void shutdown() {
+    }
+
     default StarRocksIcebergTableScan getTableScan(Table table, StarRocksIcebergTableScanContext srScanContext) {
         return new StarRocksIcebergTableScan(
                 table,

@@ -60,7 +60,7 @@
 #include "storage/compaction_manager.h"
 #include "storage/index/vector/vector_index_cache.h"
 #include "storage/lake/local_pk_index_manager.h"
-#include "storage/lake/update_manager.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/olap_common.h"
 #include "storage/persistent_index_compaction_manager.h"
 #include "storage/replication_txn_manager.h"
@@ -349,7 +349,7 @@ void* StorageEngine::_local_pk_index_shared_data_gc_evict_thread_callback(void* 
 #ifdef GOOGLE_PROFILER
     ProfilerRegisterThread();
 #endif
-    auto lake_update_manager = StorageEnv::GetInstance()->lake_update_manager();
+    auto lake_primary_key_manager = StorageEnv::GetInstance()->lake_primary_key_manager();
 
     while (!_bg_worker_stopped.load(std::memory_order_consume)) {
         SLEEP_IN_BG_WORKER(config::pindex_shared_data_gc_evict_interval_seconds);
@@ -361,8 +361,8 @@ void* StorageEngine::_local_pk_index_shared_data_gc_evict_thread_callback(void* 
                 LOG(WARNING) << "fail to walk dir. path=[" + pk_path << "] error[" << ret.to_string() << "]";
                 continue;
             }
-            lake::LocalPkIndexManager::gc(lake_update_manager, data_dir, tablet_ids);
-            lake::LocalPkIndexManager::evict(lake_update_manager, data_dir, tablet_ids);
+            lake::LocalPkIndexManager::gc(lake_primary_key_manager, data_dir, tablet_ids);
+            lake::LocalPkIndexManager::evict(lake_primary_key_manager, data_dir, tablet_ids);
         }
     }
 
@@ -655,7 +655,7 @@ void* StorageEngine::_cumulative_compaction_thread_callback(void* arg, DataDir* 
 void StorageEngine::_expire_caches(int64_t vector_cache_now) {
     _update_manager->expire_cache();
 #if defined(USE_STAROS) && !defined(BE_TEST)
-    StorageEnv::GetInstance()->lake_update_manager()->expire_cache();
+    StorageEnv::GetInstance()->lake_primary_key_manager()->expire_cache();
 #endif
     auto* vector_index_cache = StorageEnv::GetInstance()->vector_index_cache();
     if (vector_index_cache != nullptr) {
@@ -676,7 +676,7 @@ void* StorageEngine::_update_cache_expire_thread_callback(void* arg) {
         }
         _update_manager->set_cache_expire_ms(expire_sec * 1000);
 #if defined(USE_STAROS) && !defined(BE_TEST)
-        StorageEnv::GetInstance()->lake_update_manager()->set_cache_expire_ms(expire_sec * 1000);
+        StorageEnv::GetInstance()->lake_primary_key_manager()->set_cache_expire_ms(expire_sec * 1000);
 #endif
         int64_t sleep_sec = std::max(1, expire_sec / 2);
         if (StorageEnv::GetInstance()->vector_index_cache() != nullptr && config::vector_index_cache_expire_sec > 0) {
@@ -699,6 +699,11 @@ void* StorageEngine::_update_cache_evict_thread_callback(void* arg) {
             continue;
         }
 
+#if defined(USE_STAROS) && !defined(BE_TEST)
+        StorageEnv::GetInstance()->lake_primary_key_manager()->evict_cache(
+                config::primary_key_index_memory_high_percent);
+#endif
+
         // Check config valid
         int64_t memory_urgent_level = config::memory_urgent_level;
         int64_t memory_high_level = config::memory_high_level;
@@ -709,9 +714,6 @@ void* StorageEngine::_update_cache_evict_thread_callback(void* arg) {
             continue;
         }
         _update_manager->evict_cache(memory_urgent_level, memory_high_level);
-#if defined(USE_STAROS) && !defined(BE_TEST)
-        StorageEnv::GetInstance()->lake_update_manager()->evict_cache(memory_urgent_level, memory_high_level);
-#endif
     }
     return nullptr;
 }

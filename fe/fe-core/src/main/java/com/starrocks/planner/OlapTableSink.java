@@ -61,6 +61,7 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.TableName;
+import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AnalysisException;
@@ -74,6 +75,7 @@ import com.starrocks.common.Status;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.qe.scheduler.DefaultSharedDataWorkerProvider;
+import com.starrocks.lake.qe.scheduler.SkipBlacklistSharedDataWorkerProvider;
 import com.starrocks.load.Load;
 import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.qe.ConnectContext;
@@ -144,6 +146,8 @@ public class OlapTableSink extends DataSink {
 
     // input variables
     private OlapTable dstTable;
+    // Set by complete() under the table lock, see doubleWriteRoutes.
+    private Map<Long, Long> doubleWritePartitions;
     private final TupleDescriptor tupleDescriptor;
     // specified partition ids. this list should not be empty and should contains all related partition ids
     private List<Long> partitionIds;
@@ -558,6 +562,39 @@ public class OlapTableSink extends DataSink {
         complete();
     }
 
+    /**
+     * The online-optimize double-write routes this load must follow, read under the table lock complete() holds.
+     *
+     * <p>A DML planned off a copy ({@code OlapTable#copyOnlyForQuery}) builds this sink from the copy, but the
+     * routes have to come from the published table, as they did before planning moved off the lock: the
+     * {@code OnlineOptimizeJobV2} watershed protocol relies on this read conflicting with the job's database
+     * WRITE lock, and a job cancelled after the copy was taken has dropped its temp partition by now. A route
+     * counts only if the copy has its temp partition: one created after the copy belongs to a job enabled after
+     * this load's txn id was allocated, i.e. below the job's watershed, which the job waits for instead.
+     */
+    @VisibleForTesting
+    static Map<Long, Long> doubleWriteRoutes(long dbId, OlapTable dstTable) {
+        if (dstTable.isOlapExternalTable()) {
+            // Its ids are the remote cluster's, which name nothing in this one.
+            return dstTable.getDoubleWritePartitions();
+        }
+        Table published = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, dstTable.getId());
+        if (!(published instanceof OlapTable publishedOlap) || published == dstTable) {
+            return dstTable.getDoubleWritePartitions();
+        }
+        Map<Long, Long> publishedRoutes = publishedOlap.getDoubleWritePartitions();
+        if (publishedRoutes == null || publishedRoutes.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, Long> routes = new HashMap<>();
+        publishedRoutes.forEach((source, temp) -> {
+            if (dstTable.getPartition(source) != null && dstTable.getPartition(temp) != null) {
+                routes.put(source, temp);
+            }
+        });
+        return routes;
+    }
+
     public List<Long> getOpenPartitions() {
         // if load start after shema change, we should open all of the partitions to avoid different schema during schema change
         // if load start before schema change, it will be finished in waiting_txn state
@@ -616,8 +653,10 @@ public class OlapTableSink extends DataSink {
         Set<Long> openPartitionIds = partitionIds.stream().collect(
                 Collectors.toCollection(() -> new TreeSet<>(Collections.reverseOrder())))
                 .stream().limit(limit).collect(Collectors.toSet());
-        if (!dstTable.getDoubleWritePartitions().isEmpty()) {
-            openPartitionIds.addAll(dstTable.getDoubleWritePartitions().keySet());
+        Map<Long, Long> doubleWrites = doubleWritePartitions != null
+                ? doubleWritePartitions : dstTable.getDoubleWritePartitions();
+        if (!doubleWrites.isEmpty()) {
+            openPartitionIds.addAll(doubleWrites.keySet());
         }
 
         return openPartitionIds.stream().collect(Collectors.toList());
@@ -695,6 +734,7 @@ public class OlapTableSink extends DataSink {
             tSink.setSchema(createSchema(tSink.getDb_id(), dstTable, tupleDescriptor, targetWriteIndexId, true));
 
             TransactionState txnState = getTransactionState(tSink, dstTable.isOlapExternalTable());
+            doubleWritePartitions = doubleWriteRoutes(dbId, dstTable);
 
             TOlapTablePartitionParam partitionParam = createPartition(tSink.getDb_id(), dstTable, tupleDescriptor,
                     enableAutomaticPartition, automaticBucketSize, getOpenPartitions(), txnState, targetWriteIndexId);
@@ -741,7 +781,6 @@ public class OlapTableSink extends DataSink {
                 tSink.setEnable_colocate_mv_index(true);
             }
 
-            Map<Long, Long> doubleWritePartitions = dstTable.getDoubleWritePartitions();
             if (!doubleWritePartitions.isEmpty()) {
                 List<Long> doubleWritePartitionIds = new ArrayList<>();
                 for (Long partitionId : partitionIds) {
@@ -887,6 +926,9 @@ public class OlapTableSink extends DataSink {
                 }
 
                 Expr whereClause = indexMeta.getWhereClause().clone();
+                if (indexMeta.getSyncMvDefinition() != null) {
+                    whereClause = ExprUtils.rewriteStructFieldSlotRefs(whereClause);
+                }
                 List<SlotRef> slots = Lists.newArrayList();
                 whereClause.collect(SlotRef.class, slots);
 
@@ -1562,7 +1604,16 @@ public class OlapTableSink extends DataSink {
         // Double-check the tablet location backend alive info
         if (RunMode.isSharedDataMode()) {
             // NOTE: shared-nothing workerProvider.allowUsingBackupNode() == false, so don't bother to create it
-            WorkerProvider.Factory workerProviderFactory = new DefaultSharedDataWorkerProvider.Factory();
+            // Pick the provider as the scan does (CoordinatorPreprocessor): the session's routing policy, and with
+            // skip_black_list a blocklisted but alive node stays usable. A load without a session uses the defaults.
+            ConnectContext context = ConnectContext.get();
+            SessionVariable sessionVariable = context != null ? context.getSessionVariable() : null;
+            SessionVariableConstants.BlacklistBackupRoutingPolicy backupRoutingPolicy = sessionVariable != null
+                    ? sessionVariable.getBlacklistBackupRoutingPolicy()
+                    : SessionVariableConstants.BlacklistBackupRoutingPolicy.getDefault();
+            WorkerProvider.Factory workerProviderFactory = sessionVariable != null && sessionVariable.isSkipBlackList()
+                    ? new SkipBlacklistSharedDataWorkerProvider.Factory(backupRoutingPolicy)
+                    : new DefaultSharedDataWorkerProvider.Factory(backupRoutingPolicy);
             WorkerProvider workerProvider = workerProviderFactory.captureAvailableWorkers(
                     GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(), false, 0,
                     SessionVariableConstants.ComputationFragmentSchedulingPolicy.ALL_NODES, computeResource);
@@ -1572,7 +1623,8 @@ public class OlapTableSink extends DataSink {
                     List<Long> nodeIds = location.getNode_ids();
                     for (long id : nodeIds) {
                         if (!workerProvider.isDataNodeAvailable(id)) {
-                            long backupId = workerProvider.selectBackupWorker(id);
+                            // The tablet is the affinity key, the same key the scan uses, so both agree on the backup.
+                            long backupId = workerProvider.selectBackupWorker(id, location.getTablet_id());
                             if (backupId == -1) {
                                 // error out
                                 workerProvider.reportWorkerNotFoundException();

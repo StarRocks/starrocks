@@ -29,6 +29,17 @@ REVOKE
     FROM { ROLE | USER} {<role_name>|<user_identity>}
 ```
 
+#### AI functions and providers
+
+```sql
+REVOKE USAGE ON ALL AI FUNCTIONS FROM {ROLE <role_name> | USER <user_identity>};
+REVOKE USAGE ON AI FUNCTION <function_name> FROM {ROLE <role_name> | USER <user_identity>};
+REVOKE USAGE ON AI PROVIDER <provider_name> FROM {ROLE <role_name> | USER <user_identity>};
+REVOKE USAGE ON ALL AI PROVIDERS FROM {ROLE <role_name> | USER <user_identity>};
+```
+
+Revocation applies to subsequent executions and replanning, including prepared EXECUTE. It does not cancel an in-flight query. This feature adds native authorization checks; external access controllers that do not implement AI checks deny these operations.
+
 #### Resource group
 
 ```SQL
@@ -114,7 +125,7 @@ REVOKE
 
 ```SQL
 REVOKE  
-    { ALTER | DROP | SELECT | ALL [PRIVILEGES]} 
+    { ALTER | DROP | SELECT | EXPORT | ALL [PRIVILEGES]}
     ON { VIEW <view_name> [, < view_name >,...]
        ｜ ALL VIEWS} IN 
            { { DATABASE <database_name> [, <database_name>,...]}  | ALL DATABASES }
@@ -123,6 +134,7 @@ REVOKE
 
 * You must first run SET CATALOG before you run this command.
 * You can also use db.view to represent a view.
+* For the EXPORT privilege, only grant and revoke are supported. Exporting the view via `EXPORT TABLE` is not supported.
 
   ```SQL
   REVOKE <priv> ON VIEW db.view FROM {ROLE <role_name> | USER <user_identity>}
@@ -132,7 +144,7 @@ REVOKE
 
 ```SQL
 REVOKE
-    { SELECT | ALTER | REFRESH | DROP | ALL [PRIVILEGES]} 
+    { SELECT | ALTER | REFRESH | DROP | EXPORT | ALL [PRIVILEGES]}
     ON { MATERIALIZED VIEW <mv_name> [, < mv_name >,...]
        ｜ ALL MATERIALIZED VIEWS} IN 
            { { DATABASE <database_name> [, <database_name>,...] } | ALL [DATABASES] }
@@ -141,6 +153,7 @@ REVOKE
 
 * You must first run SET CATALOG before you run this command.
 * You can also use db.mv to represent an mv.
+* For the EXPORT privilege, only grant and revoke are supported. Exporting the materialized view via `EXPORT TABLE` is not supported.
 
   ```SQL
   REVOKE <priv> ON MATERIALIZED VIEW db.mv FROM {ROLE <role_name> | USER <user_identity>}

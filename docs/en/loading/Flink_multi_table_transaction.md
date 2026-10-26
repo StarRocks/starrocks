@@ -53,6 +53,27 @@ To enable Multi-table Transaction, you must running your cluster on StarRocks v4
 - Unit: Bytes
 - Description: Global buffer size in bytes for the Multi-table Transaction mode. When the total buffered data across all tables reaches this threshold, a flush is triggered.
 
+#### `sink.transaction.multi-table.mini-switch-interval-ms`
+
+- Type: Long
+- Default: `-1` (auto)
+- Unit: ms
+- Description: Minimum interval (ms) between per-partition chunk switches. Within the interval, source transactions are batched into a single stream-load, bounding HTTP request count. `-1` auto-derives `min(1000, max(500, sink.buffer-flush.interval-ms/4))`; a positive value overrides it.
+
+#### `sink.transaction.multi-table.min-switch-bytes`
+
+- Type: Long
+- Default: `1048576` (1 MB)
+- Unit: Bytes
+- Description: An interval-elapsed chunk switch only fires once a region's active chunk has accumulated at least this many bytes, so low-volume partitions batch more source transactions into one stream-load instead of emitting many tiny requests. Half-full headroom, buffer-size memory pressure, or a full `sink.buffer-flush.interval-ms` elapsing since the partition last switched all force a switch regardless — so even with a large threshold a continuous low-volume stream is still switched at roughly the flush interval and never withheld indefinitely. Set `<=0` to disable the size gate and restore the prior per-interval switching behavior.
+
+#### `sink.transaction.multi-table.max-txn-bytes`
+
+- Type: Long
+- Default: `0` (unlimited)
+- Unit: Bytes
+- Description: Hard limit in bytes on the in-progress source-transaction data one sink subtask may buffer while waiting for txnEnd. The writer never blocks on bytes that cannot be flushed before txnEnd (see Limitation 7), so a single source transaction may grow past `2 × buffer-size`; this option bounds that growth and fails the job with a clear error when exceeded. `0` means no limit: the TaskManager heap is the only bound.
+
 ### Load-related Configurations
 
 #### `sink.version`
@@ -604,7 +625,7 @@ Because the commit decision is time-driven (not tied to a specific txnEnd), the 
 
 - **Depends on StarRocks cluster transaction settings**: Monitor running txn limits, prepared timeout (default 600s), and label retention. Ensure `sink.buffer-flush.interval-ms` is significantly shorter than the StarRocks transaction timeout.
 
-- **`activeChunk` memory growth under long source transactions**: Because multi-table mode disables chunk-size-triggered internal switching (to preserve the clean-transaction-boundary invariant), `activeChunk` can grow until the next txnEnd arrives. Memory is bounded by `sink.transaction.multi-table.buffer-size` (soft) and `2 × buffer-size` (hard via `blockIfCacheFull`). Exceptionally large source transactions will throttle the task thread via back-pressure; if this becomes routine, either split the source transactions upstream or increase `sink.transaction.multi-table.buffer-size`.
+- **activeChunk memory growth under large source transactions**: Because multi-table mode disables chunk-size-triggered internal switching (to preserve the clean-transaction-boundary invariant), `activeChunk` can grow until the next txnEnd arrives. `sink.transaction.multi-table.buffer-size` (soft) and `2 × buffer-size` (hard, via `blockIfCacheFull`) only bound the *flushable* part of the buffer — frozen chunks and all-clean partitions. Bytes that cannot leave the buffer before a txnEnd (the in-progress transaction itself, plus completed rows of sibling tables in the same partition that the lockstep rule holds back) are never waited on: once the buffer is at the hard cap and nothing is flushable, the writer logs a WARN (`Write-block cap ... reached with nothing flushable`) and keeps buffering until txnEnd, after which the partition is switched and drained. So a single source transaction may exceed `2 × buffer-size`; its size is bounded only by `sink.transaction.multi-table.max-txn-bytes` (default unlimited) and the TaskManager heap. Size the heap for the largest expected source transaction times the number of sink subtasks per TaskManager, set `max-txn-bytes` if you prefer a clear failure over heap pressure, and split unbounded transactions (bulk bootstraps) upstream. At switch time a frozen chunk larger than the load body limit — the smaller of `sink.chunk-limit` (3 GB by default) and `sink.transaction.multi-table.buffer-size` — is re-cut into several load requests under the same shared label, so no single `/api/transaction/load` body exceeds that limit, except for a single row that is itself larger than it.
 
 - **Cross-database writes are rejected**: Multi-table transactions validate that all regions belong to the same database. Writing to tables in different databases within the same commit cycle will throw an error.
 
@@ -644,6 +665,16 @@ Recommended metrics:
 
 - Cause: Commit conditions are not met.
 - Solution: Verify upstream data has correct `transactionEnd=true` markers; expect up to `commitInterval + miniInterval` latency per row. If latency exceeds this budget, check the manager thread is not stuck in a recycle or in-flight load (see `StarRocks-Sink-Manager` logs).
+
+#### `Write-block cap ... reached with nothing flushable` (WARN)
+
+- Cause: A source transaction, plus completed rows of sibling tables held back until its txnEnd, exceeds `2 × buffer-size`; the writer keeps buffering until txnEnd instead of blocking.
+- Solution: Expected under a large source transaction; the data is committed once its txnEnd arrives. Watch TaskManager heap. Set `sink.transaction.multi-table.max-txn-bytes` if you prefer a hard failure, or split the transaction upstream.
+
+#### `would exceed sink.transaction.multi-table.max-txn-bytes`
+
+- Cause: A source transaction is larger than the configured hard limit.
+- Solution: Raise `max-txn-bytes` (or set it to `0` for unlimited) or split the source transaction upstream.
 
 #### Cross-database write error
 

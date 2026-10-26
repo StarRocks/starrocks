@@ -20,6 +20,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.concurrent.lock.BlockingCallValidator;
 import com.starrocks.proto.PPulsarBacklogBatchProxyRequest;
 import com.starrocks.proto.PPulsarBacklogProxyRequest;
 import com.starrocks.proto.PPulsarBacklogProxyResult;
@@ -147,6 +148,8 @@ public class PulsarUtil {
         }
 
         private PPulsarProxyResult sendProxyRequest(PPulsarProxyRequest request) throws StarRocksException {
+            // Same shape as KafkaUtil: the single funnel, and the point where the thread waits.
+            BlockingCallValidator.validateNotUnderLock("pulsar");
             TNetworkAddress address = new TNetworkAddress();
             try {
                 // TODO: need to refactor after be split into cn + dn

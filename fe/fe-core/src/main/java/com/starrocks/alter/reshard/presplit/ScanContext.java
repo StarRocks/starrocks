@@ -15,10 +15,17 @@
 package com.starrocks.alter.reshard.presplit;
 
 /**
- * Opaque marker for per-call-site scan context; concrete implementations are
+ * Per-call-site scan context; concrete implementations are
  * supplied by each integration point (INSERT-from-FILES, Broker Load, ...).
- * The sampler does not introspect it — it threads the context back to the
- * code path that builds the {@code FileScanNode} for the sampling sub-query.
+ * The sampler threads source-specific inputs back to the code path that builds
+ * the {@code FileScanNode}, and shares the load time zone across sampling tiers.
  */
 public interface ScanContext {
+    /**
+     * Time zone used to read the load's source, shared by footer statistics and data-tier queries.
+     * Contexts for internal partition rewrites have no load session and keep the query default.
+     */
+    default String loadTimeZone() {
+        return null;
+    }
 }

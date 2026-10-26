@@ -57,12 +57,24 @@ public class PrepareStmtContext {
     }
 
     public void updateLastSchemaUpdateTime(QueryStatement stmt, ConnectContext session) {
+        OlapTable table = resolveOlapTable(stmt, session);
+        this.lastSchemaUpdateTime = table.lastSchemaUpdateTime.get();
+        this.tableId = table.getId();
+    }
+
+    // true when the plan scans the live table itself rather than a private copy of it -- planning with the meta
+    // lock held for the whole phase (cbo_use_lock_db, or a copy-unsafe table) does -- such a plan must not be cached,
+    // since a hit prunes partitions and tablets on the table the plan scans without any lock, which on the live one
+    // races a concurrent INSERT OVERWRITE or partition change
+    public boolean isPlannedOnLiveTable(QueryStatement stmt, ConnectContext session, OlapTable plannedTable) {
+        return plannedTable == resolveOlapTable(stmt, session);
+    }
+
+    private static OlapTable resolveOlapTable(QueryStatement stmt, ConnectContext session) {
         SelectRelation selectRelation = (SelectRelation) (stmt.getQueryRelation());
         TableRelation tableRelation = (TableRelation) selectRelation.getRelation();
         QueryAnalyzer queryAnalyzer = new QueryAnalyzer(session);
-        OlapTable table = (OlapTable) queryAnalyzer.resolveTable(tableRelation);
-        this.lastSchemaUpdateTime = table.lastSchemaUpdateTime.get();
-        this.tableId = table.getId();
+        return (OlapTable) queryAnalyzer.resolveTable(tableRelation);
     }
 
     public void cachePlan(ExecPlan execPlan) {

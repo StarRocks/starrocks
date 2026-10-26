@@ -93,17 +93,29 @@ public class RemoteFragmentAssignmentStrategy implements FragmentAssignmentStrat
         boolean enableOptimization = connectContext != null && 
                 connectContext.getSessionVariable() != null &&
                 connectContext.getSessionVariable().isEnableGatherFragmentLocalityOptimization();
-        
+
+        // When enabled, gather fragment is assigned to a worker already used by child fragments
+        // (child affinity), rather than via global round-robin. Disable to revert to legacy behavior.
+        boolean enableChildAffinity = connectContext != null &&
+                connectContext.getSessionVariable() != null &&
+                connectContext.getSessionVariable().isEnableGatherFragmentChildAffinity();
+
         if (enableOptimization) {
             // Check if all instances of other ExecutionFragments (except current one) are on the same node
             Long commonWorkerId = findCommonWorkerIdForOtherFragments(execFragment);
             if (commonWorkerId != null) {
                 // If all other fragments' instances are on the same node, choose that node
                 workerId = commonWorkerId;
+            } else if (enableChildAffinity) {
+                // Child affinity: pick from child fragment workers
+                workerId = selectWorkerConstrainedToChildren(execFragment);
             } else {
                 // Otherwise, randomly select the next node
                 workerId = workerProvider.selectNextWorker();
             }
+        } else if (enableChildAffinity) {
+            // Child affinity: pick from child fragment workers
+            workerId = selectWorkerConstrainedToChildren(execFragment);
         } else {
             // If optimization is disabled, directly randomly select the next node
             workerId = workerProvider.selectNextWorker();
@@ -111,6 +123,31 @@ public class RemoteFragmentAssignmentStrategy implements FragmentAssignmentStrat
         
         FragmentInstance instance = new FragmentInstance(workerProvider.getWorkerById(workerId), execFragment);
         execFragment.addInstance(instance);
+    }
+
+    /**
+     * Select a worker from the child fragments' used workers, instead of round-robining across all
+     * available BEs. Child fragment workers are already label-constrained via data locality (scan
+     * fragments only schedule on BEs holding the relevant tablet replicas), so inheriting from them
+     * ensures the gather/result fragment stays within the same label boundary.
+     *
+     * Falls back to {@code workerProvider.selectNextWorker()} only when no child instances exist
+     * (e.g., single-fragment plans), preserving legacy behavior.
+     */
+    private long selectWorkerConstrainedToChildren(ExecutionFragment execFragment) throws StarRocksException {
+        Set<Long> childWorkerIdSet = Sets.newHashSet();
+        for (int i = 0; i < execFragment.childrenSize(); i++) {
+            execFragment.getChild(i).getInstances().stream()
+                    .map(FragmentInstance::getWorkerId)
+                    .forEach(childWorkerIdSet::add);
+        }
+        if (!childWorkerIdSet.isEmpty()) {
+            List<Long> uniqueWorkerIds = Lists.newArrayList(childWorkerIdSet);
+            long selectedId = uniqueWorkerIds.get(random.nextInt(uniqueWorkerIds.size()));
+            workerProvider.selectWorkerUnchecked(selectedId);
+            return selectedId;
+        }
+        return workerProvider.selectNextWorker();
     }
 
     /**

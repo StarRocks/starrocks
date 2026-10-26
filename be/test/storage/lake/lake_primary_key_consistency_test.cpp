@@ -729,7 +729,7 @@ public:
     }
 
     Status reload_op() {
-        if (!_update_mgr->try_remove_primary_index_cache(_tablet_metadata->id())) {
+        if (!_primary_key_mgr->try_remove_primary_index_cache(_tablet_metadata->id())) {
             return Status::InternalError("try_remove_primary_index_cache");
         }
         return Status::OK();

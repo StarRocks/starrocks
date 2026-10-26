@@ -45,6 +45,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.function.BiFunction;
+import java.util.function.Function;
 import java.util.function.Predicate;
 
 // copy from https://github.com/apache/iceberg/blob/apache-iceberg-1.9.0/core/src/main/java/org/apache/iceberg/ManifestGroup.java
@@ -94,6 +95,13 @@ class ManifestGroup {
         this.caseSensitive = true;
         this.manifestEntryPredicate = e -> true;
         this.scanMetrics = ScanMetrics.noop();
+    }
+
+    // Added in Iceberg 1.11.0 and called by iceberg-core. Forwards to DeleteFileIndex.Builder so
+    // equality-delete field IDs resolve against all table schemas, not just spec.schema().
+    ManifestGroup schemasById(Map<Integer, Schema> newSchemasById) {
+        deleteIndexBuilder.schemasById(newSchemasById);
+        return this;
     }
 
     ManifestGroup specsById(Map<Integer, PartitionSpec> newSpecsById) {
@@ -266,6 +274,21 @@ class ManifestGroup {
     public Iterable<CloseableIterable<DataFile>> fileGroups() {
         return entries(
                 (manifest, entries) -> CloseableIterable.transform(entries, ManifestEntry::file));
+    }
+
+    /**
+     * Transforms the entries of every matching manifest with the given function. Added in Iceberg
+     * 1.11.0; kept here because this class shadows the one in iceberg-core.
+     */
+    public <T> CloseableIterable<T> entries(
+            Function<CloseableIterable<ManifestEntry<DataFile>>, CloseableIterable<T>> entryTransform) {
+        Iterable<CloseableIterable<T>> iterables = entries((manifest, entries) -> entryTransform.apply(entries));
+
+        if (executorService != null) {
+            return new ParallelIterable<>(iterables, executorService);
+        } else {
+            return CloseableIterable.concat(iterables);
+        }
     }
 
     private <T> Iterable<CloseableIterable<T>> entries(

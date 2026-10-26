@@ -32,6 +32,7 @@
 #include "exprs/array_size_limit.h"
 #include "exprs/builtin_functions.h"
 #include "exprs/mock_vectorized_expr.h"
+#include "types/constexpr.h"
 
 namespace starrocks {
 
@@ -5271,6 +5272,43 @@ TEST_F(ArrayFunctionsTest, array_generate_when_overflow) {
     _check_array<int8_t>({(int8_t)(-9), (int8_t)(-97)}, dest_column->get(1).get_array());
 }
 
+TEST_F(ArrayFunctionsTest, array_generate_rejects_too_many_elements) {
+    auto bigint_const = [](int64_t v) { return ColumnHelper::create_const_column<TYPE_BIGINT>(v, 1); };
+    constexpr int64_t kMin = std::numeric_limits<int64_t>::min();
+    constexpr int64_t kMax = std::numeric_limits<int64_t>::max();
+
+    // array_generate(9, 9223372036854775807, 1) used to reserve ~9.2e18 elements, which threw
+    // std::length_error past TRY_CATCH_BAD_ALLOC and aborted the BE.
+    auto st = ArrayGenerate<TYPE_BIGINT>::process(nullptr, {bigint_const(9), bigint_const(kMax), bigint_const(1)});
+    ASSERT_FALSE(st.ok());
+    ASSERT_TRUE(st.status().is_invalid_argument()) << st.status();
+
+    // The full range in both directions: stop - start and -step overflow int64 here.
+    st = ArrayGenerate<TYPE_BIGINT>::process(nullptr, {bigint_const(kMin), bigint_const(kMax), bigint_const(1)});
+    ASSERT_TRUE(st.status().is_invalid_argument()) << st.status();
+    st = ArrayGenerate<TYPE_BIGINT>::process(nullptr, {bigint_const(kMax), bigint_const(kMin), bigint_const(kMin)});
+    ASSERT_TRUE(st.ok()) << st.status();
+    _check_array<int64_t>({kMax, (int64_t)-1}, st.value()->get(0).get_array());
+
+    // LARGEINT's own range.
+    auto largeint_const = [](int128_t v) { return ColumnHelper::create_const_column<TYPE_LARGEINT>(v, 1); };
+    st = ArrayGenerate<TYPE_LARGEINT>::process(
+            nullptr, {largeint_const(MIN_INT128), largeint_const(MAX_INT128), largeint_const(1)});
+    ASSERT_TRUE(st.status().is_invalid_argument()) << st.status();
+
+    // Rows that are each small but together exceed the limit.
+    auto start = ColumnHelper::create_column(TypeDescriptor(TYPE_BIGINT), false);
+    auto stop = ColumnHelper::create_column(TypeDescriptor(TYPE_BIGINT), false);
+    auto step = ColumnHelper::create_column(TypeDescriptor(TYPE_BIGINT), false);
+    for (int i = 0; i < 3; i++) {
+        start->append_datum(Datum((int64_t)0));
+        stop->append_datum(Datum((int64_t)std::numeric_limits<uint32_t>::max() / 2));
+        step->append_datum(Datum((int64_t)1));
+    }
+    st = ArrayGenerate<TYPE_BIGINT>::process(nullptr, {start, stop, step});
+    ASSERT_TRUE(st.status().is_invalid_argument()) << st.status();
+}
+
 TEST_F(ArrayFunctionsTest, array_distinct_any_type_only_null) {
     // test only null
     {
@@ -5314,6 +5352,92 @@ TEST_F(ArrayFunctionsTest, array_distinct_any_type_only_null) {
         ASSERT_EQ(dest_column->size(), 1);
         ASSERT_STREQ(dest_column->debug_string().c_str(), "[['5','33','666']]");
     }
+}
+
+// array_distinct_any_type collects the surviving element indices for the whole chunk and copies them
+// with a single append_selective(), so the per-row offsets and the shared index buffer have to stay
+// in step across rows that keep everything, keep nothing, and are NULL.
+TEST_F(ArrayFunctionsTest, array_distinct_any_type_batched_across_rows) {
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
+    src_column->append_datum(DatumArray{"a", "b", "c"});         // nothing to drop
+    src_column->append_datum(DatumArray{"x", "x", "x", "x"});    // collapses to one
+    src_column->append_datum(DatumArray{});                      // empty
+    src_column->append_nulls(1);                                 // NULL row
+    src_column->append_datum(DatumArray{"q"});                   // single element (array_size <= 1)
+    src_column->append_datum(DatumArray{Datum(), Datum(), "z"}); // NULL elements dedup too
+    src_column->append_datum(DatumArray{"b", "a", "b", "a"});    // order of first appearance
+
+    auto dest_column = ArrayFunctions::array_distinct_any_type(nullptr, {src_column}).value();
+    ASSERT_EQ(7, dest_column->size());
+    ASSERT_STREQ(dest_column->debug_string().c_str(), "[['a','b','c'], ['x'], [], NULL, ['q'], [NULL,'z'], ['b','a']]");
+}
+
+// array_top_n also batches the element copy, and its offsets are advanced independently of the
+// element column - so every shape that produces fewer elements than the row holds has to line up.
+TEST_F(ArrayFunctionsTest, array_top_n_int) {
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
+    src_column->append_datum(DatumArray{(int32_t)3, (int32_t)1, (int32_t)5, (int32_t)4}); // top 2 -> 5,4
+    src_column->append_datum(DatumArray{(int32_t)7});                                     // n > size
+    src_column->append_datum(DatumArray{});                                               // empty row
+    src_column->append_nulls(1);                                                          // NULL row
+    src_column->append_datum(DatumArray{(int32_t)9, Datum(), (int32_t)8});                // NULLs go last
+
+    auto count_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false);
+    count_column->append_datum((int32_t)2);
+    count_column->append_datum((int32_t)2);
+    count_column->append_datum((int32_t)2);
+    count_column->append_datum((int32_t)2);
+    count_column->append_datum((int32_t)2);
+
+    auto dest_column = ArrayFunctions::array_top_n(nullptr, {std::move(src_column), std::move(count_column)}).value();
+    ASSERT_EQ(5, dest_column->size());
+    ASSERT_STREQ(dest_column->debug_string().c_str(), "[[5,4], [7], [], NULL, [9,8]]");
+}
+
+// n <= 0 short-circuits before the sort and must still advance the offsets, or the element column
+// and the offsets drift apart once the copy is batched to the end of the chunk.
+TEST_F(ArrayFunctionsTest, array_top_n_non_positive_count) {
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
+    src_column->append_datum(DatumArray{(int32_t)3, (int32_t)1});
+    src_column->append_datum(DatumArray{(int32_t)9, (int32_t)8});
+    src_column->append_datum(DatumArray{(int32_t)6, (int32_t)7});
+
+    auto count_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false);
+    count_column->append_datum((int32_t)0);
+    count_column->append_datum((int32_t)-1);
+    count_column->append_datum((int32_t)1);
+
+    // Row 2 keeps nothing (n < 0) and row 3 keeps the larger of {6, 7}.
+    auto dest_column = ArrayFunctions::array_top_n(nullptr, {std::move(src_column), std::move(count_column)}).value();
+    ASSERT_EQ(3, dest_column->size());
+    ASSERT_STREQ(dest_column->debug_string().c_str(), "[[], [], [7]]");
+}
+
+// A constant n is the shape the planner produces for `array_top_n(col, 3)`.
+TEST_F(ArrayFunctionsTest, array_top_n_const_count) {
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
+    src_column->append_datum(DatumArray{"b", "d", "a", "c"});
+    src_column->append_datum(DatumArray{"z", "y"});
+
+    auto count_data = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false);
+    count_data->append_datum((int32_t)3);
+    ColumnPtr count_column = ConstColumn::create(std::move(count_data), 2);
+
+    auto dest_column = ArrayFunctions::array_top_n(nullptr, {std::move(src_column), count_column}).value();
+    ASSERT_EQ(2, dest_column->size());
+    ASSERT_STREQ(dest_column->debug_string().c_str(), "[['d','c','b'], ['z','y']]");
+}
+
+TEST_F(ArrayFunctionsTest, array_top_n_only_null) {
+    auto src_column = ColumnHelper::create_const_null_column(3);
+    auto count_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false);
+    count_column->append_datum((int32_t)2);
+    count_column->append_datum((int32_t)2);
+    count_column->append_datum((int32_t)2);
+
+    auto dest_column = ArrayFunctions::array_top_n(nullptr, {src_column, std::move(count_column)}).value();
+    ASSERT_EQ(3, dest_column->size());
+    ASSERT_TRUE(dest_column->only_null());
 }
 
 TEST_F(ArrayFunctionsTest, array_intersect_any_type_int) {
@@ -6139,6 +6263,30 @@ TEST_F(ArrayFunctionsTest, array_repeat_variant_uses_column_copy) {
     expect_variant_array_row(result, 0, {std::string(R"({"const":7})")});
     expect_variant_array_row(result, 1, {std::string(R"({"const":7})"), std::string(R"({"const":7})")});
     expect_variant_array_row(result, 2, {});
+}
+
+// repeat() pre-sizes its elements column from the counted total. For a VARIANT element that
+// reservation has to land on the base payload the rows are written to, not on the VariantRowValue
+// pool the column inherits from ObjectColumn and never touches: sizeof(VariantRowValue) is ~90
+// bytes, and the total is only capped by MAX_CAPACITY_LIMIT, so a large count would reserve
+// gigabytes for a vector that stays empty while the payload still grew geometrically.
+TEST_F(ArrayFunctionsTest, array_repeat_variant_sizes_base_payload_not_object_pool) {
+    auto source = make_nullable_variant_values({std::string("1"), std::string(R"({"a":2})")});
+    auto repeat_data = Int32Column::create();
+    repeat_data->append(64);
+    repeat_data->append(64);
+
+    auto result = ArrayFunctions::repeat(nullptr, {source, repeat_data}).value();
+    expect_variant_array_row(result, 0, std::vector<std::optional<std::string>>(64, std::string("1")));
+    expect_variant_array_row(result, 1, std::vector<std::optional<std::string>>(64, std::string(R"({"a":2})")));
+
+    const auto* array = down_cast<const ArrayColumn*>(result.get());
+    const auto* elements = down_cast<const NullableColumn*>(array->elements_column().get());
+    const auto* variants = down_cast<const VariantColumn*>(elements->data_column().get());
+    ASSERT_EQ(128, variants->size());
+    EXPECT_EQ(0, variants->get_pool().capacity());
+    EXPECT_GE(variants->metadata_column()->capacity(), 128);
+    EXPECT_GE(variants->remain_value_column()->capacity(), 128);
 }
 
 TEST_F(ArrayFunctionsTest, array_slice_variant_uses_element_ranges) {

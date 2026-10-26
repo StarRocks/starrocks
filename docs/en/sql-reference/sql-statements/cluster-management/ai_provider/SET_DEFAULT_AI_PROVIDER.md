@@ -9,6 +9,8 @@ Marks a provider as the default for **its own type**. The registry keeps one def
 (`embedding` / `rerank` / `chat`), so setting an embedding provider as default does not affect the
 rerank default and vice versa.
 
+`provider` and `model` must be constant VARCHAR expressions. If `provider` is omitted, an empty string, or SQL NULL, the cluster default Provider for the function type is used: `chat` for completion and text helpers, `embedding` for embeddings. If `model` is omitted, an empty string, or SQL NULL, the selected Provider's default model is used; an explicit model takes precedence. Values containing only whitespace are invalid. An explicit Provider call does not require a cluster default.
+
 ## Syntax
 
 ```SQL

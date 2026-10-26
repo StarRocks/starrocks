@@ -224,6 +224,6 @@ public final class AIFunctionPlacementValidator {
     private static boolean isAICall(ScalarOperator expression) {
         return expression instanceof CallOperator call
                 && call.getFunction() != null
-                && call.getFunction().isAi();
+                && call.getFunction().isAI();
     }
 }

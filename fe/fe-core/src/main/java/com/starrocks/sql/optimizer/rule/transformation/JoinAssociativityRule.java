@@ -97,6 +97,11 @@ public class JoinAssociativityRule extends JoinAssociateBaseRule {
             return false;
         }
 
+        if (JoinReorderHelper.hasNonDeterministicPredicate(topJoin) ||
+                JoinReorderHelper.hasNonDeterministicPredicate(bottomJoin)) {
+            return false;
+        }
+
         if (JoinReorderProperty.getAssociativityProperty(bottomJoin.getJoinType(), topJoin.getJoinType(), isInnerMode)
                 != JoinReorderProperty.SUPPORTED) {
             return false;

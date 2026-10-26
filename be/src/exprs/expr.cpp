@@ -131,6 +131,9 @@ Expr::Expr(TypeDescriptor type, bool is_slotref)
         case TYPE_STRUCT:
         case TYPE_MAP:
         case TYPE_JSON:
+        case TYPE_VARIANT:
+        case TYPE_GEOGRAPHY:
+        case TYPE_GEOMETRY:
             break;
 
         default:

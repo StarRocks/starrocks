@@ -14,6 +14,7 @@
 
 #include "data_workflows/load/tablet_writer/load_channel.h"
 
+#include <cerrno>
 #include <memory>
 
 #include "base/compression/block_compression.h"
@@ -289,11 +290,19 @@ void LoadChannel::add_chunks(const PTabletWriterAddChunksRequest& req, PTabletWr
 }
 
 void LoadChannel::add_segment(brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
-                              PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done) {
+                              PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done,
+                              const timespec& deadline) {
     ClosureGuard closure_guard(done);
     _num_segment++;
     TabletsChannelKey key(request->id(), request->sink_id(), request->index_id());
-    auto channel = get_tablets_channel(key);
+    auto channel_or = get_tablets_channel_until(key, deadline);
+    if (!channel_or.ok()) {
+        const auto& st = channel_or.status();
+        LOG(WARNING) << st << ", tablet_id: " << request->tablet_id();
+        st.to_protobuf(response->mutable_status());
+        return;
+    }
+    auto channel = std::move(channel_or).value();
     if (channel == nullptr) {
         LOG(WARNING) << "cannot find the tablets channel associated with the key " << key.to_string();
         response->mutable_status()->set_status_code(TStatusCode::INTERNAL_ERROR);
@@ -308,7 +317,7 @@ void LoadChannel::add_segment(brpc::Controller* cntl, const PTabletWriterAddSegm
         return;
     }
 
-    local_tablets_channel->add_segment(cntl, request, response, done);
+    local_tablets_channel->add_segment(cntl, request, response, done, deadline);
     closure_guard.release();
 }
 
@@ -353,6 +362,20 @@ void LoadChannel::_remove_tablets_channel(const TabletsChannelKey& key) {
         _closed.store(true);
         _load_mgr->remove_load_channel(_load_id);
     }
+}
+
+StatusOr<std::shared_ptr<TabletsChannel>> LoadChannel::get_tablets_channel_until(const TabletsChannelKey& key,
+                                                                                 const timespec& deadline) {
+    const int rc = bthread_mutex_timedlock(_lock.native_handler(), &deadline);
+    if (rc != 0) {
+        auto message = fmt::format(
+                "failed to acquire LoadChannel::_lock for segment replication, txn_id: {}, channel: {}, error code: {}",
+                _txn_id, key.to_string(), rc);
+        return rc == ETIMEDOUT ? Status::TimedOut(message) : Status::InternalError(message);
+    }
+    std::lock_guard l(_lock, std::adopt_lock);
+    auto it = _tablets_channels.find(key);
+    return it != _tablets_channels.end() ? it->second : nullptr;
 }
 
 std::shared_ptr<TabletsChannel> LoadChannel::get_tablets_channel(const TabletsChannelKey& key) {

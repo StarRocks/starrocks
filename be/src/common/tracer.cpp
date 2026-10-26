@@ -52,6 +52,10 @@ static inline opentelemetry::nostd::shared_ptr<opentelemetry::trace::Tracer> cre
     return opentelemetry::trace::Provider::GetTracerProvider()->GetTracer("no-op", OPENTELEMETRY_SDK_VERSION);
 }
 
+// opentelemetry-cpp deprecates the Jaeger exporter in favor of OTLP. Keep it until the
+// jaeger_endpoint config is migrated, and only silence the deprecation warning here.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 void Tracer::init(const std::string& service_name) {
     if (!config::jaeger_endpoint.empty()) {
         opentelemetry::exporter::jaeger::JaegerExporterOptions opts;
@@ -79,6 +83,7 @@ void Tracer::init(const std::string& service_name) {
         _tracer = create_no_op_tracer();
     }
 }
+#pragma GCC diagnostic pop
 
 void Tracer::shutdown() {
     if (_tracer) {

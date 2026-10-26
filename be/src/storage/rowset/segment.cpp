@@ -43,6 +43,7 @@
 #include "base/failpoint/fail_point.h"
 #include "base/hash/crc32c.h"
 #include "base/string/slice.h"
+#include "base/time/time.h"
 #include "base/utility/defer_op.h"
 #include "column/column_access_path.h"
 #include "column/flat_json/json_flat_path.h"
@@ -247,13 +248,27 @@ Segment::~Segment() {
     MEM_TRACKER_SAFE_RELEASE(RuntimeEnv::GetInstance()->short_key_index_mem_tracker(), _short_key_index_mem_usage());
 }
 
+// Adds what |file| has read to |stats|, under the fields SegmentIterator::_update_stats fills for the column files.
+static void add_read_file_io_stats(const RandomAccessFile& file, OlapReaderStatistics* stats) {
+    const auto io = file.get_io_stats_snapshot();
+    stats->compressed_bytes_read_local_disk += io.bytes_read_local_disk;
+    stats->compressed_bytes_read_remote += io.bytes_read_remote;
+    stats->compressed_bytes_read += io.bytes_read_local_disk + io.bytes_read_remote;
+    stats->io_count_local_disk += io.io_count_local_disk;
+    stats->io_count_remote += io.io_count_remote;
+    stats->io_count += io.io_count_local_disk + io.io_count_remote;
+    stats->io_ns_read_local_disk += io.io_ns_read_local_disk;
+    stats->io_ns_remote += io.io_ns_read_remote;
+}
+
 Status Segment::open(size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer,
-                     const LakeIOOptions& lake_io_opts) {
+                     const LakeIOOptions& lake_io_opts, OlapReaderStatistics* stats) {
     if (invoked(_open_once)) {
         return Status::OK();
     }
 
-    auto res = success_once(_open_once, [&] { return _open(footer_length_hint, partial_rowset_footer, lake_io_opts); });
+    auto res = success_once(_open_once,
+                            [&] { return _open(footer_length_hint, partial_rowset_footer, lake_io_opts, stats); });
     if (res.status().is_not_found()) {
         StorageMetrics::instance()->segment_file_not_found_total.increment(1);
     }
@@ -267,7 +282,7 @@ Status Segment::open(size_t* footer_length_hint, const FooterPointerPB* partial_
 }
 
 Status Segment::_open(size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer,
-                      const LakeIOOptions& lake_io_opts) {
+                      const LakeIOOptions& lake_io_opts, OlapReaderStatistics* stats) {
     SegmentFooterPB footer;
     RandomAccessFileOptions opts{.skip_fill_local_cache = !lake_io_opts.fill_data_cache,
                                  .buffer_size = lake_io_opts.buffer_size};
@@ -279,7 +294,20 @@ Status Segment::_open(size_t* footer_length_hint, const FooterPointerPB* partial
     }
 
     ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file_with_bundling(opts, _segment_file_info));
-    RETURN_IF_ERROR(Segment::parse_segment_footer(read_file.get(), &footer, footer_length_hint, partial_rowset_footer));
+    {
+        const int64_t footer_start_ns = stats != nullptr ? MonotonicNanos() : 0;
+        DeferOp record_footer_reads([&] {
+            if (stats != nullptr) {
+                stats->io_ns += MonotonicNanos() - footer_start_ns;
+                add_read_file_io_stats(*read_file, stats);
+            }
+        });
+        RETURN_IF_ERROR(
+                Segment::parse_segment_footer(read_file.get(), &footer, footer_length_hint, partial_rowset_footer));
+    }
+    if (stats != nullptr) {
+        stats->segments_opened++;
+    }
     RETURN_IF_ERROR(_create_column_readers(&footer));
     _num_rows = footer.num_rows();
     _short_key_index_page = PagePointer(footer.short_key_index_page());
@@ -389,11 +417,11 @@ Status Segment::new_inverted_index_iterator(uint32_t ucid, InvertedIndexIterator
     return Status::OK();
 }
 
-Status Segment::load_index(const LakeIOOptions& lake_io_opts) {
+Status Segment::load_index(const LakeIOOptions& lake_io_opts, OlapReaderStatistics* stats) {
     auto res = success_once(_load_index_once, [&] {
         SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
 
-        Status st = _load_index(lake_io_opts);
+        Status st = _load_index(lake_io_opts, stats);
         if (st.ok()) {
             const auto index_mem_usage = _short_key_index_mem_usage();
             MEM_TRACKER_SAFE_CONSUME(RuntimeEnv::GetInstance()->short_key_index_mem_tracker(), index_mem_usage);
@@ -421,7 +449,7 @@ StatusOr<std::unique_ptr<RandomAccessFile>> Segment::new_segment_read_file(const
     return _fs->new_random_access_file_with_bundling(file_opts, _segment_file_info);
 }
 
-Status Segment::_load_index(const LakeIOOptions& lake_io_opts) {
+Status Segment::_load_index(const LakeIOOptions& lake_io_opts, OlapReaderStatistics* stats) {
     // read and parse short key index page
     RandomAccessFileOptions file_opts{.skip_fill_local_cache = !lake_io_opts.fill_data_cache,
                                       .buffer_size = lake_io_opts.buffer_size};
@@ -440,10 +468,11 @@ Status Segment::_load_index(const LakeIOOptions& lake_io_opts) {
     opts.page_pointer = _short_key_index_page;
     opts.codec = nullptr; // short key index page uses NO_COMPRESSION for now
     OlapReaderStatistics tmp_stats;
-    opts.stats = &tmp_stats;
+    opts.stats = stats != nullptr ? stats : &tmp_stats;
 
     Slice body;
     PageFooterPB footer;
+    DeferOp record_index_reads([&] { add_read_file_io_stats(*read_file, opts.stats); });
     RETURN_IF_ERROR(PageIO::read_and_decompress_page(opts, &_sk_index_handle, &body, &footer));
 
     DCHECK_EQ(footer.type(), SHORT_KEY_PAGE);

@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include <gtest/gtest.h>
+#include <unistd.h>
 
 #include <filesystem>
 #include <fstream>
@@ -28,8 +29,10 @@ namespace starrocks {
 class ProcProfileE2ETest : public ::testing::Test {
 protected:
     void SetUp() override {
-        // Create test directory
-        test_dir = "/tmp/starrocks_proc_profile_test";
+        // Create test directory, unique per process so that concurrent test runs on one host
+        // do not create and remove the same directory under each other.
+        std::string dir_name = "starrocks_proc_profile_test_" + std::to_string(::getpid());
+        test_dir = (std::filesystem::temp_directory_path() / dir_name).string();
         std::filesystem::create_directories(test_dir);
 
         // Set config to use test directory

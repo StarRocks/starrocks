@@ -16,6 +16,7 @@
 
 #include <mutex>
 
+#include "base/auth/credential_mask.h"
 #include "common/configbase.h"
 #include "common/logging.h"
 #include "gutil/strings/substitute.h"
@@ -54,7 +55,8 @@ Status ConfigUpdateRegistry::update_config(const std::string& name, const std::s
                 LOG(WARNING) << strings::Substitute("Failed to rollback config: $0.", name);
             }
         } else {
-            LOG(INFO) << "set_config " << name << "=" << value << " success";
+            LOG(INFO) << "set_config " << name << "=" << (config::is_sensitive_config(name) ? kCredentialMask : value)
+                      << " success";
         }
     }
     return s;

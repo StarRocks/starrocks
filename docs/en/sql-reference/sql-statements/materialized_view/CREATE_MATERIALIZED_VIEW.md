@@ -97,6 +97,37 @@ SELECT select_expr[, select_expr ...]
     - If the materialized view is the AGGREGATE type, all GROUP BY columns are automatically used as sort keys.
     - If the materialized view is not the AGGREGATE type, StarRocks automatically selects sort keys based on the prefix columns.
 
+### On shared-data range tables
+
+You can use ordinary `CREATE MATERIALIZED VIEW ... AS SELECT` on eligible shared-data tables with [range distribution](../../../table_design/data_distribution/Data_distribution.md). Omit `DISTRIBUTED BY` when creating the range base table. The following view groups by `store_id`, although the base table is sorted by `id`; the filter column does not need to appear in the view's output.
+
+```sql
+SET enable_range_distribution = true;
+
+CREATE TABLE range_sales (
+    id BIGINT NOT NULL,
+    store_id INT NOT NULL,
+    amount BIGINT,
+    is_valid INT
+)
+DUPLICATE KEY(id)
+ORDER BY(id);
+
+CREATE MATERIALIZED VIEW range_store_amount AS
+SELECT store_id, SUM(amount)
+FROM range_sales
+WHERE is_valid > 0
+GROUP BY store_id;
+```
+
+The view owns its range tablet layout and sort keys. For an aggregate view, all grouping keys are sort keys; they do not need to match the base table's `ORDER BY`. Historical data is built online, and subsequent INSERT and load operations maintain the view synchronously. Base-table and view tablets support splitting and merging through `ALTER TABLE ... SPLIT TABLETS` and `ALTER TABLE ... MERGE TABLETS`. To target a view's layout, use its tablet IDs. Merge eligibility still requires source tablets to be free of shared files; compaction can remove files shared by a split. Wait for the creation job to reach `FINISHED` before creating another sibling view or rollup.
+
+The existing single-table, expression and base-table model restrictions still apply. Range synchronous views do not support shared-nothing clusters, Primary Key base tables, colocated base tables, or base tables with `AUTO_INCREMENT`. Each logical partition must have exactly one physical partition during creation; multiple logical partitions are supported. Complete a coordinated upgrade of all FEs before creating these views: older FEs cannot safely reconstruct their range-view metadata. Upgrade all CNs before splitting or merging tablets of these views.
+
+Range synchronous views reject expressions whose generated MV column name conflicts with a real base-table column. For example, `SUM(v)` cannot be used if the base table already contains `mv_sum_v`. Rename the conflicting base column or use a different expression alias where applicable. Directly selecting a real base-table column whose name starts with `mv_` is supported.
+
+A schema change or column rename is rejected if it would leave a surviving MV expression or `WHERE` clause unresolved or change its stored aggregate-state signature, including removing a referenced struct field. Adding fields and removing unreferenced fields remain supported. Drop the affected view first. Dropping a column only from a named view does not drop its base-table source.
+
 ### Query a synchronous materialized view
 
 Because a synchronous materialized view is essentially an index of the base table rather than a physical table, you can only query a synchronous materialized view using the hint `[_SYNC_MV_]`:
@@ -341,7 +372,7 @@ Properties of the asynchronous materialized view. You can modify the properties 
 - `partition_ttl`: The time-to-live (TTL) for partitions. Partitions whose data is within the specified time range are retained. Expired partitions are deleted automatically. Unit: `YEAR`, `MONTH`, `DAY`, `HOUR`, and `MINUTE`. For example, you can specify this property as `2 MONTH`. This property is recommended over `partition_ttl_number`. It is supported from v3.1.5 onwards.
 - `partition_ttl_number`: The number of most recent materialized view partitions to retain. For the partitions with a start time earlier than the current time, after the number of these partitions exceeds this value, less recent partitions will be deleted. StarRocks will periodically check materialized view partitions according to the time interval specified in the FE configuration item `dynamic_partition_check_interval_seconds`, and automatically delete expired partitions. If you enabled the [dynamic partitioning](../../../table_design/data_distribution/dynamic_partitioning.md) strategy, the partitions created in advance are not counted in. When the value is `-1`, all partitions of the materialized view will be preserved. Default: `-1`.
 - `partition_refresh_number`: In a single refresh, the maximum number of partitions to refresh. If the number of partitions to be refreshed exceeds this value, StarRocks will split the refresh task and complete it in batches. Only when the previous batch of partitions is refreshed successfully, StarRocks will continue to refresh the next batch of partitions until all partitions are refreshed. If any of the partitions fail to be refreshed, no subsequent refresh tasks will be generated. When the value is `-1`, the refresh task will not be split. The default value is changed from `-1` to `1` since v3.3, meaning StarRocks refeshes partitions one by one.
-- `partition_refresh_strategy`：The refresh strategy for a materialized view during a single refresh operation. When set to `adaptive`, the number of partitions to refresh will be automatically determined based on the data volume in the base table partitions, significantly improving refresh efficiency. If this property is not specified, the default strategy is `strict`, meaning the number of partitions refreshed in a single operation is strictly controlled by `partition_refresh_number`.
+- `partition_refresh_strategy`：The refresh strategy for a materialized view during a single refresh operation. When set to `adaptive`, the number of partitions to refresh will be automatically determined based on the data volume in the base table partitions, significantly improving refresh efficiency. If this property is not specified, the default strategy is `strict`, meaning the number of partitions refreshed in a single operation is strictly controlled by `partition_refresh_number`. Setting it to `force` refreshes every partition on each refresh; it has no effect on a materialized view whose `refresh_mode` is `INCREMENTAL`, which is maintained from base table changes by definition.
 - `excluded_trigger_tables`: If a base table of the materialized view is listed here, the automatic refresh task will not be triggered when the data in the base table is changed. This parameter only applies to load-triggered refresh strategy, and is usually used together with the property `auto_refresh_partitions_limit`. Format: `[db_name.]table_name`. When the value is an empty string, any data change in all base tables triggers the refresh of the corresponding materialized view. The default value is an empty string.
 
 - `excluded_refresh_tables`: The base tables listed in this property will not be updated to the materialized view when their data changes. Format: `[db_name.]table_name`. The default value is an empty string. When the value is an empty string, any base table data change will trigger the corresponding materialized view refresh.
@@ -352,7 +383,7 @@ Properties of the asynchronous materialized view. You can modify the properties 
   - `excluded_refresh_tables` controls whether to participate in the refresh. In the above example, if table A exists in both `excluded_trigger_table` and `excluded_refresh_tables`, when the update of table B triggers a materialized view refresh, only partition `[3]` will be refreshed.
   :::
 
-- `auto_refresh_partitions_limit`: The number of most recent materialized view partitions that need to be refreshed when a materialized view refresh is triggered. You can use this property to limit the refresh range and reduce the refresh cost. However, because not all the partitions are refreshed, the data in the materialized view may not be consistent with the base table. Default: `-1`. When the value is `-1`, all partitions will be refreshed. When the value is a positive integer N, StarRocks sorts the existing partitions in chronological order, and refreshes the current partition and N-1 most recent partitions. If the number of partitions is less than N, StarRocks refreshes all existing partitions. If there are dynamic partitions created in advance in your materialized view, StarRocks refreshes all pre-created partitions.
+- `auto_refresh_partitions_limit`: The number of most recent materialized view partitions that need to be refreshed when a materialized view refresh is triggered. You can use this property to limit the refresh range and reduce the refresh cost. However, because not all the partitions are refreshed, the data in the materialized view may not be consistent with the base table. Default: `-1`. When the value is `-1`, all partitions will be refreshed. When the value is a positive integer N, StarRocks sorts the existing partitions in chronological order, and refreshes the current partition and N-1 most recent partitions. If the number of partitions is less than N, StarRocks refreshes all existing partitions. If there are dynamic partitions created in advance in your materialized view, StarRocks refreshes all pre-created partitions. This property is not supported on a materialized view whose `refresh_mode` is `INCREMENTAL`, because incremental maintenance requires a complete baseline. To batch the initial full refresh of such a view, use `partition_refresh_number` instead; refreshes after that process only the base table changes and are not affected by either property.
 - `mv_rewrite_staleness_second`: This materialized view can be used directly for query rewrite, regardless of whether the base table data has changed, as long as the gap between the latest base-table modification time and the materialized view's last confirmed complete refresh does not exceed the time interval specified in this property. Because the comparison is against the latest base-table modification time (not the current wall-clock time), a materialized view whose base tables have not changed since its last complete refresh stays usable for query rewrite no matter how much time passes. Otherwise, StarRocks checks whether the base tables have been updated to determine whether the materialized view can be used for query rewrite. Note that a refresh covering only part of the partitions (for example, a manual `REFRESH ... PARTITION START ... END`, or a refresh limited by `auto_refresh_partitions_limit`) does not renew this freshness baseline. Unit: Second. This property is supported from v3.0.
 - `colocate_with`: The colocation group of the asynchronous materialized view. See [Colocate Join](../../../using_starrocks/Colocate_join.md) for further information. This property is supported from v3.0.
 - `unique_constraints` and `foreign_key_constraints`: The Unique Key constraints and Foreign Key constraints when you create an asynchronous materialized view for query rewrite in the View Delta Join scenario. See [Asynchronous materialized view - Rewrite queries in View Delta Join scenario](../../../using_starrocks/async_mv/use_cases/query_rewrite_with_materialized_views.md) for further information. This property is supported from v3.0.
@@ -499,7 +530,7 @@ The following operators are currently supported for incremental refresh:
 | Select                     | Supported                                                                                                                |
 | From `<Table>`             | Supported only for Iceberg tables; not yet available for other table types.                                              |
 | Filter                     | Supported                                                                                                                |
-| Aggregate with Group By    | Supported  <ul><li>Aggregation functions with `distinct` are not yet supported.</li><li>Aggregation without GROUP BY is not supported yet.</li></ul> |
+| Aggregate with Group By    | Supported  <ul><li>Aggregation functions with `distinct` are not yet supported.</li><li>Aggregation without GROUP BY is not supported yet.</li><li>A GROUP BY or SELECT DISTINCT key of a complex type (ARRAY, MAP, STRUCT) is not supported; such a key is rejected at CREATE.</li></ul> |
 | Inner Join                 | Supported                                                                                                                |
 | Union All                  | Supported                                                                                                                |
 | Left/Right/Full Outer Join | Not supported yet                                                                                                        |

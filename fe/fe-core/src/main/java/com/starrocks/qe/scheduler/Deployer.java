@@ -43,8 +43,10 @@ import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TExecBatchPlanFragmentsParams;
 import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TPlanFragment;
 import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TStatusCode;
+import com.starrocks.thrift.TUniqueId;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
@@ -280,32 +282,25 @@ public class Deployer {
         Preconditions.checkState(totalTableSinkDop >= 0,
                 "tableSinkTotalDop = %d should be >= 0", totalTableSinkDop);
 
-        int accTabletSinkDop = 0;
+        // All the instances share one thrift fragment, which is serialized only once for all their requests. Fall back
+        // to a thrift fragment per instance if sharing would lose a per-instance difference.
+        TPlanFragment sharedFragment = tFragmentInstanceFactory.createSharedFragment(fragment);
+        List<List<TExecPlanFragmentParams>> threeStageRequests =
+                createRequests(threeStageInstancesToDeploy, sharedFragment, enablePipelineTableSinkDop, totalTableSinkDop);
+        if (sharedFragment != null && !isSharedFragmentConsistent(fragment, sharedFragment, jobSpec.getQueryId())) {
+            threeStageRequests =
+                    createRequests(threeStageInstancesToDeploy, null, enablePipelineTableSinkDop, totalTableSinkDop);
+        }
+
         for (int stageIndex = 0; stageIndex < threeStageInstancesToDeploy.size(); stageIndex++) {
             List<FragmentInstance> stageInstances = threeStageInstancesToDeploy.get(stageIndex);
-            if (stageInstances.isEmpty()) {
-                continue;
-            }
-
-            TDescriptorTable curDescTable;
-            if (stageIndex < 2) {
-                curDescTable = jobSpec.getDescTable();
-            } else {
-                curDescTable = emptyDescTable;
-            }
-
-            for (FragmentInstance instance : stageInstances) {
-                TExecPlanFragmentParams request =
-                        tFragmentInstanceFactory.create(instance, curDescTable, accTabletSinkDop, totalTableSinkDop);
-                if (enablePipelineTableSinkDop) {
-                    accTabletSinkDop += instance.getTableSinkDop();
-                }
-
+            for (int i = 0; i < stageInstances.size(); i++) {
+                FragmentInstance instance = stageInstances.get(i);
                 FragmentInstanceExecState execution = FragmentInstanceExecState.createExecution(
                         jobSpec,
                         instance.getFragmentId(),
                         fragment.getFragmentIndex(),
-                        request,
+                        threeStageRequests.get(stageIndex).get(i),
                         instance.getWorker());
                 execution.setFragmentInstance(instance);
 
@@ -323,6 +318,55 @@ public class Deployer {
                 }
             }
         }
+    }
+
+    private List<List<TExecPlanFragmentParams>> createRequests(List<List<FragmentInstance>> threeStageInstances,
+                                                               TPlanFragment sharedFragment,
+                                                               boolean enablePipelineTableSinkDop,
+                                                               int totalTableSinkDop) {
+        List<List<TExecPlanFragmentParams>> threeStageRequests = new ArrayList<>(threeStageInstances.size());
+        int accTabletSinkDop = 0;
+        for (int stageIndex = 0; stageIndex < threeStageInstances.size(); stageIndex++) {
+            List<FragmentInstance> stageInstances = threeStageInstances.get(stageIndex);
+            List<TExecPlanFragmentParams> stageRequests = new ArrayList<>(stageInstances.size());
+            threeStageRequests.add(stageRequests);
+
+            TDescriptorTable curDescTable;
+            if (stageIndex < 2) {
+                curDescTable = jobSpec.getDescTable();
+            } else {
+                curDescTable = emptyDescTable;
+            }
+
+            for (FragmentInstance instance : stageInstances) {
+                stageRequests.add(tFragmentInstanceFactory.create(instance, sharedFragment, curDescTable,
+                        accTabletSinkDop, totalTableSinkDop));
+                if (enablePipelineTableSinkDop) {
+                    accTabletSinkDop += instance.getTableSinkDop();
+                }
+            }
+        }
+        return threeStageRequests;
+    }
+
+    /**
+     * Check the shared thrift fragment against the one built the regular way after all the requests of the fragment
+     * are created, which is what the last instance would have got without sharing. Any per-instance change that
+     * sharing loses shows up here, from modifying either a request's fragment or the plan fragment, including the ones
+     * {@link com.starrocks.planner.PlanFragment#hasInstanceSpecificSink} does not know about.
+     *
+     * <p>Sharing is only an optimization, so a difference never fails the query: the caller falls back to a thrift
+     * fragment per instance, as before sharing. A difference that only comes from a non-deterministic thrift
+     * conversion (equivalent fragments) also falls back, which costs the optimization but not correctness.
+     */
+    static boolean isSharedFragmentConsistent(ExecutionFragment fragment, TPlanFragment sharedFragment,
+                                              TUniqueId queryId) {
+        if (sharedFragment.equals(fragment.getPlanFragment().toThrift())) {
+            return true;
+        }
+        LOG.warn("Thrift fragment of fragment {} differs between its instances, fall back to a thrift fragment per " +
+                "instance, query: {}", fragment.getFragmentId(), DebugUtil.printId(queryId));
+        return false;
     }
 
     private void waitForDeploymentCompletion(List<FragmentInstanceExecState> executions) throws RpcException,

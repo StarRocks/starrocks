@@ -326,6 +326,13 @@ information_schema	column_privileges	COLUMN_NAME	5
 information_schema	column_privileges	PRIVILEGE_TYPE	6
 information_schema	column_privileges	IS_GRANTABLE	7
 -- !result
+select TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME, ORDINAL_POSITION from (select * from ice_hadoop${uuid0}.information_schema.columns limit 100000) t where TABLE_SCHEMA like 'ice_hadoop_db%' order by 1, 2, 4;
+-- result:
+ice_hadoop_db1	test	c0	1
+ice_hadoop_db1	test	c1	2
+ice_hadoop_db2	test	c0	1
+ice_hadoop_db2	test	c1	2
+-- !result
 drop catalog ice_hadoop${uuid0};
 -- result:
 -- !result

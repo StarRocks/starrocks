@@ -14,6 +14,7 @@
 
 package com.starrocks.rpc;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.common.Config;
 import com.starrocks.thrift.BackendService;
 import com.starrocks.thrift.FrontendService;
@@ -75,8 +76,11 @@ public class ThriftConnectionPool<SERVER_CLIENT extends org.apache.thrift.TServi
             new ThriftConnectionPool<>("HeartbeatService", heartbeatConfig, Config.heartbeat_timeout_second * 1000);
     public static ThriftConnectionPool<TFileBrokerService.Client> brokerHeartbeatPool =
             new ThriftConnectionPool<>("TFileBrokerService", heartbeatConfig, Config.heartbeat_timeout_second * 1000);
+    // The FE thrift server closes a connection once it has been idle for thrift_client_timeout_ms, so a
+    // pooled connection to another FE that sat idle that long is already closed at the other end.
     public static ThriftConnectionPool<FrontendService.Client> frontendPool =
-            new ThriftConnectionPool<>("FrontendService", backendConfig, Config.thrift_rpc_timeout_ms);
+            new ThriftConnectionPool<>("FrontendService", backendConfig, Config.thrift_rpc_timeout_ms,
+                    frontendMaxIdleMs(Config.thrift_client_timeout_ms));
     public static ThriftConnectionPool<BackendService.Client> backendPool =
             new ThriftConnectionPool<>("BackendService", backendConfig, Config.thrift_rpc_timeout_ms);
     public static ThriftConnectionPool<TFileBrokerService.Client> brokerPool =
@@ -85,11 +89,37 @@ public class ThriftConnectionPool<SERVER_CLIENT extends org.apache.thrift.TServi
     private final GenericKeyedObjectPool<TNetworkAddress, SERVER_CLIENT> pool;
     private final String className;
     private final int defaultTimeoutMs;
+    // A pooled connection idle longer than this is closed and replaced on borrow instead of being
+    // handed out; 0 hands out idle connections however old they are.
+    private final long maxIdleMs;
 
     public ThriftConnectionPool(String className, GenericKeyedObjectPoolConfig config, int defaultTimeoutMs) {
+        this(className, config, defaultTimeoutMs, 0);
+    }
+
+    public ThriftConnectionPool(String className, GenericKeyedObjectPoolConfig config, int defaultTimeoutMs,
+                                long maxIdleMs) {
+        if (maxIdleMs > 0) {
+            // The configs above are shared between pools, so enable the check on a private copy.
+            config = config.clone();
+            config.setTestOnBorrow(true);
+        }
         this.className = "com.starrocks.thrift." + className + "$Client";
         this.pool = new GenericKeyedObjectPool<>(new ThriftClientFactory(), config);
         this.defaultTimeoutMs = defaultTimeoutMs;
+        this.maxIdleMs = maxIdleMs;
+    }
+
+    /**
+     * How long a pooled connection to another FE may stay idle before it is replaced on borrow: 80% of
+     * the server's idle timeout. The server starts counting when it finishes writing a response, a little
+     * before the client returns the connection to the pool, so the margin keeps the client from
+     * reusing a connection the server is just about to close. 0 when the server never closes idle
+     * connections.
+     */
+    @VisibleForTesting
+    static long frontendMaxIdleMs(long serverIdleTimeoutMs) {
+        return serverIdleTimeoutMs > 0 ? serverIdleTimeoutMs * 4 / 5 : 0;
     }
 
     public int getDefaultTimeoutMs() {
@@ -175,6 +205,13 @@ public class ThriftConnectionPool<SERVER_CLIENT extends org.apache.thrift.TServi
 
         @Override
         public boolean validateObject(TNetworkAddress key, PooledObject<SERVER_CLIENT> p) {
+            // isOpen() only sees this end, so it cannot tell that the server has closed the connection;
+            // the idle time can.
+            long idleMs = p.getIdleTimeMillis();
+            if (maxIdleMs > 0 && idleMs > maxIdleMs) {
+                LOG.debug("replace pooled connection to {} idle for {} ms", key, idleMs);
+                return false;
+            }
             boolean isOpen = p.getObject().getOutputProtocol().getTransport().isOpen();
             LOG.debug("isOpen={}", isOpen);
             return isOpen;

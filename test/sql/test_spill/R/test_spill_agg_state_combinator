@@ -1,0 +1,47 @@
+-- name: test_spill_agg_state_combinator
+set enable_spill=true;
+-- result:
+-- !result
+set spill_mode="force";
+-- result:
+-- !result
+set pipeline_dop=1;
+-- result:
+-- !result
+set enable_agg_spill_preaggregation=false;
+-- result:
+-- !result
+set spill_operator_min_bytes=0;
+-- result:
+-- !result
+CREATE TABLE t0 (
+    k INT,
+    g INT,
+    s percentile_approx(double, double)
+)
+AGGREGATE KEY(k, g)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into t0
+    select generate_series, generate_series % 4096, percentile_approx_state(cast(generate_series as double), 0.5)
+    from table(generate_series(1, 40960));
+-- result:
+-- !result
+select count(*), min(p), max(p), sum(p) from (select g, percentile_approx_merge(s) p from t0 group by g) x;
+-- result:
+4096	18433.0	22528.0	83888128.0
+-- !result
+select count(*), min(p), max(p), sum(p) from (
+    select g, percentile_approx_merge(u) p from (select g, percentile_approx_union(s) u from t0 group by g) y group by g
+) x;
+-- result:
+4096	18433.0	22528.0	83888128.0
+-- !result
+select g, percentile_approx_merge(s) from t0 group by g order by g limit 3;
+-- result:
+0	22528.0
+1	18433.0
+2	18434.0
+-- !result

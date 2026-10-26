@@ -34,6 +34,7 @@
 
 package com.starrocks.http.action;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.common.Config;
 import com.starrocks.common.Version;
 import com.starrocks.http.ActionController;
@@ -41,6 +42,7 @@ import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
 import io.netty.handler.codec.http.HttpMethod;
+import org.owasp.encoder.Encode;
 import oshi.SystemInfo;
 import oshi.hardware.CentralProcessor;
 import oshi.hardware.GlobalMemory;
@@ -61,6 +63,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class IndexAction extends WebBaseAction {
 
@@ -81,7 +84,8 @@ public class IndexAction extends WebBaseAction {
                 appendHardwareInfo(response.getContent());
             } catch (Throwable t) {
                 response.getContent().append("<h2>Hardware Info</h2>");
-                response.getContent().append("<pre>Hardware info is generated with error: " + t.getMessage() + "</pre>");
+                response.getContent().append("<pre>Hardware info is generated with error: "
+                        + Encode.forHtml(t.getMessage()) + "</pre>");
             }
         } else {
             response.getContent().append("<h2>Hardware Info</h2>");
@@ -94,10 +98,11 @@ public class IndexAction extends WebBaseAction {
     private void appendVersionInfo(StringBuilder buffer) {
         buffer.append("<h2>Version</h2>");
         buffer.append("<pre>version info<br/>");
-        buffer.append("Version: " + Version.STARROCKS_VERSION + "<br/>");
-        buffer.append("Git: " + Version.STARROCKS_COMMIT_HASH + "<br/>");
-        buffer.append("Build Info: " + Version.STARROCKS_BUILD_USER + "@" + Version.STARROCKS_BUILD_HOST + "<br/>");
-        buffer.append("Build Time: " + Version.STARROCKS_BUILD_TIME + "<br/>");
+        buffer.append("Version: " + Encode.forHtml(Version.STARROCKS_VERSION) + "<br/>");
+        buffer.append("Git: " + Encode.forHtml(Version.STARROCKS_COMMIT_HASH) + "<br/>");
+        buffer.append("Build Info: " + Encode.forHtml(Version.STARROCKS_BUILD_USER + "@" + Version.STARROCKS_BUILD_HOST)
+                + "<br/>");
+        buffer.append("Build Time: " + Encode.forHtml(Version.STARROCKS_BUILD_TIME) + "<br/>");
         buffer.append("</pre>");
     }
 
@@ -109,15 +114,21 @@ public class IndexAction extends WebBaseAction {
         GlobalMemory memory = hal.getMemory();
         buffer.append("<h2>Hardware Info</h2>");
         buffer.append("<pre>");
-        buffer.append(String.join("<br/>", getOperatingSystem(os)) + "<hr>");
-        buffer.append(String.join("<br/>", getProcessor(processor)) + "<hr>");
-        buffer.append(String.join("<br/>", getMemory(memory)) + "<hr>");
-        buffer.append(String.join("<br/>", getProcesses(os, memory)) + "<hr>");
-        buffer.append(String.join("<br/>", getDisks(hal.getDiskStores())) + "<hr>");
-        buffer.append(String.join("<br/>", getFileSystem(os.getFileSystem())) + "<hr>");
-        buffer.append(String.join("<br/>", getNetworkInterfaces(hal.getNetworkIFs())) + "<hr>");
-        buffer.append(String.join("<br/>", getNetworkParameters(os.getNetworkParams())) + "<hr>");
+        buffer.append(joinEncodedLines(getOperatingSystem(os)) + "<hr>");
+        buffer.append(joinEncodedLines(getProcessor(processor)) + "<hr>");
+        buffer.append(joinEncodedLines(getMemory(memory)) + "<hr>");
+        buffer.append(joinEncodedLines(getProcesses(os, memory)) + "<hr>");
+        buffer.append(joinEncodedLines(getDisks(hal.getDiskStores())) + "<hr>");
+        buffer.append(joinEncodedLines(getFileSystem(os.getFileSystem())) + "<hr>");
+        buffer.append(joinEncodedLines(getNetworkInterfaces(hal.getNetworkIFs())) + "<hr>");
+        buffer.append(joinEncodedLines(getNetworkParameters(os.getNetworkParams())) + "<hr>");
         buffer.append("</pre>");
+    }
+
+    // Hardware info carries text from the host, such as process names, so each line is HTML-encoded.
+    @VisibleForTesting
+    static String joinEncodedLines(List<String> lines) {
+        return lines.stream().map(Encode::forHtml).collect(Collectors.joining("<br/>"));
     }
 
     private List<String> getOperatingSystem(OperatingSystem os) {

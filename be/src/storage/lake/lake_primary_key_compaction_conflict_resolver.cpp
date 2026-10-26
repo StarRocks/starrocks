@@ -20,9 +20,9 @@
 #include "storage/chunk_helper.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/lake_delvec_loader.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/types_fwd.h"
-#include "storage/lake/update_manager.h"
 #include "storage/rows_mapper.h"
 #include "storage/tablet_schema.h"
 

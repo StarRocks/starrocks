@@ -25,7 +25,7 @@
 
 namespace starrocks {
 
-StatusOr<ColumnPtr> AiFunctions::ai_query(FunctionContext* context, const starrocks::Columns& columns) {
+StatusOr<ColumnPtr> AIFunctions::ai_query(FunctionContext* context, const starrocks::Columns& columns) {
     if (columns.size() != 2) {
         return Status::InvalidArgument("Ai_query function only call by ai_query(prompt, config)");
     }
@@ -117,4 +117,4 @@ StatusOr<ColumnPtr> AiFunctions::ai_query(FunctionContext* context, const starro
 }
 } // namespace starrocks
 
-#include "gen_cpp/opcode/AiFunctions.inc"
+#include "gen_cpp/opcode/AIFunctions.inc"

@@ -1,0 +1,36 @@
+name: RERUN CI AFTER PR CHECKER
+
+# CI PIPELINE starts only on a push, and its RUN CHECKER stops (fails) when PR CHECKER failed
+# or did not finish within ~3 min. PR CHECKER also re-runs when the title, body or labels
+# change -- the usual fix -- but nothing used to start CI PIPELINE again. When PR CHECKER
+# passes, this re-runs the CI PIPELINE of the same commit, branch and repo if its RUN CHECKER
+# stopped on PR CHECKER and the commit is still the PR's head.
+#
+# Never executes PR code: it only reads run state and calls `gh run rerun`.
+# Logic: ci-tool scripts/rerun-ci-after-pr-checker.sh (marker set by wait-for-pr-checker.sh).
+
+on:
+  workflow_run:
+    workflows: [PR CHECKER]
+    types: [completed]
+
+permissions:
+  actions: write
+  contents: read
+  pull-requests: read
+
+jobs:
+  rerun:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: [self-hosted, quick]
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+      HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+      HEAD_OWNER: ${{ github.event.workflow_run.head_repository.owner.login }}
+    steps:
+      - name: re-run a CI PIPELINE that stopped on PR CHECKER
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && (git pull -q || true)
+          ./scripts/rerun-ci-after-pr-checker.sh

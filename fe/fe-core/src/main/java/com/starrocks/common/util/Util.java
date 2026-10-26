@@ -56,7 +56,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.BufferedReader;
-import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -74,7 +73,6 @@ import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Predicate;
 import java.util.zip.Adler32;
-import java.util.zip.DeflaterOutputStream;
 
 import static com.starrocks.authorization.ObjectType.CASE_INSENSITIVE_NAMES;
 
@@ -496,11 +494,8 @@ public class Util {
     }
 
     public static byte[] compress(byte[] input) throws IOException {
-        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-        try (DeflaterOutputStream dos = new DeflaterOutputStream(outputStream)) {
-            dos.write(input);
-        }
-        return outputStream.toByteArray();
+        // Off-heap, so that compressing large payloads does not hold the GC locker; see OffHeapDeflate.
+        return OffHeapDeflate.zlib(input);
     }
 
     public static ConnectContext getOrCreateInnerContext() {

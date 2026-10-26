@@ -1,0 +1,80 @@
+-- name: test_insert_generated_partition_column_pre_split @cloud @sequential
+-- The target is partitioned by a generated column, activity_date_month AS date_trunc('month',
+-- activity_date) -- the shape a multi-column expression partition also creates as a hidden column.
+-- No INSERT writes that column: the sampler computes it from the activity_date the load writes, so
+-- every partition the load creates or overwrites is pre-split instead of loaded through one tablet.
+--
+-- As in test_static_insert_overwrite_pre_split, the sampled tier's tablet count follows the cluster's
+-- compute-node count, so only the widening is asserted, right after each load returns and before the
+-- background split/merge daemon (minutes cadence) could have split anything.
+admin set frontend config ("tablet_pre_split_target_size" = "1048576");
+
+create database db_${uuid0};
+use db_${uuid0};
+
+create table src (account_id bigint, activity_date datetime, tenant_id bigint) properties('replication_num' = '1');
+insert into src
+select x, hours_add(days_add(cast('2025-11-01 00:00:00' as datetime), x % 60), x % 24), 1 + x % 2
+from table(generate_series(1, 400000)) as g(x);
+insert into src values (400001, NULL, 1);
+select count(*), sum(account_id), count(activity_date) from src;
+
+set enable_range_distribution = true;
+create table dst (
+    account_id bigint not null,
+    activity_date datetime null,
+    tenant_id bigint not null,
+    activity_date_month datetime null as date_trunc('month', activity_date)
+) duplicate key(account_id, activity_date)
+partition by (tenant_id, activity_date_month)
+order by (account_id, activity_date)
+properties('replication_num' = '1');
+create table dst_overwrite (
+    account_id bigint not null,
+    activity_date datetime null,
+    tenant_id bigint not null,
+    activity_date_month datetime null as date_trunc('month', activity_date)
+) duplicate key(account_id, activity_date)
+partition by (tenant_id, activity_date_month)
+order by (account_id, activity_date)
+properties('replication_num' = '1');
+set enable_range_distribution = false;
+
+-- INSERT INTO: each of the four (tenant, month) partitions the load creates is pre-split. The row
+-- whose activity_date is NULL goes to the NULL partition, which the load creates on its own.
+insert into dst (account_id, activity_date, tenant_id) select account_id, activity_date, tenant_id from src;
+SELECT PARTITION_NAME, BUCKETS > 1 AS pre_split_widened_the_partition
+FROM information_schema.partitions_meta
+WHERE DB_NAME = 'db_${uuid0}' AND TABLE_NAME = 'dst' AND IS_TEMP = false
+  AND PARTITION_NAME IN ('p1_20251101000000', 'p1_20251201000000', 'p2_20251101000000', 'p2_20251201000000')
+ORDER BY PARTITION_NAME;
+select tenant_id, activity_date_month, count(*) from dst group by tenant_id, activity_date_month
+order by tenant_id, activity_date_month;
+select count(*), sum(account_id), count(activity_date) from dst;
+select count(*) from dst partition (p1_20251101000000)
+where tenant_id != 1 or activity_date_month != '2025-11-01 00:00:00';
+
+-- Static INSERT OVERWRITE ... PARTITION(...): a load that opts out of pre-split creates the four
+-- partitions with one tablet each; the overwrite of the two November partitions is pre-split.
+set enable_tablet_pre_split = false;
+insert into dst_overwrite (account_id, activity_date, tenant_id)
+select account_id, activity_date, tenant_id from src where account_id in (1, 2, 31, 32);
+set enable_tablet_pre_split = true;
+SELECT PARTITION_NAME, BUCKETS FROM information_schema.partitions_meta
+WHERE DB_NAME = 'db_${uuid0}' AND TABLE_NAME = 'dst_overwrite' AND IS_TEMP = false AND PARTITION_NAME LIKE 'p%'
+ORDER BY PARTITION_NAME;
+insert overwrite dst_overwrite partition (p1_20251101000000, p2_20251101000000) (account_id, activity_date, tenant_id)
+select account_id, activity_date, tenant_id from src
+where activity_date >= '2025-11-01 00:00:00' and activity_date < '2025-12-01 00:00:00';
+SELECT PARTITION_NAME, BUCKETS > 1 AS pre_split_widened_the_partition
+FROM information_schema.partitions_meta
+WHERE DB_NAME = 'db_${uuid0}' AND TABLE_NAME = 'dst_overwrite' AND IS_TEMP = false AND PARTITION_NAME LIKE 'p%'
+ORDER BY PARTITION_NAME;
+select tenant_id, activity_date_month, count(*), sum(account_id) from dst_overwrite
+group by tenant_id, activity_date_month order by tenant_id, activity_date_month;
+
+admin set frontend config ("tablet_pre_split_target_size" = "0");
+drop table dst_overwrite;
+drop table dst;
+drop table src;
+drop database db_${uuid0};

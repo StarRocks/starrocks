@@ -92,6 +92,11 @@ public class RollupProcDir implements ProcDirInterface {
             return null;
         }
 
+        if (!(job instanceof RollupJobV2)) {
+            throw new AnalysisException("Not support showing detail of alter job " + jobId + " of type "
+                    + job.getClass().getSimpleName());
+        }
+
         return new RollupJobProcNode((RollupJobV2) job);
     }
 

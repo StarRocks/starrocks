@@ -231,3 +231,39 @@ SELECT null_or_empty(COLB) FROM null_or_empty_test ORDER BY COLA;
 1
 0
 -- !result
+
+-- name: test_array_generate_too_many_elements
+CREATE TABLE array_generate_bounds (id INT, s BIGINT, e BIGINT, st BIGINT) DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES ("replication_num"="1");
+-- result:
+-- !result
+INSERT INTO array_generate_bounds VALUES (1, 9, 1, -3), (2, 1, 9, -1), (3, 9, 1, 3), (4, 1, 9, 4), (5, 9223372036854775807, -9223372036854775808, -9223372036854775808);
+-- result:
+-- !result
+SELECT id, array_generate(s, e, st) FROM array_generate_bounds ORDER BY id;
+-- result:
+1	[9,6,3]
+2	[]
+3	[]
+4	[1,5,9]
+5	[9223372036854775807,-1]
+-- !result
+SELECT array_generate(s, s + 4294967295, 1) FROM array_generate_bounds WHERE id = 1;
+-- result:
+[REGEX].*array_generate would produce more than 4294967295 elements.*
+-- !result
+SELECT array_generate(9, 9223372036854775807, 1);
+-- result:
+[REGEX].*array_generate would produce more than 4294967295 elements.*
+-- !result
+SELECT array_generate(-9223372036854775808, 9223372036854775807, 1);
+-- result:
+[REGEX].*array_generate would produce more than 4294967295 elements.*
+-- !result
+SELECT array_generate(9223372036854775807, -9223372036854775808, -1);
+-- result:
+[REGEX].*array_generate would produce more than 4294967295 elements.*
+-- !result
+SELECT array_generate(CAST(-170141183460469231731687303715884105727 AS LARGEINT), CAST(170141183460469231731687303715884105727 AS LARGEINT), CAST(1 AS LARGEINT));
+-- result:
+[REGEX].*array_generate would produce more than 4294967295 elements.*
+-- !result

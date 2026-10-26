@@ -49,6 +49,9 @@ private:
     bool _flatten_json(const vpack::Slice& value, const JsonFlatPath* root, vpack::Builder* builder,
                        uint32_t* hit_count);
 
+    // Fill one row that repeats a key of the layout, see _flatten().
+    void _flatten_duplicate_row(const vpack::Slice& value, const JsonFlatPath* root);
+
 private:
     bool _has_remain = false;
     // note: paths may be less 1 than flat columns
@@ -57,6 +60,11 @@ private:
 
     MutableColumns _flat_columns;
     JsonColumn* _remain;
+
+    // Stamp of the row being flattened, kept in JsonFlatPath::last_row of the layout nodes it reaches.
+    uint32_t _row_stamp = 0;
+    // The current row repeats a key of the layout.
+    bool _duplicate = false;
 };
 
 } // namespace starrocks

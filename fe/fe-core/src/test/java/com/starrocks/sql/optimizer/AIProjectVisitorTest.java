@@ -21,6 +21,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.LogicalProperty;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.UKFKConstraints;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAIProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.MockOperator;
@@ -32,7 +33,9 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.validate.ColumnReuseChecker;
 import com.starrocks.sql.optimizer.validate.ConditionalTypeChecker;
+import com.starrocks.sql.optimizer.validate.InputDependenciesChecker;
 import com.starrocks.type.DateType;
+import com.starrocks.type.JsonType;
 import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -85,6 +88,32 @@ public class AIProjectVisitorTest {
         Assertions.assertThrows(IllegalArgumentException.class,
                 () -> ColumnReuseChecker.getInstance().validate(
                         physicalAIProject(Map.of(output1, output1), reused, input), null));
+    }
+
+    @Test
+    public void testPhysicalAIProjectionPreservesOriginalOutputsAndExpandsCommonInputs() {
+        ColumnRefOperator input = new ColumnRefOperator(1, VarcharType.VARCHAR, "input", true);
+        ColumnRefOperator common = new ColumnRefOperator(2, VarcharType.VARCHAR, "common", true);
+        ColumnRefOperator alias = new ColumnRefOperator(3, VarcharType.VARCHAR, "alias", true);
+        ColumnRefOperator result = new ColumnRefOperator(4, VarcharType.VARCHAR, "ai_result", true);
+        ColumnRefOperator projected = new ColumnRefOperator(5, VarcharType.VARCHAR, "projected", true);
+        CallOperator ai = new CallOperator("ai_complete", VarcharType.VARCHAR,
+                List.of(alias, ConstantOperator.createVarchar(""), ConstantOperator.createVarchar(""),
+                        ConstantOperator.createNull(JsonType.JSON)));
+        PhysicalAIProjectOperator operator = new PhysicalAIProjectOperator(Map.of(result, ai),
+                Map.of(alias, common, common, input));
+        OptExpression root = OptExpression.create(operator, physicalLeaf(input));
+        Assertions.assertEquals(ColumnRefSet.of(input), root.getRowOutputInfo().getUsedColumnRefSet());
+        operator.setProjection(new Projection(Map.of(projected, result)));
+        Assertions.assertEquals(ColumnRefSet.of(projected), root.getRowOutputInfo().getOutputColumnRefSet());
+        Assertions.assertTrue(root.getRowOutputInfo().getOriginalColOutputInfo().containsKey(result.getId()));
+        Assertions.assertDoesNotThrow(() -> InputDependenciesChecker.getInstance().validate(root, null));
+        Assertions.assertSame(alias, ai.getChild(0), "deriving row metadata must not rewrite the executed AI call");
+
+        ColumnRefOperator missing = new ColumnRefOperator(6, VarcharType.VARCHAR, "missing", true);
+        operator.setProjection(new Projection(Map.of(projected, missing)));
+        Assertions.assertThrows(StarRocksPlannerException.class,
+                () -> InputDependenciesChecker.getInstance().validate(root, null));
     }
 
     @Test

@@ -119,7 +119,7 @@ public class ShortCircuitPlanner {
             return false;
         }
         if (expression instanceof CallOperator call
-                && call.getFunction() != null && call.getFunction().isAi()) {
+                && call.getFunction() != null && call.getFunction().isAI()) {
             return true;
         }
         return expression.getChildren().stream().anyMatch(ShortCircuitPlanner::containsAIFunction);

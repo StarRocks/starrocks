@@ -153,6 +153,22 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
             }
             dumpJson.add("external_table_row_count", externalRowCountData);
         }
+        // Per-column ANALYZE row counts (keyed db.table -> column) of the external tables planned from ANALYZE
+        // statistics, so replay recomputes each scan's row count the way the cluster did.
+        if (!dumpInfo.getExternalColumnRowCountMap().isEmpty()) {
+            JsonObject externalColumnRowCountData = new JsonObject();
+            for (Map.Entry<String, Map<String, Long>> entry : dumpInfo.getExternalColumnRowCountMap().entrySet()) {
+                JsonObject columnRowCounts = new JsonObject();
+                entry.getValue().forEach(columnRowCounts::addProperty);
+                externalColumnRowCountData.add(entry.getKey(), columnRowCounts);
+            }
+            dumpJson.add("external_column_row_count", externalColumnRowCountData);
+        }
+        if (!dumpInfo.getExternalTableFormatVersionMap().isEmpty()) {
+            JsonObject formatVersionData = new JsonObject();
+            dumpInfo.getExternalTableFormatVersionMap().forEach(formatVersionData::addProperty);
+            dumpJson.add("external_table_format_version", formatVersionData);
+        }
         // Iceberg partition spec (transforms) + partition names, so replay can rebuild a real PartitionSpec
         // and reproduce partition pruning. Keyed db.table. Only present for partitioned iceberg tables.
         if (!dumpInfo.getExternalTablePartitionNameMap().isEmpty()) {

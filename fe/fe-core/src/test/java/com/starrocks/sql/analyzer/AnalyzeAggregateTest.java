@@ -16,6 +16,8 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.type.MapType;
+import com.starrocks.type.ScalarType;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -119,6 +121,20 @@ public class AnalyzeAggregateTest {
                 "must be an aggregate expression or appear in GROUP BY clause");
         analyzeFail("select map_agg(v1, v2)[v3] from t0 order by map_agg(v1, v2)[v3]",
                 "must be an aggregate expression or appear in GROUP BY clause");
+    }
+
+    @Test
+    public void testMapAggDecimalKeyKeepsPrecision() {
+        // map_agg declares its decimal keys as wildcards; the result must carry the input's precision and scale,
+        // not the wildcard's -1, which the BE cannot build a column for.
+        QueryRelation query = ((QueryStatement) analyzeSuccess(
+                "select map_agg(tj, tc), map_agg(4.4, tc) from tall")).getQueryRelation();
+        ScalarType columnKey = (ScalarType) ((MapType) query.getOutputExpression().get(0).getType()).getKeyType();
+        Assertions.assertEquals(9, columnKey.getScalarPrecision());
+        Assertions.assertEquals(3, columnKey.getScalarScale());
+        ScalarType literalKey = (ScalarType) ((MapType) query.getOutputExpression().get(1).getType()).getKeyType();
+        Assertions.assertEquals(2, literalKey.getScalarPrecision());
+        Assertions.assertEquals(1, literalKey.getScalarScale());
     }
 
     @Test

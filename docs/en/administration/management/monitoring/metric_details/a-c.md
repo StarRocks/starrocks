@@ -48,6 +48,27 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Count
 - Description: Queued task count in the tablet delta writer thread pool.
 
+## `authentication_failure_reason_total`
+
+- Unit: Count
+- Type: Counter
+- Description: Total number of failed authentications, labeled by failure reason (`reason` = `malformed`, `no_matching_si`, `signature_fail`, `expired`, `claim_mismatch`, `bad_credential`, `disabled`, or `internal`). The HTTP response deliberately reports every failure as a flat `invalid_token`, so this metric is where the actual reason is visible.
+- Introduced in: v4.2
+
+## `authentication_failure_total`
+
+- Unit: Count
+- Type: Counter
+- Description: Total number of failed authentications, labeled by two independent dimensions: `channel` (`mysql`, `http`, `arrow_flight`, `thrift_load`, or `thrift_gateway`) is which way the credential arrived, and `kind` (`mysql_native_scramble`, `mysql_oauth2_client`, `gssapi_token`, `plain_password`, or `bearer_token`) is how it had to be read. Sum by `channel` to tell apart which channel is failing - HTTP, Arrow Flight, or the BE-to-FE load RPCs; sum by `kind` to see whether Bearer authentication as a whole is healthy.
+- Introduced in: v4.2
+
+## `authentication_success_total`
+
+- Unit: Count
+- Type: Counter
+- Description: Total number of successful authentications, labeled by `channel` and `kind` (same label values as `authentication_failure_total`).
+- Introduced in: v4.2
+
 ## `base_compaction_task_byte_per_second`
 
 - Unit: Bytes/s

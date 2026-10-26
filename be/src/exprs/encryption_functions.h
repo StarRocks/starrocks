@@ -86,6 +86,7 @@ public:
     static Status sha2_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
     DEFINE_VECTORIZED_FN(encode_fingerprint_sha256);
+    DEFINE_VECTORIZED_FN(encode_fingerprint_sha256_v2);
 
     // method for sha2
     struct SHA2Ctx {

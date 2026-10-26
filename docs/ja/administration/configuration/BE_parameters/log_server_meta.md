@@ -210,6 +210,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: BE の thrift サーバーポートで、FEs からのリクエストを受け取るために使用されます。
 - 導入バージョン: -
 
+### brpc_failed_channel_reset_interval_s
+
+- デフォルト: 10
+- タイプ: Int
+- 単位: 秒
+- 変更可能: はい
+- 説明: BE がキャッシュされた bRPC stub を確認し、接続が失敗した stub をリセットする間隔。bRPC は失敗した接続が解放されるまで数秒ごとにヘルスチェックを行い、到達不能なアドレス（Kubernetes で再起動された BE Pod の古い IP アドレスなど）に対しては、チェックのたびに `Fail to wait EPOLLOUT` をログに出力します。stub をリセットすると失敗した接続が解放され、stub は次の RPC で新しい接続を確立します。`0` 以下の値を指定すると、このチェックは無効になります。
+- 導入バージョン: -
+
 ### brpc_max_body_size
 
 - デフォルト: 2147483648
@@ -300,13 +309,22 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: この項目が `true` に設定されていると、BE はバックグラウンドスレッド（jemalloc_tracker_daemon）を起動し、jemalloc の統計を1秒ごとにポーリングして、jemalloc の "stats.metadata" 値で RuntimeEnv の jemalloc メタデータ MemTracker を更新します。これにより jemalloc のメタデータ消費が StarRocks プロセスのメモリ集計に含まれ、jemalloc 内部により使用されるメモリの過小報告を防ぎます。トラッカーは macOS 以外のビルド（#ifndef __APPLE__）でのみコンパイル/起動され、"jemalloc_tracker_daemon" という名前のデーモンスレッドとして動作します。この設定は起動時の振る舞いや MemTracker の状態を維持するスレッドに影響するため、変更には再起動が必要です。jemalloc を使用していない場合、または jemalloc のトラッキングを別途意図的に管理している場合のみ無効にし、それ以外は正確なメモリ集計と割り当て保護を維持するために有効のままにしてください。
 - 導入バージョン: v3.2.12
 
+### enable_jvm_memory_tracker
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: Yes
+- 説明: JVM が使用するメモリを BE のメモリ上限（`mem_limit`）に含めるかどうか。JVM のヒープメモリと非ヒープメモリ（Metaspace やコードキャッシュなど）は JVM 自身が BE のメモリアロケータを経由せずにマッピングするため、通常はカウントされません。この項目が `true` の場合、BE は JVM メトリクスを収集するたびに（`enable_metric_calculator` が `true` の場合は 15 秒ごと）、`process` トラッカーの下にある `jvm` メモリトラッカーを JVM のコミット済みヒープメモリと非ヒープメモリの合計に設定します。`jvm` トラッカーは `/mem_tracker` ページに表示されます。この項目を `false` に変更すると、次の収集で `jvm` トラッカーは 0 にリセットされます。この項目は `enable_jvm_metrics` が `true` の場合にのみ有効です。BE プロセス内で JVM が作成されるまでは、`jvm` トラッカーの値は 0 です。
+- 導入バージョン: -
+
 ### enable_jvm_metrics
 
-- デフォルト: false
+- デフォルト: true
 - タイプ: Boolean
 - 単位: -
 - 変更可能: No
-- 説明: StarRocks が起動時に JVM 固有のメトリクスを初期化して登録するかどうかを制御します。値は Daemon::init 内の init_starrocks_metrics で読み取られ、BackendMetricsInitializer::initialize の init_jvm_metrics パラメータとして渡されます。有効にするとメトリクスサブシステムは JVM 関連のコレクタ（例: heap、GC、thread メトリクス）を作成してエクスポートし、無効の場合はそれらのコレクタは初期化されません。このフラグは起動時にのみ評価され、ランタイム中に変更することはできません。前方互換性のための設定であり、将来のリリースで削除される可能性があります。システムレベルのメトリクス収集は `enable_system_metrics` を使用して制御してください。
+- 説明: BE で JVM のメモリメトリクスを収集するかどうか。メトリクスは、ヒープと非ヒープのメモリを表す `jvm_heap_size_bytes` と `jvm_non_heap_size_bytes`、およびメモリプールを表す `jvm_young_size_bytes`、`jvm_survivor_size_bytes`、`jvm_old_size_bytes`、`jvm_perm_size_bytes`（Metaspace）です。各メトリクスの `type` ラベルは `used`、`committed`、`max`、`peak_used`、`peak_max` のいずれかです。この項目を有効にしても JVM は起動しません。HDFS へのアクセス、JNI ベースのリーダー、Java UDF など Java を使用する機能が BE プロセス内で JVM を作成した後に、BE はこれらのメトリクスの収集を開始します。それまではメトリクスの値は 0 です。`enable_metric_calculator` が `true` の場合、メトリクスは 15 秒ごとに更新されます。`enable_jvm_memory_tracker` が `true` の場合、更新のたびに JVM のメモリも BE のメモリ上限に含められます。詳しくは `enable_jvm_memory_tracker` を参照してください。`JAVA_HOME` が設定されていない場合、これらのメトリクスは登録されません。`max` または `peak_max` が -1 の場合、そのメモリプールには上限が定義されていないことを意味します。デフォルトの G1 ガベージコレクタでは、`jvm_young_size_bytes` と `jvm_survivor_size_bytes`（Eden 領域と Survivor 領域）がこれに該当し、`MaxMetaspaceSize` が設定されていない場合は `jvm_perm_size_bytes`（Metaspace）も該当します。メモリプールのメトリクスは、Serial、Parallel、G1 ガベージコレクタを使用している場合にのみ値が設定されます。システムレベルのメトリクス収集は `enable_system_metrics` を使用して制御してください。
 - 導入バージョン: v4.0.0
 
 ### get_pindex_worker_count
@@ -459,7 +477,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Int
 - 単位: ミリ秒
 - 変更可能: はい
-- 説明: thrift クライアントがリトライする時間間隔。
+- 説明: BE の Thrift RPC における再試行間隔の基準値です。再試行前の待機時間には、ジッター付きの指数バックオフを使用します。待機時間は 0 から `min(1000, base * 2^retry_index)` ミリ秒までの範囲から一様な確率で選ばれます。`base` はこの設定値を [0, 1000] の範囲に収めた値で、`retry_index` は 0 から始まる再試行番号です。設定値は RPC ごとに一度だけ読み取られ、途中で変更しても実行中の RPC には反映されません。0 以下に設定すると待機しません。最後の試行が失敗した後も待機しません。
 - 導入バージョン: -
 
 ### thrift_connect_timeout_seconds

@@ -24,8 +24,8 @@
 #include "common/statusor.h"
 #include "storage/del_vector.h"
 #include "storage/lake/meta_file.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/tablet.h"
-#include "storage/lake/update_manager.h"
 #include "storage/lake/versioned_tablet.h"
 #include "storage/olap_common.h"
 

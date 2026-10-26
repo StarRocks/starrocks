@@ -39,6 +39,7 @@ import static com.starrocks.statistic.StatsConstants.STATISTIC_DATA_VERSION;
 import static com.starrocks.statistic.StatsConstants.STATISTIC_DATA_VERSION_V2;
 import static com.starrocks.statistic.StatsConstants.STATISTIC_EXTERNAL_HISTOGRAM_VERSION;
 import static com.starrocks.statistic.StatsConstants.STATISTIC_EXTERNAL_QUERY_V2_VERSION;
+import static com.starrocks.statistic.StatsConstants.STATISTIC_EXTERNAL_QUERY_V3_VERSION;
 import static com.starrocks.statistic.StatsConstants.STATISTIC_HISTOGRAM_VERSION;
 import static com.starrocks.statistic.StatsConstants.STATISTIC_PARTITION_VERSION_V2;
 import static com.starrocks.statistic.StatsConstants.STATISTIC_QUERY_MULTI_COLUMN_VERSION;
@@ -87,6 +88,12 @@ public class StatisticSQLBuilder {
                     + " WHERE $predicate"
                     + " GROUP BY db_id, table_id, column_name";
 
+    // The aggregate a backend older than STATISTIC_EXTERNAL_QUERY_V3_VERSION can serialize. Kept as the
+    // fallback for the window during a rolling upgrade where the frontend is new and some backend is not
+    // (see StatisticExecutor#queryStatisticSync): the coverage numbers V3 adds are an improvement to the
+    // estimate, not something the estimate cannot be made without, so losing them for a few minutes is
+    // much better than losing external statistics entirely until every backend is restarted.
+    //
     // table_uuid isn't part of the projection and the predicate already scopes rows to a single
     // logical table via table_uuid in (hash, raw) (see buildTableUUIDInPredicate), so grouping by
     // column_name alone is enough to merge a table's data regardless of which representation any
@@ -112,13 +119,38 @@ public class StatisticSQLBuilder {
                     + " WHERE rn = 1"
                     + " GROUP BY column_name";
 
+    // Same aggregate as V2 with two more numbers about the aggregate itself, so the read path can size
+    // and scale it from the rows rather than from metadata maintained on a separate path:
+    //   - count(distinct partition_name): how many partitions these rows actually cover. The row count
+    //     is the sum over exactly these partitions, so this is the only denominator guaranteed to match
+    //     its numerator. The recorded partition set cannot promise that - it is written by the collection
+    //     job while the rows accumulate across runs, and the two drift apart whenever a run is partial.
+    //   - sum(hll_cardinality(ndv)): each partition's distinct count added up. Next to the merged
+    //     distinct count it says how much the column's values repeat across partitions, which is what
+    //     decides whether the distinct count grows with the table or stays put
+    //     (see connector.statistics.StatisticsUtils#extrapolateNdv).
+    private static final String QUERY_EXTERNAL_FULL_STATISTIC_V3_TEMPLATE =
+            "SELECT cast(" + STATISTIC_EXTERNAL_QUERY_V3_VERSION + " as INT), column_name,"
+                    + " sum(row_count), cast(sum(data_size) as bigint), hll_union_agg(ndv), sum(null_count), "
+                    + " cast(max(cast(nullif(max, '') as $type)) as string),"
+                    + " cast(min(cast(nullif(min, '') as $type)) as string),"
+                    + " max(update_time),"
+                    + " cast(count(distinct partition_name) as bigint),"
+                    + " cast(sum(hll_cardinality(ndv)) as bigint)"
+                    + " FROM (SELECT *, row_number() over ("
+                    + " partition by partition_name, column_name order by update_time desc) as rn"
+                    + " FROM " + StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME
+                    + " WHERE $predicate) dedup_t"
+                    + " WHERE rn = 1"
+                    + " GROUP BY column_name";
+
     private static final String QUERY_HISTOGRAM_STATISTIC_TEMPLATE =
             "SELECT cast(" + STATISTIC_HISTOGRAM_VERSION + " as INT), db_id, table_id, column_name,"
                     + " cast(json_object(\"buckets\", buckets, \"mcv\", mcv) as varchar)"
                     + " FROM " + StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME
                     + " WHERE $predicate";
 
-    // Same dedup rationale as QUERY_EXTERNAL_FULL_STATISTIC_V2_TEMPLATE, keyed by column_name only
+    // Same dedup rationale as QUERY_EXTERNAL_FULL_STATISTIC_V3_TEMPLATE, keyed by column_name only
     // (external_histogram_statistics has no partition dimension).
     private static final String QUERY_EXTERNAL_HISTOGRAM_STATISTIC_TEMPLATE =
             "SELECT cast(" + STATISTIC_EXTERNAL_HISTOGRAM_VERSION + " as INT), column_name,"
@@ -232,8 +264,21 @@ public class StatisticSQLBuilder {
 
     public static String buildQueryExternalFullStatisticsSQL(String tableUUID, List<String> columnNames,
                                                              List<Type> columnTypes) {
+        return buildQueryExternalFullStatisticsSQL(tableUUID, columnNames, columnTypes, true);
+    }
+
+    /**
+     * @param reportCoverage whether to ask for the numbers describing the aggregate's own coverage, which
+     *                       only a backend at STATISTIC_EXTERNAL_QUERY_V3_VERSION or later can serialize.
+     *                       False produces the older shape, for the rolling-upgrade fallback in
+     *                       {@link StatisticExecutor#queryStatisticSync}.
+     */
+    public static String buildQueryExternalFullStatisticsSQL(String tableUUID, List<String> columnNames,
+                                                             List<Type> columnTypes, boolean reportCoverage) {
         Map<String, List<String>> nameGroups = groupByTypes(columnNames, columnTypes, true);
         String tableUUIDPredicate = buildTableUUIDInPredicate(tableUUID);
+        String template = reportCoverage
+                ? QUERY_EXTERNAL_FULL_STATISTIC_V3_TEMPLATE : QUERY_EXTERNAL_FULL_STATISTIC_V2_TEMPLATE;
 
         List<String> querySQL = new ArrayList<>();
         nameGroups.forEach((type, names) -> {
@@ -242,7 +287,7 @@ public class StatisticSQLBuilder {
             context.put("predicate",
                     tableUUIDPredicate + " and column_name in (" +
                             names.stream().map(c -> "\"" + c + "\"").collect(Collectors.joining(", ")) + ")");
-            querySQL.add(build(context, QUERY_EXTERNAL_FULL_STATISTIC_V2_TEMPLATE));
+            querySQL.add(build(context, template));
         });
 
         return Joiner.on(" UNION ALL ").join(querySQL);

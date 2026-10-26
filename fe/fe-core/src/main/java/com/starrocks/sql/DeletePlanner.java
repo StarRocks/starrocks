@@ -277,6 +277,7 @@ public class DeletePlanner {
                 .getDb(session, catalogDbTable.getCatalog(), catalogDbTable.getDb());
         try {
             olapTableSink.init(session.getExecutionId(), deleteStatement.getTxnId(), db.getId(), session.getExecTimeout());
+            olapTableSink.setEstimatedWriteBytes(DmlWriteEstimates.fromExecPlan(execPlan));
             olapTableSink.complete();
         } catch (StarRocksException e) {
             throw new SemanticException(e.getMessage());
@@ -313,6 +314,8 @@ public class DeletePlanner {
         dataSink.init();
         // Create IcebergSinkExtra for DELETE operations
         IcebergMetadata.IcebergSinkExtra icebergSinkExtra = new IcebergMetadata.IcebergSinkExtra();
+        // The BE partitions the output by the spec of the table descriptor built now.
+        icebergSinkExtra.setWriteSpecId(icebergTable.getReadSpec().specId());
         // Build Iceberg filter expression from scan node for conflict detection.
         // Both helpers filter by the target table so subqueries over other Iceberg tables
         // don't leak their scan's predicate / snapshot id into the target's commit.

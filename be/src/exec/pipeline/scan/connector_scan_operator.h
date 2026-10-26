@@ -160,8 +160,6 @@ public:
     Status reuse(RuntimeState* state, MorselPtr&& morsel) override;
     void release_for_reuse(RuntimeState* state) override;
 
-    uint64_t avg_row_mem_bytes() const;
-
 protected:
     virtual bool _reach_eof() const { return _limit != -1 && _chunk_rows_read >= _limit; }
     Status _open_data_source(RuntimeState* state, bool* mem_alloc_failed);
@@ -194,7 +192,12 @@ private:
     bool _is_split_source_morsel = false;
     bool _split_source_morsel_reported = false;
     uint64_t _chunk_rows_read = 0;
-    uint64_t _chunk_mem_bytes = 0;
+    // Exponentially weighted size of the chunks this chunk source has produced, i.e. how big a
+    // chunk from it has been lately. It replaces a cumulative `sum(bytes) / sum(rows)` average over
+    // the whole lifetime, which was doubly damped: it never forgot, and it was weighted by rows, so
+    // chunks packed with narrow rows dominated. Over the ~250 chunks a large row group produces, a
+    // chunk ten times the running mean moved that average by under 4%; here it moves this by ~110%.
+    int64_t _recent_chunk_mem_bytes = 0;
     int64_t _request_mem_tracker_bytes = 0;
     int64_t _mem_alloc_failed_count = 0;
     bool _enable_adaptive_io_tasks = true;

@@ -24,8 +24,6 @@ scan:
     # gcs connector hadoop3
     - "**/gcs-connector-hadoop3-2.2.26-shaded.jar"
     # parquet hadoop bundle
-    - "**/parquet-hadoop-bundle-1.15.2.jar"
-    # from java extension
-    - "**/parquet-jackson-1.15.2.jar"
-    # from fe
-    - "**/parquet-jackson-1.16.0.jar"
+    - "**/parquet-hadoop-bundle-1.18.1.jar"
+    # from fe and java extension
+    - "**/parquet-jackson-1.18.1.jar"

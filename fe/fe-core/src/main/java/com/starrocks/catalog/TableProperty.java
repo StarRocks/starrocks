@@ -357,6 +357,8 @@ public class TableProperty implements Writable, GsonPostProcessable {
     @SerializedName(value = "enableStatisticCollectOnFirstLoadSet")
     private boolean enableStatisticCollectOnFirstLoadSet = false;
 
+    private boolean enableStatisticAutoCollect = true;
+
     // table level query timeout in seconds
     // default value -1 means use cluster query_timeout
     @SerializedName(value = "tableQueryTimeout")
@@ -438,6 +440,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         this.lakeCompactionMaxParallel = other.lakeCompactionMaxParallel;
         this.enableStatisticCollectOnFirstLoad = other.enableStatisticCollectOnFirstLoad;
         this.enableStatisticCollectOnFirstLoadSet = other.enableStatisticCollectOnFirstLoadSet;
+        this.enableStatisticAutoCollect = other.enableStatisticAutoCollect;
         this.tableQueryTimeout = other.tableQueryTimeout;
         this.cloudNativeFastSchemaEvolutionV2 = other.cloudNativeFastSchemaEvolutionV2;
     }
@@ -524,6 +527,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
                 buildLocation();
                 buildStorageCoolDownTTL();
                 buildEnableStatisticCollectOnFirstLoad();
+                buildEnableStatisticAutoCollect();
                 buildCloudNativeFastSchemaEvolutionV2();
                 buildLakeCompactionMaxParallel();
                 buildLightWeightTabletCreation();
@@ -1314,6 +1318,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return enableStatisticCollectOnFirstLoad;
     }
 
+    public boolean enableStatisticAutoCollect() {
+        return enableStatisticAutoCollect;
+    }
+
     public boolean isSetEnableStatisticCollectOnFirstLoad() {
         // Older versions persisted "false" only when the user explicitly disabled this table property,
         // but also wrote the default "true" on table creation. Preserve explicit false while avoiding
@@ -1463,6 +1471,12 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
+    public TableProperty buildEnableStatisticAutoCollect() {
+        enableStatisticAutoCollect = Boolean.parseBoolean(
+                properties.getOrDefault(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_AUTO_COLLECT, "true"));
+        return this;
+    }
+
     public TableProperty buildCloudNativeFastSchemaEvolutionV2() {
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_CLOUD_NATIVE_FAST_SCHEMA_EVOLUTION_V2)) {
             cloudNativeFastSchemaEvolutionV2 = Boolean.parseBoolean(
@@ -1546,6 +1560,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildMutableBucketNum();
         buildCompactionStrategy();
         buildLoadInitialOpenPartitionNumber();
+        // Rebuilt from the raw map rather than serialized: an older FE that checkpoints after a rollback keeps
+        // the map entry but drops unknown fields, which would silently re-enable collection on roll-forward.
+        buildEnableStatisticAutoCollect();
         // NOTE: new properties should not be built here, just add SerializedName to the field.
     }
 }

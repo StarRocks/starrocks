@@ -147,8 +147,13 @@ void merge_number(vpack::Builder* builder, const std::string_view& name, const C
     const auto data = col->immutable_data().data();
 
     if constexpr (TYPE == LogicalType::TYPE_LARGEINT) {
-        // the value is from json, must be uint64_t
-        builder->addUnchecked(name.data(), name.size(), vpack::Value((uint64_t)data[idx]));
+        // The value is a JSON integer: unsigned past INT64_MAX, or negative where an older deriver met negative
+        // integers with such values at LARGEINT. Writing a negative one as uint64_t would change it.
+        if (data[idx] < 0) {
+            builder->addUnchecked(name.data(), name.size(), vpack::Value(static_cast<int64_t>(data[idx])));
+        } else {
+            builder->addUnchecked(name.data(), name.size(), vpack::Value(static_cast<uint64_t>(data[idx])));
+        }
     } else {
         builder->addUnchecked(name.data(), name.size(), vpack::Value(data[idx]));
     }

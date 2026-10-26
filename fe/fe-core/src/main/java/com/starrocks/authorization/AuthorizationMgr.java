@@ -23,6 +23,7 @@ import com.google.common.cache.LoadingCache;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.authentication.GroupNameMatch;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.common.Config;
@@ -184,6 +185,8 @@ public class AuthorizationMgr {
                     ObjectType.PIPE,
                     ObjectType.GLOBAL_FUNCTION,
                     ObjectType.STORAGE_VOLUME,
+                    ObjectType.AI_FUNCTION,
+                    ObjectType.AI_PROVIDER,
                     ObjectType.WAREHOUSE);
             for (ObjectType objectType : objectTypes) {
                 initPrivilegeCollectionAllObjects(rolePrivilegeCollection, objectType,
@@ -220,6 +223,8 @@ public class AuthorizationMgr {
                     ObjectType.FUNCTION,
                     ObjectType.GLOBAL_FUNCTION,
                     ObjectType.STORAGE_VOLUME,
+                    ObjectType.AI_FUNCTION,
+                    ObjectType.AI_PROVIDER,
                     ObjectType.PIPE)) {
                 initPrivilegeCollectionAllObjects(rolePrivilegeCollection, t, provider.getAvailablePrivType(t));
             }
@@ -324,6 +329,8 @@ public class AuthorizationMgr {
                 || ObjectType.CATALOG.equals(objectType)
                 || ObjectType.RESOURCE_GROUP.equals(objectType)
                 || ObjectType.STORAGE_VOLUME.equals(objectType)
+                || ObjectType.AI_FUNCTION.equals(objectType)
+                || ObjectType.AI_PROVIDER.equals(objectType)
                 || ObjectType.WAREHOUSE.equals(objectType)) {
             objects.add(provider.generateObject(objectType,
                     Lists.newArrayList("*")));
@@ -883,7 +890,8 @@ public class AuthorizationMgr {
     }
 
     /**
-     * The key `groupToRoleList` already stores this group under, matched ignoring case, or
+     * The key `groupToRoleList` already stores this group under, matched the way
+     * {@link GroupNameMatch} says (ignoring case unless the cluster is configured otherwise), or
      * `groupName` itself when the group is not stored yet.
      * <p>
      * Every read and write of `groupToRoleList` goes through this, so GRANT, REVOKE, their replays
@@ -902,7 +910,7 @@ public class AuthorizationMgr {
         }
         String match = null;
         for (String stored : groupToRoleList.keySet()) {
-            if (stored.equalsIgnoreCase(groupName) && (match == null || stored.compareTo(match) < 0)) {
+            if (GroupNameMatch.equal(stored, groupName) && (match == null || stored.compareTo(match) < 0)) {
                 match = stored;
             }
         }
@@ -917,8 +925,9 @@ public class AuthorizationMgr {
                 return exactMatch;
             }
 
-            // No exact match: fall back to a case-insensitive scan. An LDAP `cn` is case-insensitive
-            // in the directory, so a GRANT written with a different case than the directory returns
+            // No exact match: fall back to the relaxed comparison (ignoring case unless
+            // authentication_group_case_insensitive is off). An LDAP `cn` is case-insensitive in
+            // the directory, so a GRANT written with a different case than the directory returns
             // must not silently have no effect. Only the lookup is relaxed - neither the stored keys
             // nor the group names of the session are rewritten, because the group name strings are
             // handed to Ranger, which matches them case-sensitively.
@@ -928,7 +937,7 @@ public class AuthorizationMgr {
             // depend on map iteration order and failing would lock out a user who could log in before.
             Set<Long> caseInsensitiveMatch = null;
             for (Map.Entry<String, Set<Long>> entry : groupToRoleList.entrySet()) {
-                if (entry.getKey().equalsIgnoreCase(groupName)) {
+                if (GroupNameMatch.equal(entry.getKey(), groupName)) {
                     if (caseInsensitiveMatch == null) {
                         caseInsensitiveMatch = new HashSet<>();
                     }

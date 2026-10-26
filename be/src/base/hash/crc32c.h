@@ -51,6 +51,28 @@ inline uint32_t Value(const std::vector<Slice>& slices) {
     return crc;
 }
 
+// Returns the active CRC32C engine name: "pmull", "arm_crc32c_scalar", "sse42_simd", or "software".
+const char* ActiveImplementationName();
+
+#ifdef BE_TEST
+// Test-only controls to simulate fallback paths in CI/UT without environment variables.
+void SetArmPmullDisabledForTesting(bool disabled);
+void ResetArmPmullForTesting();
+bool HasArmPmull();
+uint32_t ExtendFallback(uint32_t init_crc, const char* data, size_t n);
+inline uint32_t ValueFallback(const char* data, size_t n) {
+    return ExtendFallback(0, data, n);
+}
+
+#if defined(__ARM_NEON) && defined(__aarch64__) && defined(USE_ARM_PMULL)
+// Computes CRC32C using ARMv8 PMULL parallel 64-byte folding.
+// Precondition: len >= 64 && (len % 16 == 0).
+// Buffer must contain at least 64 bytes. Any trailing remainder (< 16 bytes)
+// must be handled by the caller. Exposed under BE_TEST for direct unit testing.
+uint32_t crc32c_pmull_simd(uint32_t crc, const char* buf, size_t len);
+#endif
+#endif
+
 static const uint32_t kMaskDelta = 0xa282ead8ul;
 
 // Return a masked representation of crc.

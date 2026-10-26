@@ -212,6 +212,30 @@ TEST_F(OrcFileWriterTest, TestWriteIntergersNotNull) {
     assert_equal_chunk(chunk.get(), read_chunk.get());
 }
 
+// TINYINT min/max must be signed even where plain char is unsigned (aarch64).
+TEST_F(OrcFileWriterTest, TestWriteTinyintStatistics) {
+    std::vector<TypeDescriptor> type_descs{TYPE_TINYINT_DESC};
+    auto column_names = _make_type_names(type_descs);
+    auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
+    auto writer = std::make_unique<formats::ORCFileWriter>(_file_path, std::move(_orc_stream), column_names, type_descs,
+                                                           std::move(column_evaluators),
+                                                           TCompressionType::NO_COMPRESSION, _write_options, []() {});
+    ASSERT_OK(writer->init());
+
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnTestHelper::build_column<int8_t>({5, -1, INT8_MIN, -99}), 0);
+    ASSERT_OK(writer->write(chunk.get()));
+    ASSERT_OK(writer->close().io_status);
+
+    auto reader = orc::createReader(orc::readLocalFile(_file_path), orc::ReaderOptions());
+    auto file_stats = reader->getColumnStatistics(1);
+    auto* int_stats = dynamic_cast<const orc::IntegerColumnStatistics*>(file_stats.get());
+    ASSERT_NE(int_stats, nullptr);
+    EXPECT_EQ(INT8_MIN, int_stats->getMinimum());
+    EXPECT_EQ(5, int_stats->getMaximum());
+    EXPECT_EQ(5 - 1 + INT8_MIN - 99, int_stats->getSum());
+}
+
 TEST_F(OrcFileWriterTest, TestWriteFloat) {
     std::vector<TypeDescriptor> type_descs{TYPE_FLOAT_DESC};
 

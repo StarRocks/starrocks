@@ -152,6 +152,13 @@ inline void BitReader::BufferValues() {
     }
 }
 
+inline void BitReader::advance_bytes(int num_bytes) {
+    DCHECK(is_byte_aligned());
+    DCHECK_LE(num_bytes, aligned_bytes_left());
+    byte_offset_ += num_bytes;
+    BufferValues();
+}
+
 template <typename T>
 inline bool BitReader::GetValue(int num_bits, T* v) {
     DCHECK_LE(num_bits, 64);

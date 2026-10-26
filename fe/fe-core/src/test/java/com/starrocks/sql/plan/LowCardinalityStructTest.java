@@ -15,6 +15,7 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.catalog.ColumnId;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.FeConstants;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.utframe.StarRocksAssert;
@@ -667,11 +668,11 @@ public class LowCardinalityStructTest extends PlanTestBase {
         new Expectations(dictManager) {
             {
                 // Explicitly model: VARCHAR_COL has no dict; other columns keep the default behavior.
-                dictManager.hasGlobalDict(anyLong, ColumnId.create("VARCHAR_COL"), anyLong);
+                dictManager.hasGlobalDict((OlapTable) any, ColumnId.create("VARCHAR_COL"), anyLong);
                 result = false;
                 minTimes = 0;
 
-                dictManager.hasGlobalDict(anyLong, (ColumnId) any, anyLong);
+                dictManager.hasGlobalDict((OlapTable) any, (ColumnId) any, anyLong);
                 result = true;
                 minTimes = 0;
             }
@@ -694,7 +695,7 @@ public class LowCardinalityStructTest extends PlanTestBase {
         IDictManager dictManager = IDictManager.getInstance();
         new Expectations(dictManager) {
             {
-                dictManager.hasGlobalDict(anyLong, ColumnId.create("VARCHAR_COL"), anyLong);
+                dictManager.hasGlobalDict((OlapTable) any, ColumnId.create("VARCHAR_COL"), anyLong);
                 result = false;
             }
         };

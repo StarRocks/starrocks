@@ -60,6 +60,7 @@ public class HdfsFsManagerDoorTest {
     @AfterEach
     public void tearDown() {
         Config.lock_blocking_call_validation_mode = savedMode;
+        LockInvariantViolations.restoreBlockingCallTestEscalation();
         LockInvariantViolations.clearViolations();
         LockHoldDepth.reset();
     }
@@ -71,6 +72,7 @@ public class HdfsFsManagerDoorTest {
     @Test
     public void testCreatingAFileSystemUnderALockIsReported() {
         Config.lock_blocking_call_validation_mode = "warn";
+        LockInvariantViolations.suspendBlockingCallTestEscalation();
         HdfsFsManager manager = new HdfsFsManager();
         HdfsFsIdentity identity = new HdfsFsIdentity("hdfs://namenode:9000", "user,");
 
@@ -122,6 +124,7 @@ public class HdfsFsManagerDoorTest {
     @Test
     public void testAnOperationThatReachesTheFileSystemIsReported() throws Exception {
         Config.lock_blocking_call_validation_mode = "warn";
+        LockInvariantViolations.suspendBlockingCallTestEscalation();
         HdfsFsManager manager = new HdfsFsManager();
         String path = "file://" + System.getProperty("java.io.tmpdir") + "/starrocks-door-test-*";
 
@@ -181,6 +184,7 @@ public class HdfsFsManagerDoorTest {
     @Test
     public void testTheStreamOperationsAreGuardedToo() throws Exception {
         Config.lock_blocking_call_validation_mode = "warn";
+        LockInvariantViolations.suspendBlockingCallTestEscalation();
         HdfsFsManager manager = new HdfsFsManager();
         String path = "file://" + System.getProperty("java.io.tmpdir")
                 + "/starrocks-door-test-" + UUID.randomUUID();

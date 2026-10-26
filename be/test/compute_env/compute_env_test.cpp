@@ -246,6 +246,7 @@ TEST(ComputeEnvTest, InitializesAIRuntimeFromConfigGlobals) {
     SCOPED_UPDATE(int64_t, config::ai_function_request_timeout_ms, 1234);
     SCOPED_UPDATE(int64_t, config::ai_function_connect_timeout_ms, 2345);
     SCOPED_UPDATE(int64_t, config::ai_function_max_response_bytes, 3456);
+    SCOPED_UPDATE(int64_t, config::ai_function_max_input_file_bytes, 4567);
     SCOPED_UPDATE(int32_t, config::ai_function_worker_thread_num, 2);
     SCOPED_UPDATE(int32_t, config::ai_function_sub_chunk_size, 8);
     SCOPED_UPDATE(int32_t, config::ai_function_max_retries, 4);
@@ -265,6 +266,7 @@ TEST(ComputeEnvTest, InitializesAIRuntimeFromConfigGlobals) {
     EXPECT_EQ(1234, snapshot.request_timeout_ms);
     EXPECT_EQ(2345, snapshot.connect_timeout_ms);
     EXPECT_EQ(3456, snapshot.max_response_bytes);
+    EXPECT_EQ(4567, snapshot.max_input_file_bytes);
     EXPECT_EQ(2, snapshot.worker_thread_num);
     EXPECT_EQ(8, snapshot.sub_chunk_size);
     EXPECT_EQ(4, snapshot.max_retries);

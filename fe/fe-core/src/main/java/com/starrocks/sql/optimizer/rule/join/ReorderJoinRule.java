@@ -201,7 +201,8 @@ public class ReorderJoinRule extends Rule {
                 Integer childIdx = innerJoinRoot.second.second;
 
                 MultiJoinNode multiJoinNode = MultiJoinNode.toMultiJoinNode(child);
-                if (!multiJoinNode.checkDependsPredicate()) {
+                // A single atom means the root itself can't be flattened, e.g. it has a non-deterministic predicate
+                if (multiJoinNode.getAtoms().size() < 2 || !multiJoinNode.checkDependsPredicate()) {
                     continue;
                 }
 
@@ -251,7 +252,8 @@ public class ReorderJoinRule extends Rule {
             Collections.reverse(innerJoinTrees);
             for (OptExpression innerJoinRoot : innerJoinTrees) {
                 MultiJoinNode multiJoinNode = MultiJoinNode.toMultiJoinNode(innerJoinRoot);
-                if (!multiJoinNode.checkDependsPredicate()) {
+                // A single atom means the root itself can't be flattened, e.g. it has a non-deterministic predicate
+                if (multiJoinNode.getAtoms().size() < 2 || !multiJoinNode.checkDependsPredicate()) {
                     continue;
                 }
                 enumerate(new JoinReorderLeftDeep(context), context, innerJoinRoot, multiJoinNode, true);

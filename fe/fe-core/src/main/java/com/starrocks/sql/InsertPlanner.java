@@ -73,6 +73,7 @@ import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.expression.CastExpr;
 import com.starrocks.sql.ast.expression.DefaultValueExpr;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
@@ -325,7 +326,7 @@ public class InsertPlanner {
             // the optimizer runs with the meta lock released, so every table the plan reaches has to be a
             // private copy. Collecting it inside buildExecPlanWithRetry -- where it used to live -- was too
             // late, because the logical plan built here would still point at the live objects.
-            originalOlapTables = StatementPlanner.collectOriginalOlapTables(session, insertStmt);
+            originalOlapTables = StatementPlanner.collectOriginalOlapTables(session, insertStmt, plannerMetaLocker);
         }
         try {
             return planWithRetry(insertStmt, session);
@@ -363,11 +364,22 @@ public class InsertPlanner {
             // too); either way the finally below leaves it held, as the caller expects.
             plannerMetaLocker.unlock();
             ExecPlan plan;
+            Throwable planFailure = null;
             try {
                 plan = doPlan(insertStmt, session);
+            } catch (Throwable t) {
+                planFailure = t;
+                throw t;
             } finally {
                 try (Timer ignore = Tracers.watchScope("Lock")) {
                     StatementPlanner.lock(plannerMetaLocker);
+                } catch (PlannerMetaLocker.AcquireTimeoutException e) {
+                    // A bounded re-acquire that ran out must not hide why planning failed: report that failure,
+                    // as the caller would have seen it had the lock come back.
+                    if (planFailure == null) {
+                        throw e;
+                    }
+                    planFailure.addSuppressed(e);
                 }
             }
             long validateAgainst = planStartTime;
@@ -1013,7 +1025,9 @@ public class InsertPlanner {
                         new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields()),
                                 Lists.newArrayList());
 
-                List<SlotRef> slots = targetColumn.getRefColumns();
+                Expr definition = ExprUtils.rewriteStructFieldSlotRefs(targetColumn.getDefineExpr());
+                List<SlotRef> slots = Lists.newArrayList();
+                definition.collect(SlotRef.class, slots);
                 for (SlotRef slot : slots) {
                     String originName = slot.getColumnName();
                     Optional<Column> optOriginColumn = outputFullSchema.stream()
@@ -1025,7 +1039,7 @@ public class InsertPlanner {
                 }
 
                 ScalarOperator scalarOperator =
-                        SqlToScalarOperatorTranslator.translate(targetColumn.getDefineExpr(), expressionMapping,
+                        SqlToScalarOperatorTranslator.translate(definition, expressionMapping,
                                 columnRefFactory);
 
                 ColumnRefOperator columnRefOperator =
@@ -1324,8 +1338,14 @@ public class InsertPlanner {
                 }
             }
         }
-        checkPartitionInsertValid(targetTable);
-        return true;
+        // constant partition values make a static insert only under identity transforms; otherwise the insert stays
+        // dynamic, and the sink computes the transformed partition values
+        return !hasNonIdentityPartitionTransform(targetTable);
+    }
+
+    private static boolean hasNonIdentityPartitionTransform(Table targetTable) {
+        return targetTable instanceof IcebergTable icebergTable && icebergTable.isPartitioned() &&
+                icebergTable.getNativeTable().spec().fields().stream().anyMatch(field -> !field.transform().isIdentity());
     }
 
 

@@ -86,6 +86,9 @@ public:
 
     bool is_finished() override;
 
+    // Sub-sinks record async write errors on themselves, so the outer status alone never sees them.
+    Status status() override;
+
 private:
     std::unique_ptr<ConnectorSink> _delete_sink;
     std::unique_ptr<ConnectorSink> _data_sink;

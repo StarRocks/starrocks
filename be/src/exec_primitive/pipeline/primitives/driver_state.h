@@ -108,6 +108,8 @@ public:
         this->schedule_effective_times += (chunks_moved > 0) ? 1 : 0;
     }
     void update_accumulated_rows_moved(int64_t rows_moved) { this->accumulated_rows_moved += rows_moved; }
+    void set_enter_ready_queue_timestamp(int64_t timestamp_ns) { this->enter_ready_queue_timestamp = timestamp_ns; }
+    int64_t get_enter_ready_queue_timestamp() const { return enter_ready_queue_timestamp; }
     void increment_schedule_times() { this->schedule_times += 1; }
 
     int64_t get_accumulated_local_wait_time_spent() { return accumulated_local_wait_time_spent; }
@@ -135,6 +137,7 @@ private:
     int64_t last_time_spent{0};
     int64_t last_chunks_moved{0};
     int64_t enter_local_queue_timestamp{0};
+    int64_t enter_ready_queue_timestamp{0};
     int64_t accumulated_time_spent{0};
     int64_t accumulated_local_wait_time_spent{0};
     int64_t accumulated_chunks_moved{0};

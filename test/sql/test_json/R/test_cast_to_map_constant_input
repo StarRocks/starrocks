@@ -1,0 +1,44 @@
+-- name: test_cast_to_map_constant_input
+-- A cast of a constant JSON or VARIANT to MAP returned a one-row column instead of one spanning the chunk:
+-- count() over it counted one row per chunk or read past its null column, and a predicate on it failed a size check.
+-- The `k > 0` filters keep the counts on a real scan: an unfiltered count(<constant>) can be answered by a meta scan.
+CREATE TABLE t_cast_map_const_${uuid0} (k INT)
+DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 3
+PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t_cast_map_const_${uuid0} SELECT generate_series FROM TABLE(generate_series(1, 10));
+-- result:
+-- !result
+SELECT count(CAST(parse_json('{"1":2}') AS MAP<INT, INT>)) FROM t_cast_map_const_${uuid0} WHERE k > 0;
+-- result:
+10
+-- !result
+SELECT count(CAST(parse_json('1') AS MAP<INT, INT>)) FROM t_cast_map_const_${uuid0} WHERE k > 0;
+-- result:
+0
+-- !result
+SELECT count(*) FROM (SELECT CAST(parse_json('{"1":2}') AS MAP<INT, INT>) m FROM t_cast_map_const_${uuid0}) x WHERE m IS NOT NULL;
+-- result:
+10
+-- !result
+SELECT k, CAST(parse_json('{"1":2}') AS MAP<INT, INT>) FROM t_cast_map_const_${uuid0} WHERE k <= 3 ORDER BY k;
+-- result:
+1	{1:2}
+2	{1:2}
+3	{1:2}
+-- !result
+SELECT count(CAST(CAST(map{'a':1} AS VARIANT) AS MAP<VARCHAR, INT>)) FROM t_cast_map_const_${uuid0} WHERE k > 0;
+-- result:
+10
+-- !result
+SELECT k, CAST(CAST(map{'a':1} AS VARIANT) AS MAP<VARCHAR, INT>) FROM t_cast_map_const_${uuid0} WHERE k <= 3 ORDER BY k;
+-- result:
+1	{"a":1}
+2	{"a":1}
+3	{"a":1}
+-- !result
+DROP TABLE t_cast_map_const_${uuid0};
+-- result:
+-- !result

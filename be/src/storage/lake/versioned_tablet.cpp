@@ -15,10 +15,10 @@
 #include "storage/lake/versioned_tablet.h"
 
 #include "storage/lake/pk_tablet_writer.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/tablet_writer.h"
-#include "storage/lake/update_manager.h"
 #include "storage/tablet_schema_map.h"
 #include "storage_primitive/tablet_basic_info.h"
 
@@ -138,7 +138,7 @@ TabletBasicInfo VersionedTablet::get_basic_info() const {
 
     // set pk tablet index_mem and index_disk_usage
     if (keys_type == KeysType::PRIMARY_KEYS) {
-        info.index_mem = _tablet_mgr->update_mgr()->get_index_memory_size(id());
+        info.index_mem = _tablet_mgr->primary_key_mgr()->get_index_memory_size(id());
 
         // only support cloud native pk index
         if (_metadata->has_sstable_meta()) {

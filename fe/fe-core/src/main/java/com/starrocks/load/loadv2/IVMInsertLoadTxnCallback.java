@@ -24,8 +24,10 @@ import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.transaction.InsertTxnCommitAttachment;
 import com.starrocks.transaction.TransactionException;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TxnCommitAttachment;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -94,6 +96,23 @@ public class IVMInsertLoadTxnCallback implements InsertLoadTxnCallback {
             }
             this.baseTableInfoTvrDeltaMap.put(baseTableInfo, TvrTableSnapshot.of(toCommitVersionRange.to));
         }
+
+        if (!this.baseTableInfoTvrDeltaMap.isEmpty()) {
+            // Failing the commit is the safe direction: an unrecorded window is retried, a committed one
+            // that no record describes is applied twice.
+            insertAttachmentOf(txnState).setIvmRefreshCommitInfo(
+                    new IVMRefreshCommitInfo(Maps.newHashMap(this.baseTableInfoTvrDeltaMap)));
+        }
+    }
+
+    private static InsertTxnCommitAttachment insertAttachmentOf(TransactionState txnState)
+            throws TransactionException {
+        TxnCommitAttachment attachment = txnState == null ? null : txnState.getTxnCommitAttachment();
+        if (!(attachment instanceof InsertTxnCommitAttachment)) {
+            throw new TransactionException("IVM refresh cannot record its tvr version range: expected an "
+                    + "InsertTxnCommitAttachment on the transaction, got " + attachment);
+        }
+        return (InsertTxnCommitAttachment) attachment;
     }
 
     @Override
@@ -106,11 +125,8 @@ public class IVMInsertLoadTxnCallback implements InsertLoadTxnCallback {
                 mv.getName(), baseTableInfoTvrDeltaMap);
         final MaterializedView.MvRefreshScheme copiedScheme = mv.getRefreshScheme().copy(); // copy on write
         final MaterializedView.AsyncRefreshContext asyncRefreshContext = copiedScheme.getAsyncRefreshContext();
-        Map<BaseTableInfo, TvrVersionRange> mvBaseTableInfoTvrDeltaMap =
-                asyncRefreshContext.getBaseTableInfoTvrVersionRangeMap();
 
-        // update mv's base table info tvr version range map
-        mvBaseTableInfoTvrDeltaMap.putAll(baseTableInfoTvrDeltaMap);
+        promoteCommittedTvr(asyncRefreshContext, baseTableInfoTvrDeltaMap);
         // Only clear if we still own the slot — guard against takeover between the two callbacks.
         String currentOwner = asyncRefreshContext.getTempTvrOwnerStartTaskRunId();
         if (currentOwner == null || currentOwner.equals(capturedOwner)) {
@@ -124,9 +140,71 @@ public class IVMInsertLoadTxnCallback implements InsertLoadTxnCallback {
         copiedScheme.setLastRefreshTime(maxChangedTableRefreshTime);
         ChangeMaterializedViewRefreshSchemeLog changeRefreshSchemeLog =
                 new ChangeMaterializedViewRefreshSchemeLog(mv, copiedScheme);
-        GlobalStateMgr.getCurrentState().getEditLog().logMvChangeRefreshScheme(changeRefreshSchemeLog,
-                wal -> mv.setRefreshScheme(copiedScheme));
+        try {
+            GlobalStateMgr.getCurrentState().getEditLog().logMvChangeRefreshScheme(changeRefreshSchemeLog,
+                    wal -> mv.setRefreshScheme(copiedScheme));
+        } catch (Throwable t) {
+            // Only for a node that demotes and keeps running: it advances its replay position past its own
+            // writes, so it alone never replays the txn record that already carries this window. A node that
+            // exits replays that record normally on restart and needs nothing here.
+            promoteCommittedTvr(mv.getRefreshScheme().getAsyncRefreshContext(), baseTableInfoTvrDeltaMap);
+            throw t;
+        }
+        // The COMMITTED record is durable by now, and replay reads the window off it, not off this object.
+        clearRefreshCommitInfo(txnState);
         LOG.info("Update materialized view {} refresh scheme, " +
                 "last refresh time: {}, version meta changed", mv.getName(), maxChangedTableRefreshTime);
+    }
+
+    /**
+     * The leader reaches this from {@link #afterCommitted} and every replaying node from
+     * {@link #replayOnCommitted}, so the two paths cannot drift apart.
+     */
+    static void promoteCommittedTvr(MaterializedView.AsyncRefreshContext target,
+                                    Map<BaseTableInfo, TvrVersionRange> committedTvrMap) {
+        target.getBaseTableInfoTvrVersionRangeMap().putAll(committedTvrMap);
+    }
+
+    private static void clearRefreshCommitInfo(TransactionState txnState) {
+        TxnCommitAttachment attachment = txnState == null ? null : txnState.getTxnCommitAttachment();
+        if (attachment instanceof InsertTxnCommitAttachment) {
+            ((InsertTxnCommitAttachment) attachment).setIvmRefreshCommitInfo(null);
+        }
+    }
+
+    /** Only an IVM refresh ever fills this slot, so the record alone identifies one. */
+    static boolean carriesCommittedTvr(TransactionState txnState) {
+        return !CollectionUtils.sizeIsEmpty(committedTvrMapOf(txnState));
+    }
+
+    private static Map<BaseTableInfo, TvrVersionRange> committedTvrMapOf(TransactionState txnState) {
+        IVMRefreshCommitInfo commitInfo = refreshCommitInfoOf(txnState);
+        return commitInfo == null ? null : commitInfo.getCommittedTvrMap();
+    }
+
+    private static IVMRefreshCommitInfo refreshCommitInfoOf(TransactionState txnState) {
+        TxnCommitAttachment attachment = txnState == null ? null : txnState.getTxnCommitAttachment();
+        return attachment instanceof InsertTxnCommitAttachment
+                ? ((InsertTxnCommitAttachment) attachment).getIvmRefreshCommitInfo() : null;
+    }
+
+    @Override
+    public void replayOnCommitted(TransactionState txnState) {
+        Map<BaseTableInfo, TvrVersionRange> committedTvrMap = committedTvrMapOf(txnState);
+        if (CollectionUtils.sizeIsEmpty(committedTvrMap)) {
+            return;
+        }
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        if (database == null) {
+            return;
+        }
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), tableId);
+        if (!(table instanceof MaterializedView)) {
+            return;
+        }
+        MaterializedView mv = (MaterializedView) table;
+        promoteCommittedTvr(mv.getRefreshScheme().getAsyncRefreshContext(), committedTvrMap);
+        LOG.info("Replayed the base table tvr version range of materialized view {}: {}",
+                mv.getName(), committedTvrMap);
     }
 }

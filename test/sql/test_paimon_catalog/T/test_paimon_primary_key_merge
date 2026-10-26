@@ -1,0 +1,117 @@
+-- name: test_paimon_primary_key_merge
+create external catalog paimon_pk_${uuid0}
+properties (
+"type" = "paimon",
+"paimon.catalog.type" = "filesystem",
+"paimon.catalog.warehouse" = "oss://${oss_bucket}/ci_catalog_test_data/paimon/",
+"aws.s3.access_key" = "${oss_ak}",
+"aws.s3.secret_key" = "${oss_sk}",
+"aws.s3.endpoint" = "${oss_endpoint}"
+);
+set paimon_reader_mode = 'auto';
+[ORDER]select id, amount, note from paimon_pk_${uuid0}.paimon_test.pk_merge_v1 order by id;
+select count(*), sum(amount) from paimon_pk_${uuid0}.paimon_test.pk_merge_v1;
+select count(*) from paimon_pk_${uuid0}.paimon_test.pk_merge_v1 where id = 2;
+select count(*) from paimon_pk_${uuid0}.paimon_test.pk_merge_v1 where amount = 10;
+[ORDER]select id from paimon_pk_${uuid0}.paimon_test.pk_merge_v1 where amount >= 40 order by id;
+[ORDER]select note, amount from paimon_pk_${uuid0}.paimon_test.pk_merge_v1 order by id;
+select count(*) from paimon_pk_${uuid0}.paimon_test.pk_merge_v1 where note in ("old", "deleted");
+select count(*) from paimon_pk_${uuid0}.paimon_test.pk_merge_v1 where amount < 20 or id = 2;
+select id from paimon_pk_${uuid0}.paimon_test.pk_merge_v1 where note = "updated" and amount >= 100;
+select min(amount), max(amount), count(distinct id) from paimon_pk_${uuid0}.paimon_test.pk_merge_v1;
+[ORDER]select id from paimon_pk_${uuid0}.paimon_test.pk_merge_v1 order by amount desc, id limit 2;
+function: assert_paimon_reader("select id, amount, note from paimon_pk_${uuid0}.paimon_test.pk_merge_v1 order by id", "pk_merge_v1", "native")
+function: assert_paimon_native_profile("select id, amount, note from paimon_pk_${uuid0}.paimon_test.pk_merge_v1 order by id")
+set paimon_reader_mode = 'native';
+[ORDER]select id, amount, note from paimon_pk_${uuid0}.paimon_test.pk_merge_v1 order by id;
+function: assert_paimon_reader("select id, amount, note from paimon_pk_${uuid0}.paimon_test.pk_merge_v1 order by id", "pk_merge_v1", "native")
+function: assert_paimon_native_profile("select id, amount, note from paimon_pk_${uuid0}.paimon_test.pk_merge_v1 order by id")
+set paimon_reader_mode = 'jni';
+[ORDER]select id, amount, note from paimon_pk_${uuid0}.paimon_test.pk_merge_v1 order by id;
+function: assert_paimon_reader("select id, amount, note from paimon_pk_${uuid0}.paimon_test.pk_merge_v1 order by id", "pk_merge_v1", "jni")
+set catalog default_catalog;
+drop catalog paimon_pk_${uuid0};
+
+-- name: test_paimon_merge_deduplicate_parquet
+create external catalog paimon_matrix_${uuid0}
+properties (
+"type" = "paimon",
+"paimon.catalog.type" = "filesystem",
+"paimon.catalog.warehouse" = "oss://${oss_bucket}/ci_catalog_test_data/paimon/",
+"aws.s3.access_key" = "${oss_ak}",
+"aws.s3.secret_key" = "${oss_sk}",
+"aws.s3.endpoint" = "${oss_endpoint}"
+);
+set paimon_reader_mode = 'auto';
+[ORDER]select id, amount, score from paimon_matrix_${uuid0}.paimon_test.pk_deduplicate_parquet_v1 order by id;
+[ORDER]select score, id from paimon_matrix_${uuid0}.paimon_test.pk_deduplicate_parquet_v1 order by id;
+[ORDER]select id, amount, score from paimon_matrix_${uuid0}.paimon_test.pk_deduplicate_parquet_v1 where amount >= 10 order by id;
+[ORDER]select id from paimon_matrix_${uuid0}.paimon_test.pk_deduplicate_parquet_v1 where amount is null order by id;
+select count(*), count(amount), sum(amount) from paimon_matrix_${uuid0}.paimon_test.pk_deduplicate_parquet_v1;
+function: assert_paimon_reader("select id, amount, score from paimon_matrix_${uuid0}.paimon_test.pk_deduplicate_parquet_v1 order by id", "pk_deduplicate_parquet_v1", "native")
+function: assert_paimon_native_profile("select id, amount, score from paimon_matrix_${uuid0}.paimon_test.pk_deduplicate_parquet_v1 order by id")
+set paimon_reader_mode = 'native';
+[ORDER]select id, amount, score from paimon_matrix_${uuid0}.paimon_test.pk_deduplicate_parquet_v1 order by id;
+function: assert_paimon_reader("select id, amount, score from paimon_matrix_${uuid0}.paimon_test.pk_deduplicate_parquet_v1 order by id", "pk_deduplicate_parquet_v1", "native")
+function: assert_paimon_native_profile("select id, amount, score from paimon_matrix_${uuid0}.paimon_test.pk_deduplicate_parquet_v1 order by id")
+set paimon_reader_mode = 'jni';
+[ORDER]select id, amount, score from paimon_matrix_${uuid0}.paimon_test.pk_deduplicate_parquet_v1 order by id;
+function: assert_paimon_reader("select id, amount, score from paimon_matrix_${uuid0}.paimon_test.pk_deduplicate_parquet_v1 order by id", "pk_deduplicate_parquet_v1", "jni")
+set catalog default_catalog;
+drop catalog paimon_matrix_${uuid0};
+
+-- name: test_paimon_merge_deduplicate_orc
+create external catalog paimon_matrix_${uuid0}
+properties (
+"type" = "paimon",
+"paimon.catalog.type" = "filesystem",
+"paimon.catalog.warehouse" = "oss://${oss_bucket}/ci_catalog_test_data/paimon/",
+"aws.s3.access_key" = "${oss_ak}",
+"aws.s3.secret_key" = "${oss_sk}",
+"aws.s3.endpoint" = "${oss_endpoint}"
+);
+set paimon_reader_mode = 'auto';
+[ORDER]select id, amount, score from paimon_matrix_${uuid0}.paimon_test.pk_deduplicate_orc_v1 order by id;
+[ORDER]select score, id from paimon_matrix_${uuid0}.paimon_test.pk_deduplicate_orc_v1 order by id;
+[ORDER]select id, amount, score from paimon_matrix_${uuid0}.paimon_test.pk_deduplicate_orc_v1 where amount >= 10 order by id;
+[ORDER]select id from paimon_matrix_${uuid0}.paimon_test.pk_deduplicate_orc_v1 where amount is null order by id;
+select count(*), count(amount), sum(amount) from paimon_matrix_${uuid0}.paimon_test.pk_deduplicate_orc_v1;
+function: assert_paimon_reader("select id, amount, score from paimon_matrix_${uuid0}.paimon_test.pk_deduplicate_orc_v1 order by id", "pk_deduplicate_orc_v1", "native")
+function: assert_paimon_native_profile("select id, amount, score from paimon_matrix_${uuid0}.paimon_test.pk_deduplicate_orc_v1 order by id")
+set paimon_reader_mode = 'native';
+[ORDER]select id, amount, score from paimon_matrix_${uuid0}.paimon_test.pk_deduplicate_orc_v1 order by id;
+function: assert_paimon_reader("select id, amount, score from paimon_matrix_${uuid0}.paimon_test.pk_deduplicate_orc_v1 order by id", "pk_deduplicate_orc_v1", "native")
+function: assert_paimon_native_profile("select id, amount, score from paimon_matrix_${uuid0}.paimon_test.pk_deduplicate_orc_v1 order by id")
+set paimon_reader_mode = 'jni';
+[ORDER]select id, amount, score from paimon_matrix_${uuid0}.paimon_test.pk_deduplicate_orc_v1 order by id;
+function: assert_paimon_reader("select id, amount, score from paimon_matrix_${uuid0}.paimon_test.pk_deduplicate_orc_v1 order by id", "pk_deduplicate_orc_v1", "jni")
+set catalog default_catalog;
+drop catalog paimon_matrix_${uuid0};
+
+-- name: test_paimon_merge_deduplicate_avro
+create external catalog paimon_matrix_${uuid0}
+properties (
+"type" = "paimon",
+"paimon.catalog.type" = "filesystem",
+"paimon.catalog.warehouse" = "oss://${oss_bucket}/ci_catalog_test_data/paimon/",
+"aws.s3.access_key" = "${oss_ak}",
+"aws.s3.secret_key" = "${oss_sk}",
+"aws.s3.endpoint" = "${oss_endpoint}"
+);
+set paimon_reader_mode = 'auto';
+[ORDER]select id, amount, score from paimon_matrix_${uuid0}.paimon_test.pk_deduplicate_avro_v1 order by id;
+[ORDER]select score, id from paimon_matrix_${uuid0}.paimon_test.pk_deduplicate_avro_v1 order by id;
+[ORDER]select id, amount, score from paimon_matrix_${uuid0}.paimon_test.pk_deduplicate_avro_v1 where amount >= 10 order by id;
+[ORDER]select id from paimon_matrix_${uuid0}.paimon_test.pk_deduplicate_avro_v1 where amount is null order by id;
+select count(*), count(amount), sum(amount) from paimon_matrix_${uuid0}.paimon_test.pk_deduplicate_avro_v1;
+function: assert_paimon_reader("select id, amount, score from paimon_matrix_${uuid0}.paimon_test.pk_deduplicate_avro_v1 order by id", "pk_deduplicate_avro_v1", "native")
+function: assert_paimon_native_profile("select id, amount, score from paimon_matrix_${uuid0}.paimon_test.pk_deduplicate_avro_v1 order by id")
+set paimon_reader_mode = 'native';
+[ORDER]select id, amount, score from paimon_matrix_${uuid0}.paimon_test.pk_deduplicate_avro_v1 order by id;
+function: assert_paimon_reader("select id, amount, score from paimon_matrix_${uuid0}.paimon_test.pk_deduplicate_avro_v1 order by id", "pk_deduplicate_avro_v1", "native")
+function: assert_paimon_native_profile("select id, amount, score from paimon_matrix_${uuid0}.paimon_test.pk_deduplicate_avro_v1 order by id")
+set paimon_reader_mode = 'jni';
+[ORDER]select id, amount, score from paimon_matrix_${uuid0}.paimon_test.pk_deduplicate_avro_v1 order by id;
+function: assert_paimon_reader("select id, amount, score from paimon_matrix_${uuid0}.paimon_test.pk_deduplicate_avro_v1 order by id", "pk_deduplicate_avro_v1", "jni")
+set catalog default_catalog;
+drop catalog paimon_matrix_${uuid0};

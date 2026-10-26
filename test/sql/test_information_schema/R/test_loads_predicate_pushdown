@@ -236,13 +236,14 @@ select count(1) from information_schema.loads where id = '${job_id}';
 -- result:
 1
 -- !result
+-- Multi-statement loads expose child task IDs, which must also resolve through the ID predicate.
 [UC]job_id=select id from information_schema.loads where db_name='db_${uuid0}' and table_name='t_mstmt_${uuid0}';
 -- result:
 12084
 -- !result
 select count(1) from information_schema.loads where id = '${job_id}';
 -- result:
-0
+1
 -- !result
 [UC]job_label=select label from information_schema.loads where db_name='db_${uuid0}' and table_name='t_insert_${uuid0}';
 -- result:

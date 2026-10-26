@@ -140,7 +140,23 @@ struct TCreateTabletReq {
     // Whether or not need to create a separate file to hold schema information.
     20: optional bool create_schema_file = true;
     21: optional i32 compression_level = -1;
-    // Whether or not use shared tablet initial metadata.
+    // Where BE writes the version-1 (initial) tablet metadata of a shared-data tablet.
+    //   true:  as the partition-shared initial metadata object, a plain TabletMetadataPB named after
+    //          tablet id 0 (meta/0000000000000000_0000000000000001.meta) in the partition's metadata
+    //          path. FE sends this one request on behalf of every tablet of the physical partition, and
+    //          each of them resolves its version 1 from that object.
+    //   false: under the tablet's own id, as usual. FE sends one request per tablet.
+    // FE sets it to true only if all of these hold, and to false in every other case:
+    //   - the table is cloud-native and its `file_bundling` property is true;
+    //   - the table is not range-distributed, since the shared object carries a single tablet range;
+    //   - FE is creating the tablets of physical partitions (CREATE TABLE, ADD PARTITION, automatic
+    //     partition creation, TRUNCATE TABLE, INSERT OVERWRITE and the like, or the version-1 backfill
+    //     after light_weight_tablet_creation is turned off), and the partition has a single index,
+    //     since the object name carries no index id.
+    // Rollup, schema-change and other alter jobs always send false, so a new index never overwrites
+    // the base index's shared object. With light_weight_tablet_creation on, FE sends no create request
+    // at all. The FE config lake_enable_tablet_creation_optimization is retired and no longer affects
+    // this field; while it existed, an FE with it on also sent true for tables without `file_bundling`.
     22: optional bool enable_tablet_creation_optimization = false;
     // The timeout FE will wait for the tablet to be created.
     23: optional i64 timeout_ms = -1;
@@ -517,6 +533,8 @@ struct TExternalClusterSnapshotRequest {
     9: optional bool is_filebundling
     10: optional bool is_drop_partition
     11: optional list<TComputeNodeTablets> compute_node_tablets
+    // Milliseconds left before FE gives up on the job, as of sending the task. Not set by an older FE.
+    12: optional i64 timeout_ms
 }
 
 // Placeholder for external cluster snapshot feature.

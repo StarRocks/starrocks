@@ -25,6 +25,7 @@ import com.starrocks.http.IllegalArgException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SetType;
 import io.netty.handler.codec.http.HttpMethod;
+import org.owasp.encoder.Encode;
 
 import java.util.HashMap;
 import java.util.List;
@@ -57,10 +58,10 @@ public class VariableAction extends WebBaseAction {
         try {
             confmap = Config.dump();
             for (String key : confmap.keySet()) {
-                buffer.append(key + "=" + confmap.get(key) + "\n");
+                buffer.append(Encode.forHtml(key + "=" + confmap.get(key))).append("\n");
             }
         } catch (Exception e) {
-            buffer.append("read conf exception" + e.toString());
+            buffer.append("read conf exception" + Encode.forHtml(e.toString()));
         }
         buffer.append("</pre>");
     }
@@ -71,7 +72,7 @@ public class VariableAction extends WebBaseAction {
         List<List<String>> variableInfo = GlobalStateMgr.getCurrentState().getVariableMgr()
                 .dump(SetType.GLOBAL, null, null);
         for (List<String> list : variableInfo) {
-            buffer.append(list.get(0) + "=" + list.get(1) + "\n");
+            buffer.append(Encode.forHtml(list.get(0) + "=" + list.get(1))).append("\n");
         }
         buffer.append("</pre>");
     }

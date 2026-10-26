@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.fluss;
 
+import com.starrocks.common.util.concurrent.lock.BlockingCallValidator;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
@@ -78,6 +79,10 @@ public class FlussConnector implements Connector {
             return;
         }
 
+        // Inside the memoization, not at getMetadata's entry: the connection is built once and every
+        // later call returns above. Building it contacts the coordinator, and the first build happens
+        // on whatever caller first resolves a catalog restored from the journal.
+        BlockingCallValidator.validateNotUnderLock("fluss", catalogName);
         Connection newConnection = ConnectionFactory.createConnection(flussClientConf);
         try {
             Admin newAdmin = newConnection.getAdmin();

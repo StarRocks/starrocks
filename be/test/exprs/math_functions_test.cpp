@@ -2155,4 +2155,34 @@ TEST_F(VecMathFunctionsTest, cosineSimilarityDimMismatch) {
     ASSERT_FALSE(result.ok());
 }
 
+TEST_F(VecMathFunctionsTest, intToByteArray) {
+    using Bytes = std::vector<uint8_t>;
+    // Minimal two's-complement big-endian bytes, matching Java BigInteger.toByteArray().
+    ASSERT_EQ(Bytes({0x00}), MathFunctions::int_to_byte_array<int32_t>(0));
+    ASSERT_EQ(Bytes({0x01}), MathFunctions::int_to_byte_array<int32_t>(1));
+    ASSERT_EQ(Bytes({0xFF}), MathFunctions::int_to_byte_array<int32_t>(-1));
+    ASSERT_EQ(Bytes({0x7F}), MathFunctions::int_to_byte_array<int32_t>(127));
+    ASSERT_EQ(Bytes({0x00, 0x80}), MathFunctions::int_to_byte_array<int32_t>(128));
+    ASSERT_EQ(Bytes({0x80}), MathFunctions::int_to_byte_array<int32_t>(-128));
+    ASSERT_EQ(Bytes({0xFF, 0x7F}), MathFunctions::int_to_byte_array<int32_t>(-129));
+    ASSERT_EQ(Bytes({0x7F, 0xFF, 0xFF, 0xFF}),
+              MathFunctions::int_to_byte_array<int32_t>(std::numeric_limits<int32_t>::max()));
+    ASSERT_EQ(Bytes({0x80, 0x00, 0x00, 0x00}),
+              MathFunctions::int_to_byte_array<int32_t>(std::numeric_limits<int32_t>::min()));
+
+    ASSERT_EQ(Bytes({0xF9, 0xE3}), MathFunctions::int_to_byte_array<int64_t>(-1565));
+    ASSERT_EQ(Bytes({0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}),
+              MathFunctions::int_to_byte_array<int64_t>(std::numeric_limits<int64_t>::min()));
+    ASSERT_EQ(Bytes({0x7F, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF}),
+              MathFunctions::int_to_byte_array<int64_t>(std::numeric_limits<int64_t>::max()));
+
+    ASSERT_EQ(Bytes({0x01, 0x00}), MathFunctions::int_to_byte_array<int128_t>(256));
+    Bytes int128_min(16, 0x00);
+    int128_min[0] = 0x80;
+    ASSERT_EQ(int128_min, MathFunctions::int_to_byte_array<int128_t>(std::numeric_limits<int128_t>::min()));
+    Bytes int128_max(16, 0xFF);
+    int128_max[0] = 0x7F;
+    ASSERT_EQ(int128_max, MathFunctions::int_to_byte_array<int128_t>(std::numeric_limits<int128_t>::max()));
+}
+
 } // namespace starrocks

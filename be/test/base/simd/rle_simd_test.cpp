@@ -66,14 +66,19 @@ PARALLEL_TEST(RleSimdTest, simd_fill_int32) {
 
 template <class T>
 static void test_simdutils_fill(T value, T sentinel) {
+    constexpr size_t kMaxCount = 257;
     for (size_t n :
-         {size_t{0}, size_t{1}, size_t{15}, size_t{16}, size_t{31}, size_t{32}, size_t{63}, size_t{64}, size_t{257}}) {
-        std::vector<T> dst(n + 1, sentinel);
+         {size_t{0}, size_t{1}, size_t{15}, size_t{16}, size_t{31}, size_t{32}, size_t{63}, size_t{64}, kMaxCount}) {
+        // Size the buffer independently of n. With dst(n + 1), GCC jump-threads the n == SIZE_MAX path, where n + 1
+        // wraps to 0 and the vector is empty, and reports a bogus -Wstringop-overflow on the memset in fill_n.
+        std::vector<T> dst(kMaxCount + 1, sentinel);
         SIMDUtils::simd_fill<T>(dst.data(), value, n);
         for (size_t i = 0; i < n; ++i) {
             ASSERT_EQ(dst[i], value) << "n=" << n << " i=" << i << " sizeof(T)=" << sizeof(T);
         }
-        ASSERT_EQ(dst.back(), sentinel) << "n=" << n << " sentinel";
+        for (size_t i = n; i < dst.size(); ++i) {
+            ASSERT_EQ(dst[i], sentinel) << "n=" << n << " i=" << i << " sentinel";
+        }
     }
 }
 

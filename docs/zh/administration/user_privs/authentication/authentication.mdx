@@ -4,6 +4,30 @@ displayed_sidebar: docs
 
 # 认证
 
+StarRocks 在它暴露的每个入口上都会对客户端做认证：MySQL 协议、HTTP API（SQL API、Stream Load、FE Web UI）、Arrow Flight SQL，以及 BE 转发给 FE 的 Stream Load RPC。用户有两种定义方式：用 `CREATE USER` 在本地创建（原生认证，也可以指定外部插件），或者通过[安全集成](./security_integration.md)把整个用户目录交给外部系统。
+
+## 各认证方式在哪些入口可用
+
+| 用户的定义方式 | MySQL 协议 | HTTP API | Arrow Flight SQL |
+| --- | --- | --- | --- |
+| `CREATE USER ... IDENTIFIED BY '<password>'`<br />（原生密码） | 密码 | Basic | 用户名和密码 |
+| `CREATE USER ... IDENTIFIED WITH authentication_ldap_simple`<br />（本地用户，LDAP bind） | 密码，<br />用 `mysql_clear_password` 发送 | Basic | 用户名和密码 |
+| `CREATE USER ... IDENTIFIED WITH authentication_jwt`<br />（本地用户，JWT） | JWT，<br />用 `authentication_openid_connect_client` 发送 | 不支持 | 不支持 |
+| `CREATE USER ... IDENTIFIED WITH authentication_oauth2`<br />（本地用户，OAuth 2.0） | 浏览器流 | 不支持 | 不支持 |
+| 安全集成，`authentication_ldap_simple` | 密码，<br />用 `mysql_clear_password` 发送 | Basic | 用户名和密码 |
+| 安全集成，`authentication_jwt` | JWT，<br />用 `authentication_openid_connect_client` 发送 | `Authorization: Bearer <token>` | `Authorization: Bearer <token>` |
+| 安全集成，`authentication_oauth2` | 浏览器流 | `Authorization: Bearer <token>` | `Authorization: Bearer <token>` |
+
+请注意以下几点：
+
+- **使用 Bearer token 必须配安全集成。** token 把用户名放在自己的 claim 里，而不是放在请求里，因此 StarRocks 没有任何东西可以用来查本地用户。指定了 JWT 或 OAuth 2.0 插件的本地用户因此只能走 MySQL 协议，因为那里的握手包带用户名。要在其他入口上用 token，请创建 JWT 或 OAuth 2.0 安全集成。
+- **同一个用户名可能对应两个身份。** token 经安全集成认证通过时，用户是临时（ephemeral）身份：权限来自 [Group Provider](../group_provider.md) 和 `GRANT ... TO EXTERNAL GROUP`，同名的本地用户不会被查询。因此同一个人在 MySQL 协议和 HTTP 上可能拥有不同的权限。
+- **MySQL 协议同一时刻只提供一种 token 插件**，取 `authentication_chain` 中排在最前面的 JWT 或 OAuth 2.0 安全集成。HTTP 和 Arrow Flight 入口没有这个限制，因为 token 是按 issuer 和 audience 路由的。
+- **可以关闭 Bearer 认证**：FE 配置项 `enable_rest_bearer_authentication`（默认 `true`）关闭 HTTP 与 Arrow Flight 入口上的 Bearer 认证，它不影响 MySQL 协议。
+- **Stream Load 在 commit 时会再认证一次。** 如果一次导入的耗时超过 token 的剩余有效期，它会在 commit 阶段失败；长时间导入请用有效期足够长的 token，或者改用 Basic 认证。
+- 直接向 BE 认证（把 Stream Load 发到 BE 的 HTTP 端口）需要 BE 配置项 `enable_http_auth = true`。
+- 所有 HTTP 认证失败都返回 `401`，`WWW-Authenticate` 中同时带 `Basic` 与 `Bearer` 两个 challenge，且不说明是哪种方式拒绝、为何拒绝。排查时请使用 FE 的 `authentication_failure_total` 与 `authentication_failure_reason_total` 指标。
+
 import DocCardList from '@theme/DocCardList';
 
 <DocCardList />

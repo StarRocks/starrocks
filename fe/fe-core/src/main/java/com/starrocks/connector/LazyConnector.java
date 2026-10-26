@@ -17,6 +17,7 @@ package com.starrocks.connector;
 import com.starrocks.authorization.AllowAllAccessController;
 import com.starrocks.authorization.NativeAccessController;
 import com.starrocks.authorization.ranger.hive.RangerHiveAccessController;
+import com.starrocks.authorization.ranger.hive.RangerHiveCatalogProperties;
 import com.starrocks.authorization.ranger.starrocks.RangerStarRocksAccessController;
 import com.starrocks.common.Config;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -45,27 +46,10 @@ public class LazyConnector implements Connector {
         synchronized (this) {
             if (delegate == null) {
                 try {
-                    // init access control
-                    String serviceName = context.getProperties().get("ranger.plugin.hive.service.name");
-                    String accessControl =
-                            context.getProperties().getOrDefault("catalog.access.control", Config.access_control);
-                    if (serviceName == null || serviceName.isEmpty()) {
-                        if (accessControl.equals("ranger")) {
-                            Authorizer.getInstance()
-                                    .setAccessControl(context.getCatalogName(), new RangerStarRocksAccessController());
-                        } else if (accessControl.equals("allowall")) {
-                            Authorizer.getInstance()
-                                    .setAccessControl(context.getCatalogName(), new AllowAllAccessController());
-                        } else {
-                            Authorizer.getInstance()
-                                    .setAccessControl(context.getCatalogName(), new NativeAccessController());
-                        }
-                    } else {
-                        Authorizer.getInstance().setAccessControl(context.getCatalogName(),
-                                new RangerHiveAccessController(serviceName));
-                    }
-                    // create connector
-                    delegate = ConnectorFactory.createRealConnector(context);
+                    // Connector first: if it rejects the properties, ALTER CATALOG fails with the old controller intact.
+                    Connector connector = ConnectorFactory.createRealConnector(context);
+                    installAccessControl();
+                    delegate = connector;
                 } catch (Exception e) {
                     LOG.error("Failed to init connector [type: {}, name: {}]",
                             context.getType(), context.getCatalogName(), e);
@@ -73,6 +57,43 @@ public class LazyConnector implements Connector {
                             context.getType(), context.getCatalogName(), e.getMessage());
                 }
             }
+        }
+    }
+
+    // Registers this catalog's access controller from its current properties, replacing any older one.
+    private void installAccessControl() {
+        String serviceName = context.getProperties().get(RangerHiveCatalogProperties.SERVICE_NAME);
+        String accessControl =
+                context.getProperties().getOrDefault("catalog.access.control", Config.access_control);
+        if (serviceName == null || serviceName.isEmpty()) {
+            if (accessControl.equals("ranger")) {
+                Authorizer.getInstance()
+                        .setAccessControl(context.getCatalogName(), new RangerStarRocksAccessController());
+            } else if (accessControl.equals("allowall")) {
+                Authorizer.getInstance()
+                        .setAccessControl(context.getCatalogName(), new AllowAllAccessController());
+            } else {
+                Authorizer.getInstance()
+                        .setAccessControl(context.getCatalogName(), new NativeAccessController());
+            }
+        } else {
+            Boolean catalogPrefixEnabled =
+                    RangerHiveCatalogProperties.parseCatalogPrefixEnabled(context.getProperties());
+            Authorizer.getInstance().setAccessControl(context.getCatalogName(),
+                    new RangerHiveAccessController(serviceName, catalogPrefixEnabled));
+        }
+    }
+
+    /**
+     * On a follower, an ALTER CATALOG is replayed without initializing the new connector, so the
+     * controller registered by the previous connector would keep authorizing with the old properties
+     * until something touches this catalog's metadata. Statements such as USE or SHOW CREATE DATABASE
+     * authorize before any metadata access, so refresh the controller right away when one is
+     * already registered; a catalog that was never initialized here stays lazy.
+     */
+    public void refreshAccessControlIfRegistered() {
+        if (Authorizer.getInstance().catalogToAccessControl.containsKey(context.getCatalogName())) {
+            installAccessControl();
         }
     }
 

@@ -479,7 +479,10 @@ StatusOr<bool> GroupReader::_filter_and_backfill_lazy(const Range<uint64_t>& r, 
     Filter post_filter;
 
     if (state.has_filter) {
-        state.active_chunk->filter(state.chunk_filter);
+        {
+            SCOPED_RAW_TIMER(&_param.stats->group_chunk_filter_ns);
+            state.active_chunk->filter(state.chunk_filter);
+        }
         if (state.active_chunk->num_rows() == 0) {
             return false;
         }
@@ -611,9 +614,18 @@ Status GroupReader::_create_column_readers() {
         _column_readers.emplace(slot_desc->id(), std::make_unique<FixedValueColumnReader>(value->get(0)));
     }
 
-    // create for not existed column
+    // create for not existed column: it reads its Iceberg initial-default, if any, so predicates on it (e.g. the
+    // zone-map row group filter) must see that value rather than NULL.
+    const auto& default_values = _param.scan_ctx->materialize_slot_default_values;
     for (const auto* slot : _param.scan_ctx->not_existed_slots) {
-        _column_readers.emplace(slot->id(), std::make_unique<FixedValueColumnReader>(kNullDatum));
+        Datum value = kNullDatum;
+        if (auto it = default_values.find(slot->id()); it != default_values.end()) {
+            ASSIGN_OR_RETURN(auto column,
+                             FormatScanContext::create_initial_default_column(slot->type(), true, it->second));
+            value = column->get(0);
+            _not_existed_default_columns.emplace_back(std::move(column));
+        }
+        _column_readers.emplace(slot->id(), std::make_unique<FixedValueColumnReader>(value));
     }
 
     const auto& reserved_slots = _param.scan_ctx->reserved_field_slots;
@@ -690,17 +702,17 @@ StatusOr<ColumnReaderPtr> GroupReader::_create_column_reader(const GroupReaderPa
     const auto* schema_node = _param.file_metadata->schema().get_stored_column_by_field_idx(column.idx_in_parquet);
     {
         if (column.slot_type().type == LogicalType::TYPE_VARIANT && schema_node != nullptr &&
-            schema_node->type == ColumnType::STRUCT) {
+            schema_node->type == ColumnType::VARIANT) {
             // Physical VARIANT columns use _get_variant_shredded_hints; this path
             // is for non-virtual VARIANT columns that appear directly in the SELECT list.
-            VariantShreddedReadHints hints =
-                    build_variant_shredded_hints(&_param.scan_ctx->column_access_paths, column.slot_desc->col_name());
+            // The full variant column is output, so extended access paths of its virtual subfields must not
+            // narrow it.
+            VariantShreddedReadHints hints = build_variant_shredded_hints(&_param.scan_ctx->column_access_paths,
+                                                                          column.slot_desc->col_name(), false);
             ASSIGN_OR_RETURN(column_reader, ColumnReaderFactory::create_variant_column_reader(_column_reader_opts,
                                                                                               schema_node, hints));
-        } else if (column.t_lake_schema_field == nullptr) {
-            ASSIGN_OR_RETURN(column_reader,
-                             ColumnReaderFactory::create(_column_reader_opts, schema_node, column.slot_type()));
         } else {
+            // t_lake_schema_field is nullptr outside the Iceberg (field id) path.
             ASSIGN_OR_RETURN(column_reader,
                              ColumnReaderFactory::create(_column_reader_opts, schema_node, column.slot_type(),
                                                          column.t_lake_schema_field));

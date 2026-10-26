@@ -19,13 +19,20 @@
 #include <limits>
 #include <random>
 
+#include "base/bit/rle_encoding.h"
+#include "base/coding.h"
 #include "base/simd/byte_stream_split.h"
+#include "base/string/faststring.h"
+#include "base/testutil/assert.h"
 #include "column/binary_column.h"
 #include "column/column_helper.h"
+#include "column/decimalv3_column.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "common/config_exec_fwd.h"
+#include "formats/parquet/level_codec.h"
 #include "formats/parquet/types.h"
+#include "formats/parquet/utils.h"
 
 namespace starrocks::parquet {
 class ParquetEncodingTest : public testing::Test {
@@ -1150,6 +1157,339 @@ TEST_F(ParquetEncodingTest, DeltaBinaryPackedCorruptHeader) {
         ASSERT_TRUE(encoding->create_decoder(&decoder).ok());
         Status st = decoder->set_data(Slice(reinterpret_cast<const char*>(header.data()), header.size()));
         ASSERT_TRUE(st.is_corruption()) << st;
+    }
+}
+
+namespace {
+
+enum class NullPattern { ALL_NULL, NO_NULL, ALTERNATE, RANDOM_5_PCT, RANDOM_50_PCT, LEADING_AND_TRAILING };
+
+std::vector<uint8_t> make_nulls(NullPattern pattern, size_t count, std::mt19937& rng) {
+    std::vector<uint8_t> nulls(count, 0);
+    std::uniform_int_distribution<int> pct(0, 99);
+    for (size_t i = 0; i < count; i++) {
+        switch (pattern) {
+        case NullPattern::ALL_NULL:
+            nulls[i] = 1;
+            break;
+        case NullPattern::NO_NULL:
+            break;
+        case NullPattern::ALTERNATE:
+            nulls[i] = i % 2;
+            break;
+        case NullPattern::RANDOM_5_PCT:
+            nulls[i] = pct(rng) < 5;
+            break;
+        case NullPattern::RANDOM_50_PCT:
+            nulls[i] = pct(rng) < 50;
+            break;
+        case NullPattern::LEADING_AND_TRAILING:
+            // nulls at both ends, so the last value sits exactly at the end of the page buffer
+            nulls[i] = i < 3 || i + 5 >= count || i % 7 == 0;
+            break;
+        }
+    }
+    return nulls;
+}
+
+void fill_null_infos(const std::vector<uint8_t>& nulls, size_t begin, size_t count, NullInfos* infos) {
+    infos->reset_with_capacity(count);
+    memcpy(infos->nulls_data(), nulls.data() + begin, count);
+    for (size_t i = 0; i < count; i++) {
+        infos->num_nulls += nulls[begin + i];
+        infos->num_ranges += (i == 0 || nulls[begin + i] != nulls[begin + i - 1]);
+    }
+}
+
+// Decodes a nullable PLAIN page batch by batch and checks every row against the source values.
+template <typename T>
+void check_plain_with_nulls(tparquet::Type::type type, NullPattern pattern, size_t num_rows, size_t batch_size,
+                            const MutableColumnPtr& data_column, bool with_filter, size_t misalign) {
+    std::mt19937 rng(static_cast<uint32_t>(num_rows * 131 + batch_size));
+    std::vector<uint8_t> nulls = make_nulls(pattern, num_rows, rng);
+    std::vector<T> values;
+    for (size_t i = 0; i < num_rows; i++) {
+        if (!nulls[i]) {
+            T v;
+            memset(&v, 0, sizeof(T));
+            int64_t seed = static_cast<int64_t>(i) * 2654435761LL + 17;
+            memcpy(&v, &seed, std::min(sizeof(T), sizeof(seed)));
+            values.push_back(v);
+        }
+    }
+    // The page buffer ends exactly after the non-null values, with no padding, so ASAN catches an over-read.
+    // `misalign` bytes in front move the values off T's alignment, as definition levels of any length do.
+    std::vector<uint8_t> page(misalign + values.size() * sizeof(T));
+    if (!values.empty()) {
+        memcpy(page.data() + misalign, values.data(), values.size() * sizeof(T));
+    }
+
+    const EncodingInfo* encoding = nullptr;
+    ASSERT_OK(EncodingInfo::get(type, tparquet::Encoding::PLAIN, &encoding));
+    std::unique_ptr<Decoder> decoder;
+    ASSERT_OK(encoding->create_decoder(&decoder));
+    ASSERT_OK(decoder->set_data(Slice(page.data() + misalign, page.size() - misalign)));
+
+    auto dst = NullableColumn::create(data_column->clone_empty(), NullColumn::create());
+    std::vector<uint8_t> filter(batch_size, 1);
+    for (size_t i = 0; i < filter.size(); i++) {
+        filter[i] = i % 3 == 0;
+    }
+    NullInfos infos;
+    for (size_t begin = 0; begin < num_rows; begin += batch_size) {
+        size_t count = std::min(batch_size, num_rows - begin);
+        fill_null_infos(nulls, begin, count, &infos);
+        ASSERT_OK(decoder->next_batch_with_nulls(count, infos, ColumnContentType::VALUE, dst.get(),
+                                                 with_filter ? filter.data() : nullptr));
+    }
+    // the whole page is consumed
+    ASSERT_FALSE(decoder->skip(1).ok());
+
+    ASSERT_EQ(num_rows, dst->size());
+    ASSERT_EQ(num_rows, dst->null_column()->size());
+    const auto* data = reinterpret_cast<const T*>(
+            down_cast<const FixedLengthColumnBase<T>*>(dst->data_column_raw_ptr())->raw_data());
+    size_t k = 0;
+    for (size_t i = 0; i < num_rows; i++) {
+        ASSERT_EQ(nulls[i], dst->is_null(i)) << "row " << i;
+        if (!nulls[i]) {
+            ASSERT_EQ(0, memcmp(&values[k], &data[i], sizeof(T))) << "row " << i;
+            k++;
+        }
+    }
+    ASSERT_EQ(values.size(), k);
+    size_t num_nulls = std::count(nulls.begin(), nulls.end(), 1);
+    ASSERT_EQ(num_nulls > 0, dst->has_null());
+}
+
+} // namespace
+
+TEST_F(ParquetEncodingTest, PlainFixedLengthWithNulls) {
+    const std::vector<NullPattern> patterns = {NullPattern::ALL_NULL,      NullPattern::NO_NULL,
+                                               NullPattern::ALTERNATE,     NullPattern::RANDOM_5_PCT,
+                                               NullPattern::RANDOM_50_PCT, NullPattern::LEADING_AND_TRAILING};
+    for (auto pattern : patterns) {
+        for (size_t batch_size : {1, 7, 64, 4096}) {
+            for (bool with_filter : {false, true}) {
+                for (size_t misalign : {0, 1}) {
+                    SCOPED_TRACE(fmt::format("pattern={} batch_size={} filter={} misalign={}",
+                                             static_cast<int>(pattern), batch_size, with_filter, misalign));
+                    check_plain_with_nulls<int32_t>(tparquet::Type::INT32, pattern, 4099, batch_size,
+                                                    Int32Column::create(), with_filter, misalign);
+                    check_plain_with_nulls<int64_t>(tparquet::Type::INT64, pattern, 4099, batch_size,
+                                                    Int64Column::create(), with_filter, misalign);
+                    check_plain_with_nulls<float>(tparquet::Type::FLOAT, pattern, 4099, batch_size,
+                                                  FloatColumn::create(), with_filter, misalign);
+                    check_plain_with_nulls<double>(tparquet::Type::DOUBLE, pattern, 4099, batch_size,
+                                                   DoubleColumn::create(), with_filter, misalign);
+                    check_plain_with_nulls<int96_t>(tparquet::Type::INT96, pattern, 4099, batch_size,
+                                                    FixedLengthColumn<int96_t>::create(), with_filter, misalign);
+                    // DECIMAL(7,2) stored as INT32 and read straight into a decimal column
+                    check_plain_with_nulls<int32_t>(tparquet::Type::INT32, pattern, 4099, batch_size,
+                                                    Decimal32Column::create(7, 2), with_filter, misalign);
+                }
+            }
+        }
+    }
+}
+
+TEST_F(ParquetEncodingTest, AssignNullsFromDefLevels) {
+    std::mt19937 rng(3);
+    std::uniform_int_distribution<int> pct(0, 99);
+    for (int16_t max_def_level : {1, 2}) {
+        for (int null_pct : {0, 5, 50, 100}) {
+            // sizes around the 240-row accumulation block
+            for (size_t n : {0, 1, 2, 17, 239, 240, 241, 255, 256, 481, 4096}) {
+                SCOPED_TRACE(fmt::format("max_def_level={} null_pct={} n={}", max_def_level, null_pct, n));
+                std::vector<int16_t> levels(n);
+                for (auto& l : levels) {
+                    // levels below max_def_level (0 .. max-1) are nulls of this column or of an ancestor
+                    l = pct(rng) < null_pct ? static_cast<int16_t>(rng() % max_def_level) : max_def_level;
+                }
+                NullInfos infos;
+                infos.reset_with_capacity(n);
+                assign_nulls_from_def_levels(levels.data(), max_def_level, n, &infos);
+                size_t num_nulls = 0;
+                size_t num_ranges = 1;
+                for (size_t i = 0; i < n; i++) {
+                    bool is_null = levels[i] < max_def_level;
+                    ASSERT_EQ(is_null, infos.nulls_data()[i]) << "row " << i;
+                    num_nulls += is_null;
+                    num_ranges += i > 0 && is_null != (levels[i - 1] < max_def_level);
+                }
+                ASSERT_EQ(num_nulls, infos.num_nulls);
+                ASSERT_EQ(num_ranges, infos.num_ranges);
+            }
+        }
+    }
+}
+
+// PLAIN BYTE_ARRAY with a pushed-down filter: selected rows keep their value and excluded rows are empty,
+// for short and long values (the batched append switches strategy at 128 bytes) and several batches.
+TEST_F(ParquetEncodingTest, PlainStringWithFilter) {
+    std::mt19937 rng(41);
+    for (size_t avg_len : {5, 40, 300}) {
+        SCOPED_TRACE(fmt::format("avg_len={}", avg_len));
+        const size_t num_rows = 1000;
+        std::vector<std::string> values;
+        std::string page;
+        for (size_t i = 0; i < num_rows; i++) {
+            std::string v(rng() % (2 * avg_len), static_cast<char>('a' + i % 26));
+            char len[4];
+            encode_fixed32_le(reinterpret_cast<uint8_t*>(len), static_cast<uint32_t>(v.size()));
+            page.append(len, 4);
+            page.append(v);
+            values.push_back(std::move(v));
+        }
+        std::vector<uint8_t> filter(num_rows);
+        for (auto& f : filter) f = rng() % 5 == 0;
+
+        const EncodingInfo* encoding = nullptr;
+        ASSERT_OK(EncodingInfo::get(tparquet::Type::BYTE_ARRAY, tparquet::Encoding::PLAIN, &encoding));
+        std::unique_ptr<Decoder> decoder;
+        ASSERT_OK(encoding->create_decoder(&decoder));
+        ASSERT_OK(decoder->set_data(Slice(page.data(), page.size())));
+        auto dst = BinaryColumn::create();
+        for (size_t begin = 0; begin < num_rows; begin += 333) {
+            size_t count = std::min<size_t>(333, num_rows - begin);
+            ASSERT_OK(decoder->next_batch(count, ColumnContentType::VALUE, dst.get(), filter.data() + begin));
+        }
+        ASSERT_EQ(num_rows, dst->size());
+        for (size_t i = 0; i < num_rows; i++) {
+            ASSERT_EQ(filter[i] ? values[i] : std::string(), dst->get_slice(i).to_string()) << "row " << i;
+        }
+    }
+}
+
+// Nullable BOOLEAN PLAIN (bit packed): the batched null path matches the source for every null pattern and for
+// batch sizes that leave the bit reader mid-byte.
+TEST_F(ParquetEncodingTest, PlainBooleanWithNulls) {
+    std::mt19937 rng(43);
+    const std::vector<NullPattern> patterns = {NullPattern::ALL_NULL,      NullPattern::NO_NULL,
+                                               NullPattern::ALTERNATE,     NullPattern::RANDOM_5_PCT,
+                                               NullPattern::RANDOM_50_PCT, NullPattern::LEADING_AND_TRAILING};
+    for (auto pattern : patterns) {
+        for (size_t batch_size : {1, 7, 64, 4096}) {
+            SCOPED_TRACE(fmt::format("pattern={} batch_size={}", static_cast<int>(pattern), batch_size));
+            const size_t num_rows = 4099;
+            std::vector<uint8_t> nulls = make_nulls(pattern, num_rows, rng);
+            std::vector<uint8_t> values;
+            for (size_t i = 0; i < num_rows; i++) {
+                if (!nulls[i]) values.push_back(rng() % 3 == 0);
+            }
+            const EncodingInfo* encoding = nullptr;
+            ASSERT_OK(EncodingInfo::get(tparquet::Type::BOOLEAN, tparquet::Encoding::PLAIN, &encoding));
+            std::unique_ptr<Encoder> encoder;
+            ASSERT_OK(encoding->create_encoder(&encoder));
+            ASSERT_OK(encoder->append(values.data(), values.size()));
+            Slice page = encoder->build();
+            std::unique_ptr<Decoder> decoder;
+            ASSERT_OK(encoding->create_decoder(&decoder));
+            ASSERT_OK(decoder->set_data(page));
+
+            auto dst = NullableColumn::create(BooleanColumn::create(), NullColumn::create());
+            NullInfos infos;
+            for (size_t begin = 0; begin < num_rows; begin += batch_size) {
+                size_t count = std::min(batch_size, num_rows - begin);
+                fill_null_infos(nulls, begin, count, &infos);
+                ASSERT_OK(decoder->next_batch_with_nulls(count, infos, ColumnContentType::VALUE, dst.get(), nullptr));
+            }
+            ASSERT_EQ(num_rows, dst->size());
+            const auto& data = down_cast<const BooleanColumn*>(dst->data_column_raw_ptr())->get_data();
+            size_t k = 0;
+            for (size_t i = 0; i < num_rows; i++) {
+                ASSERT_EQ(nulls[i], dst->is_null(i)) << "row " << i;
+                if (!nulls[i]) {
+                    ASSERT_EQ(values[k], data[i]) << "row " << i;
+                    k++;
+                }
+            }
+            ASSERT_EQ(values.size(), k);
+        }
+    }
+}
+
+namespace {
+
+// 1-bit RLE definition levels (V2 layout: no length prefix) for `levels`.
+std::string encode_def_levels(const std::vector<int16_t>& levels) {
+    faststring buf;
+    RleEncoder<int16_t> encoder(&buf, 1);
+    for (auto l : levels) encoder.Put(l);
+    encoder.Flush();
+    return std::string(reinterpret_cast<const char*>(buf.data()), buf.size());
+}
+
+} // namespace
+
+// decode_nulls() and skip_count_non_null() match the levels for random and clustered nulls, including when it is mixed with the
+// level_t API on the same page: levels that get_avail_levels() decoded ahead are used first, and the
+// level_t API continues from where decode_nulls() stopped.
+TEST_F(ParquetEncodingTest, LevelDecoderDecodeNulls) {
+    std::mt19937 rng(47);
+    for (int pattern = 0; pattern < 3; pattern++) {
+        SCOPED_TRACE(fmt::format("pattern={}", pattern));
+        const size_t num_levels = 20000;
+        std::vector<int16_t> levels(num_levels);
+        for (size_t i = 0; i < num_levels; i++) {
+            if (pattern == 0) {
+                levels[i] = rng() % 20 != 0; // 5% nulls, mostly literal runs
+            } else if (pattern == 1) {
+                levels[i] = (i / 97) % 3 != 0; // long repeated runs
+            } else {
+                levels[i] = rng() % 2; // 50% nulls
+            }
+        }
+        std::string encoded = encode_def_levels(levels);
+        int64_t timer = 0;
+        LevelDecoder decoder(&timer);
+        Slice slice(encoded.data(), encoded.size());
+        ASSERT_OK(decoder.parse_v2(encoded.size(), 1, num_levels, &slice));
+        ASSERT_TRUE(decoder.can_decode_nulls());
+
+        size_t pos = 0;
+        auto check_nulls = [&](size_t n) {
+            NullInfos infos;
+            ASSERT_TRUE(decoder.decode_nulls(n, &infos));
+            size_t nulls = 0, ranges = 1;
+            for (size_t i = 0; i < n; i++) {
+                ASSERT_EQ(levels[pos + i] == 0, infos.nulls_data()[i]) << "level " << pos + i;
+                nulls += levels[pos + i] == 0;
+                ranges += i > 0 && levels[pos + i] != levels[pos + i - 1];
+            }
+            ASSERT_EQ(nulls, infos.num_nulls);
+            ASSERT_EQ(ranges, infos.num_ranges);
+            pos += n;
+        };
+        auto check_levels = [&](size_t n) {
+            level_t* got = nullptr;
+            // decodes at least 4096 levels ahead into the buffer
+            ASSERT_GE(decoder.get_avail_levels(n, &got), n);
+            for (size_t i = 0; i < n; i++) {
+                ASSERT_EQ(levels[pos + i], got[i]) << "level " << pos + i;
+            }
+            decoder.consume_levels(n);
+            pos += n;
+        };
+        auto check_skip = [&](size_t n) {
+            size_t non_null = 0;
+            ASSERT_TRUE(decoder.skip_count_non_null(n, &non_null));
+            size_t expected = 0;
+            for (size_t i = 0; i < n; i++) expected += levels[pos + i] != 0;
+            ASSERT_EQ(expected, non_null);
+            pos += n;
+        };
+        check_levels(37);  // leaves ~4059 levels buffered
+        check_nulls(1000); // served from the buffer
+        check_nulls(5000); // drains the buffer, then reads the stream
+        check_levels(500); // level_t API continues from the stream position
+        check_skip(100);   // from the buffer
+        check_skip(9000);  // drains the buffer, then several stream chunks
+        decoder.reset();
+        check_nulls(4096);
+        check_nulls(num_levels - pos);
+        NullInfos infos;
+        ASSERT_FALSE(decoder.decode_nulls(1, &infos));
     }
 }
 

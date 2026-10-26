@@ -16,6 +16,8 @@
 
 #include <gtest/gtest.h>
 
+#include <new>
+
 #include "common/memory/column_allocator.h"
 
 namespace starrocks {
@@ -74,4 +76,40 @@ TEST(TestRawContainer, rawStringPageIsPageAligned) {
         EXPECT_EQ(0u, reinterpret_cast<uintptr_t>(s.data()) % kPageSize) << "unaligned for payload " << payload;
     }
 }
+
+// Both tests force a real aligned_alloc failure. The mem_alloc_error fail point cannot serve --
+// mem_hook's tracker-refusal branch is compiled out under BE_TEST -- and the ASAN/LSAN/TSAN
+// allocators abort with allocation-size-too-big instead of returning null, since run-be-ut.sh never
+// sets allocator_may_return_null. CI runs BE UT in the Release configuration, where both tests
+// execute.
+[[maybe_unused]] static constexpr size_t kUnsatisfiableSize = size_t{1} << 60; // 1 EiB, past the address space
+
+TEST(TestRawContainer, alignmentAllocatorThrowsWhenAllocationFails) {
+#if defined(ADDRESS_SANITIZER) || defined(LEAK_SANITIZER) || defined(THREAD_SANITIZER)
+    GTEST_SKIP() << "Sanitizer allocators abort on a refused aligned_alloc instead of returning null";
+#else
+    raw::AlignmentAllocator<char, 4096> allocator;
+    // Storing through a volatile keeps the compiler from eliding the allocation call outright,
+    // which would leave nothing for EXPECT_THROW to observe.
+    char* volatile allocated = nullptr;
+    EXPECT_THROW(allocated = allocator.allocate(kUnsatisfiableSize), std::bad_alloc);
+    EXPECT_EQ(nullptr, allocated);
+#endif
+}
+
+TEST(TestRawContainer, rawStringPageResizeThrowsInsteadOfAdoptingNullBuffer) {
+#if defined(ADDRESS_SANITIZER) || defined(LEAK_SANITIZER) || defined(THREAD_SANITIZER)
+    GTEST_SKIP() << "Sanitizer allocators abort on a refused aligned_alloc instead of returning null";
+#else
+    raw::RawStringPage s;
+    EXPECT_THROW(s.resize(kUnsatisfiableSize), std::bad_alloc);
+    EXPECT_TRUE(s.empty());
+
+    // A buffer that failed to grow must stay usable for the next chunk.
+    s.resize(8192);
+    EXPECT_EQ(8192u, s.size());
+    EXPECT_NE(nullptr, s.data());
+#endif
+}
+
 } // namespace starrocks

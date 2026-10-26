@@ -28,6 +28,11 @@ Stream Load and Broker Load both support data transformation at data loading and
 
 ## Before you begin
 
+:::tip
+Stream Load accepts a Bearer token as well as a username and password, if a JWT or OAuth 2.0 [security integration](../administration/user_privs/authentication/security_integration.md) is configured: send `-H "Authorization: Bearer <token>"` instead of `-u <username>:<password>`. The token must still be valid when the load commits, so use one with enough lifetime for a long load. See [Where each authentication method works](../administration/user_privs/authentication/authentication.mdx#where-each-authentication-method-works).
+:::
+
+
 ### Check privileges
 
 <InsertPrivNote />

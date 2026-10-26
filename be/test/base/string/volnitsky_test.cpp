@@ -16,6 +16,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <string>
 
 namespace starrocks {
@@ -26,7 +27,7 @@ TEST_F(VolnitskyTest, MainAlgorithmPathFindsNeedle) {
     const std::string needle = "pattern";
     std::string haystack(25000, 'x');
     const size_t expected_offset = 12345;
-    haystack.replace(expected_offset, needle.size(), needle);
+    std::copy(needle.begin(), needle.end(), haystack.begin() + expected_offset);
 
     VolnitskyUTF8 searcher(needle.data(), needle.size(), haystack.size());
     const char* result = searcher.search(haystack.data(), haystack.size());

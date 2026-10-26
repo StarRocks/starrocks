@@ -2010,12 +2010,12 @@ privilegeType
 
 privObjectType
     : CATALOG | DATABASE | MATERIALIZED VIEW | RESOURCE | RESOURCE GROUP | STORAGE VOLUME | SYSTEM | TABLE | VIEW | WAREHOUSE
-    | PIPE
+    | PIPE | AI FUNCTION | AI PROVIDER
     ;
 
 privObjectTypePlural
     : CATALOGS | DATABASES | FUNCTIONS | GLOBAL FUNCTIONS | MATERIALIZED VIEWS | POLICIES | RESOURCES | RESOURCE GROUPS
-    | STORAGE VOLUMES | TABLES | USERS | VIEWS | WAREHOUSES | PIPES
+    | STORAGE VOLUMES | TABLES | USERS | VIEWS | WAREHOUSES | PIPES | AI FUNCTIONS | AI PROVIDERS
     ;
 
 // ------------------------------------------- Security Integration Statement ----------------------------------------------------

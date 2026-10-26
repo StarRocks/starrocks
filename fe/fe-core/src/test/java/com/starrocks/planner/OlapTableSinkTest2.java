@@ -40,6 +40,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 public class OlapTableSinkTest2 {
@@ -166,6 +167,44 @@ public class OlapTableSinkTest2 {
             Assertions.assertTrue(exception.getMessage().contains("different distribute columns"));
         } finally {
             p2.setDistributionInfo(originalDistInfo);
+        }
+    }
+    @Test
+    public void testDoubleWriteRoutesComeFromThePublishedTable() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db2");
+        OlapTable published = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "tbl_range");
+        long p1 = published.getPartition("p1").getId();
+        starRocksAssert.alterTable("ALTER TABLE db2.tbl_range ADD TEMPORARY PARTITION tp1 VALUES LESS THAN ('10')");
+        try {
+            long tp1 = published.getPartition("tp1", true).getId();
+
+            // Enabled before the DML copied the table (its txn id is at or above the watershed): the copy, which
+            // a lock-free UPDATE/DELETE/INSERT builds its sink from, must still double-write.
+            published.addDoubleWritePartition(p1, tp1);
+            OlapTable copy = new OlapTable();
+            published.copyOnlyForQuery(copy);
+            Assertions.assertEquals(Map.of(p1, tp1), OlapTableSink.doubleWriteRoutes(db.getId(), copy));
+
+            // Cancelled after the copy: the temp partition is gone, so the route must be too.
+            published.clearDoubleWritePartition();
+            Assertions.assertEquals(Map.of(), OlapTableSink.doubleWriteRoutes(db.getId(), copy));
+
+            // The published table itself reads its own routes, as before.
+            published.addDoubleWritePartition(p1, tp1);
+            Assertions.assertEquals(Map.of(p1, tp1), OlapTableSink.doubleWriteRoutes(db.getId(), published));
+
+            // A route whose temp partition the copy does not have was enabled after the copy, i.e. after this
+            // load's txn id: below the watershed, drained by the job, and unknown to the copy's partitions.
+            published.clearDoubleWritePartition();
+            OlapTable copyBeforeTemp = new OlapTable();
+            published.copyOnlyForQuery(copyBeforeTemp);
+            copyBeforeTemp.dropTempPartition("tp1", false);
+            published.addDoubleWritePartition(p1, tp1);
+            Assertions.assertEquals(Map.of(), OlapTableSink.doubleWriteRoutes(db.getId(), copyBeforeTemp));
+        } finally {
+            published.clearDoubleWritePartition();
+            starRocksAssert.alterTable("ALTER TABLE db2.tbl_range DROP TEMPORARY PARTITION tp1");
         }
     }
 }

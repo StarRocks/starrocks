@@ -70,6 +70,14 @@ final class BrokerLoadRowGroupStatisticsProvider implements RowGroupStatisticsPr
         BrokerLoadScanContext context = requireBrokerLoadContext(request);
         BrokerDesc brokerDesc = requireBrokerDesc(context);
         rejectIfBrokerBacked(brokerDesc);
+        // No footer describes a generated column, and a file column that merely shares its name is not the
+        // value the load computes; the data tier evaluates the column's definition instead.
+        for (Column column : BrokerLoadSampleSubqueryExecutor.sampledKeyColumns(request)) {
+            if (column.isGeneratedColumn()) {
+                throw new MetaTierUnavailableException("sort-key column \"" + column.getName()
+                        + "\" is a generated column, which no file footer describes; falling back to data tier");
+            }
+        }
         List<BrokerFileGroup> fileGroups = context.fileGroups();
         List<List<TBrokerFileStatus>> fileStatusesPerGroup = context.fileStatusesPerGroup();
         List<Column> sortKeyColumns = request.getSortKey();

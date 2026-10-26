@@ -1006,6 +1006,24 @@ PROPERTIES (
 - `flat_json.sparsity.factor` (Optional): The proportion threshold of columns with the same name. A column will not be extracted by Flat JSON if the proportion of columns with the same name is lower than this value. This parameter takes effect only when `flat_json.enable` is set to `true`. Default value: `0.3`.
 - `flat_json.column.max` (Optional): The maximum number of sub-fields that can be extracted by Flat JSON. This parameter takes effect only when `flat_json.enable` is set to `true`. Default value: `100`.
 
+### Skip a table in automatic statistics collection
+
+You can set `enable_statistic_auto_collect` to `false` to stop automatic statistics collection from collecting statistics on a table. Default: `true`.
+
+```SQL
+PROPERTIES (
+    "enable_statistic_auto_collect" = "false"
+)
+```
+
+When this property is `false`:
+
+- The automatic collection task provided by StarRocks, and the automatic collection tasks created by `CREATE ANALYZE ALL` or `CREATE ANALYZE DATABASE`, skip this table.
+- Collection tasks that name this table, created by `CREATE ANALYZE TABLE` or run with `ANALYZE TABLE`, still collect its statistics.
+- Statistics collection triggered by data loading is not affected. It is controlled separately by `enable_statistic_collect_on_first_load`.
+
+You can change this property with [ALTER TABLE](ALTER_TABLE.md). This property is not supported for materialized views.
+
 ## Examples
 
 ### Aggregate table with Hash bucketing and columnar storage

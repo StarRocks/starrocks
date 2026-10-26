@@ -46,11 +46,13 @@ import com.starrocks.scheduler.TaskRunContext;
 import com.starrocks.scheduler.mv.BaseTableSnapshotInfo;
 import com.starrocks.scheduler.mv.MVRefreshExecutor;
 import com.starrocks.scheduler.mv.MVRefreshProcessor;
+import com.starrocks.scheduler.mv.MVVersionManager;
 import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.PlannerMetaLocker;
+import com.starrocks.sql.analyzer.QueryAnalyzer;
 import com.starrocks.sql.analyzer.mv.IvmRefreshDefinition;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.StatementBase;
@@ -79,8 +81,9 @@ public final class MVPCTRefreshProcessor extends MVRefreshProcessor {
     // Hybrid fallback to freeze TVR so the pinned state is visible to the plan builder and differ.
     private Runnable afterSyncHook;
 
-    // True when this is a subsequent pinned batch whose pinning owner has been overwritten by
-    // a newer job — we must SKIP to avoid touching the newer job's state.
+    // True when this is a subsequent pinned batch whose job no longer owns the pinning state: a newer
+    // job overwrote the owner, or took over and released it when done. Run unpinned, the batch would
+    // write past the baseline that job left behind.
     //
     // Gate on PINNED_REFRESH_JOB_ID to confirm the current run is actually a pinned batch.
     // Without this, an unrelated partial refresh running while a prior pinning job's owner
@@ -95,7 +98,7 @@ public final class MVPCTRefreshProcessor extends MVRefreshProcessor {
         }
         String owner = mv.getRefreshScheme().getAsyncRefreshContext().getTempTvrOwnerStartTaskRunId();
         String startTaskRunId = getStartTaskRunId();
-        if (owner != null && !owner.equals(startTaskRunId)) {
+        if (owner == null || !owner.equals(startTaskRunId)) {
             logger.warn("Skip stale pinned batch: pinning owner={}, startTaskRunId={}", owner, startTaskRunId);
             return true;
         }
@@ -231,7 +234,23 @@ public final class MVPCTRefreshProcessor extends MVRefreshProcessor {
         }
 
         PlannerMetaLocker locker = new PlannerMetaLocker(ctx, insertStmt);
+        // The locker covers only internal tables, so resolving an external base table under it buys a connector
+        // round trip (e.g. a JDBC getDb) with the lock held and no protection. Pre-resolve those relations here,
+        // as StatementPlanner does; the locked analyzer reuses a pre-resolved external relation. The IVM branch
+        // below regenerates the AST under the lock and so resolves its external tables there, as before.
+        // The task run reuses this context across retries and batches, while only StatementPlanner#plan clears
+        // what a pre-pass captured. Drop anything a previous attempt left (a lock timeout throws before the
+        // locked analyzer consumed it), or its view bodies -- with external tables resolved back then -- would
+        // be expanded here in place of the current ones.
+        ctx.getPreResolvedState().clear();
+        if (Config.enable_experimental_external_table_preparse) {
+            try (Timer ignored = Tracers.watchScope("MVRefreshPreResolveExternalTables")) {
+                new QueryAnalyzer(ctx).analyzeExternalTablesOnly(insertStmt);
+            }
+        }
         ExecPlan execPlan = null;
+        // Planning may let go of the lock and take it back (the optimistic INSERT path); hold that to the same bound.
+        locker.setAcquireTimeoutMs(Config.mv_refresh_try_lock_timeout_ms);
         if (!locker.tryLock(Config.mv_refresh_try_lock_timeout_ms, TimeUnit.MILLISECONDS)) {
             throw new LockTimeoutException(String.format("Materialized view %s.%s refresh failed: " +
                     "failed to acquire planner meta lock within %d ms when preparing refresh plan",
@@ -262,9 +281,15 @@ public final class MVPCTRefreshProcessor extends MVRefreshProcessor {
             try (ConnectContext.ScopeGuard guard = ctx.bindScope(); Timer ignored = Tracers.watchScope("MVRefreshPlanner")) {
                 ctx.getSessionVariable().setEnableInsertSelectExternalAutoRefresh(false); //already refreshed before
                 execPlan = StatementPlanner.planInsertStmt(locker, insertStmt, ctx);
+            } catch (PlannerMetaLocker.AcquireTimeoutException e) {
+                // Same as the first acquisition timing out: the task run retries it as a lock failure.
+                throw new LockTimeoutException(String.format("Materialized view %s.%s refresh failed: %s " +
+                        "when planning the refresh", db.getFullName(), mv.getName(), e.getMessage()));
             }
         } finally {
             locker.unlock();
+            // The IVM branch regenerates the AST, so the bodies captured above may never have been taken.
+            ctx.getPreResolvedState().clear();
         }
 
         final InsertStmt finalInsertStmt = insertStmt;
@@ -352,6 +377,17 @@ public final class MVPCTRefreshProcessor extends MVRefreshProcessor {
                     mvRefreshParams.isCompleteRefresh() && processStartTime > 0
                             && !mvContext.isPartitionLimitExcludedPartitions()
                             ? String.valueOf(processStartTime) : "0");
+        }
+        TaskRun.seedVersionMapResetEpoch(newProperties, mvContext.getVersionMapResetEpoch());
+        // Seeded by the first run only, later runs carry it via the property copy above.
+        if (!newProperties.containsKey(TaskRun.MV_NON_REF_TABLE_FINGERPRINT)) {
+            Set<Long> refBaseTableIds = mv.getRefBaseTablePartitionColumns().keySet().stream()
+                    .map(Table::getId)
+                    .collect(Collectors.toSet());
+            String fingerprint = MVVersionManager.nonRefTableFingerprint(snapshotBaseTables, refBaseTableIds);
+            if (fingerprint != null) {
+                newProperties.put(TaskRun.MV_NON_REF_TABLE_FINGERPRINT, fingerprint);
+            }
         }
         // warehouse
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {

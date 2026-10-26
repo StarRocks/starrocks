@@ -19,10 +19,10 @@
 #include <atomic>
 #include <utility>
 
-#include "column/chunk_slice.h"
 #include "column/vectorized_fwd.h"
 #include "compute_env/spill/spiller.h"
 #include "exec/join/join_hash_table.h"
+#include "exec/pipeline/hashjoin/hash_join_build_chunk_slicer.h"
 #include "exec/pipeline/hashjoin/hash_join_build_operator.h"
 #include "exec/pipeline/hashjoin/hash_joiner_fwd.h"
 #include "exprs/expr_context.h"
@@ -65,12 +65,10 @@ private:
 
     Status init_spiller_partitions(RuntimeState* state, HashJoinBuilder* builder);
 
-    size_t _hash_table_iterate_idx = 0;
-    // Own (shared_ptr) the build chunks being spilled instead of borrowing the JoinHashTables by raw
+    // Owns (shared_ptr) the build chunks being spilled instead of borrowing the JoinHashTables by raw
     // pointer, so the async spill iterator never dereferences hash-table state that the join builder
     // may free on cancel/close. See _convert_hash_map_to_chunk.
-    std::vector<ChunkPtr> _build_chunks;
-    ChunkSharedSlice _hash_table_build_chunk_slice;
+    HashJoinBuildChunkSlicer _build_chunk_slicer;
     std::function<StatusOr<ChunkPtr>()> _hash_table_slice_iterator;
     bool _is_first_time_spill = true;
     DECLARE_ONCE_DETECTOR(_set_finishing_once);

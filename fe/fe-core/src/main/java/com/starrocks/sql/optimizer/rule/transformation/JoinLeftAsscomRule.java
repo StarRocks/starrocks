@@ -79,6 +79,11 @@ public class JoinLeftAsscomRule extends JoinAssociateBaseRule {
             return false;
         }
 
+        if (JoinReorderHelper.hasNonDeterministicPredicate(topJoin) ||
+                JoinReorderHelper.hasNonDeterministicPredicate(bottomJoin)) {
+            return false;
+        }
+
         if (JoinReorderProperty.getLeftAsscomProperty(bottomJoin.getJoinType(), topJoin.getJoinType(), isInnerMode)
                 != JoinReorderProperty.SUPPORTED) {
             return false;

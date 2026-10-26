@@ -51,6 +51,7 @@ import org.apache.logging.log4j.Logger;
 import java.lang.reflect.Field;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /*
  * used to set fe config
@@ -78,7 +79,7 @@ public class SetConfigAction extends RestBaseAction {
         Map<String, String> setConfigs = Maps.newHashMap();
         Map<String, String> errConfigs = Maps.newHashMap();
 
-        LOG.debug("get config from url: {}", configs);
+        LOG.debug("get config from url: {}", Maps.transformEntries(configs, SetConfigAction::maskIfSensitive));
 
         for (Map.Entry<String, List<String>> entry : configs.entrySet()) {
             Field field = ConfigBase.getAllMutableConfigs().get(entry.getKey());
@@ -87,17 +88,18 @@ public class SetConfigAction extends RestBaseAction {
                 try {
                     ConfigBase.setConfigField(field, entryVal.get(0));
                 } catch (Exception e) {
-                    LOG.warn("failed to set config {}:{}", entry.getKey(), entryVal.get(0), e);
+                    LOG.warn("failed to set config {}:{}", entry.getKey(),
+                            ConfigBase.maskIfSensitive(entry.getKey(), entryVal.get(0)), e);
                     continue;
                 }
 
-                setConfigs.put(entry.getKey(), entryVal.get(0));
+                setConfigs.put(entry.getKey(), ConfigBase.maskIfSensitive(entry.getKey(), entryVal.get(0)));
             }
         }
 
         for (String key : configs.keySet()) {
             if (!setConfigs.containsKey(key)) {
-                errConfigs.put(key, configs.get(key).toString());
+                errConfigs.put(key, maskIfSensitive(key, configs.get(key)).toString());
             }
         }
 
@@ -107,6 +109,11 @@ public class SetConfigAction extends RestBaseAction {
 
         // to json response
         sendResultByJson(request, response, resultMap);
+    }
+
+    // The values of a credential config are kept out of the log and the reply, which echoes them back.
+    private static List<String> maskIfSensitive(String key, List<String> values) {
+        return values.stream().map(value -> ConfigBase.maskIfSensitive(key, value)).collect(Collectors.toList());
     }
 
     public static void print(String msg) {

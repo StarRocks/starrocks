@@ -69,6 +69,7 @@ public class GuardedPaimonCatalogTest {
     @AfterEach
     public void tearDown() {
         Config.lock_blocking_call_validation_mode = savedMode;
+        LockInvariantViolations.restoreBlockingCallTestEscalation();
         LockInvariantViolations.clearViolations();
         LockHoldDepth.reset();
     }
@@ -99,6 +100,7 @@ public class GuardedPaimonCatalogTest {
     @Test
     public void testEveryMethodIsOverriddenAndTheDoorsAreExactlyWhereClaimed() throws Exception {
         Config.lock_blocking_call_validation_mode = "warn";
+        LockInvariantViolations.suspendBlockingCallTestEscalation();
         Catalog guarded = new GuardedPaimonCatalog(CATALOG, noopCatalog());
         List<String> missing = new ArrayList<>();
         Set<String> reported = new HashSet<>();
@@ -157,6 +159,7 @@ public class GuardedPaimonCatalogTest {
     @Test
     public void testAMissedLookupUnderALockIsReported() {
         Config.lock_blocking_call_validation_mode = "warn";
+        LockInvariantViolations.suspendBlockingCallTestEscalation();
         Catalog guarded = new GuardedPaimonCatalog(CATALOG, noopCatalog());
 
         Locker locker = new Locker();
