@@ -34,7 +34,7 @@ ai_custom_agg(provider_name, text, instruction, options)
 
 入力が空のグローバル集約、またはすべて NULL のグループは、モデルを呼び出さず NULL を返します。グループ化したクエリに入力行がない場合は、通常の SQL 集約と同じくグループを返しません。空文字列は集約に含まれます。
 
-モデルおよび縮約の予算エラーは既存の [ai_function_on_error](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_on_error) に従います。`ignore` は**グループ全体**に NULL を返し、`fail` はクエリを中止します。成功した一部のリクエストだけの要約は返しません。設定エラー、不正な集約状態、ネイティブ集約のグループサイズ超過、クエリメモリエラー、キャンセル、クエリ期限超過は常にクエリを失敗させます。
+モデルおよび縮約の予算エラーは既存の [ai_function_on_error](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_on_error) に従います。`ignore` は**グループ全体**に NULL を返し、`fail` はクエリを中止します。成功した一部のリクエストだけの要約は返しません。設定エラー、不正な集約状態、ネイティブ集約のグループサイズ超過、ローカルリソースエラー（スケジューリングキューの枯渇やメモリエラーを含む）、キャンセル、クエリ期限超過は常にクエリを失敗させます。サニタイズ済みのローカルリソースエラーでは元の原因を復元できないため、一般的なリソースエラーを返します。直接検出したメモリ割り当て失敗は、メモリ制限エラーのまま返します。
 
 初期実装には次の固定上限があります。
 

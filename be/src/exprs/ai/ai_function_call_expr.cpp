@@ -158,10 +158,12 @@ bool matches_result_type(const TTypeDesc& type, AIFunctionResultKind kind) {
         return type.types.size() == 2 && type.types[0].type == TTypeNodeType::ARRAY &&
                type.types[1].type == TTypeNodeType::SCALAR && type.types[1].scalar_type.type == TPrimitiveType::FLOAT;
     }
-    const auto expected = kind == AIFunctionResultKind::JSON         ? TPrimitiveType::JSON
-                          : kind == AIFunctionResultKind::BOOLEAN    ? TPrimitiveType::BOOLEAN
-                          : kind == AIFunctionResultKind::SIMILARITY ? TPrimitiveType::FLOAT
-                                                                     : TPrimitiveType::VARCHAR;
+    const auto expected = kind == AIFunctionResultKind::JSON
+                                  ? TPrimitiveType::JSON
+                                  : kind == AIFunctionResultKind::BOOLEAN
+                                            ? TPrimitiveType::BOOLEAN
+                                            : kind == AIFunctionResultKind::SIMILARITY ? TPrimitiveType::FLOAT
+                                                                                       : TPrimitiveType::VARCHAR;
     return type.types.size() == 1 && type.types[0].type == TTypeNodeType::SCALAR &&
            type.types[0].scalar_type.type == expected;
 }

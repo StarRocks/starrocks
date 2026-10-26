@@ -30,6 +30,7 @@
 #include <variant>
 #include <vector>
 
+#include "base/coding.h"
 #include "base/testutil/assert.h"
 #include "base/utility/defer_op.h"
 #include "column/array_column.h"
@@ -55,6 +56,7 @@
 #include "exec/runtime/query_context.h"
 #include "exec_primitive/pipeline/operator_factory.h"
 #include "exec_primitive/pipeline/source_operator.h"
+#include "exprs/ai/ai_aggregate_state.h"
 #include "exprs/expr_context.h"
 #include "exprs/expr_factory.h"
 #include "gen_cpp/Exprs_types.h"
@@ -88,6 +90,7 @@ constexpr TSlotId kPromptSlotId = 1;
 constexpr TSlotId kCommonSlotId = 2;
 constexpr TSlotId kAnswerSlotId = 3;
 constexpr TSlotId kFileSlotId = 6;
+constexpr TSlotId kAggregateStateSlotId = 7;
 constexpr int64_t kLimit = 5;
 constexpr size_t kUpstreamDop = 6;
 constexpr size_t kBuilderDop = 9;
@@ -429,9 +432,15 @@ public:
     }
 
     Status try_submit(AICompletionWork work) override {
+        if (reject_next) {
+            reject_next = false;
+            return Status::ResourceBusy("test completion queue is full");
+        }
         _work.emplace_back(std::move(work));
         return Status::OK();
     }
+
+    bool reject_next = false;
 
     void run_until_idle() {
         while (!_work.empty()) {
@@ -650,6 +659,12 @@ protected:
                                .nullable(true)
                                .column_name("file")
                                .build());
+        tuple.add_slot(TSlotDescriptorBuilder()
+                               .id(kAggregateStateSlotId)
+                               .type(TypeDescriptor(TYPE_VARBINARY))
+                               .nullable(true)
+                               .column_name("aggregate_state")
+                               .build());
         tuple.build(&table);
 
         auto config = AIRuntimeConfigSource::create();
@@ -793,6 +808,77 @@ protected:
                 {{.slot_id = kAnswerSlotId, .expr_ctx = ai, .nullable = true, .kind = AIProjectOutputKind::AI}}, {},
                 system_model_configs());
         return AIProjectExpressionProjection::create(std::move(spec), max_input_file_bytes);
+    }
+
+    StatusOr<std::shared_ptr<AIProjectProcessor>> create_aggregate_processor(bool provider, std::string on_error) {
+        auto expression = make_ai_complete(_tuple_id, kAggregateStateSlotId);
+        auto& call = expression.nodes.front();
+        const auto binary_type = TypeDescriptor(TYPE_VARBINARY).to_thrift();
+        call.__set_num_children(provider ? 3 : 2);
+        call.fn.__set_fid(provider ? 200157 : 200155);
+        call.fn.name.__set_function_name(provider ? "__ai_custom_agg_reduce" : "__ai_agg_reduce");
+        call.fn.__set_ai_model_source(provider ? TAIModelSource::PROVIDER : TAIModelSource::SYSTEM);
+        call.__set_ai_model_config_id(provider ? "provider:aggregate" : std::string(kSystemChatConfigId));
+        call.fn.__set_arg_types(
+                provider ? std::vector<TTypeDesc>{binary_type, varchar_type().to_thrift(), varchar_type().to_thrift()}
+                         : std::vector<TTypeDesc>{binary_type, varchar_type().to_thrift()});
+        expression.nodes[1].__set_type(binary_type);
+        auto append_literal = [&](const std::string& value) {
+            TExprNode node;
+            node.__set_node_type(TExprNodeType::STRING_LITERAL);
+            node.__set_num_children(0);
+            node.__set_type(varchar_type().to_thrift());
+            node.__set_is_nullable(false);
+            TStringLiteral literal;
+            literal.__set_value(value);
+            node.__set_string_literal(literal);
+            expression.nodes.emplace_back(std::move(node));
+        };
+        if (provider) append_literal("aggregate-provider");
+        append_literal("Summarize all records.");
+        auto configs = provider ? AIProjectModelConfigs{} : system_model_configs();
+        if (provider) {
+            configs.emplace("provider:aggregate",
+                            AIProjectModelConfig{.endpoint = "https://127.0.0.1/provider/aggregate",
+                                                 .model = "provider-aggregate-model",
+                                                 .api_key = "provider-aggregate-secret",
+                                                 .source = TAIModelSource::PROVIDER});
+        }
+        ASSIGN_OR_RETURN(ExprContext * ai, create_expr_context(std::move(expression)));
+        AIProjectProjectionSpec spec(
+                _runtime_state.get(),
+                {{.slot_id = kAnswerSlotId, .expr_ctx = ai, .nullable = true, .kind = AIProjectOutputKind::AI}}, {},
+                configs);
+        ASSIGN_OR_RETURN(auto projection, AIProjectExpressionProjection::create(std::move(spec)));
+        auto config = _config_source->snapshot();
+        config.on_error = std::move(on_error);
+        ASSIGN_OR_RETURN(auto submitter, AIProjectDispatcherSubmitter::create(_runtime_state.get(), configs, config));
+        ASSIGN_OR_RETURN(auto buffer, AIChunkBuffer::create(2, 32 * kMiB));
+        return AIProjectProcessor::create(std::move(buffer), std::move(projection), std::move(submitter), config);
+    }
+
+    ChunkPtr make_aggregate_chunk() {
+        constexpr size_t records = 4;
+        constexpr size_t value_bytes = 32 * 1024;
+        const size_t payload_bytes = records * (kAiAggregateRecordLengthBytes + value_bytes);
+        std::string encoded(kAiAggregateStateHeaderBytes + payload_bytes, '\0');
+        encode_ai_aggregate_state_header(reinterpret_cast<uint8_t*>(encoded.data()), records, payload_bytes);
+        size_t offset = kAiAggregateStateHeaderBytes;
+        for (size_t i = 0; i < records; ++i) {
+            encode_fixed64_le(reinterpret_cast<uint8_t*>(encoded.data()) + offset, value_bytes);
+            offset += kAiAggregateRecordLengthBytes;
+            encoded.replace(offset, value_bytes, value_bytes, static_cast<char>('a' + i));
+            offset += value_bytes;
+        }
+        auto data = BinaryColumn::create();
+        data->append(Slice(encoded));
+        auto nulls = NullColumn::create();
+        nulls->append(0);
+        auto states = NullableColumn::create(std::move(data), std::move(nulls));
+        states->append_nulls(1);
+        auto chunk = std::make_shared<Chunk>();
+        chunk->append_column(std::move(states), kAggregateStateSlotId);
+        return chunk;
     }
 
     void set_query_deadline_ns(int64_t deadline_ns) {
@@ -1715,23 +1801,24 @@ TEST_F(AIProjectPipelineTest, MixedSystemAndProviderRoutesKeepCredentialsAndType
         const bool embedding = request.url == embed_endpoint;
         const bool custom_chat = request.url == chat_endpoint;
         EXPECT_TRUE(embedding || custom_chat || request.url == kEndpointSentinel);
-        const std::string key = embedding     ? "embed-provider-secret"
-                                : custom_chat ? "chat-provider-secret"
-                                              : std::string(kSecretSentinel);
+        const std::string key = embedding ? "embed-provider-secret"
+                                          : custom_chat ? "chat-provider-secret" : std::string(kSecretSentinel);
         EXPECT_NE(request.headers.end(),
                   std::find_if(request.headers.begin(), request.headers.end(), [&](const AIHttpHeader& header) {
                       return header.name == "Authorization" && header.value == "Bearer " + key;
                   }));
-        EXPECT_NE(std::string::npos, request.body.find(embedding     ? "provider-embed-model"
-                                                       : custom_chat ? "provider-chat-model"
-                                                                     : kModelSentinel));
+        EXPECT_NE(std::string::npos,
+                  request.body.find(embedding ? "provider-embed-model"
+                                              : custom_chat ? "provider-chat-model" : kModelSentinel));
         EXPECT_NE(std::string::npos, request.body.find(embedding ? "\"input\"" : "\"messages\""));
     }
     while (_http.pending_count() != 0) {
         const auto& url = _http.request().url;
-        _http.complete_next(url == embed_endpoint  ? R"({"data":[{"index":0,"embedding":[0.25,-0.5]}]})"
-                            : url == chat_endpoint ? R"({"choices":[{"message":{"content":"provider answer"}}]})"
-                                                   : R"({"choices":[{"message":{"content":"system answer"}}]})");
+        _http.complete_next(url == embed_endpoint
+                                    ? R"({"data":[{"index":0,"embedding":[0.25,-0.5]}]})"
+                                    : url == chat_endpoint
+                                              ? R"({"choices":[{"message":{"content":"provider answer"}}]})"
+                                              : R"({"choices":[{"message":{"content":"system answer"}}]})");
         _completion.run_until_idle();
         _control.run_until_idle();
     }
@@ -1752,6 +1839,132 @@ TEST_F(AIProjectPipelineTest, MixedSystemAndProviderRoutesKeepCredentialsAndType
     ASSERT_EQ(2, array.elements_column()->size());
     EXPECT_FLOAT_EQ(0.25f, array.elements_column()->get(0).get_float());
     EXPECT_FLOAT_EQ(-0.5f, array.elements_column()->get(1).get_float());
+    processor->close(_runtime_state.get());
+}
+
+TEST_F(AIProjectPipelineTest, AggregateSystemAndProviderExecuteMultipleRoundsThroughProductionDispatcher) {
+    set_query_deadline_ns(120'000'000'000);
+    ScopedEnvironment system_key{std::string(kApiKeyEnvironment), std::string(kSecretSentinel)};
+    for (const bool provider : {false, true}) {
+        SCOPED_TRACE(provider);
+        auto processor_or = create_aggregate_processor(provider, "fail");
+        ASSERT_TRUE(processor_or.ok()) << processor_or.status();
+        auto processor = std::move(processor_or).value();
+        ASSERT_OK(processor->prepare(_runtime_state.get(), 1));
+        auto admitted = processor->input_buffer()->try_put(0, make_aggregate_chunk());
+        ASSERT_TRUE(admitted.ok()) << admitted.status();
+        ASSERT_TRUE(admitted.value());
+        ASSERT_OK(processor->input_buffer()->set_sink_eos(0));
+        ASSERT_OK(processor->try_process(_runtime_state.get(), 0));
+        _control.run_until_idle();
+        ASSERT_EQ(4, _http.pending_count());
+        for (size_t i = 0; i < 4; ++i) {
+            const auto& request = _http.request(i);
+            EXPECT_EQ(provider ? "https://127.0.0.1/provider/aggregate" : kEndpointSentinel, request.url);
+            EXPECT_NE(std::string::npos, request.body.find(provider ? "provider-aggregate-model" : kModelSentinel));
+            EXPECT_NE(std::string::npos, request.body.find("Input records"));
+            const std::string key = provider ? "provider-aggregate-secret" : std::string(kSecretSentinel);
+            EXPECT_NE(request.headers.end(),
+                      std::find_if(request.headers.begin(), request.headers.end(), [&](const AIHttpHeader& header) {
+                          return header.name == "Authorization" && header.value == "Bearer " + key;
+                      }));
+        }
+        while (_http.pending_count() != 0) {
+            _http.complete_next(R"({"choices":[{"message":{"content":"leaf summary"}}],"usage":{"total_tokens":3}})");
+            _completion.run_until_idle();
+            _control.run_until_idle();
+        }
+        ASSERT_OK(processor->try_process(_runtime_state.get(), 0));
+        _control.run_until_idle();
+        ASSERT_EQ(1, _http.pending_count());
+        EXPECT_NE(std::string::npos, _http.request().body.find("Intermediate summaries"));
+        EXPECT_NE(std::string::npos, _http.request().body.find("Produce the final result"));
+        _http.complete_next(R"({"choices":[{"message":{"content":"final answer"}}],"usage":{"total_tokens":5}})");
+        _completion.run_until_idle();
+        _control.run_until_idle();
+        auto output = processor->pull_chunk(_runtime_state.get(), 0);
+        ASSERT_TRUE(output.ok()) << output.status();
+        ASSERT_NE(nullptr, output.value());
+        ASSERT_EQ(2, output.value()->num_rows());
+        EXPECT_EQ("final answer", nullable_string(output.value(), kAnswerSlotId, 0));
+        EXPECT_EQ(std::nullopt, nullable_string(output.value(), kAnswerSlotId, 1));
+        EXPECT_EQ(5, processor->statistics(0).request_count);
+        EXPECT_EQ(17, processor->statistics(0).total_tokens);
+        EXPECT_EQ(2, processor->aggregate_statistics(0).groups);
+        EXPECT_EQ(1, processor->aggregate_statistics(0).empty_groups);
+        EXPECT_EQ(2, processor->aggregate_statistics(0).rounds);
+        EXPECT_FALSE(processor->pending_finish(0));
+        processor->close(_runtime_state.get());
+    }
+}
+
+TEST_F(AIProjectPipelineTest, AggregateProviderFailureUsesGroupPolicyThroughProductionDispatcher) {
+    set_query_deadline_ns(120'000'000'000);
+    for (const std::string on_error : {"ignore", "fail"}) {
+        SCOPED_TRACE(on_error);
+        auto processor_or = create_aggregate_processor(true, on_error);
+        ASSERT_TRUE(processor_or.ok()) << processor_or.status();
+        auto processor = std::move(processor_or).value();
+        ASSERT_OK(processor->prepare(_runtime_state.get(), 1));
+        auto admitted = processor->input_buffer()->try_put(0, make_aggregate_chunk());
+        ASSERT_TRUE(admitted.ok()) << admitted.status();
+        ASSERT_TRUE(admitted.value());
+        ASSERT_OK(processor->input_buffer()->set_sink_eos(0));
+        ASSERT_OK(processor->try_process(_runtime_state.get(), 0));
+        _control.run_until_idle();
+        ASSERT_EQ(4, _http.pending_count());
+        _http.complete_next(R"({"choices":[{"message":{"content":"successful partial summary"}}]})");
+        _http.complete_next("invalid response");
+        _completion.run_until_idle();
+        _control.run_until_idle();
+        auto output = processor->pull_chunk(_runtime_state.get(), 0);
+        if (on_error == "ignore") {
+            ASSERT_TRUE(output.ok()) << output.status();
+            ASSERT_NE(nullptr, output.value());
+            EXPECT_EQ(std::nullopt, nullable_string(output.value(), kAnswerSlotId, 0));
+            EXPECT_EQ(std::nullopt, nullable_string(output.value(), kAnswerSlotId, 1));
+        } else {
+            EXPECT_FALSE(output.ok());
+        }
+        ASSERT_OK(processor->set_source_finished(0));
+        while (_http.pending_count() != 0) {
+            _http.complete_next(AIHttpNoResponseCode::CANCELLATION);
+            _completion.run_until_idle();
+            _control.run_until_idle();
+        }
+        EXPECT_EQ(4, processor->statistics(0).request_count);
+        EXPECT_FALSE(processor->pending_finish(0));
+        processor->close(_runtime_state.get());
+    }
+}
+
+TEST_F(AIProjectPipelineTest, AggregateCompletionQueueExhaustionPreservesSanitizedResourceCategory) {
+    set_query_deadline_ns(120'000'000'000);
+    auto processor_or = create_aggregate_processor(true, "ignore");
+    ASSERT_TRUE(processor_or.ok()) << processor_or.status();
+    auto processor = std::move(processor_or).value();
+    ASSERT_OK(processor->prepare(_runtime_state.get(), 1));
+    auto admitted = processor->input_buffer()->try_put(0, make_aggregate_chunk());
+    ASSERT_TRUE(admitted.ok()) << admitted.status();
+    ASSERT_TRUE(admitted.value());
+    ASSERT_OK(processor->input_buffer()->set_sink_eos(0));
+    ASSERT_OK(processor->try_process(_runtime_state.get(), 0));
+    _control.run_until_idle();
+    ASSERT_EQ(4, _http.pending_count());
+    _completion.reject_next = true;
+    _http.complete_next(R"({"choices":[{"message":{"content":"leaf summary"}}]})");
+    _control.run_until_idle();
+    auto output = processor->pull_chunk(_runtime_state.get(), 0);
+    ASSERT_FALSE(output.ok());
+    EXPECT_EQ(TStatusCode::RUNTIME_ERROR, output.status().code()) << output.status();
+    EXPECT_FALSE(output.status().is_mem_limit_exceeded());
+    ASSERT_OK(processor->set_source_finished(0));
+    while (_http.pending_count() != 0) {
+        _http.complete_next(AIHttpNoResponseCode::CANCELLATION);
+        _completion.run_until_idle();
+        _control.run_until_idle();
+    }
+    EXPECT_FALSE(processor->pending_finish(0));
     processor->close(_runtime_state.get());
 }
 

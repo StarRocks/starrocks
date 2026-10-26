@@ -712,9 +712,9 @@ Status AIProjectProcessor::_advance(const std::shared_ptr<Lane>& lane,
 void AIProjectProcessor::_complete_submit_failure(const std::shared_ptr<Lane>& lane, bool ignore, uint64_t task_id,
                                                   size_t slot_index, const Status& status) {
     if (status.is_cancelled() || status.is_time_out() || status.is_shutdown() || status.is_service_unavailable()) {
-        const auto reason = status.is_cancelled()  ? AILifecycleReason::CANCELLED
-                            : status.is_time_out() ? AILifecycleReason::DEADLINE
-                                                   : AILifecycleReason::SHUTDOWN;
+        const auto reason = status.is_cancelled()
+                                    ? AILifecycleReason::CANCELLED
+                                    : status.is_time_out() ? AILifecycleReason::DEADLINE : AILifecycleReason::SHUTDOWN;
         _complete_task(lane, ignore, task_id, slot_index, AILifecycleCancelled{.reason = reason}, {});
     } else {
         const auto failure = status.is_mem_limit_exceeded() || status.is_resource_busy()
@@ -739,16 +739,19 @@ void AIProjectProcessor::_complete_task(const std::shared_ptr<Lane>& lane, bool 
                 TEST_SYNC_POINT("AIProjectProcessor::_complete_task:before_publish");
                 if (const auto* failure = std::get_if<AISanitizedRowFailure>(&local)) {
                     if (slot.aggregate && failure->failure_class == AISanitizedFailureClass::LOCAL_RESOURCE) {
+                        // The sanitized class includes scheduling and memory failures.
+                        // Its original cause is unavailable, so do not invent an OOM.
                         lane->terminal_status.update(
-                                Status::MemoryLimitExceeded("AI aggregate request resource limit exceeded"));
+                                Status::RuntimeError("AI aggregate request failed due to local resource exhaustion"));
                     } else if (!ignore && lane->terminal_kind == TerminalKind::NONE)
                         lane->terminal_kind = TerminalKind::ROW_FAILURE;
                 } else if (const auto* cancelled = std::get_if<AILifecycleCancelled>(&local)) {
                     if (lane->terminal_kind == TerminalKind::NONE) {
-                        lane->terminal_kind =
-                                cancelled->reason == AILifecycleReason::CANCELLED  ? TerminalKind::CANCELLED
-                                : cancelled->reason == AILifecycleReason::DEADLINE ? TerminalKind::DEADLINE
-                                                                                   : TerminalKind::SHUTDOWN;
+                        lane->terminal_kind = cancelled->reason == AILifecycleReason::CANCELLED
+                                                      ? TerminalKind::CANCELLED
+                                                      : cancelled->reason == AILifecycleReason::DEADLINE
+                                                                ? TerminalKind::DEADLINE
+                                                                : TerminalKind::SHUTDOWN;
                     }
                 }
                 slot.result.emplace(std::move(local));

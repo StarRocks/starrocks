@@ -1902,9 +1902,61 @@ TEST(AIProjectProcessorTest, AggregateLocalResourceFailureIsFatalEvenWithIgnore)
     RuntimeState state;
     ASSERT_OK(processor->try_process(&state, 0));
     submitter->fail_row(submitter->submitted_prompts.front(), AISanitizedFailureClass::LOCAL_RESOURCE);
-    EXPECT_TRUE(processor->status(0).is_mem_limit_exceeded());
+    EXPECT_EQ(TStatusCode::RUNTIME_ERROR, processor->status(0).code());
+    EXPECT_FALSE(processor->status(0).is_mem_limit_exceeded());
     EXPECT_FALSE(processor->pull_chunk(&state, 0).ok());
     EXPECT_FALSE(processor->pending_finish(0));
+}
+
+TEST(AIProjectProcessorTest, AggregateSanitizedResourceFailuresDoNotInventMemoryErrors) {
+    const std::vector<Status> failures = {
+            Status::ResourceBusy(std::string(kSecretExceptionSentinel)),
+            Status::MemoryLimitExceeded(std::string(kSecretExceptionSentinel)),
+    };
+    for (const auto& failure : failures) {
+        SCOPED_TRACE(failure.code());
+        for (const std::string on_error : {"ignore", "fail"}) {
+            SCOPED_TRACE(on_error);
+            auto buffer = make_input_buffer();
+            auto projection = std::make_shared<RecordingProjection>();
+            projection->aggregate_input = aggregate_input(1);
+            auto submitter = std::make_shared<ManualTaskSubmitter>();
+            submitter->submit_error = failure;
+            auto processor = make_processor(buffer, projection, submitter, on_error);
+            put_and_finish(buffer, make_input_chunk(0, 1));
+
+            RuntimeState state;
+            ASSERT_OK(processor->try_process(&state, 0));
+            auto output = processor->pull_chunk(&state, 0);
+            ASSERT_FALSE(output.ok());
+            EXPECT_EQ(TStatusCode::RUNTIME_ERROR, output.status().code()) << output.status();
+            EXPECT_FALSE(output.status().is_mem_limit_exceeded());
+            EXPECT_EQ(std::string::npos, output.status().to_string().find(kSecretExceptionSentinel));
+            EXPECT_FALSE(processor->pending_finish(0));
+            EXPECT_OK(processor->set_source_finished(0));
+        }
+    }
+}
+
+TEST(AIProjectProcessorTest, AggregateObservedAllocationFailureRetainsMemoryError) {
+    for (const std::string on_error : {"ignore", "fail"}) {
+        SCOPED_TRACE(on_error);
+        auto buffer = make_input_buffer();
+        auto projection = std::make_shared<RecordingProjection>();
+        projection->aggregate_input = aggregate_input(1);
+        auto submitter = std::make_shared<ManualTaskSubmitter>();
+        submitter->throw_on_submit_call = 0;
+        submitter->submit_exception = ManualTaskSubmitter::SubmitException::BAD_ALLOC;
+        auto processor = make_processor(buffer, projection, submitter, on_error);
+        put_and_finish(buffer, make_input_chunk(0, 1));
+
+        RuntimeState state;
+        EXPECT_TRUE(processor->try_process(&state, 0).is_mem_limit_exceeded());
+        EXPECT_TRUE(processor->status(0).is_mem_limit_exceeded());
+        EXPECT_FALSE(processor->pull_chunk(&state, 0).ok());
+        EXPECT_FALSE(processor->pending_finish(0));
+        EXPECT_OK(processor->set_source_finished(0));
+    }
 }
 
 TEST(AIProjectProcessorTest, AggregateInlineCallbacksReuseSlotsAcrossRoundsAndReleaseSummaries) {

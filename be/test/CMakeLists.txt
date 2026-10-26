@@ -3,6 +3,7 @@ add_subdirectory(testutil)
 set(EXEC_FILES
         ./exec/aggregator_limited_mem_state_test.cpp
         ./exec/sorted_streaming_aggregator_error_test.cpp
+        ./exec/aggregator_serialization_error_test.cpp
         ./agent/agent_metrics_test.cpp
         ./agent/agent_task_test.cpp
         ./agent/heartbeat_server_test.cpp

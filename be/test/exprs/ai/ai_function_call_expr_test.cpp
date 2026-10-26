@@ -1279,9 +1279,9 @@ TExpr make_extended_ai_expression(int64_t fid, const std::string& name, const Ty
     }
     call.__set_num_children(arguments.size());
     call.fn.__set_ai_model_source(provider ? TAIModelSource::PROVIDER : TAIModelSource::SYSTEM);
-    call.__set_ai_model_config_id(provider                         ? "provider:00000000-0000-0000-0000-000000000102"
-                                  : result_type.type == TYPE_ARRAY ? "__system_embedding__"
-                                                                   : "__system_chat__");
+    call.__set_ai_model_config_id(provider ? "provider:00000000-0000-0000-0000-000000000102"
+                                           : result_type.type == TYPE_ARRAY ? "__system_embedding__"
+                                                                            : "__system_chat__");
     expression.nodes.resize(1);
     for (size_t i = 0; i < arguments.size(); ++i) {
         expression.nodes.push_back(make_slot_ref(arguments[i], i + 1));

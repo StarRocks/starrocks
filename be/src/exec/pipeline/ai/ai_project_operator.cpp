@@ -24,7 +24,7 @@ namespace {
 
 struct AIStatisticsCounter {
     const char* name;
-    int64_t AIExecutionStatistics::* value;
+    int64_t AIExecutionStatistics::*value;
     TUnit::type unit = TUnit::UNIT;
 };
 
@@ -45,7 +45,7 @@ constexpr std::array<AIStatisticsCounter, 12> kAIStatisticsCounters = {{
 
 struct AIAggregateCounter {
     const char* name;
-    int64_t AIAggregateExecutionStatistics::* value;
+    int64_t AIAggregateExecutionStatistics::*value;
 };
 constexpr std::array<AIAggregateCounter, 5> kAggregateCounters = {
         {{"AIAggregateGroups", &AIAggregateExecutionStatistics::groups},

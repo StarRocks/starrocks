@@ -442,7 +442,9 @@ Status SortedStreamingAggregator::_update_states(size_t chunk_size, bool is_upda
                                                           _agg_states_offsets[i], _agg_input_columns[i][0].get(),
                                                           _tmp_agg_states.data());
         }
-        RETURN_IF_ERROR(check_has_error());
+        if (_agg_fn_ctxs[i]->has_error()) {
+            return Status::RuntimeError(_agg_fn_ctxs[i]->error_msg());
+        }
     }
     return Status::OK();
 }
@@ -472,7 +474,9 @@ Status SortedStreamingAggregator::_get_agg_result_columns(size_t chunk_size, con
                                                              _agg_states_offsets[i], agg_result_columns[i].get(),
                                                              selector);
         }
-        RETURN_IF_ERROR(check_has_error());
+        if (_agg_fn_ctxs[i]->has_error()) {
+            return Status::RuntimeError(_agg_fn_ctxs[i]->error_msg());
+        }
     }
     TRY_CATCH_ALLOC_SCOPE_END();
     return Status::OK();

@@ -34,7 +34,7 @@ The functions do not support `DISTINCT`, aggregate `ORDER BY`, window execution,
 
 An empty global aggregate or an all-NULL group returns NULL without a model request. A grouped query over no rows returns no groups, following ordinary SQL aggregation. Empty strings still participate in the aggregate.
 
-The existing [ai_function_on_error](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_on_error) policy applies to model and reduction-budget failures: `ignore` returns NULL for the **entire group**, while `fail` aborts the query. A failed group never returns a summary of only its successful requests. Configuration errors, invalid aggregate states, the native group-size bound, query memory failures, cancellation, and query deadlines always fail the query.
+The existing [ai_function_on_error](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_on_error) policy applies to model and reduction-budget failures: `ignore` returns NULL for the **entire group**, while `fail` aborts the query. A failed group never returns a summary of only its successful requests. Configuration errors, invalid aggregate states, the native group-size bound, local resource failures (including scheduling queue exhaustion and memory failures), cancellation, and query deadlines always fail the query. Sanitized local resource failures are reported as a general resource error because their original cause is unavailable; directly detected allocation failures retain the memory-limit error.
 
 The initial implementation uses these fixed safety bounds:
 

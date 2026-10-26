@@ -34,7 +34,7 @@ ai_custom_agg(provider_name, text, instruction, options)
 
 空输入的全局聚合或全部为 NULL 的分组返回 NULL，不发送模型请求。带分组的查询在没有输入行时不返回分组，与普通 SQL 聚合一致。空字符串仍参与聚合。
 
-模型调用及归约预算失败遵循既有 [ai_function_on_error](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_on_error)：`ignore` 使**整个分组**返回 NULL，`fail` 终止查询。失败分组不会返回仅由部分成功请求组成的摘要。配置错误、无效聚合状态、原生分组大小超限、查询内存错误、取消和查询超时始终终止查询。
+模型调用及归约预算失败遵循既有 [ai_function_on_error](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_on_error)：`ignore` 使**整个分组**返回 NULL，`fail` 终止查询。失败分组不会返回仅由部分成功请求组成的摘要。配置错误、无效聚合状态、原生分组大小超限、本地资源错误（包括调度队列耗尽和内存错误）、取消和查询超时始终终止查询。脱敏后的本地资源错误无法还原原始原因，因此返回通用资源错误；直接检测到的分配失败仍返回内存限制错误。
 
 首版采用以下固定安全边界：
 

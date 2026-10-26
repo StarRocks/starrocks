@@ -1146,6 +1146,9 @@ Status Aggregator::output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk
                     _agg_functions[i]->convert_to_serialize_format(_agg_fn_ctxs[i], _agg_input_columns[i],
                                                                    result_chunk->num_rows(), agg_result_column[i]);
                 }
+                if (_agg_fn_ctxs[i]->has_error()) {
+                    return Status::RuntimeError(_agg_fn_ctxs[i]->error_msg());
+                }
                 result_chunk->append_column(std::move(agg_result_column[i]), slot_id);
             }
         }
@@ -1196,6 +1199,9 @@ Status Aggregator::convert_to_spill_format(Chunk* input_chunk, ChunkPtr* chunk) 
             } else {
                 _agg_functions[i]->convert_to_serialize_format(_agg_fn_ctxs[i], _agg_input_columns[i],
                                                                result_chunk->num_rows(), agg_result_column[i]);
+                if (_agg_fn_ctxs[i]->has_error()) {
+                    return Status::RuntimeError(_agg_fn_ctxs[i]->error_msg());
+                }
                 result_chunk->append_column(std::move(agg_result_column[i]), slot_id);
             }
         }
