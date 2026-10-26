@@ -5,18 +5,22 @@ name: PR RECORD
 # ci-api/DESIGN-pr-data.md. Logic: ci-tool lib/pr_record.py, which reads the PR live from
 # GitHub (the event only says WHICH PR changed) and never fails anyone's CI.
 #
-# Only the events that change a field some consumer reads trigger a job (the `if:` below).
-# Everything else, bot comments and bot labels included, leaves a skipped run that takes
-# no runner. Runs on the dedicated `pr-record` pool, which mounts its own read-only
-# ci-tool; it never checks out or executes PR code, so pull_request_target is safe here.
+# Every PR event in `on:` is recorded, on every PR. A comment is recorded only when a human
+# writes a seal-check skip command (the `if:` below); any other comment leaves a skipped
+# run that takes no runner. Runs on the dedicated `pr-record` pool, which mounts its own
+# read-only ci-tool; it never checks out or executes PR code, so pull_request_target is
+# safe here.
 
 on:
   pull_request_target:
-    types: [opened, reopened, closed, edited, labeled, unlabeled, ready_for_review, converted_to_draft]
+    types: [opened, reopened, closed, edited, labeled, unlabeled, ready_for_review, converted_to_draft, assigned, unassigned]
   issue_comment:
     types: [created, edited, deleted]
-  workflow_run:  # ERROR is set/cleared by this pipeline with GITHUB_TOKEN, which emits no labeled event
-    workflows: ["CD SYNC CI PIPELINE"]
+  # CD SYNC CI PIPELINE: sets/clears ERROR with GITHUB_TOKEN, which emits no labeled event.
+  # PR REVIEW EVENT: relays a review (approvers); pull_request_review has no _target
+  # variant, so on a fork PR it gets no secrets and cannot report itself.
+  workflow_run:
+    workflows: ["CD SYNC CI PIPELINE", "PR REVIEW EVENT"]
     types: [completed]
 
 permissions:
@@ -27,26 +31,23 @@ permissions:
 jobs:
   record:
     # Job-level, not workflow-level: a workflow-level group would let a filtered bot
-    # comment cancel a real recording run and then skip itself.
+    # comment cancel a real recording run and then skip itself. `opened` has a group of its
+    # own: that run also records the sync PRs the new one replaced (pr_record.superseded),
+    # and the labels a new sync PR gets right away would otherwise cancel it. A fork run of
+    # PR REVIEW EVENT carries no PR number; its head commit keeps it apart.
     concurrency:
-      group: pr-record-${{ github.event.pull_request.number || github.event.issue.number || github.event.workflow_run.pull_requests[0].number }}
+      group: pr-record-${{ github.event.pull_request.number || github.event.issue.number || github.event.workflow_run.pull_requests[0].number || github.event.workflow_run.head_sha }}${{ github.event.action == 'opened' && '-opened' || '' }}
       cancel-in-progress: true  # every run reads the live state, so the newest run suffices
-    # CI Metrics is the complete PR data source, so every PR is recorded alike, main PRs
-    # included: opened / reopened / closed, a draft flip, a title or base change, and the
-    # labels a consumer reads.
-    # X.Y-merged is added after a PR merges.
+    # CI Metrics is the complete PR data source: every pull_request_target event in `on:` is
+    # recorded on every PR, main PRs included. Reviews come in as PR REVIEW EVENT runs.
     # A human comment is recorded when it carries a seal-check skip command read on this
     # repo's PRs: ignore backport check / merge / sync (ignore reverse sync is read on CD PRs).
     # No comments inside the expression below: in a folded scalar a '#' line is part of it.
     if: >-
-      (github.event_name == 'pull_request_target' && (
-        contains(fromJSON('["opened","reopened","closed","ready_for_review","converted_to_draft"]'), github.event.action) ||
-        (github.event.action == 'edited' &&
-          (github.event.changes.base != null || github.event.changes.title != null)) ||
-        (contains(fromJSON('["labeled","unlabeled"]'), github.event.action) &&
-          (endsWith(github.event.label.name, '-merged') ||
-           contains(fromJSON('["ERROR","conflict","conflicts","pending","SKIP MERGE"]'), github.event.label.name))))) ||
-      (github.event_name == 'workflow_run' && github.event.workflow_run.pull_requests[0] != null) ||
+      github.event_name == 'pull_request_target' ||
+      (github.event_name == 'workflow_run' &&
+        (github.event.workflow_run.pull_requests[0] != null ||
+         github.event.workflow_run.name == 'PR REVIEW EVENT')) ||
       (github.event_name == 'issue_comment' && github.event.issue.pull_request &&
         github.event.comment.user.type == 'User' &&
         !contains(fromJSON('["CelerData-Reviewer","wanpengfei-git","CLAassistant","starrocks-robot","robot-sync"]'),
