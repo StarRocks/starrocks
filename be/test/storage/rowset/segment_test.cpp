@@ -890,4 +890,44 @@ TEST_F(SegmentReaderWriterTest, TestBadColumnMetaFailsOnFirstUse) {
     EXPECT_NE(nullptr, other);
 }
 
+// The footer of a wide table does not fit in the first read of the file, so the open reads it in two parts.
+TEST_F(SegmentReaderWriterTest, TestWideFooterReadInTwoParts) {
+    constexpr int kColumns = 300;
+    std::vector<ColumnPB> columns{create_int_key_pb(1)};
+    for (int i = 2; i <= kColumns; ++i) {
+        columns.push_back(create_int_value_pb(i));
+    }
+    std::shared_ptr<TabletSchema> schema = TabletSchemaHelper::create_tablet_schema(columns);
+    SegmentWriterOptions opts;
+    shared_ptr<Segment> segment;
+    build_segment(opts, schema, schema, 10, DefaultIntGenerator, &segment);
+
+    size_t footer_length_hint = 4096;
+    ASSIGN_OR_ABORT(auto read_file, _fs->new_random_access_file(segment->file_name()));
+    SegmentFooterPB footer;
+    ASSIGN_OR_ABORT(auto footer_size,
+                    Segment::parse_segment_footer(read_file.get(), &footer, &footer_length_hint, nullptr));
+    ASSERT_GT(footer_size, 4096);
+    ASSERT_EQ(kColumns, footer.columns_size());
+
+    ASSIGN_OR_ABORT(auto reopened, Segment::open(_fs, FileInfo{segment->file_name()}, 0, schema));
+    EXPECT_EQ(10, reopened->num_rows());
+    EXPECT_EQ(kColumns, reopened->num_columns());
+    EXPECT_EQ(0, num_built_column_readers(*reopened));
+
+    ColumnIteratorOptions iter_opts;
+    OlapReaderStatistics stats;
+    iter_opts.stats = &stats;
+    iter_opts.read_file = read_file.get();
+    ASSIGN_OR_ABORT(auto iter, reopened->new_column_iterator(schema->column(kColumns - 1), nullptr));
+    ASSERT_OK(iter->init(iter_opts));
+    auto read_schema = ChunkHelper::convert_schema(schema, std::vector<ColumnId>{kColumns - 1});
+    auto values = ChunkFactory::column_from_field(*read_schema.field(0))->clone_empty();
+    const std::vector<rowid_t> rowids{0, 9};
+    ASSERT_OK(iter->fetch_values_by_rowid(rowids.data(), rowids.size(), values.get()));
+    EXPECT_EQ(kColumns - 1, values->get(0).get_int32());
+    EXPECT_EQ(90 + kColumns - 1, values->get(1).get_int32());
+    EXPECT_EQ(1, num_built_column_readers(*reopened));
+}
+
 } // namespace starrocks
