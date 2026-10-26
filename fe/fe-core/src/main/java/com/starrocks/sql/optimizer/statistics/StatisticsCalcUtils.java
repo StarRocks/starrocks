@@ -354,11 +354,16 @@ public class StatisticsCalcUtils {
 
     /**
      * Row count of the index the scan reads, summed over the partition's sub-partitions.
+     * Falls back to the base index when the index has no row count yet, e.g. a new rollup whose tablet stats
+     * have not been collected by TabletStatMgr.
      */
     private static long getSelectedIndexRowCount(Partition partition, long indexMetaId) {
         long rowCount = 0;
         for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
             MaterializedIndex index = physicalPartition.getQueryableIndex(indexMetaId);
+            if (index != null && index.getRowCount() == 0) {
+                index = physicalPartition.getLatestBaseIndexOrNull();
+            }
             if (index != null) {
                 rowCount += index.getRowCount();
             }
