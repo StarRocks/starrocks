@@ -276,15 +276,11 @@ public abstract class MVTimelinessArbiter {
         return baseChangedPartitionNames;
     }
 
-    protected PCellSortedSet getMvPartitionCellsWithUntrackedRows(Set<Table> refBaseTables,
-                                                                  Map<String, Map<Table, PCellSortedSet>> mvToBaseNameRef,
-                                                                  PCellSortedSet mvPartitionCells) {
-        Set<String> untracked = refBaseTables.stream()
+    protected Set<String> getMvPartitionNamesWithUntrackedRows(Set<Table> refBaseTables,
+                                                               Map<String, Map<Table, Set<String>>> mvToBaseNameRef) {
+        return refBaseTables.stream()
                 .flatMap(refBaseTable -> getMvPartitionsWithUntrackedRows(mv, refBaseTable, mvToBaseNameRef).stream())
                 .collect(Collectors.toSet());
-        PCellSortedSet cells = PCellSortedSet.of(mvPartitionCells);
-        cells.retainAllNames(untracked);
-        return cells;
     }
 
     /**

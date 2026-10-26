@@ -43,19 +43,17 @@ TRUNCATE TABLE base_p PARTITION (p20240103);
 TRUNCATE TABLE base_u;
 -- result:
 -- !result
-ALTER TABLE base_p MODIFY COLUMN v BIGINT;
+ALTER TABLE base_p RENAME COLUMN v TO v_tmp;
 -- result:
 -- !result
-function: wait_alter_table_finish()
--- result:
-None
--- !result
-ALTER TABLE base_u MODIFY COLUMN v BIGINT;
+ALTER TABLE base_p RENAME COLUMN v_tmp TO v;
 -- result:
 -- !result
-function: wait_alter_table_finish()
+ALTER TABLE base_u RENAME COLUMN v TO v_tmp;
 -- result:
-None
+-- !result
+ALTER TABLE base_u RENAME COLUMN v_tmp TO v;
+-- result:
 -- !result
 ALTER MATERIALIZED VIEW mv_p ACTIVE;
 -- result:

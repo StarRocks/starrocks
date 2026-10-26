@@ -364,29 +364,6 @@ public class MvRefreshArbiter {
         }
         return affected;
     }
-<<<<<<< HEAD
-=======
-
-    /** Whether the mv holds a refreshed partition version for any partition of {@code table}. */
-    public static boolean tracksPartitionVersions(MaterializedView mv, Table table) {
-        return !MapUtils.isEmpty(getTrackedPartitionVersions(mv, table));
-    }
-
-    /** Olap base tables are tracked in a table-id keyed map, external ones in a {@link BaseTableInfo} keyed map. */
-    private static Map<String, MaterializedView.BasePartitionInfo> getTrackedPartitionVersions(
-            MaterializedView mv, Table table) {
-        MaterializedView.AsyncRefreshContext context = mv.getRefreshScheme().getAsyncRefreshContext();
-        if (table.isNativeTableOrMaterializedView()) {
-            return context.getBaseTableVisibleVersionMap().getOrDefault(table.getId(), Maps.newHashMap());
-        }
-        // matchTable compares the whole identity; an identifier alone repeats across catalogs and databases and would
-        // hand back another table's version map.
-        return mv.getBaseTableInfos().stream()
-                .filter(info -> info.matchTable(table))
-                .findFirst()
-                .map(context::getBaseTableRefreshInfo)
-                .orElseGet(Maps::newHashMap);
-    }
 
     /**
      * The mv partitions holding rows that no tracked partition of {@code refBaseTable} accounts for.
@@ -397,7 +374,7 @@ public class MvRefreshArbiter {
      * @param mvToBasePartitions the partitions of each ref base table intersecting each mv partition
      */
     public static Set<String> getMvPartitionsWithUntrackedRows(
-            MaterializedView mv, Table refBaseTable, Map<String, Map<Table, PCellSortedSet>> mvToBasePartitions) {
+            MaterializedView mv, Table refBaseTable, Map<String, Map<Table, Set<String>>> mvToBasePartitions) {
         if (mvToBasePartitions == null || !canLeaveUntrackedRows(mv, refBaseTable)) {
             return Sets.newHashSet();
         }
@@ -407,10 +384,10 @@ public class MvRefreshArbiter {
                     .filter(MvRefreshArbiter::holdsRows)
                     .map(Partition::getName)
                     .filter(name -> {
-                        Map<Table, PCellSortedSet> intersected = mvToBasePartitions.get(name);
-                        PCellSortedSet basePartitions = intersected == null ? null : intersected.get(refBaseTable);
+                        Map<Table, Set<String>> intersected = mvToBasePartitions.get(name);
+                        Set<String> basePartitions = intersected == null ? null : intersected.get(refBaseTable);
                         return basePartitions != null && !basePartitions.isEmpty()
-                                && Collections.disjoint(basePartitions.getPartitionNames(), tracked);
+                                && Collections.disjoint(basePartitions, tracked);
                     })
                     .collect(Collectors.toSet());
             if (!untracked.isEmpty()) {
@@ -454,5 +431,4 @@ public class MvRefreshArbiter {
         return mvPartition.getSubPartitions().stream()
                 .anyMatch(physical -> physical.getVisibleVersion() != Partition.PARTITION_INIT_VERSION);
     }
->>>>>>> fe390aa ([BugFix] Refresh mv partitions whose rows no tracked base partition accounts for (#81192))
 }

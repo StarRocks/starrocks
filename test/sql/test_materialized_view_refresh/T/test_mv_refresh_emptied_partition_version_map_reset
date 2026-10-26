@@ -30,11 +30,12 @@ REFRESH MATERIALIZED VIEW mv_u WITH SYNC MODE;
 
 TRUNCATE TABLE base_p PARTITION (p20240103);
 TRUNCATE TABLE base_u;
--- reading v, both mvs are inactivated and their version maps reset
-ALTER TABLE base_p MODIFY COLUMN v BIGINT;
-function: wait_alter_table_finish()
-ALTER TABLE base_u MODIFY COLUMN v BIGINT;
-function: wait_alter_table_finish()
+-- renaming v inactivates both mvs and resets their version maps. Not MODIFY COLUMN: a shared-data schema change
+-- bumps every partition's version, so the emptied partition would no longer read as new.
+ALTER TABLE base_p RENAME COLUMN v TO v_tmp;
+ALTER TABLE base_p RENAME COLUMN v_tmp TO v;
+ALTER TABLE base_u RENAME COLUMN v TO v_tmp;
+ALTER TABLE base_u RENAME COLUMN v_tmp TO v;
 ALTER MATERIALIZED VIEW mv_p ACTIVE;
 ALTER MATERIALIZED VIEW mv_u ACTIVE;
 REFRESH MATERIALIZED VIEW mv_p WITH SYNC MODE;

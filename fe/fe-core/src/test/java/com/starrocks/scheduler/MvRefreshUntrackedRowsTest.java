@@ -113,7 +113,7 @@ public class MvRefreshUntrackedRowsTest extends MVTestBase {
 
             TaskRun firstBatch = TaskRunBuilder.newBuilder(task).build();
             initAndExecuteTaskRun(firstBatch);
-            TaskRun nextBatch = getPartitionBasedRefreshProcessor(firstBatch).getNextTaskRun();
+            TaskRun nextBatch = ((PartitionBasedMvRefreshProcessor) firstBatch.getProcessor()).getNextTaskRun();
             Assertions.assertNotNull(nextBatch);
             executeAllBatches(nextBatch);
 
@@ -214,11 +214,11 @@ public class MvRefreshUntrackedRowsTest extends MVTestBase {
 
             starRocksAssert.getCtx().executeSql("TRUNCATE TABLE test.tbl_single");
             mv.resetVisibleVersionMap();
-            Assertions.assertEquals(MvUpdateInfo.MvToRefreshType.FULL, getMvUpdateInfo(mv).getMVToRefreshType());
+            Assertions.assertEquals(MvUpdateInfo.MvToRefreshType.FULL, getMvUpdateInfo(mv).getMvToRefreshType());
 
             Assertions.assertNotNull(getMVRefreshExecPlan(taskRun));
             Assertions.assertTrue(visibleVersion(mv, "mv_single") > versionBefore);
-            Assertions.assertEquals(MvUpdateInfo.MvToRefreshType.NO_REFRESH, getMvUpdateInfo(mv).getMVToRefreshType());
+            Assertions.assertEquals(MvUpdateInfo.MvToRefreshType.NO_REFRESH, getMvUpdateInfo(mv).getMvToRefreshType());
             Assertions.assertNull(getMVRefreshExecPlan(taskRun));
         } finally {
             starRocksAssert.dropMaterializedView("mv_single");
@@ -299,8 +299,8 @@ public class MvRefreshUntrackedRowsTest extends MVTestBase {
     }
 
     private static Set<String> refreshedMvPartitions(TaskRun taskRun) {
-        return getPartitionBasedRefreshProcessor(taskRun).getMvContext().getRefreshScope()
-                .getMvPartitionsToRefresh().getPartitionNames();
+        return ((PartitionBasedMvRefreshProcessor) taskRun.getProcessor()).getMVTaskRunExtraMessage()
+                .getMvPartitionsToRefresh();
     }
 
     private static void assertSettled(MaterializedView mv, TaskRun taskRun) throws Exception {
