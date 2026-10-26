@@ -269,6 +269,15 @@ fi
 cd -
 echo "Finished patching $RE2_SOURCE"
 
+# grpc patch to release cancelled reclaimers without memory pressure
+cd "$TP_SOURCE_DIR/$GRPC_SOURCE" || exit 1
+if [ ! -f "$PATCHED_MARK.reclaimer_queue_leak" ] && [ "$GRPC_SOURCE" = "grpc-1.43.0" ]; then
+    patch --batch -p1 < "$TP_PATCH_DIR/grpc-1.43.0-reclaimer-queue-leak.patch" || exit 1
+    touch "$PATCHED_MARK.reclaimer_queue_leak"
+fi
+cd -
+echo "Finished patching $GRPC_SOURCE"
+
 # libevent patch
 cd $TP_SOURCE_DIR/$LIBEVENT_SOURCE
 if [ ! -f $PATCHED_MARK ]; then
