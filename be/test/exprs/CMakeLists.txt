@@ -107,6 +107,7 @@ set(EXPR_TEST_FILES
     table_function/multi_unnest_core_test.cpp
     table_function/unnest_bitmap_core_test.cpp
     table_function/unnest_core_test.cpp
+    table_function/subdivide_bitmap_core_test.cpp
     udf/python/env_test.cpp
     unary_function_test.cpp
     unnest_core_test.cpp

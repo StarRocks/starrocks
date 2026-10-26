@@ -1093,6 +1093,124 @@ TEST_F(geographyFunctionsTest, nativeGeographyPointDistance) {
     EXPECT_TRUE(null->is_null(0));
 }
 
+TEST_F(geographyFunctionsTest, nativeGeoPointDistanceFastPathPreservesBits) {
+    const std::array<WkbCoordinate, 2> cases[] = {
+            {{{0, 0}, {3, 4}}},
+            {{{179, 0}, {-179, 0}}},
+            {{{0, 90}, {180, 90}}},
+            {{{-180, -90}, {180, 90}}},
+            {{{-0.0, 0}, {0, -0.0}}},
+            {{{0, 0}, {180, 0}}},
+            {{{1e7, -2e7}, {1e7 + 3, -2e7 + 4}}},
+            {{{std::numeric_limits<double>::max(), 0}, {-std::numeric_limits<double>::max(), 0}}},
+            {{{std::numeric_limits<double>::denorm_min(), 0}, {0, 0}}}};
+    for (bool spherical : {false, true}) {
+        const auto type = spherical ? geography_type() : geometry_type();
+        auto distance = spherical ? GeoFunctions::st_geography_distance : GeoFunctions::st_geometry_distance;
+        const size_t size = spherical ? 6 : std::size(cases);
+        for (unsigned constants = 0; constants < 4; ++constants) {
+            for (bool prepare : {false, true}) {
+                Columns inputs;
+                for (size_t side = 0; side < 2; ++side) {
+                    auto data = GeoColumn::create(GeoColumnDescriptor{
+                            type.geo_type.value(),
+                            {GEO_ENCODING_WKB, GEO_DIMENSION_XY, GEO_VALIDATION_STATE_UNVALIDATED}});
+                    for (size_t row = 0; row < (constants & (1 << side) ? 1 : size); ++row) {
+                        WkbGeometry point;
+                        point.type = WkbGeometryType::POINT;
+                        point.coordinates.push_back(cases[row][side]);
+                        std::string bytes;
+                        ASSERT_TRUE(WkbCodec::to_wkb(point, &bytes, WkbCoordinateSemantics::GEOMETRY_CARTESIAN).ok());
+                        data->append_wkb(Slice(bytes));
+                    }
+                    inputs.push_back(constants & (1 << side) ? ColumnPtr(ConstColumn::create(data, size)) : data);
+                }
+                std::unique_ptr<FunctionContext> context(
+                        FunctionContext::create_test_context({type, type}, TypeDescriptor(TYPE_DOUBLE)));
+                context->set_constant_columns(
+                        {constants & 1 ? inputs[0] : nullptr, constants & 2 ? inputs[1] : nullptr});
+                if (prepare)
+                    ASSERT_TRUE(
+                            GeoFunctions::native_geo_distance_prepare(context.get(), FunctionContext::FRAGMENT_LOCAL)
+                                    .ok());
+                auto actual = distance(context.get(), inputs);
+                ASSERT_TRUE(actual.ok()) << actual.status();
+                ASSERT_EQ(size, (*actual)->size());
+                EXPECT_EQ(constants == 3, (*actual)->is_constant());
+                for (size_t row = 0; row < size; ++row) {
+                    const auto& a = cases[constants & 1 ? 0 : row][0];
+                    const auto& b = cases[constants & 2 ? 0 : row][1];
+                    double expected = std::hypot(b.x - a.x, b.y - a.y);
+                    if (spherical) ASSERT_TRUE(GeoPoint::st_distance_sphere(a.x, a.y, b.x, b.y, &expected));
+                    EXPECT_EQ(std::bit_cast<uint64_t>(expected),
+                              std::bit_cast<uint64_t>((*actual)->get(row).get_double()));
+                }
+                if (prepare)
+                    ASSERT_TRUE(GeoFunctions::native_geo_distance_close(context.get(), FunctionContext::FRAGMENT_LOCAL)
+                                        .ok());
+            }
+        }
+    }
+}
+
+TEST_F(geographyFunctionsTest, nativeGeoPointDistanceFastPathKeepsFallbackErrorsAndNulls) {
+    for (bool spherical : {false, true}) {
+        const auto type = spherical ? geography_type() : geometry_type();
+        auto distance = spherical ? GeoFunctions::st_geography_distance : GeoFunctions::st_geometry_distance;
+        const GeoColumnDescriptor descriptor{type.geo_type.value(),
+                                             {GEO_ENCODING_WKB, GEO_DIMENSION_XY, GEO_VALIDATION_STATE_UNVALIDATED}};
+        const auto point = spherical ? geography({"POINT (1 2)"}) : geometry({"POINT (1 2)"});
+        auto big = point->get(0).get_slice().to_string();
+        big[0] = 0;
+        std::reverse(big.begin() + 1, big.begin() + 5);
+        std::reverse(big.begin() + 5, big.begin() + 13);
+        std::reverse(big.begin() + 13, big.end());
+        auto right = GeoColumn::create(descriptor);
+        right->append_wkb(Slice(big));
+        for (const auto& bytes : geometry_point_wkb_cases()) {
+            for (bool null : {false, true}) {
+                auto data = GeoColumn::create(descriptor);
+                data->append_wkb(Slice(bytes));
+                auto nulls = NullColumn::create();
+                nulls->append(null);
+                ColumnPtr input = NullableColumn::create(data, nulls);
+                for (bool constant : {false, true}) {
+                    ColumnPtr lhs = constant ? ConstColumn::create(input, 1) : input;
+                    std::unique_ptr<FunctionContext> context(
+                            FunctionContext::create_test_context({type, type}, TypeDescriptor(TYPE_DOUBLE)));
+                    context->set_constant_columns({constant ? lhs : nullptr, nullptr});
+                    ASSERT_TRUE(
+                            GeoFunctions::native_geo_distance_prepare(context.get(), FunctionContext::FRAGMENT_LOCAL)
+                                    .ok());
+                    auto actual = distance(context.get(), {lhs, point});
+                    auto fallback = distance(context.get(), {lhs, right});
+                    ASSERT_EQ(actual.ok(), fallback.ok());
+                    if (!actual.ok()) {
+                        EXPECT_EQ(actual.status().code(), fallback.status().code());
+                        EXPECT_EQ(actual.status().message(), fallback.status().message());
+                    } else {
+                        ASSERT_EQ((*actual)->is_null(0), (*fallback)->is_null(0));
+                        if (!(*actual)->is_null(0)) {
+                            EXPECT_EQ(std::bit_cast<uint64_t>((*actual)->get(0).get_double()),
+                                      std::bit_cast<uint64_t>((*fallback)->get(0).get_double()));
+                        }
+                    }
+                    ASSERT_TRUE(GeoFunctions::native_geo_distance_close(context.get(), FunctionContext::FRAGMENT_LOCAL)
+                                        .ok());
+                }
+            }
+        }
+        auto empty = GeoColumn::create(descriptor);
+        auto result = distance(nullptr, {empty, empty});
+        ASSERT_TRUE(result.ok()) << result.status();
+        EXPECT_EQ(0, (*result)->size());
+        auto all_null = distance(nullptr, {ColumnHelper::create_const_null_column(17), ConstColumn::create(point, 17)});
+        ASSERT_TRUE(all_null.ok()) << all_null.status();
+        EXPECT_TRUE((*all_null)->only_null());
+        EXPECT_EQ(17, (*all_null)->size());
+    }
+}
+
 TEST_F(geographyFunctionsTest, nativeGeometryPointLineDistanceAndDWithin) {
     auto points = geometry({"POINT (5 3)", "POINT (-2 0)", "POINT (5 1)", "POINT (5 3)"});
     auto lines = geometry({"LINESTRING (0 0, 10 0)", "LINESTRING (0 0, 10 0)",

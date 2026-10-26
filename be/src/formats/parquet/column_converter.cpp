@@ -126,7 +126,6 @@ private:
     int _offset = 0;
     cctz::time_zone _ctz;
     int64_t _second_mask = 0;
-    int64_t _scale_to_nano_factor = 0;
 };
 
 template <typename SourceType, typename DestType, bool kSourceUnsigned = false>
@@ -798,14 +797,14 @@ Status parquet::Int32ToDateTimeConverter::convert(const Column* src, Column* dst
     auto& dst_null_data = dst_nullable_column->null_column_raw_ptr()->get_data();
 
     size_t size = dst_null_data.size();
+    memcpy(dst_null_data.data(), src_null_data.data(), size);
+    // from_unix_second(day * SECS_PER_DAY) divides the seconds back into a Julian day with no remainder
+    // (UNIX_EPOCH_SECONDS is UNIX_EPOCH_JULIAN whole days), so build the midnight timestamp from the day
+    // directly. Null rows hold arbitrary bytes, so they convert day 0 instead (the value is unused); the
+    // loop has no division or branch and vectorizes.
     for (size_t i = 0; i < size; i++) {
-        dst_null_data[i] = src_null_data[i];
-        if (!src_null_data[i]) {
-            int64_t day = src_data[i];
-            TimestampValue ep;
-            ep.from_unix_second(day * 24 * 60 * 60, 0);
-            dst_data[i].set_timestamp(ep.timestamp());
-        }
+        int64_t day = src_null_data[i] ? 0 : src_data[i];
+        dst_data[i].set_timestamp(timestamp::from_julian_and_time(day + date::UNIX_EPOCH_JULIAN, 0));
     }
     dst_nullable_column->set_has_null(src_nullable_column->has_null());
     return Status::OK();
@@ -886,13 +885,10 @@ Status Int64ToDateTimeConverter::init(const std::string& timezone, const tparque
 
         if (time_unit.__isset.MILLIS) {
             _second_mask = 1000;
-            _scale_to_nano_factor = 1000000;
         } else if (time_unit.__isset.MICROS) {
             _second_mask = 1000000;
-            _scale_to_nano_factor = 1000;
         } else if (time_unit.__isset.NANOS) {
             _second_mask = 1000000000;
-            _scale_to_nano_factor = 1;
         } else {
             std::stringstream ss;
             time_unit.printTo(ss);
@@ -904,10 +900,8 @@ Status Int64ToDateTimeConverter::init(const std::string& timezone, const tparque
         const auto& converted_type = schema_element.converted_type;
         if (converted_type == tparquet::ConvertedType::TIMESTAMP_MILLIS) {
             _second_mask = 1000;
-            _scale_to_nano_factor = 1000000;
         } else if (converted_type == tparquet::ConvertedType::TIMESTAMP_MICROS) {
             _second_mask = 1000000;
-            _scale_to_nano_factor = 1000;
         } else {
             return Status::InternalError(
                     strings::Substitute("unexpected converted type $0", tparquet::to_string(converted_type)));
@@ -945,31 +939,58 @@ Status Int64ToDateTimeConverter::convert(const Column* src, Column* dst) {
     auto& dst_null_data = dst_nullable_column->null_column_raw_ptr()->get_data();
 
     size_t size = dst_null_data.size();
-    auto fill_dst_fn = [&]<bool UTC_TO_TZ, bool FAST_TZ>() {
+    memcpy(dst_null_data.data(), src_null_data.data(), size);
+    // SECOND_MASK is the tick count per second (1e3 / 1e6 / 1e9), known from the schema; as a template
+    // argument the division and modulo below compile to multiplications instead of idiv.
+    auto fill_dst_fn = [&]<int64_t SECOND_MASK, bool UTC_TO_TZ, bool FAST_TZ>() {
+        constexpr int64_t kScaleToNano = NANOSECS_PER_SEC / SECOND_MASK;
         for (size_t i = 0; i < size; i++) {
-            dst_null_data[i] = src_null_data[i];
-            if (!src_null_data[i]) {
-                int64_t seconds = src_data[i] / _second_mask;
-                int64_t nanoseconds = (src_data[i] % _second_mask) * _scale_to_nano_factor;
-                // Truncating division leaves a negative sub-second remainder for a pre-1970 tick;
-                // borrow a whole second so nanoseconds stays in [0, NANOSECS_PER_SEC), matching the
-                // floor split the FE boundary computation uses. Without this, of_epoch_second packs
-                // a negative microsecond into the timestamp and corrupts the value.
-                if (nanoseconds < 0) {
-                    seconds -= 1;
-                    nanoseconds += NANOSECS_PER_SEC;
+            // With a fixed offset every row costs the same, so null rows are converted too, from tick 0 since
+            // they hold arbitrary bytes (the value is unused), and the loop has no branch; the per-row
+            // timezone lookup is too costly to spend on nulls.
+            int64_t ticks;
+            if constexpr (FAST_TZ) {
+                ticks = src_null_data[i] ? 0 : src_data[i];
+            } else {
+                if (src_null_data[i]) {
+                    continue;
                 }
-
-                if constexpr (UTC_TO_TZ) {
-                    int offset = _offset;
-                    if constexpr (!FAST_TZ) {
-                        offset = timestamp::get_timezone_offset_by_epoch_seconds(seconds, _ctz);
-                    }
-                    seconds += offset;
-                }
-
-                dst_data[i].set_timestamp(timestamp::of_epoch_second(seconds, nanoseconds));
+                ticks = src_data[i];
             }
+            int64_t seconds = ticks / SECOND_MASK;
+            int64_t nanoseconds = (ticks % SECOND_MASK) * kScaleToNano;
+            // Truncating division leaves a negative sub-second remainder for a pre-1970 tick;
+            // borrow a whole second so nanoseconds stays in [0, NANOSECS_PER_SEC), matching the
+            // floor split the FE boundary computation uses. Without this, of_epoch_second packs
+            // a negative microsecond into the timestamp and corrupts the value.
+            if (nanoseconds < 0) {
+                seconds -= 1;
+                nanoseconds += NANOSECS_PER_SEC;
+            }
+
+            if constexpr (UTC_TO_TZ) {
+                int offset = _offset;
+                if constexpr (!FAST_TZ) {
+                    offset = timestamp::get_timezone_offset_by_epoch_seconds(seconds, _ctz);
+                }
+                seconds += offset;
+            }
+
+            dst_data[i].set_timestamp(timestamp::of_epoch_second(seconds, nanoseconds));
+        }
+    };
+    auto fill_dst_by_unit = [&]<bool UTC_TO_TZ, bool FAST_TZ>() {
+        switch (_second_mask) {
+        case 1000:
+            fill_dst_fn.operator()<1000, UTC_TO_TZ, FAST_TZ>();
+            break;
+        case 1000000:
+            fill_dst_fn.operator()<1000000, UTC_TO_TZ, FAST_TZ>();
+            break;
+        default:
+            DCHECK_EQ(_second_mask, 1000000000);
+            fill_dst_fn.operator()<1000000000, UTC_TO_TZ, FAST_TZ>();
+            break;
         }
     };
 
@@ -977,12 +998,12 @@ Status Int64ToDateTimeConverter::convert(const Column* src, Column* dst) {
         // use fixed offset to adjust to local timezone(potentially could get wrong result but faster)
         // or when it's UTC timezone.
         if (config::parquet_fast_timezone_conversion || _offset == 0) {
-            fill_dst_fn.operator()<true, true>();
+            fill_dst_by_unit.operator()<true, true>();
         } else {
-            fill_dst_fn.operator()<true, false>();
+            fill_dst_by_unit.operator()<true, false>();
         }
     } else {
-        fill_dst_fn.operator()<false, true>();
+        fill_dst_by_unit.operator()<false, true>();
     }
 
     dst_nullable_column->set_has_null(src_nullable_column->has_null());

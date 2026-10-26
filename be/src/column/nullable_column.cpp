@@ -298,6 +298,24 @@ uint32_t NullableColumn::serialize(size_t idx, uint8_t* pos) const {
     return sizeof(bool) + _data_column->serialize(idx, pos + sizeof(bool));
 }
 
+uint32_t NullableColumn::serialize_compact(size_t idx, uint8_t* pos) const {
+    // For nullable column don't have null column data and has_null is false.
+    if (!_has_null) {
+        strings::memcpy_inlined(pos, &_has_null, sizeof(bool));
+        return sizeof(bool) + _data_column->serialize_compact(idx, pos + sizeof(bool));
+    }
+
+    const auto null_data = _null_column->immutable_data();
+    bool null = null_data[idx];
+    strings::memcpy_inlined(pos, &null, sizeof(bool));
+
+    if (null) {
+        return sizeof(bool);
+    }
+
+    return sizeof(bool) + _data_column->serialize_compact(idx, pos + sizeof(bool));
+}
+
 uint32_t NullableColumn::serialize_default(uint8_t* pos) const {
     bool null = true;
     strings::memcpy_inlined(pos, &null, sizeof(bool));
@@ -329,6 +347,21 @@ const uint8_t* NullableColumn::deserialize_and_append(const uint8_t* pos) {
 
     if (null == 0) {
         pos = _data_column->deserialize_and_append(pos);
+    } else {
+        _has_null = true;
+        _data_column->append_default();
+    }
+    return pos;
+}
+
+const uint8_t* NullableColumn::deserialize_compact_and_append(const uint8_t* pos) {
+    bool null;
+    memcpy(&null, pos, sizeof(bool));
+    pos += sizeof(bool);
+    null_column_data().emplace_back(null);
+
+    if (null == 0) {
+        pos = _data_column->deserialize_compact_and_append(pos);
     } else {
         _has_null = true;
         _data_column->append_default();

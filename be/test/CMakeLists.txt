@@ -13,6 +13,7 @@ set(EXEC_FILES
         ./compute_env/spill/spill_observable_test.cpp
         ./exec/pipeline/spill_process_channel_test.cpp
         ./exec/pipeline/hash_join_build_chunk_slicer_test.cpp
+        ./exec/pipeline/partial_runtime_filter_merger_test.cpp
         ./exec/pipeline/block_reason_test.cpp
         ./exec/pipeline/spillable_sort_source_lockstep_test.cpp
         ./exec/pipeline/spillable_sort_observer_wakeup_test.cpp
@@ -26,6 +27,7 @@ set(EXEC_FILES
         ./exec/pipeline/table_function_operator_test.cpp
         ./exec/data_sinks/pipeline_sink_builder_test.cpp
         ./exec/pipeline/exchange_sink_operator_test.cpp
+        ./exec/pipeline/exchange_compression_strategy_test.cpp
         ./exec/pipeline/sink/export_sink_operator_test.cpp
         ./exec/pipeline/sink/memory_scratch_sink_operator_test.cpp
         ./exec/pipeline/sink/olap_table_sink_operator_test.cpp
@@ -53,6 +55,7 @@ set(EXEC_FILES
         ./exec/sink/sink_io_buffer_test.cpp
         ./exec/agg_hash_map_test.cpp
         ./exec/compress_serializer_test.cpp
+        ./exec/aggregator_hash_variant_test.cpp
         ./exec/hash_variant_test.cpp
         ./exec/pipeline/olap_scan_operator_test.cpp
         ./exec/analytor_test.cpp
@@ -76,6 +79,7 @@ set(EXEC_FILES
         ./exprs/agg/aggregate_test.cpp
         ./exprs/agg/window_test.cpp
         ./exprs/agg/agg_compressed_key_test.cpp
+        ./exprs/agg/distinct_two_level_test.cpp
         ./exprs/agg/agg_state_functions_test.cpp
         ./exprs/decimal_cast_expr_float_test.cpp
         ./exprs/flat_json_functions_test.cpp

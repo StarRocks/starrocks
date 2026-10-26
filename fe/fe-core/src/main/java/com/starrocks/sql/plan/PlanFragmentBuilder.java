@@ -293,10 +293,34 @@ public class PlanFragmentBuilder {
                                               boolean hasOutputFragment, boolean isShortCircuit) {
         UKFKConstraintsCollector.collectColumnConstraints(plan);
         ExecPlan execPlan = new ExecPlan(connectContext, colNames, plan, outputColumns, isShortCircuit);
-        createOutputFragment(new PhysicalPlanTranslator(columnRefFactory).translate(plan, execPlan), execPlan,
-                outputColumns, hasOutputFragment);
-        execPlan.setPlanCount(plan.getPlanCount());
-        return finalizeFragments(execPlan, resultSinkType);
+        boolean planned = false;
+        try {
+            createOutputFragment(new PhysicalPlanTranslator(columnRefFactory).translate(plan, execPlan), execPlan,
+                    outputColumns, hasOutputFragment);
+            execPlan.setPlanCount(plan.getPlanCount());
+            ExecPlan finalizedPlan = finalizeFragments(execPlan, resultSinkType);
+            planned = true;
+            return finalizedPlan;
+        } finally {
+            if (!planned) {
+                releaseScanResources(execPlan);
+            }
+        }
+    }
+
+    /**
+     * Releases what the scans of a plan that failed to assemble already opened. Such a plan never reaches a
+     * coordinator, so nothing else would clear its scan nodes.
+     */
+    public static void releaseScanResources(ExecPlan execPlan) {
+        for (ScanNode scanNode : execPlan.getScanNodes()) {
+            try {
+                scanNode.clear();
+            } catch (Exception e) {
+                // The original planning failure is the one worth reporting.
+                LOG.warn("clear scan node failed for {}", scanNode.getClass().getSimpleName(), e);
+            }
+        }
     }
 
     public static ExecPlan createPhysicalPlan(OptExpression plan, ConnectContext connectContext,
@@ -1764,6 +1788,7 @@ public class PlanFragmentBuilder {
             deltaLakeScanNode.computeStatistics(optExpression.getStatistics());
             deltaLakeScanNode.setScanOptimizeOption(node.getScanOptimizeOption());
             currentExecGroup.add(deltaLakeScanNode, true);
+            boolean scanNodePrepared = false;
             try {
                 // set predicate
                 ScalarOperatorToExpr.FormatterContext formatterContext =
@@ -1780,12 +1805,18 @@ public class PlanFragmentBuilder {
                 HDFSScanNodePredicates scanNodePredicates = deltaLakeScanNode.getScanNodePredicates();
                 prepareCommonExpr(scanNodePredicates, node.getScanOperatorPredicates(), context);
                 prepareMinMaxExpr(scanNodePredicates, node.getScanOperatorPredicates(), context, referenceTable);
+                scanNodePrepared = true;
             } catch (AnalysisException e) {
                 LOG.warn("Delta lake scan node get scan range locations failed : ", e);
                 throw new StarRocksPlannerException(e.getMessage(), INTERNAL_ERROR);
             } catch (StarRocksException e) {
                 LOG.warn("Delta scan node get scan range locations failed : " + e);
                 throw new StarRocksPlannerException(e.getMessage(), INTERNAL_ERROR);
+            } finally {
+                if (!scanNodePrepared) {
+                    // Not registered yet, so a failed plan's cleanup would not find what setup opened.
+                    deltaLakeScanNode.clear();
+                }
             }
 
             deltaLakeScanNode.setLimit(node.getLimit());
@@ -2119,6 +2150,7 @@ public class PlanFragmentBuilder {
             icebergScanNode.setColumnAccessPaths(node.getColumnAccessPaths());
             icebergScanNode.computeStatistics(expression.getStatistics());
             currentExecGroup.add(icebergScanNode, true);
+            boolean scanNodePrepared = false;
             try {
                 // set predicate
                 ScalarOperatorToExpr.FormatterContext formatterContext =
@@ -2153,9 +2185,15 @@ public class PlanFragmentBuilder {
                     HDFSScanNodePredicates scanNodePredicates = icebergScanNode.getScanNodePredicates();
                     prepareMinMaxExpr(scanNodePredicates, node.getScanOperatorPredicates(), context, referenceTable);
                 }
+                scanNodePrepared = true;
             } catch (StarRocksException e) {
                 LOG.warn("Iceberg scan node get scan range locations failed : ", e);
                 throw new StarRocksPlannerException(e.getMessage(), INTERNAL_ERROR);
+            } finally {
+                if (!scanNodePrepared) {
+                    // Not registered yet, so a failed plan's cleanup would not find what setup opened.
+                    icebergScanNode.clear();
+                }
             }
 
             icebergScanNode.setLimit(node.getLimit());

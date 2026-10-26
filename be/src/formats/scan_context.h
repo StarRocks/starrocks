@@ -110,6 +110,8 @@ struct FormatScannerStats {
     int64_t column_reader_init_ns = 0;
     // dict filter
     int64_t group_chunk_read_ns = 0;
+    // compacting the active columns to the rows that passed the predicates and runtime filters
+    int64_t group_chunk_filter_ns = 0;
     int64_t group_dict_filter_ns = 0;
     int64_t group_dict_decode_ns = 0;
     // io coalesce

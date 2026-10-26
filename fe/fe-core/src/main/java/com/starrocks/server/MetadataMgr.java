@@ -94,6 +94,7 @@ import com.starrocks.sql.optimizer.statistics.Histogram;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.thrift.TSinkCommitInfo;
+import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.FileContent;
 import org.apache.logging.log4j.LogManager;
@@ -755,6 +756,28 @@ public class MetadataMgr {
         return statistics.setStatsSource(Statistics.StatsSource.ANALYZE).build();
     }
 
+    // An external table planned from ANALYZE statistics gets its scan row count from the max of the scanned columns'
+    // own row counts, each SAMPLE-analyzed column extrapolated separately; no single table row count reproduces it,
+    // so a query dump records them per column. They are read from the same (cached) statistics the plan just used.
+    private void captureAnalyzedColumnRowCountsToDump(OptimizerContext session, String catalogName, Table table,
+                                                      Map<ColumnRefOperator, Column> columns) {
+        if (session.getDumpInfo() == null || CatalogMgr.isInternalCatalog(catalogName)) {
+            return;
+        }
+        List<ColumnRefOperator> refs = columns.keySet().stream()
+                .filter(ref -> !FeNameFormat.FORBIDDEN_COLUMN_NAMES.contains(ref.getName()))
+                .collect(Collectors.toList());
+        List<String> columnNames = refs.stream().map(ref -> columns.get(ref).getName()).collect(Collectors.toList());
+        List<ConnectorTableColumnStats> stats =
+                GlobalStateMgr.getCurrentState().getStatisticStorage().getConnectorTableStatistics(table, columnNames);
+        for (int i = 0; i < refs.size() && i < stats.size(); i++) {
+            if (!stats.get(i).isUnknown()) {
+                session.getDumpInfo().addExternalColumnRowCount(table, refs.get(i).getName(),
+                        (long) stats.get(i).getRowCount());
+            }
+        }
+    }
+
     public Statistics getTableStatistics(OptimizerContext session,
                                          String catalogName,
                                          Table table,
@@ -787,6 +810,10 @@ public class MetadataMgr {
         // (100 for iceberg / 1 for hive) and plans an empty table with the wrong cardinality.
         if (statistics.getOutputRowCount() >= 0 && !Double.isInfinite(statistics.getOutputRowCount())) {
             session.getDumpInfo().addExternalTableRowCount(table, (long) statistics.getOutputRowCount());
+        }
+        if (table instanceof IcebergTable icebergTable
+                && icebergTable.getNativeTable() instanceof BaseTable) {
+            session.getDumpInfo().addExternalTableFormatVersion(table, icebergTable.getFormatVersion());
         }
         // For a partitioned iceberg table also record its partition spec + names + per-partition counts (hive
         // captures the same via OptExternalPartitionPruner) so replay can reproduce partition pruning.
@@ -867,11 +894,18 @@ public class MetadataMgr {
                             setOutputRowCount(connectorBasicStats.getOutputRowCount())
                             .setStatsSource(Statistics.StatsSource.TABLE_METADATA).build();
                 } else {
+                    // A connector serving ANALYZE statistics (query dump replay) keeps the partition predicate in the
+                    // selectivity, exactly like the internal-statistics branch below.
+                    if (connectorBasicStats != null
+                            && connectorBasicStats.getStatsSource() == Statistics.StatsSource.ANALYZE) {
+                        session.setObtainedFromInternalStatistics(true);
+                    }
                     return connectorBasicStats;
                 }
             }
         } else {
             session.setObtainedFromInternalStatistics(true);
+            captureAnalyzedColumnRowCountsToDump(session, catalogName, table, columns);
             return internalStatistics;
         }
     }
