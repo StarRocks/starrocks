@@ -65,14 +65,14 @@ final class AIFunctionAnalyzer {
         boolean hasOptionMap = argumentCount > 1 && node.getChild(argumentCount - 1).getType().isMapType();
         int modelArgument = AIModelConfigs.getModelArgument(node.getFn());
         boolean embedding = AIModelConfigs.isTextEmbedding(node.getFn());
-        boolean namedProvider = node.getFn().getAiModelSource() == TAIModelSource.PROVIDER;
+        boolean providerSource = node.getFn().getAiModelSource() == TAIModelSource.PROVIDER;
 
         try {
             AIModelConfigs.DefaultModelRequirement requirement = modelArgument >= 0
                     ? AIModelConfigs.DefaultModelRequirement.OPTIONAL : AIModelConfigs.DefaultModelRequirement.REQUIRED;
-            if (namedProvider) {
+            if (providerSource) {
                 // Only emitted physical AIProject calls capture metadata, independently for each execution plan.
-                AIModelConfigs.providerName(node.getChild(AIModelConfigs.getProviderArgument(node.getFn())));
+                AIModelConfigs.providerSelection(node);
             } else if (embedding) {
                 AIModelConfigs.systemEmbeddingSnapshot(requirement);
             } else {

@@ -17,6 +17,18 @@ import unittest
 
 
 class AIAggregateFunctionsTest(unittest.TestCase):
+    def test_aggregate_routes_only_through_default_chat_provider(self):
+        import functions
+        aggregates = functions.ai_aggregate_functions
+        reducers = [fn for fn in functions.ai_vectorized_functions if fn[0] in (200155, 200156)]
+        self.assertEqual([200150, 200151], [fn[0] for fn in aggregates])
+        for fn in aggregates + reducers:
+            self.assertEqual('PROVIDER', fn[7]['model_source'])
+            self.assertEqual('CHAT', fn[7]['capability'])
+            self.assertEqual(-1, fn[7]['provider_argument'])
+            self.assertEqual(-1, fn[7]['model_argument'])
+            self.assertIn(len(fn[5]), (2, 3))
+
     def test_public_routing_and_hidden_execution_are_separate(self):
         with tempfile.TemporaryDirectory() as output:
             subprocess.run([sys.executable, str(pathlib.Path(__file__).with_name('gen_functions.py')),
@@ -89,7 +101,7 @@ class AIAggregateMetadataValidationTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             gen_functions.add_ai_aggregate_function(public)
 
-    def test_public_aggregate_rejects_provider_routing(self):
+    def test_public_aggregate_rejects_explicit_provider_overload(self):
         import copy
         import functions
         import gen_functions

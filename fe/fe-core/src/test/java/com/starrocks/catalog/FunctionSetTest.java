@@ -73,7 +73,7 @@ public class FunctionSetTest {
             Function fn = functionSet.getFunction(description, Function.CompareMode.IS_SUPERTYPE_OF);
             Assertions.assertInstanceOf(AggregateFunction.class, fn);
             Assertions.assertTrue(fn.isAi());
-            TAIModelSource source = TAIModelSource.SYSTEM;
+            TAIModelSource source = TAIModelSource.PROVIDER;
             Assertions.assertEquals(source, fn.getAiModelSource());
             Assertions.assertEquals(source, fn.copy().getAiModelSource());
             Assertions.assertEquals(source, fn.toThrift().getAi_model_source());

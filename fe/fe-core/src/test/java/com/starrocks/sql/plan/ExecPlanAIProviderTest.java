@@ -27,6 +27,7 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.common.AIModelConfigs;
+import com.starrocks.utframe.AIProviderTestUtils;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -43,6 +44,8 @@ import java.util.Set;
 public class ExecPlanAIProviderTest extends PlanTestBase {
     private static FunctionCallExpr chatTemplate;
     private static FunctionCallExpr embeddingTemplate;
+    private static FunctionCallExpr aggregateDefaultTemplate;
+    private static FunctionCallExpr namedAggregateProviderTemplate;
 
     @BeforeAll
     public static void resolveFunctions() throws Exception {
@@ -60,6 +63,11 @@ public class ExecPlanAIProviderTest extends PlanTestBase {
             embeddingTemplate = analyzedCall("ai_custom_embedding", "embedding_template");
         } finally {
             registry.dropProvider("embedding_template", true);
+        }
+        try (var ignored = AIProviderTestUtils.withDefaultProvider("aggregate_template", AIProviderType.CHAT,
+                Map.of("endpoint", "https://example.test/v1/systemone", "model", "aggregate-model"))) {
+            aggregateDefaultTemplate = aggregateCall(false);
+            namedAggregateProviderTemplate = aggregateCall(true);
         }
     }
 
@@ -192,6 +200,99 @@ public class ExecPlanAIProviderTest extends PlanTestBase {
         Assertions.assertEquals("provider:0", bound.getAiModelConfigId());
         Assertions.assertEquals("provider:0", ((FunctionCallExpr) bound.clone()).getAiModelConfigId());
         Assertions.assertTrue(Modifier.isFinal(FunctionCallExpr.class.getDeclaredField("aiModelConfigId").getModifiers()));
+    }
+
+    @Test
+    public void testDefaultSelectionIsStableWithinPlanAndFreshForNewPlan() {
+        AIProviderMgr manager = Mockito.mock(AIProviderMgr.class);
+        AIProvider first = provider("first", AIProviderType.CHAT, "first-model");
+        AIProvider second = provider("second", AIProviderType.CHAT, "second-model");
+        Mockito.when(manager.getDefaultProvider(AIProviderType.CHAT)).thenReturn(first, second);
+        ExecPlan plan = new ExecPlan(connectContext, List.of(), null, List.of(), false);
+        try (MockedStatic<GlobalStateMgr> ignored = mockProviderManager(manager)) {
+            AIModelConfigs.ModelConfig captured = plan.bindAIModelConfigs(project(aggregateDefaultTemplate)).get("provider:0");
+            Assertions.assertSame(captured,
+                    plan.bindAIModelConfigs(project(aggregateDefaultTemplate)).get("provider:0"));
+            Assertions.assertEquals("first-model", captured.model());
+            AIModelConfigs.ModelConfig fresh = new ExecPlan(connectContext, List.of(), null, List.of(), false)
+                    .bindAIModelConfigs(project(aggregateDefaultTemplate)).get("provider:0");
+            Assertions.assertEquals("second-model", fresh.model());
+            Mockito.verify(manager, Mockito.times(2)).getDefaultProvider(AIProviderType.CHAT);
+            Mockito.verifyNoMoreInteractions(manager);
+        }
+    }
+
+    @Test
+    public void testDefaultAndNamedSelectorsReuseFirstSnapshotByUuid() {
+        for (boolean defaultFirst : List.of(true, false)) {
+            AIProviderMgr manager = Mockito.mock(AIProviderMgr.class);
+            AIProvider shared = provider("aggregate_template", AIProviderType.CHAT, "original-model");
+            Mockito.when(manager.getDefaultProvider(AIProviderType.CHAT)).thenReturn(shared);
+            Mockito.when(manager.getProvider("aggregate_template")).thenReturn(shared);
+            ExecPlan plan = new ExecPlan(connectContext, List.of(), null, List.of(), false);
+            try (MockedStatic<GlobalStateMgr> ignored = mockProviderManager(manager)) {
+                FunctionCallExpr first = defaultFirst ? aggregateDefaultTemplate : namedAggregateProviderTemplate;
+                FunctionCallExpr second = defaultFirst ? namedAggregateProviderTemplate : aggregateDefaultTemplate;
+                AIModelConfigs.ModelConfig captured = plan.bindAIModelConfigs(project(first)).get("provider:0");
+                shared.mergeParams(Map.of("model", "changed-model", "api_key", "changed-key"));
+                Map<String, AIModelConfigs.ModelConfig> rebound = plan.bindAIModelConfigs(project(second));
+                Assertions.assertEquals(Set.of("provider:0"), rebound.keySet());
+                Assertions.assertSame(captured, rebound.get("provider:0"));
+                Assertions.assertEquals("original-model", captured.model());
+                Assertions.assertEquals("test-key", captured.apiKey());
+                Mockito.verify(manager).getDefaultProvider(AIProviderType.CHAT);
+                Mockito.verify(manager).getProvider("aggregate_template");
+                Mockito.verifyNoMoreInteractions(manager);
+            }
+        }
+    }
+
+    @Test
+    public void testNewSelectorDoesNotAliasRecreatedProviderWithSameName() {
+        AIProviderMgr manager = Mockito.mock(AIProviderMgr.class);
+        AIProvider original = provider("aggregate_template", AIProviderType.CHAT, "original-model");
+        AIProvider replacement = new AIProvider("replacement-id", original.getName(), original.getType(),
+                Map.of("endpoint", original.getEndpoint(), "model", "replacement-model"), "");
+        Mockito.when(manager.getDefaultProvider(AIProviderType.CHAT)).thenReturn(original);
+        Mockito.when(manager.getProvider("aggregate_template")).thenReturn(replacement);
+        ExecPlan plan = new ExecPlan(connectContext, List.of(), null, List.of(), false);
+        try (MockedStatic<GlobalStateMgr> ignored = mockProviderManager(manager)) {
+            AIModelConfigs.ModelConfig captured = plan.bindAIModelConfigs(project(aggregateDefaultTemplate)).get("provider:0");
+            Map<String, AIModelConfigs.ModelConfig> named = plan.bindAIModelConfigs(project(namedAggregateProviderTemplate));
+            Assertions.assertEquals(Set.of("provider:1"), named.keySet());
+            Assertions.assertEquals("replacement-model", named.get("provider:1").model());
+            Assertions.assertSame(captured,
+                    plan.bindAIModelConfigs(project(aggregateDefaultTemplate)).get("provider:0"));
+        }
+    }
+
+    @Test
+    public void testDefaultBindingFailuresDoNotCaptureSelectionOrConsumeIds() {
+        AIProviderMgr manager = Mockito.mock(AIProviderMgr.class);
+        AIProvider invalid = provider("invalid", AIProviderType.CHAT, "invalid-model");
+        invalid.mergeParams(Map.of("protocol", "anthropic"));
+        Mockito.when(manager.getDefaultProvider(AIProviderType.CHAT)).thenReturn(null,
+                provider("wrong-type", AIProviderType.EMBEDDING, "embedding-model"), invalid,
+                provider("valid", AIProviderType.CHAT, "valid-model"));
+        ExecPlan plan = new ExecPlan(connectContext, List.of(), null, List.of(), false);
+        try (MockedStatic<GlobalStateMgr> ignored = mockProviderManager(manager)) {
+            for (String message : List.of("does not exist", "requires type CHAT", "not ANTHROPIC")) {
+                SemanticException error = Assertions.assertThrows(SemanticException.class,
+                        () -> plan.bindAIModelConfigs(project(aggregateDefaultTemplate)));
+                Assertions.assertTrue(error.getDetailMsg().contains(message), error.getDetailMsg());
+            }
+            Map<String, AIModelConfigs.ModelConfig> configs = plan.bindAIModelConfigs(project(aggregateDefaultTemplate));
+            Assertions.assertEquals(Set.of("provider:0"), configs.keySet());
+            Assertions.assertEquals("valid-model", configs.get("provider:0").model());
+            Mockito.verify(manager, Mockito.times(4)).getDefaultProvider(AIProviderType.CHAT);
+        }
+    }
+
+    private static FunctionCallExpr aggregateCall(boolean explicitProvider) throws Exception {
+        String sql = explicitProvider ? "select ai_custom_query('aggregate_template', 'prompt')"
+                : "select ai_agg('text', 'summarize')";
+        QueryStatement statement = (QueryStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        return (FunctionCallExpr) ((SelectRelation) statement.getQueryRelation()).getOutputExpression().get(0);
     }
 
     private static FunctionCallExpr analyzedCall(String function, String providerName) throws Exception {

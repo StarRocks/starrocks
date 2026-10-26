@@ -82,7 +82,8 @@ public class AIModelConfigsTest {
             Assertions.assertEquals(namedModelIds.contains(id) ? 0 : -1, AIModelConfigs.getProviderArgument(function),
                     () -> function.signatureString() + " (function ID " + id + ")");
             int providerArgument = AIModelConfigs.getProviderArgument(function);
-            Assertions.assertEquals(function.getAiModelSource() == TAIModelSource.PROVIDER, providerArgument >= 0);
+            Assertions.assertEquals(namedModelIds.contains(id) || id == 200150L || id == 200151L,
+                    function.getAiModelSource() == TAIModelSource.PROVIDER);
             if (providerArgument >= 0) {
                 Assertions.assertTrue(providerArgument < function.getNumArgs());
                 Assertions.assertTrue(function.getArgs()[providerArgument].isVarchar());

@@ -8,6 +8,8 @@ description: "将某个 AI provider 设为其类型的默认值。"
 将某个 provider 设为**其所属类型**的默认值。注册表按类型（`embedding` / `rerank` / `chat`）各自保留
 一个默认值，因此把一个 embedding provider 设为默认不会影响 rerank 的默认值，反之亦然。
 
+[ai_agg](../../../sql-functions/ai-functions/ai_agg.md) 使用默认 `chat` Provider。该设置不改变既有 SYSTEM Chat 或 Embedding 函数的路由。
+
 ## 语法
 
 ```SQL

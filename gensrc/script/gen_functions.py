@@ -272,10 +272,10 @@ def validate_ai_routing(fn_data, metadata):
             invalid(f'{field} is out of range')
         if index >= 0 and args[index] != 'VARCHAR':
             invalid(f'{field} must refer to a VARCHAR')
-    if (metadata['model_source'] == 'PROVIDER') != (metadata['provider_argument'] >= 0):
-        invalid('AI model source must have a Provider selector')
-    if metadata['provider_argument'] >= 0 and metadata['model_argument'] >= 0:
-        invalid('Provider selector is not an explicit provider model')
+    if metadata['model_source'] == 'SYSTEM' and metadata['provider_argument'] >= 0:
+        invalid('SYSTEM functions cannot select a Provider')
+    if metadata['model_source'] == 'PROVIDER' and metadata['model_argument'] >= 0:
+        invalid('Provider functions use the registered model')
 
 
 def add_ai_aggregate_function(fn_data):
@@ -294,7 +294,7 @@ def add_ai_aggregate_function(fn_data):
     roles = [metadata['text_argument'], metadata['instruction_argument']]
     options = [i for i, arg in enumerate(args) if arg == 'ANY_MAP']
     if (fn_data[4] != 'VARCHAR' or metadata['capability'] != 'CHAT'
-            or metadata['model_source'] != 'SYSTEM' or metadata['provider_argument'] != -1
+            or metadata['model_source'] != 'PROVIDER' or metadata['provider_argument'] != -1
             or metadata['model_argument'] != -1
             or len(options) > 1 or (options and options[0] != len(args) - 1)
             or sorted(roles + options) != list(range(len(args)))

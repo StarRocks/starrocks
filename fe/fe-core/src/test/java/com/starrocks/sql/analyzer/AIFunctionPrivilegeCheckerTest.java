@@ -47,6 +47,7 @@ import com.starrocks.sql.plan.PlanTestNoneDBBase;
 import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.type.IntegerType;
+import com.starrocks.utframe.AIProviderTestUtils;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
@@ -68,6 +69,7 @@ public class AIFunctionPrivilegeCheckerTest extends PlanTestNoneDBBase {
     private static String previousEndpoint;
     private static String previousModel;
     private static String previousProvider;
+    private static AIProviderTestUtils defaultProvider;
     private ConnectContext caller;
     private String user;
 
@@ -86,9 +88,9 @@ public class AIFunctionPrivilegeCheckerTest extends PlanTestNoneDBBase {
         starRocksAssert.withView("CREATE VIEW ai_invoker SECURITY INVOKER AS "
                 + "SELECT ai_complete(prompt) AS answer FROM prompts");
         starRocksAssert.withView("CREATE VIEW ai_nested SECURITY NONE AS SELECT answer FROM ai_invoker");
-        GlobalStateMgr.getCurrentState().getAIProviderMgr().createProvider("ai_rbac_provider", AIProviderType.CHAT,
+        defaultProvider = AIProviderTestUtils.withDefaultProvider("ai_rbac_provider", AIProviderType.CHAT,
                 Map.of("endpoint", "https://models.example.test/v1/chat/completions", "model", "provider-model",
-                        "api_key", "private-rbac-test-key"), "");
+                        "api_key", "private-rbac-test-key"));
         starRocksAssert.withView("CREATE VIEW ai_provider_view SECURITY NONE AS "
                 + "SELECT ai_custom_query('ai_rbac_provider', prompt) AS answer FROM prompts");
     }
@@ -98,7 +100,7 @@ public class AIFunctionPrivilegeCheckerTest extends PlanTestNoneDBBase {
         Config.ai_default_chat_endpoint = previousEndpoint;
         Config.ai_default_chat_model = previousModel;
         Config.ai_default_chat_provider = previousProvider;
-        GlobalStateMgr.getCurrentState().getAIProviderMgr().dropProvider("ai_rbac_provider", true);
+        defaultProvider.close();
     }
 
     @BeforeEach
@@ -144,15 +146,20 @@ public class AIFunctionPrivilegeCheckerTest extends PlanTestNoneDBBase {
 
     @Test
     public void testAggregatePublicFamilyUsage() throws Exception {
-        String system = "SELECT ai_agg(prompt, 'summarize') FROM prompts";
-        assertDenied(system);
+        String sql = "SELECT ai_agg(prompt, 'summarize') FROM prompts";
+        assertDenied(sql);
         executeAsRoot("GRANT USAGE ON AI FUNCTION ai_agg TO '" + user + "'");
-        authorize(system);
+        assertDenied(sql, "AI PROVIDER");
+        executeAsRoot("GRANT USAGE ON AI PROVIDER ai_rbac_provider TO '" + user + "'");
+        authorize(sql);
+        executeAsRoot("REVOKE USAGE ON AI PROVIDER ai_rbac_provider FROM '" + user + "'");
+        assertDenied(sql, "AI PROVIDER");
     }
 
     @Test
     public void testPreparedAggregateRechecksPublicUsage() throws Exception {
         executeAsRoot("GRANT USAGE ON AI FUNCTION ai_agg TO '" + user + "'");
+        executeAsRoot("GRANT USAGE ON AI PROVIDER ai_rbac_provider TO '" + user + "'");
         PrepareStmt prepared = prepare("SELECT ai_agg(prompt, 'summarize') FROM prompts WHERE id = ?");
         try {
             ExecPlan first = executePrepared(prepared, 1);
@@ -162,6 +169,20 @@ public class AIFunctionPrivilegeCheckerTest extends PlanTestNoneDBBase {
             Assertions.assertEquals(Set.of("__ai_agg_reduce"), executedAIFamilies(first));
             executeAsRoot("REVOKE USAGE ON AI FUNCTION ai_agg FROM '" + user + "'");
             Assertions.assertThrows(ErrorReportException.class, () -> executePrepared(prepared, 3));
+        } finally {
+            caller.removePreparedStmt(prepared.getName());
+        }
+    }
+
+    @Test
+    public void testPreparedAggregateRechecksDefaultProviderUsage() throws Exception {
+        executeAsRoot("GRANT USAGE ON AI FUNCTION ai_agg TO '" + user + "'");
+        executeAsRoot("GRANT USAGE ON AI PROVIDER ai_rbac_provider TO '" + user + "'");
+        PrepareStmt prepared = prepare("SELECT ai_agg(prompt, 'summarize') FROM prompts WHERE id = ?");
+        try {
+            executePrepared(prepared, 1);
+            executeAsRoot("REVOKE USAGE ON AI PROVIDER ai_rbac_provider FROM '" + user + "'");
+            Assertions.assertThrows(ErrorReportException.class, () -> executePrepared(prepared, 2));
         } finally {
             caller.removePreparedStmt(prepared.getName());
         }

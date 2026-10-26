@@ -20,6 +20,7 @@ import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.SqlFunction;
 import com.starrocks.common.Config;
 import com.starrocks.context.ai.AIProviderType;
+import com.starrocks.server.AIProviderMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
@@ -36,6 +37,7 @@ import com.starrocks.type.FloatType;
 import com.starrocks.type.MapType;
 import com.starrocks.type.Type;
 import com.starrocks.type.VarcharType;
+import com.starrocks.utframe.AIProviderTestUtils;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -53,26 +55,31 @@ import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class AIFunctionAnalyzerTest {
+    private AIProviderTestUtils defaultProvider;
     @BeforeAll
     public static void beforeClass() throws Exception {
         AnalyzeTestUtil.init();
     }
 
     @BeforeEach
-    public void setUpSystemChat() {
+    public void setUpSystemChat() throws Exception {
         Config.ai_default_chat_endpoint = "https://models.example.test/v1/chat/completions";
         Config.ai_default_chat_model = "default-model";
         Config.ai_default_chat_provider = "openai_compatible";
+        defaultProvider = AIProviderTestUtils.withDefaultProvider("aggregate_analyzer_default", AIProviderType.CHAT,
+                Map.of("endpoint", "https://provider.example.test/v1/chat/completions", "model", "aggregate-model",
+                        "api_key", "aggregate-analyzer-key"));
     }
 
     @AfterEach
-    public void clearSystemChat() {
+    public void clearSystemChat() throws Exception {
         Config.ai_default_chat_endpoint = "";
         Config.ai_default_chat_model = "";
         Config.ai_default_chat_provider = "";
         Config.ai_default_embedding_endpoint = "";
         Config.ai_default_embedding_model = "";
         Config.ai_default_embedding_provider = "";
+        defaultProvider.close();
     }
 
     @Test
@@ -97,6 +104,28 @@ public class AIFunctionAnalyzerTest {
             analyzeFail("create materialized view ai_agg_mv distributed by random as " + query,
                     "nondeterministic function");
         }
+    }
+
+    @Test
+    public void testAggregateRequiresDefaultChatProviderWithoutSystemFallback() throws Exception {
+        AIProviderMgr manager = GlobalStateMgr.getCurrentState().getAIProviderMgr();
+        var defaults = AIProviderMgr.class.getDeclaredField("defaultByType");
+        defaults.setAccessible(true);
+        Object original = defaults.get(manager);
+        defaults.set(manager, new java.util.EnumMap<>(AIProviderType.class));
+        try {
+            analyzeFail("select ai_agg(ta, 'summarize') from tall", "Default AI provider of type CHAT does not exist");
+        } finally {
+            defaults.set(manager, original);
+        }
+        Config.ai_default_chat_endpoint = "";
+        Config.ai_default_chat_model = "";
+        Config.ai_default_chat_provider = "";
+        analyzeSuccess("select ai_agg(ta, 'summarize') from tall");
+        analyzeFail("select ai_custom_agg('aggregate_analyzer_default', ta, 'summarize') from tall",
+                "No matching function");
+        analyzeFail("select ai_agg('aggregate_analyzer_default', ta, 'summarize') from tall",
+                "No matching function");
     }
 
     @Test

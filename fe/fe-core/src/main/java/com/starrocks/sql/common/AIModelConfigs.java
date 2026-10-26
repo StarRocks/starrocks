@@ -23,9 +23,11 @@ import com.starrocks.common.Config;
 import com.starrocks.context.ai.AIProvider;
 import com.starrocks.context.ai.AIProviderProtocol;
 import com.starrocks.context.ai.AIProviderType;
+import com.starrocks.server.AIProviderMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprUtils;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.thrift.TAIEndpointConfig;
 import com.starrocks.thrift.TAIModelConfiguration;
@@ -51,8 +53,12 @@ public final class AIModelConfigs {
         OPTIONAL
     }
 
+    public static AICapability capability(Function function) {
+        return descriptor(function).capability();
+    }
+
     public static boolean isTextEmbedding(Function function) {
-        return descriptor(function).capability() == AICapability.TEXT_EMBEDDING;
+        return capability(function) == AICapability.TEXT_EMBEDDING;
     }
 
     public static boolean hasExplicitModel(Function function) {
@@ -82,6 +88,41 @@ public final class AIModelConfigs {
             throw new SemanticException("AI function requires a nonblank constant AI provider name", expression.getPos());
         }
         return literal.getValue();
+    }
+
+    /** A SQL selector, not a registry identity. Exactly one of name and defaultType is present. */
+    public record ProviderSelection(String name, AIProviderType defaultType) {
+        public ProviderSelection {
+            Preconditions.checkArgument((name == null) != (defaultType == null), "Expected one provider selector");
+        }
+
+        public String description() {
+            return name != null ? "AI provider '" + name + "'" : "Default AI provider of type " + defaultType;
+        }
+    }
+
+    public static AIProviderType providerType(Function function) {
+        return switch (capability(function)) {
+            case CHAT -> AIProviderType.CHAT;
+            case TEXT_EMBEDDING -> AIProviderType.EMBEDDING;
+        };
+    }
+
+    public static ProviderSelection providerSelection(FunctionCallExpr call) {
+        Preconditions.checkState(call.getFn().getAiModelSource() == TAIModelSource.PROVIDER,
+                "Expected a Provider function");
+        int argument = getProviderArgument(call.getFn());
+        return argument >= 0 ? new ProviderSelection(providerName(call.getChild(argument)), null)
+                : new ProviderSelection(null, providerType(call.getFn()));
+    }
+
+    public static AIProvider resolveProvider(ProviderSelection selection, AIProviderMgr manager) {
+        AIProvider provider = selection.name() != null ? manager.getProvider(selection.name())
+                : manager.getDefaultProvider(selection.defaultType());
+        if (provider == null) {
+            throw new SemanticException(selection.description() + " does not exist");
+        }
+        return provider;
     }
 
     public static String systemConfigId(Function function) {

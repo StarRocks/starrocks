@@ -101,7 +101,8 @@ public class ExecPlan {
     // Captured lazily only for plans containing an AIProject.
     private SystemChatConfig systemChatConfig;
     private Map<String, AIModelConfigs.ModelConfig> aiModelConfigs;
-    private Map<String, String> aiProviderConfigIds;
+    private Map<AIModelConfigs.ProviderSelection, String> aiProviderConfigIds;
+    private Map<String, String> aiProviderUuidConfigIds;
 
     @VisibleForTesting
     public ExecPlan() {
@@ -162,37 +163,39 @@ public class ExecPlan {
             String id;
             AIModelConfigs.ModelConfig config;
             if (call.getFn().getAiModelSource() == TAIModelSource.PROVIDER) {
-                String name = AIModelConfigs.providerName(call.getChild(AIModelConfigs.getProviderArgument(call.getFn())));
-                id = aiProviderConfigIds == null ? null : aiProviderConfigIds.get(name);
+                AIModelConfigs.ProviderSelection selection = AIModelConfigs.providerSelection(call);
+                id = aiProviderConfigIds == null ? null : aiProviderConfigIds.get(selection);
+                AIProvider provider = null;
                 if (id == null) {
-                    AIProvider provider = GlobalStateMgr.getCurrentState().getAIProviderMgr().getProvider(name);
-                    if (provider == null) {
-                        throw new SemanticException("AI provider '" + name + "' does not exist", call.getPos());
-                    }
+                    provider = AIModelConfigs.resolveProvider(selection,
+                            GlobalStateMgr.getCurrentState().getAIProviderMgr());
                     try {
                         Authorizer.checkAIProviderAction(connectContext, provider, PrivilegeType.USAGE);
                     } catch (AccessDeniedException e) {
                         AccessDeniedException.reportAccessDenied(null, connectContext.getCurrentUserIdentity(),
-                                connectContext.getCurrentRoleIds(), PrivilegeType.USAGE.name(), "AI PROVIDER", name);
+                                connectContext.getCurrentRoleIds(), PrivilegeType.USAGE.name(),
+                                "AI PROVIDER", provider.getName());
                     }
-                    config = AIModelConfigs.fromProvider(provider);
-                } else {
-                    config = aiModelConfigs.get(id);
+                    id = aiProviderUuidConfigIds == null ? null : aiProviderUuidConfigIds.get(provider.getId());
                 }
-                boolean embedding = AIModelConfigs.isTextEmbedding(call.getFn());
-                if (!(embedding ? "TEXT_EMBEDDING" : "CHAT").equals(config.capability())) {
-                    throw new SemanticException("AI provider '" + name + "' requires type "
-                            + (embedding ? "EMBEDDING" : "CHAT"), call.getPos());
+                config = id == null ? AIModelConfigs.fromProvider(provider) : aiModelConfigs.get(id);
+                if (!AIModelConfigs.capability(call.getFn()).name().equals(config.capability())) {
+                    throw new SemanticException(selection.description() + " requires type "
+                            + AIModelConfigs.providerType(call.getFn()), call.getPos());
                 }
                 if (id == null) {
-                    if (aiProviderConfigIds == null) {
-                        aiProviderConfigIds = new HashMap<>();
+                    if (aiProviderUuidConfigIds == null) {
+                        aiProviderUuidConfigIds = new HashMap<>();
                     }
                     // The wire only needs a plan-local correlation key, never a name or registry identity.
-                    id = "provider:" + aiProviderConfigIds.size();
-                    aiProviderConfigIds.put(name, id);
+                    id = "provider:" + aiProviderUuidConfigIds.size();
+                    aiProviderUuidConfigIds.put(provider.getId(), id);
                     aiModelConfigs.put(id, config);
                 }
+                if (aiProviderConfigIds == null) {
+                    aiProviderConfigIds = new HashMap<>();
+                }
+                aiProviderConfigIds.put(selection, id);
                 entry.setValue(call.withAiModelConfigId(id));
             } else {
                 id = AIModelConfigs.systemConfigId(call.getFn());

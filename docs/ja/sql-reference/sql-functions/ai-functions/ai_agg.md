@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "SYSTEM Chat モデルを使用し、指示に従ってグループのテキストを集約します。"
+description: "デフォルト CHAT AI プロバイダーを使用し、指示に従ってグループのテキストを集約します。"
 sidebar_position: 24
 ---
 
@@ -8,7 +8,7 @@ sidebar_position: 24
 
 `ai_agg` は、指示に従って各 SQL グループのテキストを要約し、グループごとに NULL 許容の VARCHAR を返します。`count` や `sum` などの通常の集約と併用できます。
 
-`ai_agg` は [ai_complete](ai_complete.md#設定) の SYSTEM Chat 設定と BE ローカル認証情報を使用します。使用前にすべての FE と BE をアップグレードしてください。
+`ai_agg` は、`openai` プロトコルのデフォルト `chat` AI プロバイダーを使用します。エンドポイント、リモートモデル、API キー、任意の `timeout_ms` はプロバイダーから取得し、SYSTEM Chat 設定や BE ローカル認証情報にはフォールバックしません。使用前にすべての FE と BE をアップグレードしてください。
 
 :::warning
 入力テキスト、中間要約、指示は設定済みのモデルサービスへ送信されます。1 グループで複数のリクエストと再試行が発生し、課金される場合があります。他の AI 関数と同じデータ取り扱いとエンドポイント承認の方針を適用してください。
@@ -49,9 +49,25 @@ ai_agg(expr, instruction, options)
 
 ## 権限と例
 
-`USAGE ON AI FUNCTION ai_agg` または `USAGE ON ALL AI FUNCTIONS` が必要です。その他の認可と実行コンテキストについては [AI 関数の権限](ai_functions.mdx#ai-function-privileges) を参照してください。
+テーブル権限に加え、`USAGE ON AI FUNCTION ai_agg`（または `USAGE ON ALL AI FUNCTIONS`）と、選択されたデフォルト CHAT プロバイダーの `USAGE ON AI PROVIDER` の両方が必要です。[AI 関数の権限](ai_functions.mdx#ai-function-privileges)を参照してください。プロバイダーの選択と認可は、空入力でも最適化前に検査します。実行設定は、物理プランに残る AI 呼び出しをバインドする際に検証します。
 
-`reviews(category, review_text)` テーブルと SYSTEM Chat モデルがある場合:
+管理者は [CHAT プロバイダー](../../sql-statements/cluster-management/ai_provider/CREATE_AI_PROVIDER.md)を登録し、デフォルトに設定して既存のロールに権限を付与します。
+
+```sql
+CREATE AI PROVIDER review_chat TYPE chat
+PROPERTIES (
+    "endpoint" = "https://api.example.com/v1/chat/completions",
+    "model" = "chat-model",
+    "api_key" = "<api-key>"
+);
+SET review_chat AS DEFAULT AI PROVIDER;
+GRANT USAGE ON AI FUNCTION ai_agg TO ROLE review_reader;
+GRANT USAGE ON AI PROVIDER review_chat TO ROLE review_reader;
+```
+
+プランは最初のデフォルト CHAT 選択を固定し、各グループと縮約ラウンドで同じ Provider UUID の不変スナップショットを再利用します。同じ UUID を使用する他の Provider 呼び出しも共有します。後のメタデータやデフォルト変更は、新しく構築されたプランに適用されます。認証情報の保存・転送と認可については [Provider 設定とスナップショット](ai_custom_functions.md#query-snapshots-and-system-compatibility)を参照してください。
+
+`reviews(category, review_text)` テーブルがある場合:
 
 ```sql
 SELECT category, count(*) AS review_count,

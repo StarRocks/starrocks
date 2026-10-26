@@ -817,8 +817,8 @@ protected:
         call.__set_num_children(2);
         call.fn.__set_fid(200155);
         call.fn.name.__set_function_name("__ai_agg_reduce");
-        call.fn.__set_ai_model_source(TAIModelSource::SYSTEM);
-        call.__set_ai_model_config_id(std::string(kSystemChatConfigId));
+        call.fn.__set_ai_model_source(TAIModelSource::PROVIDER);
+        call.__set_ai_model_config_id("provider:aggregate-default");
         call.fn.__set_arg_types({binary_type, varchar_type().to_thrift()});
         expression.nodes[1].__set_type(binary_type);
         auto append_literal = [&](const std::string& value) {
@@ -833,7 +833,11 @@ protected:
             expression.nodes.emplace_back(std::move(node));
         };
         append_literal("Summarize all records.");
-        auto configs = system_model_configs();
+        AIProjectModelConfigs configs{
+                {"provider:aggregate-default", AIProjectModelConfig{.endpoint = std::string(kEndpointSentinel),
+                                                                    .model = std::string(kModelSentinel),
+                                                                    .api_key = std::string(kSecretSentinel),
+                                                                    .source = TAIModelSource::PROVIDER}}};
         ASSIGN_OR_RETURN(ExprContext * ai, create_expr_context(std::move(expression)));
         AIProjectProjectionSpec spec(
                 _runtime_state.get(),
@@ -1832,9 +1836,10 @@ TEST_F(AIProjectPipelineTest, MixedSystemAndProviderRoutesKeepCredentialsAndType
     processor->close(_runtime_state.get());
 }
 
-TEST_F(AIProjectPipelineTest, AggregateSystemExecutesMultipleRoundsThroughProductionDispatcher) {
+TEST_F(AIProjectPipelineTest, AggregateDefaultProviderExecutesMultipleRoundsThroughProductionDispatcher) {
     set_query_deadline_ns(120'000'000'000);
-    ScopedEnvironment system_key{std::string(kApiKeyEnvironment), std::string(kSecretSentinel)};
+    ScopedEnvironment system_key{std::string(kApiKeyEnvironment), std::nullopt};
+    ScopedEnvironment system_endpoint{std::string(kEndpointEnvironment), std::nullopt};
     auto processor_or = create_aggregate_processor("fail");
     ASSERT_TRUE(processor_or.ok()) << processor_or.status();
     auto processor = std::move(processor_or).value();
@@ -1887,7 +1892,8 @@ TEST_F(AIProjectPipelineTest, AggregateSystemExecutesMultipleRoundsThroughProduc
 
 TEST_F(AIProjectPipelineTest, AggregateModelFailureUsesGroupPolicyThroughProductionDispatcher) {
     set_query_deadline_ns(120'000'000'000);
-    ScopedEnvironment system_key{std::string(kApiKeyEnvironment), std::string(kSecretSentinel)};
+    ScopedEnvironment system_key{std::string(kApiKeyEnvironment), std::nullopt};
+    ScopedEnvironment system_endpoint{std::string(kEndpointEnvironment), std::nullopt};
     for (const std::string on_error : {"ignore", "fail"}) {
         SCOPED_TRACE(on_error);
         auto processor_or = create_aggregate_processor(on_error);
@@ -1928,7 +1934,8 @@ TEST_F(AIProjectPipelineTest, AggregateModelFailureUsesGroupPolicyThroughProduct
 
 TEST_F(AIProjectPipelineTest, AggregateCompletionQueueExhaustionPreservesSanitizedResourceCategory) {
     set_query_deadline_ns(120'000'000'000);
-    ScopedEnvironment system_key{std::string(kApiKeyEnvironment), std::string(kSecretSentinel)};
+    ScopedEnvironment system_key{std::string(kApiKeyEnvironment), std::nullopt};
+    ScopedEnvironment system_endpoint{std::string(kEndpointEnvironment), std::nullopt};
     auto processor_or = create_aggregate_processor("ignore");
     ASSERT_TRUE(processor_or.ok()) << processor_or.status();
     auto processor = std::move(processor_or).value();

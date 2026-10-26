@@ -73,7 +73,7 @@ constexpr std::string_view kSystemConfigId = "__system_chat__";
 
 class CountingColumnExpr final : public Expr {
 public:
-    CountingColumnExpr(TypeDescriptor type, ColumnPtr column) : Expr(std::move(type)), _column(std::move(column)) {}
+    CountingColumnExpr(TypeDescriptor type, ColumnPtr column) : Expr(make_node(type)), _column(std::move(column)) {}
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new CountingColumnExpr(type(), _column)); }
 
@@ -87,6 +87,15 @@ public:
     int evaluation_count() const { return _evaluation_count; }
 
 private:
+    static TExprNode make_node(const TypeDescriptor& type) {
+        TExprNode node;
+        node.__set_node_type(TExprNodeType::FUNCTION_CALL);
+        node.__set_num_children(0);
+        node.__set_type(type.to_thrift());
+        node.__set_is_nullable(true);
+        return node;
+    }
+
     ColumnPtr _column;
     int _evaluation_count = 0;
 };
@@ -2066,11 +2075,30 @@ TEST_F(AIFunctionCallExprTest, ProviderSourceAndCorrelationKeyAreExplicit) {
 
 } // namespace
 
+TEST_F(AIFunctionCallExprTest, AggregateRequiresBoundProviderMetadataWithoutSelectorArgument) {
+    for (const bool options : {false, true}) {
+        ObjectPool pool;
+        std::vector<TypeDescriptor> arguments{TypeDescriptor(TYPE_VARBINARY), varchar_type()};
+        if (options) arguments.emplace_back(options_type());
+        auto wire = make_extended_ai_expression(options ? 200156 : 200155, "__ai_agg_reduce", varchar_type(), arguments,
+                                                true);
+        auto created = AIFunctionCallExpr::create(&pool, wire.nodes.front());
+        ASSERT_TRUE(created.ok()) << created.status();
+        EXPECT_EQ(TAIModelSource::PROVIDER, created.value()->model_source());
+        EXPECT_EQ(AICapability::CHAT, created.value()->capability());
+        auto& node = wire.nodes.front();
+        node.__set_ai_model_config_id("__system_chat__");
+        EXPECT_FALSE(AIFunctionCallExpr::create(&pool, node).ok());
+        node.fn.__set_ai_model_source(TAIModelSource::SYSTEM);
+        EXPECT_FALSE(AIFunctionCallExpr::create(&pool, node).ok());
+    }
+}
+
 TEST_F(AIFunctionCallExprTest, AggregateInputOwnsTypedStateColumnAndConstantControls) {
     for (const bool constant_state : {false, true}) {
         ObjectPool pool;
         auto wire = make_extended_ai_expression(200155, "__ai_agg_reduce", varchar_type(),
-                                                {TypeDescriptor(TYPE_VARBINARY), varchar_type()});
+                                                {TypeDescriptor(TYPE_VARBINARY), varchar_type()}, true);
         auto created = AIFunctionCallExpr::create(&pool, wire.nodes.front());
         ASSERT_TRUE(created.ok()) << created.status();
         auto states = BinaryColumn::create();
@@ -2102,7 +2130,7 @@ TEST_F(AIFunctionCallExprTest, AggregateRejectsWrongDeclaredOrEvaluatedStateAndN
         ObjectPool pool;
         auto wire = make_extended_ai_expression(
                 200155, "__ai_agg_reduce", varchar_type(),
-                {invalid_case == 0 ? varchar_type() : TypeDescriptor(TYPE_VARBINARY), varchar_type()});
+                {invalid_case == 0 ? varchar_type() : TypeDescriptor(TYPE_VARBINARY), varchar_type()}, true);
         auto created = AIFunctionCallExpr::create(&pool, wire.nodes.front());
         if (invalid_case == 0) {
             EXPECT_FALSE(created.ok());

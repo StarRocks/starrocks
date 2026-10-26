@@ -46,11 +46,11 @@ ai_custom_embedding(provider_name, text, options)
 
 Provider API key 保存在 FE 元数据 journal 和 image 中，并经现有内部 RPC 传给执行请求的 BE。请保护元数据文件和集群网络访问。SHOW 和 DESC 会掩码显示密钥，但这不表示元数据或内部 RPC 已加密。不要把凭证放入函数参数或 options。
 
-## 查询快照与 SYSTEM 兼容性
+## 查询快照与 SYSTEM 兼容性 {#query-snapshots-and-system-compatibility}
 
-每个物理执行计划在首次需要某个 provider 时捕获其配置，同一计划中该 provider 的所有调用复用这一快照。权限检查在优化前覆盖所有已解析的 AI 调用。只有保留到物理计划的 AI 调用才捕获执行配置；配置进入计划前，会对实际捕获的 Provider UUID 再次授权检查。后续 ALTER 或 DROP 不改变已捕获的配置，也不会取消正在执行的查询。新构建的计划（包括重试时重新规划或下一次预处理 EXECUTE）会捕获当前元数据。
+每个物理执行计划在首次使用时固定每个显式名称或能力默认项选择的 Provider，并按 Provider UUID 捕获配置；默认选择与显式选择指向同一 UUID 时，复用同一个不可变快照。权限检查在优化前覆盖所有已解析的 AI 调用。只有保留到物理计划的 AI 调用才捕获执行配置，配置进入计划前会对实际 Provider UUID 再次授权检查。后续 ALTER、DROP 或默认项变更不会重定向已捕获的选择，也不会改变其快照。新构建的计划（包括重试时重新规划或下一次预处理 EXECUTE）重新解析当前元数据和权限。
 
-Query dump 不捕获 provider 元数据。暂不支持具名 provider 调用的离线重放，也不能用当前同名 provider 替代未捕获的快照。
+Query dump 不捕获 provider 元数据。暂不支持 Provider 调用的离线重放，显式名称或当前默认项都不能替代未捕获的快照。
 
 Spark/Flink 使用的 `/api/{db}/{table}/_query_plan` 导出接口仅支持已有的单表过滤、裁剪和扫描（filter-prune-scan），不支持 AI 函数，以避免将可执行计划中的 provider 凭证导出给客户端。这是计划导出的能力限制，不是新增 AI 函数或 provider 的 RBAC 权限。
 

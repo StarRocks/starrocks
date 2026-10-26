@@ -9,6 +9,8 @@ description: "AI プロバイダーをそのタイプのデフォルトとして
 (`embedding` / `rerank` / `chat`) に 1 つのデフォルトを保持するため、embedding プロバイダーをデフォルトに
 設定しても rerank のデフォルトには影響せず、その逆も同様です。
 
+[ai_agg](../../../sql-functions/ai-functions/ai_agg.md) は、デフォルトの `chat` プロバイダーを使用します。既存の SYSTEM Chat や Embedding 関数のルーティングは変わりません。
+
 ## 構文
 
 ```SQL

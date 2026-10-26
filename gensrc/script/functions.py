@@ -1872,7 +1872,7 @@ ai_text_collector = [200154, '__ai_collect_text', True, False, 'VARBINARY', ['VA
 
 def ai_aggregate_metadata(text_argument, instruction_argument, reducer_function_id):
     return {
-        'model_source': 'SYSTEM',
+        'model_source': 'PROVIDER',
         'capability': 'CHAT',
         'model_argument': -1,
         'provider_argument': -1,
@@ -1892,7 +1892,7 @@ ai_aggregate_functions = [
 
 def ai_reducer_metadata(instruction_argument):
     return dict(ai_metadata('CHAT', 'PASSTHROUGH', 'STRING', [0, instruction_argument]),
-                execution_kind='AGGREGATE_REDUCE', internal=True)
+                model_source='PROVIDER', execution_kind='AGGREGATE_REDUCE', internal=True)
 
 
 ai_vectorized_functions += [

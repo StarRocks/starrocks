@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "Aggregate groups of text with instructions using the SYSTEM chat model."
+description: "Aggregate groups of text with instructions using the default CHAT AI Provider."
 sidebar_position: 24
 ---
 
@@ -8,7 +8,7 @@ sidebar_position: 24
 
 `ai_agg` produces one nullable VARCHAR result per SQL group by applying an instruction to the group's text. It can appear alongside ordinary aggregates such as `count` and `sum`.
 
-`ai_agg` uses the SYSTEM chat configuration and BE-local credentials described in [ai_complete](ai_complete.md#configuration). Upgrade all FE and BE nodes before using this function.
+`ai_agg` uses the default `chat` AI Provider with the `openai` protocol. Endpoint, remote model, API key, and optional `timeout_ms` come from that Provider. It does not fall back to SYSTEM chat settings or BE-local credentials. Upgrade all FE and BE nodes before using this function.
 
 :::warning
 Input text, intermediate summaries, and instructions are sent to the configured model service. One group can require multiple requests and retries, with corresponding provider charges. Apply the same data-handling and endpoint approval policies as other AI functions.
@@ -49,9 +49,25 @@ A record that cannot fit a prompt is rejected instead of truncated. Oversized su
 
 ## Privileges and examples
 
-Execution requires `USAGE ON AI FUNCTION ai_agg` or `USAGE ON ALL AI FUNCTIONS`. See [AI function privileges](ai_functions.mdx#ai-function-privileges) for the existing authorization and execution-context rules.
+Execution requires `USAGE ON AI FUNCTION ai_agg` (or `USAGE ON ALL AI FUNCTIONS`) and `USAGE ON AI PROVIDER` for the selected default CHAT Provider, in addition to table privileges. See [AI function privileges](ai_functions.mdx#ai-function-privileges). Provider selection and authorization are checked before optimization, even for empty-input queries. Execution configuration is validated when a surviving AI call is bound to the physical plan.
 
-Given a table `reviews(category, review_text)` and a configured SYSTEM chat model:
+An administrator registers a [CHAT Provider](../../sql-statements/cluster-management/ai_provider/CREATE_AI_PROVIDER.md), selects the default, and grants access to an existing role:
+
+```sql
+CREATE AI PROVIDER review_chat TYPE chat
+PROPERTIES (
+    "endpoint" = "https://api.example.com/v1/chat/completions",
+    "model" = "chat-model",
+    "api_key" = "<api-key>"
+);
+SET review_chat AS DEFAULT AI PROVIDER;
+GRANT USAGE ON AI FUNCTION ai_agg TO ROLE review_reader;
+GRANT USAGE ON AI PROVIDER review_chat TO ROLE review_reader;
+```
+
+The plan fixes its first default CHAT selection and reuses an immutable Provider UUID snapshot for every group and reduction round. Provider calls using the same UUID share the snapshot. Later metadata or default changes apply to newly built plans. See [Provider settings and snapshots](ai_custom_functions.md#query-snapshots-and-system-compatibility) for credential storage, transport, and authorization behavior.
+
+Given a table `reviews(category, review_text)`:
 
 ```sql
 SELECT category, count(*) AS review_count,

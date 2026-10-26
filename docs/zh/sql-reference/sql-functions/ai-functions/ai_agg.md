@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "使用 SYSTEM Chat 模型，按指令聚合分组文本。"
+description: "使用默认 CHAT AI Provider，按指令聚合分组文本。"
 sidebar_position: 24
 ---
 
@@ -8,7 +8,7 @@ sidebar_position: 24
 
 `ai_agg` 根据指令汇总每个 SQL 分组中的文本，每组返回一个可为 NULL 的 VARCHAR 结果，可以与 `count`、`sum` 等普通聚合同时使用。
 
-`ai_agg` 使用 [ai_complete](ai_complete.md#配置) 的 SYSTEM Chat 配置及 BE 本地凭证。使用前需升级全部 FE 和 BE。
+`ai_agg` 使用默认的 `chat` AI Provider，协议必须为 `openai`。端点、远端模型、API Key 和可选的 `timeout_ms` 均来自该 Provider，不回退到 SYSTEM Chat 配置或 BE 本地凭证。使用前需升级全部 FE 和 BE。
 
 :::warning
 输入文本、中间摘要和指令会发送到配置的模型服务。每组可能产生多次请求和重试，并产生相应费用。请遵循与其他 AI 函数相同的数据处理及服务端点审批要求。
@@ -49,9 +49,25 @@ ai_agg(expr, instruction, options)
 
 ## 权限与示例
 
-执行需要 `USAGE ON AI FUNCTION ai_agg`，也可使用 `USAGE ON ALL AI FUNCTIONS`。其他授权及执行身份规则参见 [AI 函数权限](ai_functions.mdx#ai-function-privileges)。
+除表权限外，执行同时需要 `USAGE ON AI FUNCTION ai_agg`（或 `USAGE ON ALL AI FUNCTIONS`）及所选默认 CHAT Provider 的 `USAGE ON AI PROVIDER`。参见 [AI 函数权限](ai_functions.mdx#ai-function-privileges)。Provider 选择和授权在优化前检查，空输入查询也不例外。只有保留到物理计划的 AI 调用才绑定并校验执行配置。
 
-假设存在 `reviews(category, review_text)` 表，且已配置 SYSTEM Chat 模型：
+管理员注册 [CHAT Provider](../../sql-statements/cluster-management/ai_provider/CREATE_AI_PROVIDER.md)、设置默认项，并向已有角色授权：
+
+```sql
+CREATE AI PROVIDER review_chat TYPE chat
+PROPERTIES (
+    "endpoint" = "https://api.example.com/v1/chat/completions",
+    "model" = "chat-model",
+    "api_key" = "<api-key>"
+);
+SET review_chat AS DEFAULT AI PROVIDER;
+GRANT USAGE ON AI FUNCTION ai_agg TO ROLE review_reader;
+GRANT USAGE ON AI PROVIDER review_chat TO ROLE review_reader;
+```
+
+计划固定首次选择的默认 CHAT Provider，每组及每轮归约复用同一 Provider UUID 的不可变快照。同一 UUID 的其他 Provider 调用也共享该快照。后续元数据或默认项变更在新构建的计划中生效。凭证存储、传输和授权规则参见 [Provider 设置与快照](ai_custom_functions.md#query-snapshots-and-system-compatibility)。
+
+假设存在 `reviews(category, review_text)` 表：
 
 ```sql
 SELECT category, count(*) AS review_count,

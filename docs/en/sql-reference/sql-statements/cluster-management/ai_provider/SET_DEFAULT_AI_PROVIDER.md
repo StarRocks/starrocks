@@ -9,6 +9,8 @@ Marks a provider as the default for **its own type**. The registry keeps one def
 (`embedding` / `rerank` / `chat`), so setting an embedding provider as default does not affect the
 rerank default and vice versa.
 
+[ai_agg](../../../sql-functions/ai-functions/ai_agg.md) uses the default `chat` Provider. This does not reroute existing SYSTEM chat or embedding functions.
+
 ## Syntax
 
 ```SQL

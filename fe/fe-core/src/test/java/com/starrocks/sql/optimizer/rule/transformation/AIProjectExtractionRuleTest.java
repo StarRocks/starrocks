@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.starrocks.common.Config;
+import com.starrocks.context.ai.AIProviderType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -69,6 +70,7 @@ import com.starrocks.sql.optimizer.task.TaskContext;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.type.DateType;
 import com.starrocks.type.VarcharType;
+import com.starrocks.utframe.AIProviderTestUtils;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
@@ -87,6 +89,7 @@ import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class AIProjectExtractionRuleTest {
     private static ConnectContext connectContext;
+    private AIProviderTestUtils defaultProvider;
 
     @BeforeAll
     public static void beforeClass() throws Exception {
@@ -95,17 +98,21 @@ public class AIProjectExtractionRuleTest {
     }
 
     @BeforeEach
-    public void setUpSystemChat() {
+    public void setUpSystemChat() throws Exception {
         Config.ai_default_chat_endpoint = "https://models.example.test/v1/chat/completions";
         Config.ai_default_chat_model = "default-model";
         Config.ai_default_chat_provider = "openai_compatible";
+        defaultProvider = AIProviderTestUtils.withDefaultProvider("aggregate_lowering_default", AIProviderType.CHAT,
+                Map.of("endpoint", "https://provider.example.test/v1/chat/completions", "model", "aggregate-model",
+                        "api_key", "aggregate-lowering-key"));
     }
 
     @AfterEach
-    public void clearSystemChat() {
+    public void clearSystemChat() throws Exception {
         Config.ai_default_chat_endpoint = "";
         Config.ai_default_chat_model = "";
         Config.ai_default_chat_provider = "";
+        defaultProvider.close();
     }
 
     @Test
