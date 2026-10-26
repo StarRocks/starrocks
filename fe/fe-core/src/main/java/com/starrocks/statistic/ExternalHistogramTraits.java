@@ -93,19 +93,6 @@ final class ExternalHistogramTraits extends HistogramCollectTraits {
     }
 
     @Override
-<<<<<<< HEAD
-=======
-    boolean toleratesColumnFailure() {
-        return true;
-    }
-
-    @Override
-    boolean waitsOutSharedMemoryPressure() {
-        return true;
-    }
-
-    @Override
->>>>>>> 17789c24157... [BugFix] Retry external statistics collection on shared memory limits, not only process OOM (#63864)
     String buildMcvQuery(String columnName) {
         VelocityContext context = new VelocityContext();
         context.put("columnName", StatisticUtils.quoting(table, columnName));

@@ -51,11 +51,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
-<<<<<<< HEAD
-=======
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Stream;
->>>>>>> 17789c24157... [BugFix] Retry external statistics collection on shared memory limits, not only process OOM (#63864)
 
 // A collection query that fails must not take the rest of the job (or the metadata describing what the job
 // did manage to collect) down with it. Covers both halves of that: the tolerance rules in
@@ -287,63 +283,6 @@ public class ExternalStatsPartialCollectTest extends PlanTestNoneDBBase {
     }
 
     @Test
-<<<<<<< HEAD
-=======
-    public void testWaitingForMemoryIsBoundedByABudget() throws Exception {
-        // Waiting out a busy backend is right for a spike and wrong for a sustained shortage: then every
-        // query is rejected, and a job that keeps waiting sleeps away its whole deadline while holding one
-        // of the two analyze slots - collecting nothing, and blocking every other table from being
-        // collected either. Past the budget it stops waiting and fails in the ordinary way.
-        Set<Integer> failures = new HashSet<>();
-        for (int i = 0; i < 200; i++) {
-            failures.add(i);
-        }
-        RecordingJob job = new RecordingJob(partitions(200), columns(), columnTypes(), failures);
-        job.failureMessage = BACKEND_OUT_OF_MEMORY;
-        job.backoffMillis = 600;
-
-        long saved = Config.connector_table_analyze_memory_backoff_budget_second;
-        try {
-            // Room for exactly one 600ms wait; the second would take the job past a second.
-            Config.connector_table_analyze_memory_backoff_budget_second = 1;
-            Exception e = Assertions.assertThrows(Exception.class,
-                    () -> job.runCollectPhases(connectContext, newAnalyzeStatus(), 1L));
-            Assertions.assertTrue(e.getMessage().contains("too many failed tasks"), e.getMessage());
-        } finally {
-            Config.connector_table_analyze_memory_backoff_budget_second = saved;
-        }
-
-        // Same 11 counted failures as with unlimited waiting, but reached in 12 queries instead of 33:
-        // only the first was retried, and only once. The job as a whole slept 600ms, not 11 x 40s.
-        Assertions.assertEquals(12, job.getExecutedCount());
-        Assertions.assertEquals(600, job.getSharedMemoryBackoffSpentMs());
-    }
-
-    @Test
-    public void testWaitingBudgetCanBeTurnedOff() throws Exception {
-        // <= 0 restores unbounded waiting, for a cluster that would rather have the statistics late than
-        // not at all.
-        Set<Integer> failures = new HashSet<>();
-        for (int i = 0; i < 40; i++) {
-            failures.add(i * 3);
-        }
-        RecordingJob job = new RecordingJob(partitions(200), columns(), columnTypes(), failures);
-        job.failureMessage = BACKEND_OUT_OF_MEMORY;
-
-        long saved = Config.connector_table_analyze_memory_backoff_budget_second;
-        try {
-            Config.connector_table_analyze_memory_backoff_budget_second = 0;
-            job.runCollectPhases(connectContext, newAnalyzeStatus(), 1L);
-        } finally {
-            Config.connector_table_analyze_memory_backoff_budget_second = saved;
-        }
-
-        Assertions.assertFalse(job.hasToleratedFailures());
-        Assertions.assertEquals(200, job.collectedCount);
-    }
-
-    @Test
->>>>>>> 17789c24157... [BugFix] Retry external statistics collection on shared memory limits, not only process OOM (#63864)
     public void testOneQueryCannotHoldTheWholeJobBudget() throws Exception {
         // The job budget is an hour by default; without a cap each individual query inherits whatever is left
         // of it, so one stuck query would prevent every partition after it from being attempted at all.

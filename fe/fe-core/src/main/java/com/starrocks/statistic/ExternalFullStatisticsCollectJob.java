@@ -139,12 +139,12 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
     // (FullStatisticsCollectJob#collect).
     private static final int MIN_TASKS_TO_TOLERATE_FAILURE = 100;
 
-    // Backend-wide memory exhaustion is transient, so a rejected collection query is retried after a pause
+    // Exhausting a shared memory budget is transient, so a rejected collection query is retried after a pause
     // instead of being counted as a failed partition. Short first, since the spike that prompted this cleared
     // in about a second; the later steps cover a longer-running neighbour without pinning the job to a
     // backend that is genuinely saturated - once these are exhausted the query counts as failed and the usual
     // tolerance rules apply.
-    private static final long[] PROCESS_MEMORY_RETRY_BACKOFF_MS = {10_000L, 30_000L};
+    private static final long[] SHARED_MEMORY_RETRY_BACKOFF_MS = {10_000L, 30_000L};
 
     // Tolerating a failed query means the rows this job writes cover fewer partitions than it set out to
     // scan, so what actually landed has to be recorded per column rather than assumed to be `partitionNames`
@@ -435,11 +435,7 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
                 checkCancelled(analyzeStatus);
                 calculateAndSetRemainingTimeout(context, analyzeStatus);
 
-<<<<<<< HEAD
-                if (attempt >= PROCESS_MEMORY_RETRY_BACKOFF_MS.length || !isProcessMemoryExhausted(e)) {
-=======
-                if (attempt >= maxSharedMemoryRetries() || !isSharedMemoryExhausted(e)) {
->>>>>>> 17789c24157... [BugFix] Retry external statistics collection on shared memory limits, not only process OOM (#63864)
+                if (attempt >= SHARED_MEMORY_RETRY_BACKOFF_MS.length || !isSharedMemoryExhausted(e)) {
                     return e;
                 }
                 long backoffMs = retryBackoffMillis(attempt);
@@ -454,18 +450,7 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
 
     // Overridable so tests do not have to sleep through the real backoff.
     protected long retryBackoffMillis(int attempt) {
-        return PROCESS_MEMORY_RETRY_BACKOFF_MS[attempt];
-    }
-
-    // True when the failure is the backend as a whole running out of memory, which says nothing about this
-    // query and will stop being true on its own.
-    static boolean isProcessMemoryExhausted(Throwable failure) {
-        for (Throwable t = failure; t != null && t != t.getCause(); t = t.getCause()) {
-            if (t.getMessage() != null && t.getMessage().contains(PROCESS_MEMORY_EXHAUSTED_MARKER)) {
-                return true;
-            }
-        }
-        return false;
+        return SHARED_MEMORY_RETRY_BACKOFF_MS[attempt];
     }
 
     // Records a tolerated partial failure on the job so it is visible in SHOW ANALYZE STATUS. The job still

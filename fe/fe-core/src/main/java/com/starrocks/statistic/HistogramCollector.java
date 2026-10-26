@@ -118,65 +118,6 @@ final class HistogramCollector {
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
     }
 
-<<<<<<< HEAD
-=======
-    /** The columns whose histogram row reached storage; only these should get metadata. */
-    List<String> collectedColumns() {
-        return insertedColumns;
-    }
-
-    /**
-     * Queries one column's most common values and buckets, waiting out a backend that is momentarily out
-     * of memory when the flavour asks for it. A statistics query is tiny, so such a rejection is about
-     * other work on that backend and stops being true on its own - see
-     * {@link StatisticsCollectJob#awaitBackendMemory} for why the waiting is budgeted.
-     */
-    private ColumnHistogram collectColumn(ConnectContext context, AnalyzeStatus analyzeStatus, String columnName,
-                                          Type columnType) throws Exception {
-        StatisticsCollectJob job = traits.job;
-        for (int attempt = 0; ; attempt++) {
-            try {
-                List<TStatisticData> mcv = job.queryStatisticSync(
-                        traits.buildMcvQuery(columnName), context, analyzeStatus);
-                Map<String, String> mostCommonValues = traits.buildMostCommonValues(mcv);
-
-                String bucketsQuery = traits.buildBucketsQuery(
-                        context, analyzeStatus, columnName, columnType, mostCommonValues);
-                String buckets = traits.singleResult(
-                        job.queryStatisticSync(bucketsQuery, context, analyzeStatus), columnName).histogram;
-
-                return new ColumnHistogram(buckets, buildMcvJson(mostCommonValues));
-            } catch (Exception e) {
-                if (!traits.waitsOutSharedMemoryPressure()
-                        || attempt >= job.maxSharedMemoryRetries()
-                        || !StatisticsCollectJob.isSharedMemoryExhausted(e)) {
-                    throw e;
-                }
-                // A KILL or the overall analyze deadline can land while a query is in flight, where it
-                // surfaces as that query's failure. Re-check both before waiting, so neither is mistaken
-                // for a busy backend and silently retried.
-                job.checkCancelled(analyzeStatus);
-                job.calculateAndSetRemainingTimeout(context, analyzeStatus);
-
-                long backoffMs = job.retryBackoffMillis(attempt);
-                LOG.info("[ExternalStats] backend out of memory, retrying histogram | table={} column={} " +
-                        "attempt={} backoffMs={}", table(), columnName, attempt + 1, backoffMs);
-                if (!job.awaitBackendMemory(backoffMs)) {
-                    throw e;
-                }
-            }
-        }
-    }
-
-    private String table() {
-        return traits.table == null ? "?" : traits.table.getName();
-    }
-
-    /** One column's collected histogram, before it is turned into a buffered row. */
-    private record ColumnHistogram(String buckets, String mcvJson) {
-    }
-
->>>>>>> 17789c24157... [BugFix] Retry external statistics collection on shared memory limits, not only process OOM (#63864)
     /**
      * Best-effort flush of the rows collected so far, so a failure on one column does not discard
      * the columns already computed. The collection failure stays the primary exception.
