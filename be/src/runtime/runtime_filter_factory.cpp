@@ -14,6 +14,8 @@
 
 #include "runtime/runtime_filter_factory.h"
 
+#include <memory>
+
 #include "column/column_helper.h"
 #include "common/object_pool.h"
 #include "common/system/cpu_info.h"
@@ -45,6 +47,25 @@ RuntimeFilter* RuntimeFilterFactory::to_empty_filter(ObjectPool* pool, RuntimeFi
             [&]<LogicalType LT>() -> RuntimeFilter* {
                 return new ComposedRuntimeEmptyFilter<LT>(*down_cast<const MinMaxRuntimeFilter<LT>*>(min_max_filter),
                                                           *membership_filter);
+            });
+
+    if (pool != nullptr && filter != nullptr) {
+        return pool->add(filter);
+    } else {
+        return filter;
+    }
+}
+
+RuntimeFilter* RuntimeFilterFactory::create_pass_all_filter(ObjectPool* pool, LogicalType type, int8_t join_mode) {
+    RuntimeFilter* filter =
+            type_dispatch_filter(type, static_cast<RuntimeFilter*>(nullptr), [&]<LogicalType LT>() -> RuntimeFilter* {
+                auto rf = std::make_unique<ComposedRuntimeEmptyFilter<LT>>();
+                rf->get_membership_filter()->set_join_mode(join_mode);
+                if (!rf->min_max_filter().set_pass_all()) {
+                    return nullptr;
+                }
+                rf->insert_null();
+                return rf.release();
             });
 
     if (pool != nullptr && filter != nullptr) {
