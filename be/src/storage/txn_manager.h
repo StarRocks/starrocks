@@ -222,7 +222,7 @@ private:
     // Commits hold a shared lock across metadata persistence and the map update. Cleanup
     // takes the exclusive lock so it cannot erase a prepared entry during an in-flight
     // commit. Shard by tablet so force rollback can use the same lock for all its txns.
-    // Lock order: tablet txn lock -> txn map lock -> tablet metadata lock. Commits on
+    // Lock order: tablet txn lock -> txn map lock -> tablet writing-size mutex. Commits on
     // the same shard can still persist metadata concurrently without holding a map lock.
     std::unique_ptr<std::shared_mutex[]> _tablet_txn_locks;
 

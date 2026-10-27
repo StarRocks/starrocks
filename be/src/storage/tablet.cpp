@@ -1814,14 +1814,14 @@ int64_t Tablet::data_size() {
 int64_t Tablet::in_writing_data_size() {
     int64_t size = 0;
     {
-        std::shared_lock rdlock(_meta_lock);
+        std::lock_guard lock(_in_writing_size_lock);
         for (const auto& [txn_id, bytes] : _in_writing_txn_size) {
             size += bytes;
         }
     }
     // PK publish may accept an out-of-order version into pending commits. Its writing-map
     // entry can be released, but the bytes must still count towards the immutable-tablet
-    // estimate until the version gap is filled. Do not nest the metadata and updates locks.
+    // estimate until the version gap is filled. Do not nest the writing-size and updates locks.
     if (_updates != nullptr) {
         size += _updates->pending_data_size();
     }
@@ -1830,14 +1830,20 @@ int64_t Tablet::in_writing_data_size() {
 }
 
 void Tablet::add_in_writing_data_size(int64_t txn_id, int64_t delta) {
-    std::unique_lock wrlock(_meta_lock);
+    std::lock_guard lock(_in_writing_size_lock);
     VLOG(2) << "tablet " << tablet_id() << " add in writing data size: " << _in_writing_txn_size[txn_id]
             << " delta: " << delta << " txn_id: " << txn_id;
     _in_writing_txn_size[txn_id] += delta;
 }
 
+void Tablet::set_in_writing_data_size(int64_t txn_id, int64_t bytes) {
+    std::lock_guard lock(_in_writing_size_lock);
+    VLOG(2) << "tablet " << tablet_id() << " set in writing data size: " << bytes << " txn_id: " << txn_id;
+    _in_writing_txn_size[txn_id] = bytes;
+}
+
 void Tablet::remove_in_writing_data_size(int64_t txn_id) {
-    std::unique_lock wrlock(_meta_lock);
+    std::lock_guard lock(_in_writing_size_lock);
     auto it = _in_writing_txn_size.find(txn_id);
     if (it == _in_writing_txn_size.end()) {
         return;

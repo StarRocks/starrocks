@@ -107,12 +107,12 @@ public:
         CHECK(result.ok()) << result.status();
         auto rowset = result.value();
         if (with_data) {
-            add(txn_id, rowset->data_disk_size());
+            add(txn_id, rowset->rowset_meta()->total_disk_size());
         }
         return rowset;
     }
 
-    RowsetSharedPtr commit(int64_t txn_id, bool with_data = false) {
+    RowsetSharedPtr commit(int64_t txn_id, bool with_data = true) {
         auto rowset = build_rowset(txn_id, with_data);
         CHECK_OK(_txn_mgr->commit_txn(_tablet->partition_id(), _tablet, txn_id, _load_id, rowset, false, false));
         return rowset;
@@ -134,7 +134,7 @@ public:
             SCOPED_TRACE(commit_point);
             prepare(txn_id);
             auto rowset = build_rowset(txn_id, true);
-            const auto bytes = rowset->data_disk_size();
+            const auto bytes = rowset->rowset_meta()->total_disk_size();
             ASSERT_GT(bytes, 0);
             const auto initial_data_size = _tablet->data_size();
             CountDownLatch commit_paused(1), resume_commit(1), cleanup_started(1);
@@ -220,9 +220,9 @@ TEST_P(TxnManagerWritingSizeTest, PublishReleasesEntriesForEveryTransaction) {
         EXPECT_EQ(30, _tablet->in_writing_data_size());
         auto rowset = commit(txn_id);
         // A committed writer can be destroyed before FE publishes. Do not lose these bytes early.
-        EXPECT_EQ(30, _tablet->in_writing_data_size());
+        EXPECT_EQ(rowset->rowset_meta()->total_disk_size(), _tablet->in_writing_data_size());
         add(txn_id, 100); // A delayed/duplicate flush must not change a committed transaction.
-        EXPECT_EQ(30, _tablet->in_writing_data_size());
+        EXPECT_EQ(rowset->rowset_meta()->total_disk_size(), _tablet->in_writing_data_size());
         ASSERT_OK(_txn_mgr->publish_txn(_tablet->partition_id(), _tablet, txn_id, txn_id + 1, rowset));
         expect_empty();
         ASSERT_OK(_txn_mgr->publish_txn(_tablet->partition_id(), _tablet, txn_id, txn_id + 1, rowset));
@@ -250,7 +250,7 @@ TEST_P(TxnManagerWritingSizeTest, PendingPublishPreservesCapacityUntilVersionGap
     auto later_rowset = commit(1, true);
     const auto later_bytes = later_rowset->data_disk_size();
     ASSERT_GT(later_bytes, 0);
-    EXPECT_EQ(later_bytes, _tablet->in_writing_data_size());
+    EXPECT_EQ(later_rowset->rowset_meta()->total_disk_size(), _tablet->in_writing_data_size());
     // Version 2 has not arrived. A successful publish of version 3 only enters pending commits.
     ASSERT_OK(_txn_mgr->publish_txn(_tablet->partition_id(), _tablet, 1, 3, later_rowset));
     EXPECT_EQ(1, _tablet->updates()->num_pending());
@@ -266,7 +266,7 @@ TEST_P(TxnManagerWritingSizeTest, PendingPublishPreservesCapacityUntilVersionGap
     auto earlier_rowset = commit(2, true);
     const auto earlier_bytes = earlier_rowset->data_disk_size();
     ASSERT_GT(earlier_bytes, 0);
-    EXPECT_EQ(later_bytes + earlier_bytes, _tablet->in_writing_data_size());
+    EXPECT_EQ(later_bytes + earlier_rowset->rowset_meta()->total_disk_size(), _tablet->in_writing_data_size());
     ASSERT_OK(_txn_mgr->publish_txn(_tablet->partition_id(), _tablet, 2, 2, earlier_rowset));
     EXPECT_EQ(0, _tablet->updates()->num_pending());
     EXPECT_EQ(0, _tablet->updates()->pending_data_size());
@@ -301,7 +301,7 @@ TEST_P(TxnManagerWritingSizeTest, PendingMetadataFailureKeepsSingleEstimateForRe
             EXPECT_EQ(0, _tablet->updates()->pending_data_size());
             EXPECT_EQ(initial_data_size, _tablet->data_size());
             EXPECT_EQ(1, _tablet->_in_writing_txn_size.size());
-            EXPECT_EQ(later_bytes, _tablet->in_writing_data_size());
+            EXPECT_EQ(later_rowset->rowset_meta()->total_disk_size(), _tablet->in_writing_data_size());
         }
     }
     // Retry must persist the pending rowset, not mistake the failed insertion for success.
@@ -344,7 +344,7 @@ TEST_P(TxnManagerWritingSizeTest, FailedPendingPublishIsNotAppliedWhenGapIsFille
     EXPECT_EQ(0, _tablet->updates()->num_pending());
     EXPECT_EQ(2, _tablet->updates()->max_version());
     EXPECT_EQ(1, _tablet->_in_writing_txn_size.size());
-    EXPECT_EQ(later_bytes, _tablet->in_writing_data_size());
+    EXPECT_EQ(later_rowset->rowset_meta()->total_disk_size(), _tablet->in_writing_data_size());
     ASSERT_OK(_txn_mgr->publish_txn(_tablet->partition_id(), _tablet, 1, 3, later_rowset));
     EXPECT_EQ(3, _tablet->updates()->max_version());
     expect_empty();
@@ -364,7 +364,7 @@ TEST_P(TxnManagerWritingSizeTest, PublishFailureKeepsEntryForRetry) {
         status = _txn_mgr->publish_txn(_tablet->partition_id(), _tablet, 1, 2, rowset);
     }
     ASSERT_FALSE(status.ok());
-    EXPECT_EQ(10, _tablet->in_writing_data_size());
+    EXPECT_EQ(rowset->rowset_meta()->total_disk_size(), _tablet->in_writing_data_size());
     EXPECT_EQ(1, _tablet->_in_writing_txn_size.size());
     ASSERT_OK(_txn_mgr->publish_txn(_tablet->partition_id(), _tablet, 1, 2, rowset));
     expect_empty();
@@ -384,7 +384,7 @@ TEST_P(TxnManagerWritingSizeTest, OverwriteFailureKeepsEntryForRetry) {
         status = _txn_mgr->publish_overwrite_txn(_tablet->partition_id(), _tablet, 1, 2, rowset, 0);
     }
     ASSERT_FALSE(status.ok());
-    EXPECT_EQ(10, _tablet->in_writing_data_size());
+    EXPECT_EQ(rowset->rowset_meta()->total_disk_size(), _tablet->in_writing_data_size());
     ASSERT_OK(_txn_mgr->publish_overwrite_txn(_tablet->partition_id(), _tablet, 1, 2, rowset, 0));
     expect_empty();
 }
@@ -404,7 +404,7 @@ TEST_P(TxnManagerWritingSizeTest, CommittedRollbackKeepsEntryUntilClearTransacti
     add(1, 10);
     auto rowset = commit(1);
     ASSERT_TRUE(_txn_mgr->rollback_txn(_tablet->partition_id(), _tablet, 1).is_already_exist());
-    EXPECT_EQ(10, _tablet->in_writing_data_size());
+    EXPECT_EQ(rowset->rowset_meta()->total_disk_size(), _tablet->in_writing_data_size());
     // FE can abort after the local writer committed (e.g. a late max_filter_ratio failure).
     StorageEngine::instance()->clear_transaction_task(1, {_tablet->partition_id()});
     expect_empty();
@@ -484,12 +484,13 @@ TEST_P(TxnManagerWritingSizeTest, CommitsOnTheSameTabletCanPersistConcurrently) 
         return _txn_mgr->commit_txn(_tablet->partition_id(), _tablet, 2, _load_id, second, false, false);
     });
     ASSERT_TRUE(commits_paused.wait_for(std::chrono::seconds(10)));
-    EXPECT_EQ(first->data_disk_size() + second->data_disk_size(), _tablet->in_writing_data_size());
+    EXPECT_EQ(first->rowset_meta()->total_disk_size() + second->rowset_meta()->total_disk_size(),
+              _tablet->in_writing_data_size());
     resume_commits.count_down();
     ASSERT_OK(first_commit.get());
     ASSERT_OK(second_commit.get());
     ASSERT_OK(_txn_mgr->delete_txn(_tablet->partition_id(), _tablet, 1));
-    EXPECT_EQ(second->data_disk_size(), _tablet->in_writing_data_size());
+    EXPECT_EQ(second->rowset_meta()->total_disk_size(), _tablet->in_writing_data_size());
     ASSERT_OK(_txn_mgr->delete_txn(_tablet->partition_id(), _tablet, 2));
     expect_empty();
 }
@@ -517,7 +518,7 @@ TEST_P(TxnManagerWritingSizeTest, RejectedDeletePreservesWritingEstimate) {
     auto rowset = commit(1);
     rowset->make_visible(Version(2, 2));
     ASSERT_FALSE(_txn_mgr->delete_txn(_tablet->partition_id(), _tablet, 1).ok());
-    EXPECT_EQ(10, _tablet->in_writing_data_size());
+    EXPECT_EQ(rowset->rowset_meta()->total_disk_size(), _tablet->in_writing_data_size());
     EXPECT_EQ(1, _tablet->_in_writing_txn_size.size());
 }
 
@@ -531,6 +532,283 @@ TEST_P(TxnManagerWritingSizeTest, ForceRollbackReleasesPreparedAndCommittedEntri
                                                  _tablet->schema_hash(), _tablet->tablet_uid());
     add(1, 100);
     add(2, 100);
+    expect_empty();
+}
+
+TEST_P(TxnManagerWritingSizeTest, CleanupBeforeCommitRejectsFinishedWriter) {
+    for (auto cleanup : {Cleanup::CLEAR, Cleanup::ROLLBACK, Cleanup::FORCE_ROLLBACK}) {
+        SCOPED_TRACE(static_cast<int>(cleanup));
+        prepare(1);
+        // DeltaWriter waits for flush and builds this rowset before entering commit_txn.
+        auto rowset = build_rowset(1, true);
+        ASSERT_GT(_tablet->in_writing_data_size(), 0);
+        ASSERT_GT(rowset->rowset_meta()->index_disk_size(), 0);
+        if (cleanup == Cleanup::CLEAR) {
+            StorageEngine::instance()->clear_transaction_task(1, {_tablet->partition_id()});
+        } else if (cleanup == Cleanup::ROLLBACK) {
+            ASSERT_OK(_txn_mgr->rollback_txn(_tablet->partition_id(), _tablet, 1));
+        } else {
+            _txn_mgr->force_rollback_tablet_related_txns(_tablet->data_dir()->get_meta(), _tablet->tablet_id(),
+                                                        _tablet->schema_hash(), _tablet->tablet_uid());
+        }
+        expect_empty();
+        auto status = _txn_mgr->commit_txn(_tablet->partition_id(), _tablet, 1, _load_id, rowset, false, false);
+        EXPECT_TRUE(status.is_not_found()) << status;
+        EXPECT_FALSE(RowsetMetaManager::check_rowset_meta(_tablet->data_dir()->get_meta(), _tablet->tablet_uid(),
+                                                          rowset->rowset_id()));
+        EXPECT_FALSE(_txn_mgr->has_txn(_tablet->partition_id(), 1, _tablet->tablet_id(), _tablet->schema_hash(),
+                                       _tablet->tablet_uid()));
+        add(1, 100);
+        expect_empty();
+    }
+}
+
+TEST_P(TxnManagerWritingSizeTest, ReprepareNormalizesAcceptedOldWriterWithoutDoubleCounting) {
+    prepare(1);
+    auto old_rowset = build_rowset(1, true);
+    const auto bytes = old_rowset->rowset_meta()->total_disk_size();
+    ASSERT_GT(bytes, 0);
+    ASSERT_OK(_txn_mgr->rollback_txn(_tablet->partition_id(), _tablet, 1));
+    prepare(1);
+    add(1, bytes * 3); // Estimate from the new attempt, not the rowset that will be accepted.
+    // Preserve the existing same-load reprepare contract: no writer-generation token is introduced.
+    ASSERT_OK(_txn_mgr->commit_txn(_tablet->partition_id(), _tablet, 1, _load_id, old_rowset, false, false));
+    EXPECT_EQ(bytes, _tablet->in_writing_data_size());
+    ASSERT_OK(_txn_mgr->commit_txn(_tablet->partition_id(), _tablet, 1, _load_id, old_rowset, false, false));
+    EXPECT_EQ(bytes, _tablet->in_writing_data_size());
+    EXPECT_EQ(1, _tablet->_in_writing_txn_size.size());
+    add(1, bytes);
+    EXPECT_EQ(bytes, _tablet->in_writing_data_size());
+    auto different_rowset = build_rowset(1, true);
+    ASSERT_FALSE(_txn_mgr->commit_txn(_tablet->partition_id(), _tablet, 1, _load_id, different_rowset, false, false)
+                         .ok());
+    EXPECT_EQ(bytes, _tablet->in_writing_data_size());
+    ASSERT_OK(_txn_mgr->delete_txn(_tablet->partition_id(), _tablet, 1));
+    expect_empty();
+    // A new writer can still explicitly prepare and commit after cleanup.
+    prepare(1);
+    auto retry_rowset = commit(1, true);
+    EXPECT_EQ(retry_rowset->rowset_meta()->total_disk_size(), _tablet->in_writing_data_size());
+    ASSERT_OK(_txn_mgr->delete_txn(_tablet->partition_id(), _tablet, 1));
+    expect_empty();
+}
+
+TEST_P(TxnManagerWritingSizeTest, RecoveryWithoutPrepareRestoresOneEstimate) {
+    auto rowset = build_rowset(1, true);
+    expect_empty(); // No prepared transaction exists to accept flush accounting.
+    RowsetMetaPB meta_pb;
+    rowset->rowset_meta()->get_full_meta_pb(&meta_pb);
+    ASSERT_OK(RowsetMetaManager::save(_tablet->data_dir()->get_meta(), _tablet->tablet_uid(), meta_pb));
+    {
+        DeferOp restore_error([] {
+            TEST_DISABLE_ERROR_POINT("RowsetMetaManager::save");
+            SyncPoint::GetInstance()->DisableProcessing();
+        });
+        SyncPoint::GetInstance()->EnableProcessing();
+        TEST_ENABLE_ERROR_POINT("RowsetMetaManager::save", Status::IOError("recovery must not save metadata"));
+        ASSERT_OK(_txn_mgr->commit_txn(_tablet, _tablet->partition_id(), 1, _load_id, rowset, true, false));
+        ASSERT_OK(_txn_mgr->commit_txn(_tablet, _tablet->partition_id(), 1, _load_id, rowset, true, false));
+        // An already committed same-rowset call remains idempotent even in normal mode.
+        ASSERT_OK(_txn_mgr->commit_txn(_tablet, _tablet->partition_id(), 1, _load_id, rowset, false, false));
+    }
+    EXPECT_EQ(rowset->rowset_meta()->total_disk_size(), _tablet->in_writing_data_size());
+    EXPECT_EQ(1, _tablet->_in_writing_txn_size.size());
+    ASSERT_OK(_txn_mgr->delete_txn(_tablet->partition_id(), _tablet, 1));
+    expect_empty();
+}
+
+TEST_P(TxnManagerWritingSizeTest, CommitMetadataFailureKeepsEstimateForRetryOrCleanup) {
+    for (bool cleanup_before_retry : {false, true}) {
+        SCOPED_TRACE(cleanup_before_retry);
+        prepare(1);
+        auto rowset = build_rowset(1, true);
+        const auto bytes = rowset->rowset_meta()->total_disk_size();
+        {
+            DeferOp restore_error([] {
+                TEST_DISABLE_ERROR_POINT("RowsetMetaManager::save");
+                SyncPoint::GetInstance()->DisableProcessing();
+            });
+            SyncPoint::GetInstance()->EnableProcessing();
+            TEST_ENABLE_ERROR_POINT("RowsetMetaManager::save", Status::IOError("injected committed write"));
+            for (int attempt = 0; attempt < 2; ++attempt) {
+                ASSERT_FALSE(_txn_mgr->commit_txn(_tablet->partition_id(), _tablet, 1, _load_id, rowset, false, false)
+                                     .ok());
+                EXPECT_EQ(bytes, _tablet->in_writing_data_size());
+                EXPECT_FALSE(RowsetMetaManager::check_rowset_meta(_tablet->data_dir()->get_meta(),
+                                                                  _tablet->tablet_uid(), rowset->rowset_id()));
+            }
+        }
+        if (cleanup_before_retry) {
+            ASSERT_OK(_txn_mgr->delete_txn(_tablet->partition_id(), _tablet, 1));
+        }
+        auto status = _txn_mgr->commit_txn(_tablet->partition_id(), _tablet, 1, _load_id, rowset, false, false);
+        if (cleanup_before_retry) {
+            EXPECT_TRUE(status.is_not_found()) << status;
+            EXPECT_FALSE(RowsetMetaManager::check_rowset_meta(_tablet->data_dir()->get_meta(), _tablet->tablet_uid(),
+                                                              rowset->rowset_id()));
+        } else {
+            ASSERT_OK(status);
+            EXPECT_EQ(bytes, _tablet->in_writing_data_size());
+            ASSERT_OK(_txn_mgr->delete_txn(_tablet->partition_id(), _tablet, 1));
+        }
+        expect_empty();
+    }
+}
+
+TEST_P(TxnManagerWritingSizeTest, CommitAfterPublishDoesNotRecreateEstimate) {
+    prepare(1);
+    auto rowset = commit(1, true);
+    ASSERT_OK(_txn_mgr->publish_txn(_tablet->partition_id(), _tablet, 1, 2, rowset));
+    expect_empty();
+    auto status = _txn_mgr->commit_txn(_tablet->partition_id(), _tablet, 1, _load_id, rowset, false, false);
+    EXPECT_TRUE(status.is_not_found()) << status;
+    expect_empty();
+}
+
+TEST_P(TxnManagerWritingSizeTest, CommitAfterPendingPublishDoesNotDoubleCount) {
+    if (GetParam() != TKeysType::PRIMARY_KEYS) {
+        GTEST_SKIP() << "Only PK tablets have pending commits";
+    }
+    prepare(1);
+    auto rowset = commit(1, true);
+    ASSERT_OK(_txn_mgr->publish_txn(_tablet->partition_id(), _tablet, 1, 3, rowset));
+    auto status = _txn_mgr->commit_txn(_tablet->partition_id(), _tablet, 1, _load_id, rowset, false, false);
+    EXPECT_TRUE(status.is_not_found()) << status;
+    EXPECT_TRUE(_tablet->_in_writing_txn_size.empty());
+    EXPECT_EQ(rowset->data_disk_size(), _tablet->in_writing_data_size());
+    prepare(2);
+    auto earlier_rowset = commit(2, true);
+    ASSERT_OK(_txn_mgr->publish_txn(_tablet->partition_id(), _tablet, 2, 2, earlier_rowset));
+    expect_empty();
+}
+
+TEST_P(TxnManagerWritingSizeTest, CommitFinishingAfterConcurrentPublishDoesNotRecreateEstimate) {
+    for (bool pending : {false, true}) {
+        if (pending && GetParam() != TKeysType::PRIMARY_KEYS) continue;
+        SCOPED_TRACE(pending);
+        const int64_t txn_id = pending ? 2 : 1;
+        prepare(txn_id);
+        auto rowset = build_rowset(txn_id, true);
+        CountDownLatch first_saved(1), second_saved(1), resume_first(1), resume_second(1);
+        std::atomic<int> saves{0};
+        auto* sync = SyncPoint::GetInstance();
+        std::future<Status> first, second;
+        DeferOp finish([&] {
+            resume_first.count_down();
+            resume_second.count_down();
+            if (first.valid()) first.wait();
+            if (second.valid()) second.wait();
+            sync->DisableProcessing();
+            sync->ClearAllCallBacks();
+        });
+        sync->SetCallBack("TxnManager::commit_txn::after_save", [&](void*) {
+            if (saves.fetch_add(1) == 0) {
+                first_saved.count_down();
+                EXPECT_TRUE(resume_first.wait_for(std::chrono::seconds(30)));
+            } else {
+                second_saved.count_down();
+                EXPECT_TRUE(resume_second.wait_for(std::chrono::seconds(30)));
+            }
+        });
+        sync->EnableProcessing();
+        auto commit_rowset = [&] {
+            return _txn_mgr->commit_txn(_tablet->partition_id(), _tablet, txn_id, _load_id, rowset, false, false);
+        };
+        first = std::async(std::launch::async, commit_rowset);
+        ASSERT_TRUE(first_saved.wait_for(std::chrono::seconds(10)));
+        second = std::async(std::launch::async, commit_rowset);
+        ASSERT_TRUE(second_saved.wait_for(std::chrono::seconds(10)));
+        resume_first.count_down();
+        ASSERT_OK(first.get());
+        const int64_t version = pending ? 4 : 2;
+        ASSERT_OK(_txn_mgr->publish_txn(_tablet->partition_id(), _tablet, txn_id, version, rowset));
+        resume_second.count_down();
+        ASSERT_OK(second.get());
+        EXPECT_TRUE(_tablet->_in_writing_txn_size.empty());
+        EXPECT_EQ(pending ? rowset->data_disk_size() : 0, _tablet->in_writing_data_size());
+        // Final map reconstruction by the in-flight duplicate is pre-existing behavior.
+        // A publish retry still removes it without creating another accounting contribution.
+        ASSERT_OK(_txn_mgr->publish_txn(_tablet->partition_id(), _tablet, txn_id, version, rowset));
+        EXPECT_TRUE(_tablet->_in_writing_txn_size.empty());
+    }
+}
+
+TEST_P(TxnManagerWritingSizeTest, CommitBeforePublishRemovalCannotLeaveWritingEstimate) {
+    for (bool pending : {false, true}) {
+        if (pending && GetParam() != TKeysType::PRIMARY_KEYS) continue;
+        SCOPED_TRACE(pending);
+        const int64_t txn_id = pending ? 2 : 1;
+        prepare(txn_id);
+        auto rowset = build_rowset(txn_id, true);
+        CountDownLatch first_saved(1), second_saved(1), resume_first(1), resume_second(1);
+        CountDownLatch publish_paused(1), resume_publish(1);
+        std::atomic<int> saves{0};
+        auto* sync = SyncPoint::GetInstance();
+        std::future<Status> first, second, publishing;
+        DeferOp finish([&] {
+            resume_first.count_down();
+            resume_second.count_down();
+            resume_publish.count_down();
+            if (publishing.valid()) publishing.wait();
+            if (first.valid()) first.wait();
+            if (second.valid()) second.wait();
+            sync->DisableProcessing();
+            sync->ClearAllCallBacks();
+        });
+        sync->SetCallBack("TxnManager::commit_txn::after_save", [&](void*) {
+            if (saves.fetch_add(1) == 0) {
+                first_saved.count_down();
+                EXPECT_TRUE(resume_first.wait_for(std::chrono::seconds(30)));
+            } else {
+                second_saved.count_down();
+                EXPECT_TRUE(resume_second.wait_for(std::chrono::seconds(30)));
+            }
+        });
+        sync->SetCallBack("TxnManager::publish_txn::before_remove", [&](void*) {
+            publish_paused.count_down();
+            EXPECT_TRUE(resume_publish.wait_for(std::chrono::seconds(30)));
+        });
+        sync->EnableProcessing();
+        auto commit_rowset = [&] {
+            return _txn_mgr->commit_txn(_tablet->partition_id(), _tablet, txn_id, _load_id, rowset, false, false);
+        };
+        first = std::async(std::launch::async, commit_rowset);
+        ASSERT_TRUE(first_saved.wait_for(std::chrono::seconds(10)));
+        second = std::async(std::launch::async, commit_rowset);
+        ASSERT_TRUE(second_saved.wait_for(std::chrono::seconds(10)));
+        resume_first.count_down();
+        ASSERT_OK(first.get());
+        const int64_t version = pending ? 4 : 2;
+        publishing = std::async(std::launch::async, [&] {
+            return _txn_mgr->publish_txn(_tablet->partition_id(), _tablet, txn_id, version, rowset);
+        });
+        ASSERT_TRUE(publish_paused.wait_for(std::chrono::seconds(10)));
+        resume_second.count_down();
+        ASSERT_OK(second.get());
+        resume_publish.count_down();
+        ASSERT_OK(publishing.get());
+        EXPECT_TRUE(_tablet->_in_writing_txn_size.empty());
+        EXPECT_EQ(pending ? rowset->data_disk_size() : 0, _tablet->in_writing_data_size());
+        // Both accounting removal and transaction removal must happen after the second
+        // commit normalizes the estimate, not on opposite sides of the map lock.
+        ASSERT_OK(_txn_mgr->publish_txn(_tablet->partition_id(), _tablet, txn_id, version, rowset));
+        EXPECT_TRUE(_tablet->_in_writing_txn_size.empty());
+    }
+}
+
+TEST_P(TxnManagerWritingSizeTest, WritingAccountingDoesNotWaitForTabletMetadataLock) {
+    prepare(1);
+    std::unique_lock metadata_lock(_tablet->_meta_lock);
+    auto accounting = std::async(std::launch::async, [&] {
+        add(1, 100);
+        _tablet->set_in_writing_data_size(1, 200);
+        _tablet->remove_in_writing_data_size(1);
+        return _tablet->in_writing_data_size();
+    });
+    const auto result = accounting.wait_for(std::chrono::seconds(2));
+    metadata_lock.unlock(); // Always release the simulated metadata-I/O lock before joining.
+    EXPECT_EQ(std::future_status::ready, result);
+    EXPECT_EQ(0, accounting.get());
     expect_empty();
 }
 

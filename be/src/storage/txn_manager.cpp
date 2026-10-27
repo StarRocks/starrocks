@@ -248,6 +248,14 @@ Status TxnManager::commit_txn(const TabletSharedPtr& tablet, TPartitionId partit
         std::shared_lock rdlock(_get_txn_map_lock(transaction_id));
         txn_tablet_map_t& txn_tablet_map = _get_txn_tablet_map(transaction_id);
         auto it = txn_tablet_map.find(key);
+        // Normal writers prepare before committing. Cleanup may have won before commit_guard
+        // was acquired; do not resurrect that completed lifetime or persist its rowset.
+        // Startup recovery is different: it reconstructs committed transactions from metadata.
+        if (!is_recovery && (it == txn_tablet_map.end() || it->second.find(tablet_info) == it->second.end())) {
+            return Status::NotFound(fmt::format("Transaction was not prepared or has been cleared. tablet_id: {}, "
+                                               "partition_id: {}, txn_id: {}",
+                                               tablet_id, partition_id, transaction_id));
+        }
         if (it != txn_tablet_map.end()) {
             auto load_itr = it->second.find(tablet_info);
             if (load_itr != it->second.end()) {
@@ -322,6 +330,15 @@ Status TxnManager::commit_txn(const TabletSharedPtr& tablet, TPartitionId partit
         txn_tablet_map_t& txn_tablet_map = _get_txn_tablet_map(transaction_id);
         auto& tablet_txn_infos = txn_tablet_map[key];
         auto itr = tablet_txn_infos.find(tablet_info);
+        if (is_recovery || itr != tablet_txn_infos.end()) {
+            // A retry can prepare the same transaction again before an older writer commits.
+            // Replace, rather than add to, that attempt's estimate with the accepted rowset.
+            // If concurrent publish already removed the transaction while we saved metadata,
+            // do not create a new estimate. Leave the existing final transaction-map update
+            // behavior below unchanged; this is not a writer-attempt lifecycle fence.
+            // Recovery runs before serving writes and rebuilds the unpublished rowset's bytes.
+            tablet->set_in_writing_data_size(transaction_id, rowset_ptr->rowset_meta()->total_disk_size());
+        }
         if (itr == tablet_txn_infos.end()) {
             TabletTxnInfo info(load_id, rowset_ptr, is_shadow);
             info.commit_time = UnixSeconds();
@@ -358,7 +375,7 @@ void TxnManager::add_in_writing_data_size(TPartitionId partition_id, const Table
     // Keep the transaction lock until the tablet map has been updated. Otherwise an async
     // flush could recreate an entry after clear/rollback removed it. Committed rowsets retain
     // their existing bytes until publish or delete, but must not receive any more flush bytes.
-    // Lock order: transaction map, then tablet metadata; neither tablet method calls back here.
+    // Lock order: transaction map, then writing-size mutex; neither tablet method calls back here.
     tablet->add_in_writing_data_size(transaction_id, delta);
 }
 
@@ -378,10 +395,11 @@ Status TxnManager::publish_overwrite_txn(TPartitionId partition_id, const Tablet
                 << ", tablet_id: " << tablet->tablet_id() << ", schema_hash: " << tablet->schema_hash()
                 << ", rowset_id: " << rowset->rowset_id() << ", version: " << rowset->version();
     }
-    // The rowset now owns these bytes. Keep the estimate on retryable publish errors above.
-    tablet->remove_in_writing_data_size(transaction_id);
     tablet->erase_committed_rowset(rowset);
     std::unique_lock wrlock(_get_txn_map_lock(transaction_id));
+    // Serialize the ownership transfer with commit's final accounting update. Keep the
+    // estimate on retryable publish errors above; this short mutex never waits for metadata I/O.
+    tablet->remove_in_writing_data_size(transaction_id);
     txn_tablet_map_t& txn_tablet_map = _get_txn_tablet_map(transaction_id);
     pair<int64_t, int64_t> key(partition_id, transaction_id);
     TabletInfo tablet_info(tablet->tablet_id(), tablet->schema_hash(), tablet->tablet_uid());
@@ -426,10 +444,11 @@ Status TxnManager::publish_txn(TPartitionId partition_id, const TabletSharedPtr&
             return st;
         }
     }
-    // The rowset now owns these bytes. Keep the estimate on retryable publish errors above.
-    tablet->remove_in_writing_data_size(transaction_id);
     tablet->erase_committed_rowset(rowset);
+    TEST_SYNC_POINT("TxnManager::publish_txn::before_remove");
     std::unique_lock wrlock(_get_txn_map_lock(transaction_id));
+    // See publish_overwrite_txn: accounting and transaction removal share one critical section.
+    tablet->remove_in_writing_data_size(transaction_id);
     txn_tablet_map_t& txn_tablet_map = _get_txn_tablet_map(transaction_id);
     pair<int64_t, int64_t> key(partition_id, transaction_id);
     TabletInfo tablet_info(tablet->tablet_id(), tablet->schema_hash(), tablet->tablet_uid());

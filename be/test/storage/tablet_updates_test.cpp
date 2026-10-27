@@ -4527,6 +4527,7 @@ TEST_F(TabletUpdatesTest, test_skip_schema) {
     PUniqueId load_id;
     load_id.set_hi(1000);
     load_id.set_lo(1000);
+    ASSERT_OK(StorageEngine::instance()->txn_manager()->prepare_txn(100, _tablet, 100, load_id));
     ASSERT_TRUE(
             StorageEngine::instance()->txn_manager()->commit_txn(_tablet, 100, 100, load_id, rs1, false, false).ok());
     ASSERT_EQ(true, rs1->rowset_meta()->skip_tablet_schema());
@@ -4563,6 +4564,7 @@ TEST_F(TabletUpdatesTest, test_skip_schema) {
     ASSERT_EQ(false, rs2->rowset_meta()->skip_tablet_schema());
     load_id.set_hi(1001);
     load_id.set_lo(1001);
+    ASSERT_OK(StorageEngine::instance()->txn_manager()->prepare_txn(101, _tablet, 101, load_id));
     ASSERT_TRUE(
             StorageEngine::instance()->txn_manager()->commit_txn(_tablet, 101, 101, load_id, rs2, false, false).ok());
     ASSERT_EQ(true, rs2->rowset_meta()->skip_tablet_schema());
@@ -4609,6 +4611,7 @@ TEST_F(TabletUpdatesTest, test_skip_schema) {
     _tablet->set_update_schema_running(true);
     load_id.set_hi(1002);
     load_id.set_lo(1002);
+    ASSERT_OK(StorageEngine::instance()->txn_manager()->prepare_txn(102, _tablet, 102, load_id));
     ASSERT_TRUE(
             StorageEngine::instance()->txn_manager()->commit_txn(_tablet, 102, 102, load_id, rs3, false, false).ok());
     ASSERT_EQ(false, rs3->rowset_meta()->skip_tablet_schema());
@@ -4631,6 +4634,7 @@ TEST_F(TabletUpdatesTest, test_skip_schema) {
     ASSERT_EQ(false, rs4->rowset_meta()->skip_tablet_schema());
     load_id.set_hi(1003);
     load_id.set_lo(1003);
+    ASSERT_OK(StorageEngine::instance()->txn_manager()->prepare_txn(103, _tablet, 103, load_id));
     ASSERT_TRUE(
             StorageEngine::instance()->txn_manager()->commit_txn(_tablet, 103, 103, load_id, rs4, false, false).ok());
     ASSERT_EQ(true, rs4->rowset_meta()->skip_tablet_schema());
