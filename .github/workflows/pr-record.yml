@@ -16,8 +16,13 @@ on:
     types: [opened, reopened, synchronize, closed, edited, labeled, unlabeled, ready_for_review, converted_to_draft, assigned, unassigned]
   issue_comment:
     types: [created, edited, deleted]
-  workflow_run:  # ERROR is set/cleared by this pipeline with GITHUB_TOKEN, which emits no labeled event
-    workflows: ["CD SYNC CI PIPELINE"]
+  # These workflows set labels with GITHUB_TOKEN, which emits no labeled event, so the PR is
+  # recorded again once they finish: ERROR / conflict / automerge (sync pipeline), version and
+  # behavior labels (PR CHECKER), the doc label (CI DOC Checker), version labels removed
+  # after the backport comment (MERGE PIPELINE), PAI-contributed on a backport (Contributed
+  # Backport Label).
+  workflow_run:
+    workflows: ["CD SYNC CI PIPELINE", "PR CHECKER", "CI DOC Checker", "MERGE PIPELINE", "Contributed Backport Label"]
     types: [completed]
 
 permissions:
@@ -31,17 +36,20 @@ jobs:
     # comment cancel a real recording run and then skip itself. `opened` has a group of its
     # own: that run also records the sync PRs the new one replaced (pr_record.superseded),
     # and the labels a new sync PR gets right away would otherwise cancel it.
+    # A workflow_run of a fork PR carries no PR number; its head commit keeps it apart.
     concurrency:
-      group: pr-record-${{ github.event.pull_request.number || github.event.issue.number || github.event.workflow_run.pull_requests[0].number }}${{ github.event.action == 'opened' && '-opened' || '' }}
+      group: pr-record-${{ github.event.pull_request.number || github.event.issue.number || github.event.workflow_run.pull_requests[0].number || github.event.workflow_run.head_sha }}${{ github.event.action == 'opened' && '-opened' || '' }}
       cancel-in-progress: true  # every run reads the live state, so the newest run suffices
     # CI Metrics is the complete PR data source: every pull_request_target event in `on:` is
     # recorded on every PR, main PRs included.
+    # A workflow_run is recorded for every listed workflow; pr_record.py finds the PR by the
+    # run's head when GitHub leaves workflow_run.pull_requests empty (fork heads).
     # A human comment is recorded when it carries a seal-check skip command read on this
     # repo's PRs: ignore backport check / merge / sync (ignore reverse sync is read on CD PRs).
     # No comments inside the expression below: in a folded scalar a '#' line is part of it.
     if: >-
       github.event_name == 'pull_request_target' ||
-      (github.event_name == 'workflow_run' && github.event.workflow_run.pull_requests[0] != null) ||
+      github.event_name == 'workflow_run' ||
       (github.event_name == 'issue_comment' && github.event.issue.pull_request &&
         github.event.comment.user.type == 'User' &&
         !contains(fromJSON('["CelerData-Reviewer","wanpengfei-git","CLAassistant","starrocks-robot","robot-sync"]'),
