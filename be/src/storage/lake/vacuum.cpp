@@ -382,18 +382,13 @@ static Status collect_garbage_files(const TabletMetadataPB& metadata, const std:
     return Status::OK();
 }
 
-enum class FileReferenceScope {
-    SHARED_ONLY,
-    ALL,
-};
-
-// Register active file paths according to scope. Historical snapshot references may predate
-// shared flags and therefore use ALL. These paths filter shared deletion candidates only;
-// ordinary files remain protected by the version-interval checks in collect_garbage_files.
+// Register active file paths, optionally including non-shared references. Historical snapshot
+// references may predate shared flags and therefore include all paths. These paths filter shared
+// deletion candidates only; ordinary files remain protected by the version-interval checks in
+// collect_garbage_files.
 static Status collect_protected_file_paths(const TabletMetadataPB& metadata, std::string_view data_dir,
-                                           AsyncSharedFileDeleter* deleter, FileReferenceScope scope,
+                                           AsyncSharedFileDeleter* deleter, bool include_non_shared,
                                            int64_t deadline_ms) {
-    const bool include_non_shared = scope == FileReferenceScope::ALL;
     for (const auto& rowset : metadata.rowsets()) {
         RETURN_IF_ERROR(check_vacuum_deadline(deadline_ms));
         for (int i = 0; i < rowset.segment_metas_size(); ++i) {
@@ -503,7 +498,7 @@ static Status collect_alive_shared_files(TabletManager* tablet_mgr, const std::v
         if (!res.ok()) {
             return res.status();
         }
-        RETURN_IF_ERROR(collect_protected_file_paths(*res.value(), data_dir, deleter, FileReferenceScope::SHARED_ONLY,
+        RETURN_IF_ERROR(collect_protected_file_paths(*res.value(), data_dir, deleter, false /* include_non_shared */,
                                                      deadline_ms));
     }
     return check_vacuum_deadline(deadline_ms);
@@ -555,8 +550,8 @@ static StatusOr<bool> protect_snapshot_files(TabletManager* tablet_mgr, const Va
                 return metadata.status();
             }
             auto data_dir = join_path(root_dir, kSegmentDirectoryName);
-            RETURN_IF_ERROR(collect_protected_file_paths(*metadata.value(), data_dir, deleter, FileReferenceScope::ALL,
-                                                         deadline_ms));
+            RETURN_IF_ERROR(collect_protected_file_paths(*metadata.value(), data_dir, deleter,
+                                                         true /* include_non_shared */, deadline_ms));
         }
     }
     RETURN_IF_ERROR(check_vacuum_deadline(deadline_ms));
