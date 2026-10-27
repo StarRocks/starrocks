@@ -1379,6 +1379,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：ルーチンロードジョブが自動的に回復される間隔。
 - 導入時期：-
 
+### `pipe_max_consecutive_failed_task_executions`
+
+- デフォルト：5
+- タイプ：Int
+- 単位：-
+- 変更可能：Yes
+- 説明：パイプで連続して失敗できるタスク実行回数の上限。連続して失敗したタスク実行回数がこの値を超えると、パイプは `ERROR` 状態になり、再開されるまでデータのロードを停止します。失敗したタスクの再試行は、それぞれ 1 回の実行として数えられます。タスクがファイルのロードに成功したとき、および `ALTER PIPE <pipe_name> RESUME` または `ALTER PIPE <pipe_name> { RETRY ALL | RETRY FILE '<file_name>' }` を実行したときに、カウントはリセットされます。失敗したタスクは最大 5 回再試行されます。この項目を 5 より大きい値に設定すると、再試行後も失敗するタスクは打ち切られます。そのファイルは `ERROR` としてマークされ、`RETRY` で再度ロードでき、パイプは次のファイルのロードに進みます。
+- 導入時期：-
+
 ### `prepared_transaction_default_timeout_second`
 
 - デフォルト：86400

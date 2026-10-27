@@ -1407,6 +1407,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The interval at which Routine Load jobs are automatically recovered.
 - Introduced in: -
 
+### `pipe_max_consecutive_failed_task_executions`
+
+- Default: 5
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of task executions in a row that can fail in a pipe. When more task executions than this fail in a row, the pipe changes to the `ERROR` state and stops loading data until you resume it. Each retry of a failed task counts as one execution. The count is reset when a task loads its files successfully, and when you run `ALTER PIPE <pipe_name> RESUME` or `ALTER PIPE <pipe_name> { RETRY ALL | RETRY FILE '<file_name>' }`. A failed task is retried up to 5 times. If you set this item to a value greater than 5, a task that still fails after its retries is given up: its files are marked as `ERROR`, you can load them again with `RETRY`, and the pipe goes on to the next files.
+- Introduced in: -
+
 ### `prepared_transaction_default_timeout_second`
 
 - Default: 86400

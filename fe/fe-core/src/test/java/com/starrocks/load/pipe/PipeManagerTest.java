@@ -18,6 +18,7 @@ import com.google.common.base.Stopwatch;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.UserIdentity;
+import com.starrocks.common.Config;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.StarRocksException;
@@ -88,12 +89,14 @@ import org.mockito.Mockito;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
@@ -374,6 +377,45 @@ public class PipeManagerTest {
         return submit;
     }
 
+    /** An accepted submission whose task run has already finished as SUCCESS. */
+    private static SubmitResult submittedWithSucceededRun() {
+        SubmitResult submit = new SubmitResult("queryid", SubmitResult.SubmitStatus.SUBMITTED);
+        FutureTask<Constants.TaskRunState> future = new FutureTask<>(() -> Constants.TaskRunState.SUCCESS);
+        submit.setFuture(future);
+        future.run();
+        return submit;
+    }
+
+    /**
+     * Makes every listing of the pipe source return one new file, so a continuous pipe gets a new
+     * batch each time it polls with nothing left to load.
+     */
+    private void mockNewFileOnEachPoll() {
+        new MockUp<HdfsUtil>() {
+            private int seq = 0;
+
+            @Mock
+            public List<FileStatus> listFileMeta(String path, Map<String, String> properties, boolean skipDir) {
+                seq++;
+                return Lists.newArrayList(new FileStatus(1024, false, 1, 1024, seq, new Path("file-" + seq)));
+            }
+        };
+    }
+
+    /**
+     * Runs the pipe's single task through {@code attempts} failed attempts in a row. Expects the task
+     * to be RUNNABLE, or not built yet, and leaves it in ERROR after the last attempt.
+     */
+    private static void failCurrentTask(Pipe pipe, int attempts) {
+        for (int i = 0; i < attempts; i++) {
+            if (i > 0) {
+                pipe.schedule(); // clear the error -> RUNNABLE
+            }
+            pipe.schedule(); // submit -> RUNNING
+            pipe.schedule(); // execution failed -> ERROR
+        }
+    }
+
     private void mockPollError(int errorCount) {
         // poll error
         new MockUp<HdfsUtil>() {
@@ -602,6 +644,9 @@ public class PipeManagerTest {
                     p3.getPipeSource().getFileListRepo().listFilesByState(FileListRepo.PipeFileState.UNLOADED, 0);
             Assertions.assertEquals(1, unloadedFiles.size());
         }
+
+        // RETRY restarts the pipe with a clean failure count, as RESUME does.
+        Assertions.assertEquals(0, p3.getFailedTaskExecutionCount());
     }
 
     private Pipe preparePipe(String pipeName) throws Exception {
@@ -645,6 +690,345 @@ public class PipeManagerTest {
         }
     }
 
+<<<<<<< HEAD
+=======
+    // Whether TaskManager still has a task of the pipe, named as PipeTaskDesc.genUniqueTaskName() names them.
+    private static boolean hasPipeTasks(String pipeName) {
+        return GlobalStateMgr.getCurrentState().getTaskManager().filterTasks(null).stream()
+                .anyMatch(task -> task.getName().startsWith("pipe-" + pipeName + "-task-"));
+    }
+
+    /**
+     * Pipe tasks carry no expire time, so the pipe drops the task of a batch once the batch is done. Otherwise every
+     * batch would stay in TaskManager, and in information_schema.tasks, for good.
+     */
+    @Test
+    public void testFinishedTaskIsDropped() throws Exception {
+        mockRepoExecutor();
+        mockTaskExecution(Constants.TaskRunState.SUCCESS);
+        final String pipeName = "p_drop_finished";
+        Pipe pipe = preparePipe(pipeName);
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+
+        pipe.schedule(); // build the task and submit it
+        Assertions.assertEquals(1, pipe.getRunningTasks().size());
+        String taskName = pipe.getRunningTasks().get(0).getUniqueTaskName();
+        Assertions.assertTrue(taskManager.containTask(taskName));
+
+        pipe.schedule(); // the run succeeded: finalize the batch
+        Assertions.assertTrue(pipe.getRunningTasks().isEmpty());
+        Assertions.assertEquals(1,
+                pipe.getPipeSource().getFileListRepo().listFilesByState(FileListRepo.PipeFileState.FINISHED, 0).size());
+        Assertions.assertFalse(taskManager.containTask(taskName));
+        Assertions.assertFalse(hasPipeTasks(pipeName));
+
+        dropPipe(pipeName);
+    }
+
+    /**
+     * Each retry of a failed batch runs as a new task, so the task of every failed attempt is dropped as well, not only
+     * the last one.
+     */
+    @Test
+    public void testFailedAttemptTasksAreDropped() throws Exception {
+        mockRepoExecutor();
+        final String pipeName = "p_drop_failed";
+        Pipe pipe = preparePipe(pipeName);
+        mockTaskSubmission(PipeManagerTest::submittedWithFailedRun);
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+
+        List<String> attemptTaskNames = new ArrayList<>();
+        for (int i = 0; i <= Pipe.FAILED_TASK_THRESHOLD; i++) {
+            pipe.schedule(); // submit -> RUNNING
+            String taskName = pipe.getRunningTasks().get(0).getUniqueTaskName();
+            Assertions.assertTrue(taskManager.containTask(taskName), "attempt " + i);
+            attemptTaskNames.add(taskName);
+
+            pipe.schedule(); // execution failed -> ERROR, which ends the attempt
+            Assertions.assertFalse(taskManager.containTask(taskName), "attempt " + i);
+
+            if (i < Pipe.FAILED_TASK_THRESHOLD) {
+                pipe.schedule(); // retry as a new task -> RUNNABLE
+            }
+        }
+        Assertions.assertEquals(Pipe.State.ERROR, pipe.getState());
+        Assertions.assertTrue(pipe.getRunningTasks().isEmpty());
+        Assertions.assertEquals(Pipe.FAILED_TASK_THRESHOLD + 1, attemptTaskNames.stream().distinct().count());
+        Assertions.assertFalse(hasPipeTasks(pipeName));
+
+        dropPipe(pipeName);
+    }
+
+    /**
+     * A done future does not end an attempt yet: the task run scheduler archives the run on its next dispatch round.
+     * Until then the attempt stays running and keeps its task, so that the drop is journaled after the run's archive
+     * record.
+     */
+    @Test
+    public void testAttemptEndsAfterTaskRunIsArchived() throws Exception {
+        mockRepoExecutor();
+        final String pipeName = "p_wait_archive";
+        Pipe pipe = preparePipe(pipeName);
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        TaskRunScheduler taskRunScheduler = taskManager.getTaskRunScheduler();
+
+        // Hand the pipe a done future, but leave the task's run registered as running, as the scheduler does until its
+        // next dispatch round. The run's own future stays open, so the scheduler of this FE does not archive it.
+        List<TaskRun> registeredRuns = new ArrayList<>();
+        new MockUp<TaskManager>() {
+            @Mock
+            public SubmitResult executeTaskAsync(Task task, ExecuteOption option) {
+                TaskRun run = TaskRunBuilder.newBuilder(task).build();
+                run.initStatus("queryid", System.currentTimeMillis());
+                taskRunScheduler.addRunningTaskRun(run);
+                registeredRuns.add(run);
+                CompletableFuture<Constants.TaskRunState> future = new CompletableFuture<>();
+                future.complete(Constants.TaskRunState.SUCCESS);
+                return new SubmitResult("queryid", SubmitResult.SubmitStatus.SUBMITTED, future);
+            }
+        };
+
+        try {
+            pipe.schedule(); // build the task and submit it
+            Assertions.assertEquals(1, registeredRuns.size());
+            String taskName = pipe.getRunningTasks().get(0).getUniqueTaskName();
+
+            pipe.schedule();
+            pipe.schedule();
+            Assertions.assertEquals(1, pipe.getRunningTasks().size());
+            Assertions.assertTrue(pipe.getRunningTasks().get(0).isRunning());
+            Assertions.assertTrue(taskManager.containTask(taskName));
+
+            // the scheduler archives the run
+            taskRunScheduler.removeRunningTask(registeredRuns.get(0).getTaskId());
+            pipe.schedule();
+            Assertions.assertTrue(pipe.getRunningTasks().isEmpty());
+            Assertions.assertFalse(taskManager.containTask(taskName));
+        } finally {
+            registeredRuns.forEach(run -> taskRunScheduler.removeRunningTask(run.getTaskId()));
+        }
+
+        dropPipe(pipeName);
+    }
+
+    /**
+     * The scheduler archives a run under the task run lock, and removes it from the running map before it adds it to
+     * the history. A pipe that looks in between must not end the attempt yet: the failed run is not in the history, so
+     * its LabelAlreadyUsed error, which means an earlier attempt already loaded the batch, would read as an unknown
+     * failure.
+     */
+    @Test
+    public void testFailedAttemptWaitsForArchiveUnderTaskRunLock() throws Exception {
+        mockRepoExecutor();
+        final String pipeName = "p_archive_lock";
+        Pipe pipe = preparePipe(pipeName);
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        TaskRunManager taskRunManager = taskManager.getTaskRunManager();
+
+        // The run fails and is never left in the running map: the archive has already removed it from there.
+        List<TaskRun> submittedRuns = new ArrayList<>();
+        new MockUp<TaskManager>() {
+            @Mock
+            public SubmitResult executeTaskAsync(Task task, ExecuteOption option) {
+                TaskRun run = TaskRunBuilder.newBuilder(task).build();
+                run.initStatus("queryid-" + task.getId(), System.currentTimeMillis());
+                submittedRuns.add(run);
+                CompletableFuture<Constants.TaskRunState> future = new CompletableFuture<>();
+                future.complete(Constants.TaskRunState.FAILED);
+                return new SubmitResult(run.getStatus().getQueryId(), SubmitResult.SubmitStatus.SUBMITTED, future);
+            }
+        };
+        // ...but has not added it to the history yet, and holds the task run lock until it has.
+        AtomicBoolean archiving = new AtomicBoolean(true);
+        new MockUp<TaskRunManager>() {
+            @Mock
+            public boolean tryTaskRunLock(Invocation invocation) {
+                return !archiving.get() && invocation.<Boolean>proceed();
+            }
+        };
+
+        pipe.schedule(); // build the task and submit it
+        pipe.schedule();
+        Assertions.assertEquals(1, pipe.getRunningTasks().size());
+        Assertions.assertTrue(pipe.getRunningTasks().get(0).isRunning(), pipe.getRunningTasks().toString());
+
+        // The archive completes.
+        TaskRunStatus status = submittedRuns.get(0).getStatus();
+        status.setState(Constants.TaskRunState.FAILED);
+        status.setErrorMessage(new LabelAlreadyUsedException(pipe.getRunningTasks().get(0).getUniqueTaskName()).getMessage());
+        taskRunManager.getTaskRunHistory().addHistory(status);
+        archiving.set(false);
+
+        pipe.schedule();
+        Assertions.assertTrue(pipe.getRunningTasks().isEmpty());
+        Assertions.assertEquals(1,
+                pipe.getPipeSource().getFileListRepo().listFilesByState(FileListRepo.PipeFileState.FINISHED, 0).size());
+        Assertions.assertEquals(0,
+                pipe.getPipeSource().getFileListRepo().listFilesByState(FileListRepo.PipeFileState.ERROR, 0).size());
+
+        dropPipe(pipeName);
+    }
+
+    /**
+     * A continuous pipe whose batches each fail once and then load on the retry keeps running. The
+     * pipe stops only when task executions fail many times in a row, and a task that loads ends the
+     * streak, so short object-store stalls hours apart do not add up to stopping the pipe (POST-2003).
+     */
+    @Test
+    public void testTransientTaskFailuresDoNotStopPipe() throws Exception {
+        mockRepoExecutor();
+        mockNewFileOnEachPoll();
+        // Every batch fails its first attempt and loads on the retry.
+        AtomicInteger submissions = new AtomicInteger();
+        mockTaskSubmission(() -> submissions.getAndIncrement() % 2 == 0
+                ? submittedWithFailedRun() : submittedWithSucceededRun());
+
+        final String pipeName = "p_transient_failures";
+        Pipe pipe = preparePipe(pipeName);
+
+        int batches = 3 * (Pipe.FAILED_TASK_THRESHOLD + 1);
+        for (int batch = 0; batch < batches; batch++) {
+            pipe.setLastPolledTime(0);
+            pipe.poll(); // stage the next file once the previous batch has loaded
+            failCurrentTask(pipe, 1);
+            Assertions.assertEquals(Pipe.State.RUNNING, pipe.getState(), "batch " + batch);
+
+            pipe.schedule(); // clear the error -> RUNNABLE
+            pipe.schedule(); // resubmit -> RUNNING
+            pipe.schedule(); // the retry loaded -> FINISHED, task removed
+            Assertions.assertEquals(Pipe.State.RUNNING, pipe.getState(), "batch " + batch);
+            Assertions.assertTrue(pipe.getRunningTasks().isEmpty(), "batch " + batch + ": " + pipe.getRunningTasks());
+        }
+        Assertions.assertEquals(0, pipe.getFailedTaskExecutionCount());
+        Assertions.assertEquals(batches, pipe.getPipeSource().getFileListRepo()
+                .listFilesByState(FileListRepo.PipeFileState.FINISHED, 0).size());
+
+        dropPipe(pipeName);
+    }
+
+    /**
+     * RETRY on a pipe stopped by too many failures restarts it with a clean failure count, as RESUME
+     * does. With the old count, still over the limit, the next single failure stopped it again.
+     */
+    @Test
+    public void testRetryAfterErrorStartsNewFailureStreak() throws Exception {
+        mockRepoExecutor();
+        mockTaskSubmission(PipeManagerTest::submittedWithFailedRun);
+
+        final String pipeName = "p_retry_after_error";
+        Pipe pipe = preparePipe(pipeName);
+        failCurrentTask(pipe, Pipe.FAILED_TASK_THRESHOLD + 1);
+        Assertions.assertEquals(Pipe.State.ERROR, pipe.getState());
+
+        alterPipe("alter pipe " + pipeName + " retry all");
+        Assertions.assertEquals(Pipe.State.RUNNING, pipe.getState());
+        Assertions.assertEquals(0, pipe.getFailedTaskExecutionCount());
+
+        failCurrentTask(pipe, 1);
+        Assertions.assertEquals(Pipe.State.RUNNING, pipe.getState());
+        Assertions.assertEquals(1, pipe.getFailedTaskExecutionCount());
+
+        dropPipe(pipeName);
+    }
+
+    /**
+     * The pipe-level limit is pipe_max_consecutive_failed_task_executions, separate from the per-task
+     * retry limit. Raised above it, a batch that keeps failing is given up on, its files are left in
+     * ERROR for ALTER PIPE RETRY, and the pipe moves on. Lowered below it, the pipe stops before the
+     * task has used up its retries.
+     */
+    @Test
+    public void testConsecutiveFailureLimitIsConfigurable() throws Exception {
+        mockRepoExecutor();
+        mockNewFileOnEachPoll();
+        AtomicBoolean fail = new AtomicBoolean(true);
+        mockTaskSubmission(() -> fail.get() ? submittedWithFailedRun() : submittedWithSucceededRun());
+
+        int defaultLimit = Config.pipe_max_consecutive_failed_task_executions;
+        try {
+            Config.pipe_max_consecutive_failed_task_executions = 100;
+            Pipe raised = preparePipe("p_limit_raised");
+            failCurrentTask(raised, Pipe.FAILED_TASK_THRESHOLD + 1);
+            Assertions.assertEquals(Pipe.State.RUNNING, raised.getState());
+            Assertions.assertTrue(raised.getRunningTasks().isEmpty(), raised.getRunningTasks().toString());
+            Assertions.assertEquals(1, raised.getPipeSource().getFileListRepo()
+                    .listFilesByState(FileListRepo.PipeFileState.ERROR, 0).size());
+            Assertions.assertEquals(Pipe.FAILED_TASK_THRESHOLD + 1, raised.getFailedTaskExecutionCount());
+
+            // The next batch loads and ends the streak.
+            fail.set(false);
+            raised.setLastPolledTime(0);
+            raised.poll();
+            raised.schedule(); // build the task and submit it -> RUNNING
+            raised.schedule(); // loaded -> FINISHED
+            Assertions.assertEquals(Pipe.State.RUNNING, raised.getState());
+            Assertions.assertEquals(0, raised.getFailedTaskExecutionCount());
+            dropPipe("p_limit_raised");
+
+            fail.set(true);
+            Config.pipe_max_consecutive_failed_task_executions = 1;
+            Pipe lowered = preparePipe("p_limit_lowered");
+            failCurrentTask(lowered, 2);
+            Assertions.assertEquals(Pipe.State.ERROR, lowered.getState());
+            Assertions.assertEquals(2, lowered.getFailedTaskExecutionCount());
+            Assertions.assertEquals(1, lowered.getRunningTasks().size(), "the task still has retries left");
+            dropPipe("p_limit_lowered");
+        } finally {
+            Config.pipe_max_consecutive_failed_task_executions = defaultLimit;
+        }
+    }
+
+    /**
+     * The ERROR state a pipe enters after too many failed task executions goes to the edit log.
+     * Kept only in the leader's memory, it was lost on FE restart or leader change, which brought the
+     * pipe back as RUNNING, and followers replaying the journal never saw it.
+     */
+    @Test
+    public void testTooManyFailuresErrorStateIsPersisted() throws Exception {
+        mockRepoExecutor();
+        mockTaskSubmission(PipeManagerTest::submittedWithFailedRun);
+
+        final String pipeName = "p_error_persisted";
+        Pipe pipe = preparePipe(pipeName);
+
+        // A follower that holds the pipe as RUNNING and follows the leader's journal from here on.
+        PipeManager pm = ctx.getGlobalStateMgr().getPipeManager();
+        UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
+        UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
+        pm.getRepo().save(image.getImageWriter());
+        PipeManager follower = new PipeManager();
+        SRMetaBlockReader reader = new SRMetaBlockReaderV2(image.getJsonReader());
+        follower.getRepo().load(reader);
+        reader.close();
+        Pipe followerPipe = follower.mayGetPipe(new PipeName(PIPE_TEST_DB, pipeName)).get();
+        Assertions.assertEquals(Pipe.State.RUNNING, followerPipe.getState());
+
+        failCurrentTask(pipe, Pipe.FAILED_TASK_THRESHOLD + 1);
+        Assertions.assertEquals(Pipe.State.ERROR, pipe.getState());
+
+        replayAlterPipeLogs(follower);
+        Assertions.assertEquals(Pipe.State.ERROR, followerPipe.getState());
+
+        dropPipe(pipeName);
+    }
+
+    /** Replays every queued ALTER PIPE journal entry into {@code follower}. */
+    private static void replayAlterPipeLogs(PipeManager follower) throws Exception {
+        while (true) {
+            AlterPipeLog log;
+            try {
+                log = (AlterPipeLog) UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_ALTER_PIPE);
+            } catch (Exception e) {
+                if (StringUtils.contains(e.getMessage(), "queue is empty")) {
+                    return;
+                }
+                throw e;
+            }
+            follower.getRepo().replayAlterPipe(log);
+        }
+    }
+
+>>>>>>> 8deafba4bb8... [BugFix][POST-2003] Stop a pipe only on consecutive task failures (#66897)
     @Test
     public void testTaskExecution() {
         PipeTaskDesc task = new PipeTaskDesc(1, "task", "test", "sql", null);

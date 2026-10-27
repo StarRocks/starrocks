@@ -4682,6 +4682,10 @@ public class Config extends ConfigBase {
     public static int pipe_scheduler_interval_millis = 1000;
     @ConfField(mutable = true, comment = "default poll interval of pipe")
     public static int pipe_default_poll_interval_s = 60 * 5;
+    @ConfField(mutable = true, comment = "A pipe changes to ERROR and stops loading when more than this many " +
+            "task executions fail in a row. Retries of a failed task count as executions. A task that loads " +
+            "successfully, ALTER PIPE RESUME, and ALTER PIPE RETRY reset the count.")
+    public static int pipe_max_consecutive_failed_task_executions = 5;
 
     @ConfField(mutable = true)
     public static long mv_active_checker_interval_seconds = 60;
