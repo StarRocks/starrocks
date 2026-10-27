@@ -44,6 +44,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.AlterMaterializedViewBaseTableInfosLog;
@@ -1661,6 +1662,37 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             return;
         }
         inactiveMvAndLog(mv, MaterializedViewExceptions.inactiveReasonForConsecutiveFailures(mv.getName()));
+    }
+
+    /**
+     * Inactivates an MV from inside the refresh that found a base table gone or changed, clearing its version map, and
+     * journals it so that followers and the next leader do not keep the MV active. It leaves the task scheduled: such
+     * a table is often dropped and created again by an ETL job, and the next refresh can activate the MV again.
+     */
+    public static void inactiveMvFromRefresh(MaterializedView mv, String inactiveReason) {
+        try (AutoCloseableLock ignored = new AutoCloseableLock(mv.getDbId(), mv.getId(), LockType.WRITE)) {
+            // A refresh can get here after its MV, or the MV's database, was dropped: the entry would then have
+            // nothing to apply to on any FE.
+            if (!mv.isInCatalog()) {
+                LOG.info("Skip inactivating materialized view {}/{}, it was dropped: {}", mv.getName(), mv.getId(),
+                        inactiveReason);
+                return;
+            }
+            AlterMaterializedViewStatusLog log = new AlterMaterializedViewStatusLog(mv.getDbId(),
+                    mv.getId(), AlterMaterializedViewStatusClause.INACTIVE, inactiveReason);
+            log.setClearVersionMap(true);
+            log.setKeepTaskScheduled(true);
+            // See doInactiveMaterializedViewOnly for the reset epoch bumped on both sides of the clear.
+            mv.markVersionMapReset();
+            try {
+                GlobalStateMgr.getCurrentState().getEditLog().logAlterMvStatus(log, wal -> {
+                    mv.setInactiveAndReason(inactiveReason);
+                    mv.getRefreshScheme().clearVersionState();
+                });
+            } finally {
+                mv.markVersionMapReset();
+            }
+        }
     }
 
     // Mark the MV inactive and journal the transition, so the inactive state survives a leader restart
