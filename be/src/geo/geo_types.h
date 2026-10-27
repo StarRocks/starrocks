@@ -157,6 +157,17 @@ private:
     std::unique_ptr<Impl> _impl;
 };
 
+// Reusable buffer for GeoPolygon::point_relation_direct; opaque so callers don't need S2 headers.
+class GeoRingScratch {
+public:
+    GeoRingScratch();
+    ~GeoRingScratch();
+
+private:
+    friend class GeoPolygon;
+    std::vector<S2Point> _points;
+};
+
 class GeoPolygon : public GeoShape {
 public:
     GeoPolygon();
@@ -171,8 +182,13 @@ public:
     // Check small rings directly with the same S2 predicates; large rings use is_valid_ring.
     static bool is_valid_ring_direct(const GeoCoordinateList& coordinates);
 
-    // Upper bound for the direct O(V^2) ring check; chosen by a paired sweep over 4..512 vertices.
+    // Upper bound for the direct O(V^2) ring checks (validation and point relation);
+    // chosen by a paired sweep over 4..512 vertices.
     static constexpr size_t kMaxDirectVertices = 512;
+
+    // False means not applicable; the caller must use point_relation on a full polygon.
+    static bool point_relation_direct(const GeoCoordinateList& coordinates, const GeoPoint& point,
+                                      GeoRingScratch* scratch, GeoPointPolygonRelation* relation);
 
     GeoShapeType type() const override { return GEO_SHAPE_POLYGON; }
     const S2Polygon* polygon() const { return _polygon.get(); }
