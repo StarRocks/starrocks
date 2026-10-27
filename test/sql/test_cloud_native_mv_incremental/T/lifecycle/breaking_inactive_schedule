@@ -1,0 +1,50 @@
+-- name: test_ivm_breaking_refresh_stops_the_schedule @cloud
+-- A scheduled view whose incremental chain breaks stops being refreshed on its schedule, rather than failing every
+-- period until ten consecutive failures replace its inactive reason. Activating it again resumes one schedule, which
+-- breaks on the same baseline and stops again.
+[UC]ADMIN SET FRONTEND CONFIG ("materialized_view_min_refresh_interval" = "1");
+CREATE TABLE bis_base (dt date, k int, v bigint)
+DUPLICATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');
+INSERT INTO bis_base VALUES ('2026-10-01',1,10),('2026-10-02',2,20),('2026-10-03',3,30);
+CREATE MATERIALIZED VIEW mv_bis
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED ASYNC EVERY(INTERVAL 5 SECOND)
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'incremental', 'partition_refresh_number' = '-1')
+AS SELECT dt, k, SUM(v) AS v, COUNT(*) AS c FROM bis_base GROUP BY dt, k;
+[UC]ADMIN SET FRONTEND CONFIG ("materialized_view_min_refresh_interval" = "60");
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_bis';
+REFRESH MATERIALIZED VIEW mv_bis WITH SYNC MODE;
+DELETE FROM bis_base WHERE k = 2;
+LOOP {
+  PROPERTY: {"timeout": 120, "interval": 2, "desc": "the schedule broke the view"}
+  result=SELECT COUNT(*) FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'mv_bis' AND IS_ACTIVE = 'false';
+  CHECK: int(${result}[0][0]) == 1
+} END LOOP
+LOOP {
+  PROPERTY: {"timeout": 60, "interval": 2, "desc": "no run of the view is left pending or running"}
+  result=SELECT COUNT(*) FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' AND STATE IN ('PENDING', 'RUNNING');
+  CHECK: int(${result}[0][0]) == 0
+} END LOOP
+[UC]RUNS=SELECT COUNT(*) FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}';
+shell: sleep 20
+SELECT COUNT(*) - ${RUNS} FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}';
+SELECT IS_ACTIVE, INACTIVE_REASON LIKE 'incremental refresh broken by non-append-only base change:%' FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'mv_bis';
+ALTER MATERIALIZED VIEW mv_bis ACTIVE;
+LOOP {
+  PROPERTY: {"timeout": 120, "interval": 2, "desc": "the view broke again"}
+  result=SELECT COUNT(*) FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'mv_bis' AND IS_ACTIVE = 'false';
+  CHECK: int(${result}[0][0]) == 1
+} END LOOP
+LOOP {
+  PROPERTY: {"timeout": 60, "interval": 2, "desc": "no run of the view is left pending or running"}
+  result=SELECT COUNT(*) FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' AND STATE IN ('PENDING', 'RUNNING');
+  CHECK: int(${result}[0][0]) == 0
+} END LOOP
+[UC]RUNS=SELECT COUNT(*) FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}';
+shell: sleep 20
+SELECT COUNT(*) - ${RUNS} FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}';
+SELECT IS_ACTIVE, INACTIVE_REASON LIKE 'incremental refresh broken by non-append-only base change:%' FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'mv_bis';
+DROP MATERIALIZED VIEW mv_bis;

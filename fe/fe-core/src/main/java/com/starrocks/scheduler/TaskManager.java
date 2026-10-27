@@ -607,10 +607,17 @@ public class TaskManager implements MemoryTrackable {
     }
 
     /**
+<<<<<<< HEAD
      * Suspends a task and leaves its runs as they are, for a caller that has just failed to take the task run lock,
      * which killing them takes, and must not wait for it again.
      */
     public void suspendTaskLeavingRuns(Task task) {
+=======
+     * Suspends a task and drops its queued runs, but lets its running one finish: a run that suspends its own task as
+     * it fails would otherwise be killed, and report "TaskRun killed" instead of its failure.
+     */
+    public void suspendTaskWithoutKilling(Task task) {
+>>>>>>> 1e81c8a8e36... [BugFix] Suspend the task of an incremental MV a refresh inactivates (#64854)
         suspendTask(task, false, false);
     }
 
@@ -647,15 +654,36 @@ public class TaskManager implements MemoryTrackable {
                 }
             }
 
+<<<<<<< HEAD
             // kill running task run
             if (killTaskRuns && !killTask(task.getName(), true)) {
                 LOG.warn("kill task failed: {}", task.getName());
+=======
+            if (killTaskRuns) {
+                if (!killTask(task.getName(), true)) {
+                    LOG.warn("kill task failed: {}", task.getName());
+                }
+            } else if (!removePendingTaskRuns(task)) {
+                LOG.warn("remove pending task runs failed: {}", task.getName());
+>>>>>>> 1e81c8a8e36... [BugFix] Suspend the task of an incremental MV a refresh inactivates (#64854)
             }
             // remove task from scheduler
             periodFutureMap.remove(task.getId());
         } finally {
             taskUnlock();
         }
+    }
+
+    private boolean removePendingTaskRuns(Task task) {
+        if (!taskRunManager.tryTaskRunLock()) {
+            return false;
+        }
+        try {
+            taskRunScheduler.removePendingTask(task);
+        } finally {
+            taskRunManager.taskRunUnlock();
+        }
+        return true;
     }
 
     /**
@@ -997,7 +1025,12 @@ public class TaskManager implements MemoryTrackable {
                 LOG.warn("failed to execute periodical task: {}", task, e);
             }
         }, initialDelay, periodSeconds, TimeUnit.SECONDS);
-        periodFutureMap.put(task.getId(), future);
+        // Registering a task that is still scheduled must not leave the replaced submitter firing: no later
+        // suspend, alter or drop could reach it.
+        ScheduledFuture<?> replaced = periodFutureMap.put(task.getId(), future);
+        if (replaced != null) {
+            replaced.cancel(false);
+        }
     }
 
     private boolean tryTaskLock() {
