@@ -1331,6 +1331,7 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
 
             if (!groupedRangeScan) {
                 msg.lake_scan_node.setOutput_asc_hint(sortKeyAscHint);
+                partitionKeyAscHint.ifPresent(aBoolean -> msg.lake_scan_node.setPartition_order_hint(aBoolean));
             }
             msg.lake_scan_node.setSchema_key(getSchemaKey());
 
