@@ -34,6 +34,8 @@
 
 package com.starrocks.common;
 
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.starrocks.metric.GaugeMetric;
@@ -47,6 +49,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.LinkedTransferQueue;
 import java.util.concurrent.PriorityBlockingQueue;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.RejectedExecutionHandler;
@@ -59,16 +62,36 @@ import java.util.concurrent.TimeUnit;
 /**
  * ThreadPoolManager is a helper class for construct daemon thread pool with limit thread and memory resource.
  * thread names in thread pool are formatted as poolName-ID, where ID is a unique, sequentially assigned integer.
- * it provide four functions to construct thread pool now.
  * <p>
- * 1. newDaemonCacheThreadPool
- * Wrapper over newCachedThreadPool with additional maxNumThread limit.
- * 2. newDaemonFixedThreadPool
- * Wrapper over newCachedThreadPool with additional blocking queue capacity limit.
- * 3. newDaemonThreadPool
- * Wrapper over ThreadPoolExecutor, user can use it to construct thread pool more flexibly.
- * 4. newDaemonScheduledThreadPool
- * Wrapper over ScheduledThreadPoolExecutor, but without delay task num limit and thread num limit now(NOTICE).
+ * Choosing a pool. For every task, ThreadPoolExecutor (1) starts a new thread if it has fewer than corePoolSize
+ * threads, even when other threads are idle; otherwise (2) offers the task to its work queue; and if the queue
+ * refuses the task, (3) starts a new thread up to maximumPoolSize, past which it calls the rejection handler. The
+ * factories set up these steps differently, so pick one by what must happen once every thread is busy:
+ * <ul>
+ * <li>newDaemonFixedThreadPool, newDaemonFixedThreadPoolWithAbortPolicy, newDaemonFixedThreadPoolWithUnboundedQueue:
+ * core = max = numThread over a LinkedBlockingQueue. The pool starts a thread for each of the first numThread tasks
+ * whatever the load and keeps them; after that every task goes through the queue. When a bounded queue is full,
+ * the submitter blocks for up to 60 s and then gets a RejectedExecutionException, or gets one at once with
+ * WithAbortPolicy; WithUnboundedQueue never rejects. Each hand-off takes the queue's lock, which is cheap for a
+ * few dozen threads but costly for hundreds of threads running short tasks. Use it for bounded, CPU-sized
+ * parallelism.
+ * <li>newDaemonCacheThreadPool(maxNumThread): core 0 over a SynchronousQueue. A task goes to an idle thread, else
+ * a new thread starts, up to maxNumThread; idle threads exit after KEEP_ALIVE_TIME. With every thread busy the task
+ * is logged and dropped, and a Future returned by submit() never completes. Use it only for work that may be
+ * skipped, such as best-effort cache loads.
+ * <li>newDaemonCacheThreadPool(maxNumThread, queueSize): core = max = maxNumThread over a bounded queue, with core
+ * threads timing out. It grows like a fixed pool, then queues up to queueSize, then blocks the submitter for up to
+ * 5 s and rejects. An idle pool shrinks to zero threads.
+ * <li>newDaemonScalingThreadPool: coreNumThread threads, at least one, stay. A task goes to an idle thread if
+ * there is one, else a new thread starts, up to maxNumThread; past that tasks wait in an unbounded queue. It never
+ * blocks the submitter and never rejects a task before shutdown, and it hands tasks to idle threads without a lock.
+ * Use it for a server pool that mostly runs short tasks but must also absorb many blocking ones, where a task must
+ * not be dropped or fail.
+ * <li>newDaemonFixedPriorityThreadPool: a fixed pool whose queue runs tasks in priority order.
+ * <li>newDaemonThreadPool: the ThreadPoolExecutor constructor, for any other combination.
+ * <li>newDaemonScheduledThreadPool: a ScheduledThreadPoolExecutor, without a limit on delayed tasks or threads
+ * (NOTICE).
+ * </ul>
  * <p>
  * All thread pool constructed by ThreadPoolManager will be added to the nameToThreadPoolMap,
  * so the thread pool name in fe must be unique.
@@ -185,6 +208,37 @@ public class ThreadPoolManager {
                                                                                 boolean needRegisterMetric) {
         return newDaemonThreadPool(numThread, numThread, KEEP_ALIVE_TIME, TimeUnit.SECONDS,
                 new LinkedBlockingQueue<>(), new LogDiscardPolicy(poolName), poolName, needRegisterMetric);
+    }
+
+    /**
+     * A pool sized by demand: a task goes to an idle thread if there is one, a new thread starts only when
+     * every thread is busy, and once maxNumThread threads are busy tasks wait in an unbounded queue. The
+     * pool never blocks the submitter and never rejects a task before shutdown. coreNumThread threads stay
+     * for good; the others exit after KEEP_ALIVE_TIME idle. coreNumThread must be at least 1: a task queued once
+     * maxNumThread threads are busy relies on a thread that never exits to run it.
+     * <p>
+     * Use it for a pool that must be able to grow large for blocking tasks but mostly runs short ones. A
+     * fixed pool over a LinkedBlockingQueue does not fit that: it starts a thread for each task until it is
+     * full, whatever the load, and then wakes one of its parked threads through the queue's take lock for
+     * every task, which costs far more than a short task once hundreds of threads wait on that lock. Nor does
+     * newDaemonCacheThreadPool(maxNumThread), which grows the same way but drops a task once maxNumThread
+     * threads are busy, where this pool queues it.
+     */
+    public static ThreadPoolExecutor newDaemonScalingThreadPool(int coreNumThread, int maxNumThread, String poolName,
+                                                                boolean needRegisterMetric) {
+        return newDaemonScalingThreadPool(coreNumThread, maxNumThread, KEEP_ALIVE_TIME, TimeUnit.SECONDS, poolName,
+                needRegisterMetric);
+    }
+
+    @VisibleForTesting
+    static ThreadPoolExecutor newDaemonScalingThreadPool(int coreNumThread, int maxNumThread, long keepAliveTime,
+                                                         TimeUnit unit, String poolName, boolean needRegisterMetric) {
+        // With no core thread, the last thread can time out and exit between the executor refusing a task and
+        // ForceQueuePolicy queueing it, which leaves the task queued with no thread to run it.
+        Preconditions.checkArgument(coreNumThread >= 1, "a scaling pool needs at least one core thread, got %s",
+                coreNumThread);
+        return newDaemonThreadPool(coreNumThread, maxNumThread, keepAliveTime, unit, new ScalingQueue(),
+                new ForceQueuePolicy(), poolName, needRegisterMetric);
     }
 
     public static PriorityThreadPoolExecutor newDaemonFixedPriorityThreadPool(int numThread, int queueSize,
@@ -318,6 +372,42 @@ public class ThreadPoolManager {
         }
     }
 
+    /**
+     * The work queue of a scaling pool. ThreadPoolExecutor calls offer() to ask whether to queue a task
+     * rather than start a thread: this hands the task to a thread already waiting for one, and otherwise
+     * refuses, so the executor starts a new thread. When the pool is at its maximum the executor rejects
+     * the task instead, and {@link ForceQueuePolicy} queues it for the next thread that frees up.
+     */
+    static class ScalingQueue extends LinkedTransferQueue<Runnable> {
+        @Override
+        public boolean offer(Runnable task) {
+            return tryTransfer(task);
+        }
+
+        void forceOffer(Runnable task) {
+            super.offer(task);
+        }
+    }
+
+    /**
+     * A handler for rejected task that queues it, used for scaling thread pool, which rejects a task only
+     * when all of its threads are busy. Rejects for real once the pool is shut down, and takes back a task
+     * queued while the pool was shutting down, which no thread may be left to run.
+     */
+    static class ForceQueuePolicy implements RejectedExecutionHandler {
+
+        @Override
+        public void rejectedExecution(Runnable r, ThreadPoolExecutor executor) {
+            if (executor.isShutdown()) {
+                throw new RejectedExecutionException("Task " + r + " rejected from a shut down pool");
+            }
+            ((ScalingQueue) executor.getQueue()).forceOffer(r);
+            if (executor.isShutdown() && executor.remove(r)) {
+                throw new RejectedExecutionException("Task " + r + " rejected from a shut down pool");
+            }
+        }
+    }
+
     public static void setCacheThreadPoolSize(ThreadPoolExecutor executor, int newMaxPoolSize) {
         if (executor.getCorePoolSize() > 0) {
             // skip for non-cache thread pool
@@ -343,6 +433,45 @@ public class ThreadPoolManager {
             // decrease the pool size, set `CoreSize` first and then the `MaximumPoolSize`
             executor.setCorePoolSize(poolSize);
             executor.setMaximumPoolSize(poolSize);
+        }
+    }
+
+    /**
+     * Resize a pool from {@link #newDaemonScalingThreadPool}. coreNumThread is clamped to [1, maxNumThread], and
+     * a non-positive maxNumThread is ignored so that a bad config value leaves the pool as it is. Raising the
+     * maximum starts threads for tasks already queued, up to the new maximum. An unchanged size is a no-op.
+     */
+    public static void setScalingThreadPoolSize(ThreadPoolExecutor executor, int coreNumThread, int maxNumThread) {
+        if (maxNumThread <= 0) {
+            return;
+        }
+        int core = Math.max(1, Math.min(coreNumThread, maxNumThread));
+        int oldMax = executor.getMaximumPoolSize();
+        // setCorePoolSize interrupts the idle threads whenever the pool is above the core size, even with the size
+        // unchanged, and an interrupted thread starts its keep-alive over. The config refresh calls this every
+        // 10 s, so touching the pool on every call would keep the threads above the core from ever exiting.
+        if (core == executor.getCorePoolSize() && maxNumThread == oldMax) {
+            return;
+        }
+        // ThreadPoolExecutor throws if either setter leaves core above max, so set max first unless the
+        // current core is above the new max
+        if (maxNumThread >= executor.getCorePoolSize()) {
+            executor.setMaximumPoolSize(maxNumThread);
+            if (maxNumThread > oldMax) {
+                // Raising the maximum starts no thread, so tasks queued at the old maximum would wait for the
+                // threads already running. Raising the core size starts threads for queued tasks, so raise it to
+                // cover the backlog first, then set the core size the pool keeps.
+                int backlogTarget = Math.min(maxNumThread, executor.getPoolSize() + executor.getQueue().size());
+                if (backlogTarget > executor.getCorePoolSize()) {
+                    executor.setCorePoolSize(backlogTarget);
+                }
+            }
+            if (core != executor.getCorePoolSize()) {
+                executor.setCorePoolSize(core);
+            }
+        } else {
+            executor.setCorePoolSize(core);
+            executor.setMaximumPoolSize(maxNumThread);
         }
     }
 

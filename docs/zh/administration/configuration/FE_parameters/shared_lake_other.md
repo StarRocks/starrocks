@@ -656,7 +656,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: -
 - 是否可变: Yes
-- 描述: FE starmgr 模块中 grpc 服务器使用的最大工作线程数。
+- 描述: FE starmgr 模块中 gRPC 服务端处理请求的最大线程数。线程池常驻线程数与 CPU 核数相同，只有当所有线程都在忙时才会创建新线程，新增的线程空闲 60 秒后自动退出。忙碌的线程数达到该上限后，新的请求会进入队列等待。有效值为大于等于 1 的整数，`fe.conf` 和 `ADMIN SET FRONTEND CONFIG` 都会拒绝 0 或负数。
 - 引入版本: v4.0.0, v3.5.8
 
 ### `starmgr_grpc_timeout_seconds`
