@@ -34,16 +34,6 @@
 
 namespace starrocks {
 
-// True when some null row still spans a non-empty range, i.e. empty_null_in_complex_column() has work to do.
-static bool has_payload_under_null_rows(const uint8_t* nulls, const uint32_t* offsets, size_t num_rows) {
-    for (size_t i = 0; i < num_rows; ++i) {
-        if (nulls[i] && offsets[i + 1] != offsets[i]) {
-            return true;
-        }
-    }
-    return false;
-}
-
 MapApplyExpr::MapApplyExpr(const TExprNode& node) : Expr(node, false) {}
 
 // for tests
