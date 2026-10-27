@@ -193,4 +193,21 @@ public class PCellSortedSetTest extends MVTestBase  {
         Assertions.assertTrue(str.contains("gamma"));
         Assertions.assertFalse(str.contains("..."));
     }
+
+    @Test
+    public void testMinusByName() {
+        PCellSortedSet from = PCellSortedSet.of();
+        from.add(PCellWithName.of("p1", new PRangeCell(RANGE1)));
+        from.add(PCellWithName.of("p2", new PRangeCell(RANGE2)));
+        PCellSortedSet remove = PCellSortedSet.of();
+        remove.add(PCellWithName.of("P2", new PRangeCell(RANGE2)));
+
+        PCellSortedSet res = PCellSortedSet.minusByName(from, remove);
+        Assertions.assertEquals(Collections.singleton("p1"), res.getPartitionNames());
+        // names match case-insensitively, the way the set itself keys them
+        Assertions.assertFalse(res.containsName("p2"));
+        // neither input is disturbed
+        Assertions.assertEquals(2, from.size());
+        Assertions.assertEquals(1, remove.size());
+    }
 }
