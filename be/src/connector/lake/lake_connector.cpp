@@ -1323,6 +1323,7 @@ void LakeDataSource::init_counter(RuntimeState* state) {
     _rows_read_counter = ADD_COUNTER(_runtime_profile, "RowsRead", TUnit::UNIT);
 
     _create_seg_iter_timer = ADD_TIMER(_runtime_profile, "CreateSegmentIter");
+    _segment_zone_map_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "SegmentZoneMapFilter", "CreateSegmentIter");
 
     _read_compressed_counter = ADD_COUNTER(_runtime_profile, "CompressedBytesRead", TUnit::BYTES);
     _read_uncompressed_counter = ADD_COUNTER(_runtime_profile, "UncompressedBytesRead", TUnit::BYTES);
@@ -1360,6 +1361,8 @@ void LakeDataSource::init_counter(RuntimeState* state) {
             ADD_CHILD_COUNTER(_runtime_profile, "ShortKeyRangeNumber", TUnit::UNIT, segment_init_name);
     _column_iterator_init_timer = ADD_CHILD_TIMER(_runtime_profile, "ColumnIteratorInit", segment_init_name);
     _bitmap_index_iterator_init_timer = ADD_CHILD_TIMER(_runtime_profile, "BitmapIndexIteratorInit", segment_init_name);
+    _rewrite_predicates_timer = ADD_CHILD_TIMER(_runtime_profile, "RewritePredicates", segment_init_name);
+    _init_context_timer = ADD_CHILD_TIMER(_runtime_profile, "InitContext", segment_init_name);
     _zone_map_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "ZoneMapIndexFilter", segment_init_name);
     _rows_key_range_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "ShortKeyFilter", segment_init_name);
     _bf_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "BloomFilterFilter", segment_init_name);
@@ -1562,6 +1565,7 @@ void LakeDataSource::update_realtime_counter(Chunk* chunk) {
 void LakeDataSource::update_counter(RuntimeState* state) {
     const auto& reader_stats = _reader->stats();
     COUNTER_UPDATE(_create_seg_iter_timer, reader_stats.create_segment_iter_ns);
+    COUNTER_UPDATE(_segment_zone_map_filter_timer, reader_stats.segment_zone_map_filter_ns);
     COUNTER_UPDATE(_rows_read_counter, _num_rows_read);
 
     COUNTER_UPDATE(_io_timer, reader_stats.io_ns);
@@ -1581,6 +1585,8 @@ void LakeDataSource::update_counter(RuntimeState* state) {
     COUNTER_UPDATE(_seg_init_timer, reader_stats.segment_init_ns);
     COUNTER_UPDATE(_column_iterator_init_timer, reader_stats.column_iterator_init_ns);
     COUNTER_UPDATE(_bitmap_index_iterator_init_timer, reader_stats.bitmap_index_iterator_init_ns);
+    COUNTER_UPDATE(_rewrite_predicates_timer, reader_stats.rewrite_predicates_ns);
+    COUNTER_UPDATE(_init_context_timer, reader_stats.init_context_ns);
     COUNTER_UPDATE(_zone_map_filter_timer, reader_stats.zone_map_filter_ns);
     COUNTER_UPDATE(_rows_key_range_filter_timer, reader_stats.rows_key_range_filter_ns);
     COUNTER_UPDATE(_bf_filter_timer, reader_stats.bf_filter_ns);

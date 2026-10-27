@@ -188,6 +188,9 @@ private:
     RuntimeProfile::Counter* _expr_filter_timer = nullptr;
     RuntimeProfile::Counter* _expr_filter_counter = nullptr;
     RuntimeProfile::Counter* _create_seg_iter_timer = nullptr;
+    // Segment-level zone map prune. Runs during iterator creation, so it is a child of
+    // CreateSegmentIter, not of SegmentInit.
+    RuntimeProfile::Counter* _segment_zone_map_filter_timer = nullptr;
     RuntimeProfile::Counter* _io_timer = nullptr;
     RuntimeProfile::Counter* _read_compressed_counter = nullptr;
     RuntimeProfile::Counter* _decompress_timer = nullptr;
@@ -205,6 +208,8 @@ private:
     RuntimeProfile::Counter* _seg_init_timer = nullptr;
     RuntimeProfile::Counter* _column_iterator_init_timer = nullptr;
     RuntimeProfile::Counter* _bitmap_index_iterator_init_timer = nullptr;
+    RuntimeProfile::Counter* _rewrite_predicates_timer = nullptr;
+    RuntimeProfile::Counter* _init_context_timer = nullptr;
     RuntimeProfile::Counter* _zone_map_filter_timer = nullptr;
     RuntimeProfile::Counter* _rows_key_range_filter_timer = nullptr;
     RuntimeProfile::Counter* _rows_key_range_counter = nullptr;

@@ -82,7 +82,16 @@ struct OlapReaderStatistics {
     int64_t rows_key_range_filter_ns = 0;
     int64_t bf_filter_ns = 0;
 
+    // Predicate rewrite and context construction inside segment_init_ns. Reported by the lake scan path only.
+    int64_t rewrite_predicates_ns = 0;
+    // _init_context and _init_column_predicates together form the context build.
+    int64_t init_context_ns = 0;
+
     int64_t segment_stats_filtered = 0;
+    // Time spent in Segment::_prune_by_segment_zone_map, the counterpart of segment_stats_filtered.
+    // This runs while the segment iterator is being created, not inside segment_init_ns, so the lake
+    // connector reports it under CreateSegmentIter rather than under SegmentInit.
+    int64_t segment_zone_map_filter_ns = 0;
     int64_t rows_key_range_filtered = 0;
     int64_t rows_after_key_range = 0;
     int64_t rows_key_range_num = 0;
@@ -268,10 +277,13 @@ struct OlapReaderStatistics {
         segment_init_ns += other.segment_init_ns;
         column_iterator_init_ns += other.column_iterator_init_ns;
         bitmap_index_iterator_init_ns += other.bitmap_index_iterator_init_ns;
+        rewrite_predicates_ns += other.rewrite_predicates_ns;
+        init_context_ns += other.init_context_ns;
         zone_map_filter_ns += other.zone_map_filter_ns;
         rows_key_range_filter_ns += other.rows_key_range_filter_ns;
         bf_filter_ns += other.bf_filter_ns;
         segment_stats_filtered += other.segment_stats_filtered;
+        segment_zone_map_filter_ns += other.segment_zone_map_filter_ns;
         rows_key_range_filtered += other.rows_key_range_filtered;
         rows_after_key_range += other.rows_after_key_range;
         rows_key_range_num += other.rows_key_range_num;
