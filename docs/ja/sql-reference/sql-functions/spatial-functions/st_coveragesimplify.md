@@ -27,17 +27,17 @@ ST_CoverageSimplify(GEOMETRY geom, DOUBLE tolerance, BOOLEAN simplify_boundary)
 
 `true` は共有辺と外側の境界を簡略化します。`false` は共有内部辺だけを簡略化し、外側の境界、隙間、未充填の穴の辺を維持します。他のメンバーに充填された穴は共有内部境界です。
 
-同じ平面 GEOMETRY CRS descriptor を持つ POLYGON/MULTIPOLYGON のみを受け付けます。非空ポリゴンの内部は重ならず、共有辺の頂点は一致する必要があります。隙間は許可されます（`gapWidth = 0`）。辺の分割不一致、T 字接合、非空ポリゴンの重複、不正な環や穴はエラーです。修復、union、自動 noding は行いません。GEOGRAPHY、POINT、LINESTRING、GEOMETRYCOLLECTION、Z/M は未サポートです。UNKNOWN/MIXED 次元メタデータは、実際の値が XY 検証を通った場合にのみ許可されます。
+同じ平面 GEOMETRY CRS descriptor を持つ POLYGON/MULTIPOLYGON のみを受け付けます。非空ポリゴンの内部は重ならず、共有辺の頂点は一致する必要があります。隙間は許可されます（`gapWidth = 0`）。この関数は入力が有効な coverage かどうかを検証しません。不正な入力では出力にアーティファクトが生じる場合があり、有効な coverage になる保証はありません。修復、union、自動 noding は行いません。GEOGRAPHY、POINT、LINESTRING、GEOMETRYCOLLECTION、Z/M は未サポートです。UNKNOWN/MIXED 次元メタデータは、実際の値が XY 検証を通った場合にのみ許可されます。
 
 ## 結果とエラー
 
-入力 CRS のネイティブ XY WKB GEOMETRY を各入力行に返します。POLYGON/MULTIPOLYGON の型、メンバー順序、穴、環の向き、接触点、接合点、共有辺を維持します。単一メンバーの MULTIPOLYGON も MULTIPOLYGON のままです。行は位置で対応付け、同じジオメトリを重複排除しません。
+入力 CRS のネイティブ XY WKB GEOMETRY を各入力行に返します。有効な coverage では、POLYGON/MULTIPOLYGON の型、メンバー順序、穴、環の向き、接触点、接合点、共有辺を維持します。単一メンバーの MULTIPOLYGON も MULTIPOLYGON のままです。行は位置で対応付け、同じジオメトリを重複排除しません。
 
 - NULL ジオメトリは計算から除外され、元の位置に NULL を返します。
 - POLYGON/MULTIPOLYGON EMPTY は型と位置を維持します。
 - 許容値または明示的な境界パラメータが NULL の場合、カーネルを実行せず全行に NULL を返します。型と定数チェックは実施します。
-- 許容値ゼロでは入力と coverage を検証してから、重複閉合座標を含む元の WKB を返します。
-- 空入力や全 NULL/EMPTY でもパラメータを検証します。不正な coverage/WKB、未サポートの descriptor/次元、資源制限超過はパーティション結果の公開前にエラーとなります。
+- 許容値ゼロでも入力の構造チェックを行い、重複閉合座標を含む元の WKB を返します。
+- 空入力や全 NULL/EMPTY でもパラメータを検証します。不正な WKB、構造が不正な環、未サポートの descriptor/次元、資源制限超過はパーティション結果の公開前にエラーとなります。
 
 ## 資源管理
 

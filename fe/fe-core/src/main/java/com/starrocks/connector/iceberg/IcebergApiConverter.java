@@ -377,11 +377,11 @@ public class IcebergApiConverter {
             }
             Column column = new Column(field.name(), srType, field.isOptional());
             column.setComment(field.doc());
-            // Prioritize write-default (used for INSERT) over initial-default (used for backfill)
+            // The column default is what INSERT writes for an omitted column: only the write-default. Without
+            // one, the spec writes NULL; the initial-default only fills older data files on read.
             String writeDefault = toWriteDefaultValueString(field);
-            String defaultVal = writeDefault != null ? writeDefault : toInitialDefaultValueString(field);
-            if (defaultVal != null) {
-                column.setDefaultValue(defaultVal);
+            if (writeDefault != null) {
+                column.setDefaultValue(writeDefault);
             }
             fullSchema.add(column);
         }

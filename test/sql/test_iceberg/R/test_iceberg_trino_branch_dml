@@ -1,0 +1,252 @@
+-- name: test_iceberg_trino_branch_dml
+trino: CREATE SCHEMA iceberg.trino_branch_dml_${uuid0} WITH (location = 'oss://${oss_bucket}/trino_branch_dml_${uuid0}.db');
+-- result:
+-- !result
+trino: CREATE TABLE iceberg.trino_branch_dml_${uuid0}.t (id integer, v varchar, p integer) WITH (format = 'PARQUET', format_version = 2, partitioning = ARRAY['p']);
+-- result:
+-- !result
+trino: INSERT INTO iceberg.trino_branch_dml_${uuid0}.t VALUES (1, 'a', 1), (2, 'b', 1), (3, 'c', 2), (4, 'd', 2);
+-- result:
+4
+-- !result
+create external catalog ice_cat_${uuid0} properties ("type" = "iceberg", "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+);
+-- result:
+-- !result
+alter table ice_cat_${uuid0}.trino_branch_dml_${uuid0}.t create branch b1;
+-- result:
+-- !result
+alter table ice_cat_${uuid0}.trino_branch_dml_${uuid0}.t create tag tag1;
+-- result:
+-- !result
+insert into ice_cat_${uuid0}.trino_branch_dml_${uuid0}.t values (5, 'e', 3);
+-- result:
+-- !result
+delete from ice_cat_${uuid0}.trino_branch_dml_${uuid0}.t for version as of b1 where id = 1;
+-- result:
+-- !result
+update ice_cat_${uuid0}.trino_branch_dml_${uuid0}.t for version as of b1 set v = 'b2' where id = 2;
+-- result:
+-- !result
+merge into ice_cat_${uuid0}.trino_branch_dml_${uuid0}.t for version as of b1 as t
+    using (select 3 as id, 'c2' as v, 2 as p union all select 6, 'f', 3) as s on t.id = s.id
+    when matched then update set v = s.v
+    when not matched then insert values (s.id, s.v, s.p);
+-- result:
+-- !result
+delete from ice_cat_${uuid0}.trino_branch_dml_${uuid0}.t for version as of b1 where p = 2 and id = 4;
+-- result:
+-- !result
+select * from ice_cat_${uuid0}.trino_branch_dml_${uuid0}.t for version as of 'b1' order by id;
+-- result:
+2	b2	1
+3	c2	2
+6	f	3
+-- !result
+select * from ice_cat_${uuid0}.trino_branch_dml_${uuid0}.t order by id;
+-- result:
+1	a	1
+2	b	1
+3	c	2
+4	d	2
+5	e	3
+-- !result
+select * from ice_cat_${uuid0}.trino_branch_dml_${uuid0}.t for version as of 'tag1' order by id;
+-- result:
+1	a	1
+2	b	1
+3	c	2
+4	d	2
+-- !result
+trino: SELECT * FROM iceberg.trino_branch_dml_${uuid0}.t FOR VERSION AS OF 'b1' ORDER BY id;
+-- result:
+2	b2	1
+3	c2	2
+6	f	3
+-- !result
+trino: SELECT * FROM iceberg.trino_branch_dml_${uuid0}.t ORDER BY id;
+-- result:
+1	a	1
+2	b	1
+3	c	2
+4	d	2
+5	e	3
+-- !result
+delete from ice_cat_${uuid0}.trino_branch_dml_${uuid0}.t for version as of tag1 where id = 1;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: tag1 is a tag, not a branch.')
+-- !result
+update ice_cat_${uuid0}.trino_branch_dml_${uuid0}.t for version as of no_such_branch set v = 'x' where id = 1;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Cannot find snapshot with reference name: no_such_branch.')
+-- !result
+select count(*) from ice_cat_${uuid0}.trino_branch_dml_${uuid0}.t$snapshots;
+-- result:
+7
+-- !result
+drop catalog ice_cat_${uuid0};
+-- result:
+-- !result
+trino: DROP TABLE iceberg.trino_branch_dml_${uuid0}.t;
+-- result:
+-- !result
+trino: DROP SCHEMA iceberg.trino_branch_dml_${uuid0};
+-- result:
+-- !result
+-- name: test_iceberg_trino_branch_dml_after_schema_change
+trino: CREATE SCHEMA iceberg.trino_branch_schema_${uuid0} WITH (location = 'oss://${oss_bucket}/trino_branch_schema_${uuid0}.db');
+-- result:
+-- !result
+trino: CREATE TABLE iceberg.trino_branch_schema_${uuid0}.t (id integer, c varchar) WITH (format = 'PARQUET', format_version = 2);
+-- result:
+-- !result
+trino: INSERT INTO iceberg.trino_branch_schema_${uuid0}.t VALUES (1, 'x'), (2, 'x'), (3, 'y');
+-- result:
+3
+-- !result
+create external catalog ice_cat_${uuid0} properties ("type" = "iceberg", "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+);
+-- result:
+-- !result
+alter table ice_cat_${uuid0}.trino_branch_schema_${uuid0}.t create branch b1;
+-- result:
+-- !result
+alter table ice_cat_${uuid0}.trino_branch_schema_${uuid0}.t drop column c;
+-- result:
+-- !result
+alter table ice_cat_${uuid0}.trino_branch_schema_${uuid0}.t add column c varchar;
+-- result:
+-- !result
+delete from ice_cat_${uuid0}.trino_branch_schema_${uuid0}.t for version as of b1 where c = 'x';
+-- result:
+-- !result
+select * from ice_cat_${uuid0}.trino_branch_schema_${uuid0}.t for version as of 'b1' order by id;
+-- result:
+1	None
+2	None
+3	None
+-- !result
+update ice_cat_${uuid0}.trino_branch_schema_${uuid0}.t for version as of b1 set c = 'z' where id = 1;
+-- result:
+-- !result
+delete from ice_cat_${uuid0}.trino_branch_schema_${uuid0}.t for version as of b1 where c is null and id = 3;
+-- result:
+-- !result
+select * from ice_cat_${uuid0}.trino_branch_schema_${uuid0}.t for version as of 'b1' order by id;
+-- result:
+1	z
+2	None
+-- !result
+select * from ice_cat_${uuid0}.trino_branch_schema_${uuid0}.t order by id;
+-- result:
+1	None
+2	None
+3	None
+-- !result
+trino: SELECT * FROM iceberg.trino_branch_schema_${uuid0}.t FOR VERSION AS OF 'b1' ORDER BY id;
+-- result:
+1	z
+2	None
+-- !result
+trino: SELECT * FROM iceberg.trino_branch_schema_${uuid0}.t ORDER BY id;
+-- result:
+1	None
+2	None
+3	None
+-- !result
+drop catalog ice_cat_${uuid0};
+-- result:
+-- !result
+trino: DROP TABLE iceberg.trino_branch_schema_${uuid0}.t;
+-- result:
+-- !result
+trino: DROP SCHEMA iceberg.trino_branch_schema_${uuid0};
+-- result:
+-- !result
+-- name: test_iceberg_trino_branch_dml_after_partition_evolution
+trino: CREATE SCHEMA iceberg.trino_branch_spec_${uuid0} WITH (location = 'oss://${oss_bucket}/trino_branch_spec_${uuid0}.db');
+-- result:
+-- !result
+trino: CREATE TABLE iceberg.trino_branch_spec_${uuid0}.t (id integer, v varchar, p integer) WITH (format = 'PARQUET', format_version = 2);
+-- result:
+-- !result
+trino: INSERT INTO iceberg.trino_branch_spec_${uuid0}.t VALUES (1, 'a', 1), (2, 'b', 1), (3, 'c', 2), (4, 'd', 2);
+-- result:
+4
+-- !result
+create external catalog ice_cat_${uuid0} properties ("type" = "iceberg", "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+);
+-- result:
+-- !result
+alter table ice_cat_${uuid0}.trino_branch_spec_${uuid0}.t create branch b1;
+-- result:
+-- !result
+alter table ice_cat_${uuid0}.trino_branch_spec_${uuid0}.t add partition column p;
+-- result:
+-- !result
+merge into ice_cat_${uuid0}.trino_branch_spec_${uuid0}.t for version as of b1 as t
+    using (select 1 as id, 'a2' as v, 1 as p union all select 5, 'e', 3) as s on t.id = s.id
+    when matched then update set v = s.v
+    when not matched then insert values (s.id, s.v, s.p);
+-- result:
+-- !result
+update ice_cat_${uuid0}.trino_branch_spec_${uuid0}.t for version as of b1 set v = 'c2' where id = 3;
+-- result:
+-- !result
+delete from ice_cat_${uuid0}.trino_branch_spec_${uuid0}.t for version as of b1 where id = 4;
+-- result:
+-- !result
+select * from ice_cat_${uuid0}.trino_branch_spec_${uuid0}.t for version as of 'b1' order by id;
+-- result:
+1	a2	1
+2	b	1
+3	c2	2
+5	e	3
+-- !result
+select * from ice_cat_${uuid0}.trino_branch_spec_${uuid0}.t for version as of 'b1' where p = 1 order by id;
+-- result:
+1	a2	1
+2	b	1
+-- !result
+select * from ice_cat_${uuid0}.trino_branch_spec_${uuid0}.t order by id;
+-- result:
+1	a	1
+2	b	1
+3	c	2
+4	d	2
+-- !result
+trino: SELECT * FROM iceberg.trino_branch_spec_${uuid0}.t FOR VERSION AS OF 'b1' ORDER BY id;
+-- result:
+1	a2	1
+2	b	1
+3	c2	2
+5	e	3
+-- !result
+trino: SELECT * FROM iceberg.trino_branch_spec_${uuid0}.t ORDER BY id;
+-- result:
+1	a	1
+2	b	1
+3	c	2
+4	d	2
+-- !result
+drop catalog ice_cat_${uuid0};
+-- result:
+-- !result
+trino: DROP TABLE iceberg.trino_branch_spec_${uuid0}.t;
+-- result:
+-- !result
+trino: DROP SCHEMA iceberg.trino_branch_spec_${uuid0};
+-- result:
+-- !result

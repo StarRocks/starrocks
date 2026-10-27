@@ -258,11 +258,11 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 ### blacklist_backup_routing
 
 * **范围**：Session
-* **描述**：在 shared-data（存算分离）模式下，若某次扫描在规划中偏好的计算节点不在本查询当前可使用的计算节点范围内（例如节点宕机或出现在主机黑名单上），则规划器需另选备份计算节点。本变量控制在该候选集合中如何挑选备份节点。`RANDOM` 在候选集中均匀随机选取。`CIRCULAR` 在按 id 排好序的节点环上、从主节点起向后寻找第一个可用候选（确定性、与旧版行为类似）。哪些节点可作为备份还受 `skip_black_list` 影响：默认会排除位于主机黑名单上的节点；`skip_black_list` 为 `true` 时，位于黑名单的节点在集群中仍属可用时，也可能被选为备份。
+* **描述**：在 shared-data（存算分离）模式下，若某次扫描在规划中偏好的计算节点不在本查询当前可使用的计算节点范围内（例如节点宕机或出现在主机黑名单上），则规划器需另选备份计算节点。本变量控制在该候选集合中如何挑选备份节点。`RANDOM` 在候选集中均匀随机选取。`CIRCULAR` 在按 id 排好序的节点环上、从主节点起向后寻找第一个可用候选（确定性、与旧版行为类似）。`TABLET_HASH` 对 tablet 与各候选节点计算哈希（rendezvous hashing），选取哈希值最大的节点：不可用节点上的 tablet 会均匀分散到其余节点，而同一个 tablet 在不同查询中始终落到同一个备份节点，其数据只需缓存在这一个节点上。Colocate 扫描以 Colocation Group 和分桶代替 tablet 计算哈希，同一 Group 内各表的同一分桶会选中同一个备份节点。只要各 FE 看到的候选节点相同，它们为同一 tablet 选出的备份节点也相同。导入（例如 `INSERT`）写入的 tablet 所在计算节点不可用时，同样按本变量选择备份节点。哪些节点可作为备份还受 `skip_black_list` 影响：默认会排除位于主机黑名单上的节点；`skip_black_list` 为 `true` 时，位于黑名单的节点在集群中仍属可用时，也可能被选为备份。
 
 * **默认值**：`CIRCULAR`
 * **类型**：String
-* **合法取值**：`CIRCULAR`、`RANDOM`
+* **合法取值**：`CIRCULAR`、`RANDOM`、`TABLET_HASH`
 * **引入版本**：-
 
 ### broadcast_mem_exceeded_penalty_factor
@@ -279,6 +279,15 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 SET broadcast_mem_exceeded_penalty_factor = 10.0;
 SET GLOBAL broadcast_mem_exceeded_penalty_factor = 10.0;
 ```
+
+### broadcast_mem_threshold
+
+* **描述**：设置构建侧预估大小阈值，超过此阈值时优化器会惩罚广播计划。此阈值适用于预估发送到每个 BE 的字节数。预估大小等于阈值时不会受到惩罚。此变量是优化器阈值，而非运行时内存限制。它独立于 `exec_mem_limit`；`broadcast_row_limit` 仍控制广播选择的行数检查。设置为 `0` 时，所有预估大小大于零的广播都会受到惩罚。
+* **范围**：Session、Global
+* **默认值**：`2147483648`（2 GiB）
+* **单位**：字节
+* **类型**：long
+* **合法取值**：[0, 9223372036854775807]
 
 ### catalog（3.2.4 及以后）
 
@@ -675,6 +684,12 @@ FROM test;
 * 描述：是否开启资源组粒度的[查询队列](../administration/management/resource_management/query_queues.md)。
 * 默认值：false，表示不开启。
 * 引入版本：v3.1.4
+
+### enable_iceberg_eq_delete_runtime_filter_pruning
+
+* 描述：是否允许 Runtime Filter 跳过 Iceberg 表的 Equality Delete 文件。仅当表从未变更过分区规格（Partition Spec），且每个分区字段都是查询所读取的 INT、DATE 或 STRING 列的 identity 转换时生效。此时，Join 在这些列上生成的 Runtime Filter 会跳过被其过滤掉的分区的 Equality Delete 文件。设置为 `false` 时会应用所有 Equality Delete 文件，例如查询报错且错误信息中提到该变量时。
+* 默认值：true
+* 引入版本：v26.2
 
 ### enable_incremental_mv
 
@@ -1377,7 +1392,12 @@ FROM test;
 
 ### paimon_reader_mode
 
-* 描述：控制 Paimon 表使用的 Reader。有效值为 `AUTO`、`JNI` 和 `NATIVE`（不区分大小写）。`AUTO` 表示由 StarRocks 自动选择合适的 Reader。`JNI` 始终使用 JNI Reader。`NATIVE` 使用 paimon-cpp 原生 Reader。注意 `paimon_force_jni_reader` 的优先级高于本变量：一旦其设置为 `true`，将始终使用 JNI Reader。
+* 描述：控制 Paimon 表使用的 Reader。有效值为 `AUTO`、`JNI` 和 `NATIVE`（不区分大小写）。
+
+  * `AUTO`：由 StarRocks 自动选择合适的读取模式。
+  * `JNI`：强制使用 Paimon Java Reader，通过 JNI 读取。
+  * `NATIVE`：兼容时使用 StarRocks 文件 Reader，否则要求使用兼容的 paimon-cpp Reader；无法支持时查询报错，不回退到 JNI。
+  * 设置 `paimon_force_jni_reader=true` 等价于选择 `JNI`，优先于本变量的设置。
 * 默认值：AUTO
 * 类型：String
 * 引入版本：v4.2

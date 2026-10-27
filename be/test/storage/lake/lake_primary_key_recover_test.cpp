@@ -330,6 +330,123 @@ protected:
         return ops;
     }
 
+    // One statement of a multi-statement transaction: full rows, or with `partial` set, c1 of each key only.
+    struct Statement {
+        std::vector<Op> ops;
+        std::optional<PartialUpdateMode> partial;
+    };
+
+    static Statement statement(std::vector<Op> ops) { return {std::move(ops), std::nullopt}; }
+
+    static Statement partial_statement(int32_t first, int32_t last, int32_t c1_base, PartialUpdateMode mode) {
+        return {upserts(first, last, c1_base, 0), mode};
+    }
+
+    // Apply a statement to the model. A partial update keeps c2; a new key takes c2's default (10), except in
+    // column update mode, which only updates existing keys.
+    static void apply(Rows* rows, const Statement& stmt) {
+        if (!stmt.partial.has_value()) {
+            apply(rows, std::vector<std::vector<Op>>{stmt.ops});
+            return;
+        }
+        for (const auto& op : stmt.ops) {
+            auto it = rows->find(op.key);
+            if (it != rows->end()) {
+                it->second.first = op.c1;
+            } else if (*stmt.partial != PartialUpdateMode::COLUMN_UPDATE_MODE) {
+                (*rows)[op.key] = {op.c1, 10};
+            }
+        }
+    }
+
+    // Write each statement through its own delta writer and load id under one transaction, as a multi-statement
+    // transaction does, and return the transaction to publish.
+    TxnInfoPB write_multi_statement(const std::vector<Statement>& statements) {
+        const int64_t txn_id = next_id();
+        TxnInfoPB info;
+        info.set_txn_id(txn_id);
+        info.set_txn_type(TXN_NORMAL);
+        info.set_combined_txn_log(false);
+        info.set_commit_time(time(nullptr));
+        info.set_force_publish(false);
+        for (size_t i = 0; i < statements.size(); i++) {
+            const auto& stmt = statements[i];
+            PUniqueId* load_id = info.add_load_ids();
+            load_id->set_hi(txn_id);
+            load_id->set_lo(i);
+            DeltaWriterBuilder builder;
+            builder.set_tablet_manager(_tablet_mgr.get())
+                    .set_tablet_id(tablet_id())
+                    .set_txn_id(txn_id)
+                    .set_partition_id(_partition_id)
+                    .set_mem_tracker(_mem_tracker.get())
+                    .set_schema_id(_tablet_schema->id())
+                    .set_slot_descriptors(stmt.partial.has_value() ? &_partial_slots : &_full_slots)
+                    .set_load_id(*load_id)
+                    .set_is_multi_statements_txn(true)
+                    .set_profile(&_dummy_runtime_profile);
+            if (stmt.partial.has_value()) {
+                builder.set_partial_update_mode(*stmt.partial);
+            }
+            ASSIGN_OR_ABORT(auto delta_writer, builder.build());
+            CHECK_OK(delta_writer->open());
+            auto c0 = Int32Column::create();
+            auto c1 = Int32Column::create();
+            auto c2 = Int32Column::create();
+            auto op = Int8Column::create();
+            for (const auto& row : stmt.ops) {
+                c0->append(row.key);
+                c1->append(row.c1);
+                c2->append(row.c2);
+                op->append(row.del ? TOpType::DELETE : TOpType::UPSERT);
+            }
+            Columns columns;
+            columns.emplace_back(std::move(c0));
+            columns.emplace_back(std::move(c1));
+            if (!stmt.partial.has_value()) {
+                columns.emplace_back(std::move(c2));
+                columns.emplace_back(std::move(op));
+            }
+            Chunk chunk = make_chunk(std::move(columns));
+            std::vector<uint32_t> indexes(stmt.ops.size());
+            std::iota(indexes.begin(), indexes.end(), 0);
+            CHECK_OK(delta_writer->write(chunk, indexes.data(), indexes.size()));
+            CHECK_OK(delta_writer->finish_with_txnlog());
+            delta_writer->close();
+        }
+        return info;
+    }
+
+    // Publish a multi-statement transaction as the next version, through recover like publish() with `recover`.
+    void publish_multi_statement(const std::vector<Statement>& statements, bool recover) {
+        TxnInfoPB info = write_multi_statement(statements);
+        if (recover) {
+            _primary_key_mgr->try_remove_primary_index_cache(tablet_id());
+            _fail_next_index_load = true;
+        }
+        const int64_t recover_before = recover_count();
+        std::vector<TxnInfoPB> txns{info};
+        auto st =
+                publish_version(_tablet_mgr.get(), PublishTabletInfo(tablet_id()), _version, _version + 1, txns, false)
+                        .status();
+        _fail_next_index_load = false;
+        ASSERT_OK(st);
+        _version++;
+        if (recover) {
+            ASSERT_EQ(recover_before + 1, recover_count()) << "publish did not go through recover";
+        }
+    }
+
+    // Live rows according to the rowsets' num_rows and num_dels, which compaction and statistics trust.
+    int64_t live_rows_by_stats(int64_t version) {
+        ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id(), version));
+        int64_t rows = 0;
+        for (const auto& rowset : metadata->rowsets()) {
+            rows += rowset.num_rows() - rowset.num_dels();
+        }
+        return rows;
+    }
+
     constexpr static const char* const kTestDirectory = "test_lake_primary_key_recover";
 
     std::shared_ptr<TabletMetadata> _tablet_metadata;
@@ -385,8 +502,8 @@ TEST_F(LakePrimaryKeyRecoverTest, upsert_and_delete_mixed_in_one_load) {
 // A delete load followed by a compaction that takes the delete rowset but not the rowset holding the deleted
 // keys. The parameter decides whether the index has flushed those deletes into sstables before the compaction:
 // if not, the compaction carries the del file over to its output rowset; if so, it drops it, since the
-// sstables already have it. Recover rebuilds from rowsets alone and does not replay either kind of del file, so
-// the deleted keys may come back. That is accepted: recover must not lose a live row or change its value, but a
+// sstables already have it. Recover rebuilds from rowsets alone and does not replay either kind of del file (it
+// drops the carried-over one, so the index rebuild does not replay it either), so the deleted keys may come back. That is accepted: recover must not lose a live row or change its value, but a
 // deleted row may reappear, with the value it had when it was deleted.
 class LakePrimaryKeyRecoverCompactionTest : public LakePrimaryKeyRecoverTest, public testing::WithParamInterface<bool> {
 public:
@@ -395,10 +512,6 @@ public:
 
 TEST_P(LakePrimaryKeyRecoverCompactionTest, delete_then_compaction_keeps_live_rows) {
     const bool flush_index = GetParam();
-    if (!flush_index) {
-        GTEST_SKIP() << "recover skips the del file the compaction output inherited, but the index rebuild replays "
-                        "it, so the index and the delete vectors disagree";
-    }
     Rows expected;
     // The last value each key was ever upserted with, deleted keys included: what a resurrected row may show.
     Rows last_upserted;
@@ -446,11 +559,23 @@ TEST_P(LakePrimaryKeyRecoverCompactionTest, delete_then_compaction_keeps_live_ro
     ASSERT_EQ(first_rowset_id, metadata->rowsets(0).id());
     // The del file goes with the compaction output only while the sstables do not cover it yet.
     ASSERT_EQ(flush_index ? 0 : 1, metadata->rowsets(1).del_files_size());
+    const std::string inherited_del = flush_index ? "" : metadata->rowsets(1).del_files(0).name();
 
     const std::vector<std::vector<Op>> later = {upserts(300, 302, 0, 0)};
     publish(write_rows(later), true);
     apply(&expected, later);
     Rows recovered = read(_version);
+    if (!flush_index) {
+        // Recover dropped the carried-over del file and handed it to vacuum.
+        ASSIGN_OR_ABORT(auto recovered_meta, _tablet_mgr->get_tablet_metadata(tablet_id(), _version));
+        for (const auto& rowset : recovered_meta->rowsets()) {
+            for (const auto& del : rowset.del_files()) {
+                EXPECT_NE(inherited_del, del.name());
+            }
+        }
+        EXPECT_TRUE(std::any_of(recovered_meta->orphan_files().begin(), recovered_meta->orphan_files().end(),
+                                [&](const FileMetaPB& f) { return f.name() == inherited_del; }));
+    }
     for (const auto& [key, value] : expected) {
         auto it = recovered.find(key);
         ASSERT_TRUE(it != recovered.end()) << "recover lost live key " << key;
@@ -469,6 +594,60 @@ TEST_P(LakePrimaryKeyRecoverCompactionTest, delete_then_compaction_keeps_live_ro
 
 INSTANTIATE_TEST_SUITE_P(LakePrimaryKeyRecoverCompactionTest, LakePrimaryKeyRecoverCompactionTest,
                          testing::Values(false, true));
+
+// A compaction of a delete-only rowset has no output segments; its output rowset exists only to carry the del
+// file over. Recover drops that del file, which leaves the rowset empty, so recover drops the rowset too.
+TEST_F(LakePrimaryKeyRecoverTest, recover_drops_rowset_emptied_of_inherited_del_files) {
+    Rows expected;
+    Rows last_upserted;
+    const std::vector<std::vector<std::vector<Op>>> loads = {{upserts(0, 16, 0, 0)}, {deletes(0, 8)}};
+    for (const auto& load : loads) {
+        publish(write_rows(load), false);
+        apply(&expected, load);
+    }
+    for (const auto& op : upserts(0, 16, 0, 0)) {
+        last_upserted[op.key] = {op.c1, op.c2};
+    }
+    ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id(), _version));
+    auto rowsets = Rowset::get_rowsets(_tablet_mgr.get(), metadata);
+    ASSERT_EQ(2, rowsets.size());
+    const int64_t compaction_txn_id = next_id();
+    auto context =
+            std::make_unique<CompactionTaskContext>(compaction_txn_id, tablet_id(), _version, false, false, nullptr);
+    ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(context.get(), {rowsets[1]}));
+    ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
+    publish(compaction_txn_id, false);
+    ASSERT_EQ(expected, read(_version));
+    ASSIGN_OR_ABORT(metadata, _tablet_mgr->get_tablet_metadata(tablet_id(), _version));
+    ASSERT_EQ(2, metadata->rowsets_size());
+    ASSERT_EQ(0, metadata->rowsets(1).segment_metas_size());
+    ASSERT_EQ(1, metadata->rowsets(1).del_files_size());
+    const uint32_t carrier_id = metadata->rowsets(1).id();
+
+    const std::vector<std::vector<Op>> later = {upserts(300, 302, 0, 0)};
+    publish(write_rows(later), true);
+    apply(&expected, later);
+    for (const auto& op : later[0]) {
+        last_upserted[op.key] = {op.c1, op.c2};
+    }
+    ASSIGN_OR_ABORT(auto recovered_meta, _tablet_mgr->get_tablet_metadata(tablet_id(), _version));
+    for (const auto& rowset : recovered_meta->rowsets()) {
+        EXPECT_NE(carrier_id, rowset.id());
+        EXPECT_TRUE(rowset.has_delete_predicate() || rowset.segment_metas_size() > 0 || rowset.del_files_size() > 0)
+                << "empty rowset " << rowset.id();
+    }
+    Rows recovered = read(_version);
+    for (const auto& [key, value] : expected) {
+        auto it = recovered.find(key);
+        ASSERT_TRUE(it != recovered.end()) << "recover lost live key " << key;
+        EXPECT_EQ(value, it->second) << "recover changed live key " << key;
+    }
+    for (const auto& [key, value] : recovered) {
+        ASSERT_TRUE(last_upserted.contains(key)) << "recover produced key " << key << " that was never written";
+        EXPECT_EQ(last_upserted.at(key), value) << "key " << key << " has a value it never had";
+    }
+    check_index_agrees(&recovered);
+}
 
 // A conditional upsert keeps the stored row when the incoming one does not win the condition; the losing new
 // row stays in its segment, masked only by that segment's delete vector. Recover must not bring it back.
@@ -717,76 +896,133 @@ TEST_F(LakePrimaryKeyRecoverTest, shared_segment_read_through_tablet_range) {
 
 // A multi-statement transaction publishes all its statements' txn logs through one batch apply. It has to
 // recover from a duplicate primary key like a single-statement load does.
-// Disabled: the batch apply of a multi-statement transaction has no recover path.
-TEST_F(LakePrimaryKeyRecoverTest, DISABLED_multi_statement_transaction) {
+TEST_F(LakePrimaryKeyRecoverTest, multi_statement_transaction) {
     Rows expected;
     const std::vector<std::vector<Op>> base = {upserts(0, 12, 0, 0)};
     publish(write_rows(base), false);
     apply(&expected, base);
 
-    const int64_t txn_id = next_id();
-    std::vector<PUniqueId> load_ids;
-    const std::vector<std::vector<Op>> statements = {upserts(4, 8, 100, 100), upserts(100, 104, 0, 0)};
-    for (size_t i = 0; i < statements.size(); i++) {
-        PUniqueId load_id;
-        load_id.set_hi(txn_id);
-        load_id.set_lo(i);
-        load_ids.push_back(load_id);
-        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
-                                                   .set_tablet_manager(_tablet_mgr.get())
-                                                   .set_tablet_id(tablet_id())
-                                                   .set_txn_id(txn_id)
-                                                   .set_partition_id(_partition_id)
-                                                   .set_mem_tracker(_mem_tracker.get())
-                                                   .set_schema_id(_tablet_schema->id())
-                                                   .set_slot_descriptors(&_full_slots)
-                                                   .set_load_id(load_id)
-                                                   .set_is_multi_statements_txn(true)
-                                                   .set_profile(&_dummy_runtime_profile)
-                                                   .build());
-        ASSERT_OK(delta_writer->open());
-        auto c0 = Int32Column::create();
-        auto c1 = Int32Column::create();
-        auto c2 = Int32Column::create();
-        auto op = Int8Column::create();
-        for (const auto& row : statements[i]) {
-            c0->append(row.key);
-            c1->append(row.c1);
-            c2->append(row.c2);
-            op->append(TOpType::UPSERT);
-        }
-        Columns columns;
-        columns.emplace_back(std::move(c0));
-        columns.emplace_back(std::move(c1));
-        columns.emplace_back(std::move(c2));
-        columns.emplace_back(std::move(op));
-        Chunk chunk = make_chunk(std::move(columns));
-        std::vector<uint32_t> indexes(statements[i].size());
-        std::iota(indexes.begin(), indexes.end(), 0);
-        ASSERT_OK(delta_writer->write(chunk, indexes.data(), indexes.size()));
-        ASSERT_OK(delta_writer->finish_with_txnlog());
-        delta_writer->close();
+    const std::vector<Statement> statements = {statement(upserts(4, 8, 100, 100)), statement(upserts(100, 104, 0, 0))};
+    publish_multi_statement(statements, true);
+    for (const auto& stmt : statements) {
+        apply(&expected, stmt);
     }
-    apply(&expected, statements);
-
-    TxnInfoPB info;
-    info.set_txn_id(txn_id);
-    info.set_txn_type(TXN_NORMAL);
-    info.set_combined_txn_log(false);
-    info.set_commit_time(time(nullptr));
-    info.set_force_publish(false);
-    for (const auto& load_id : load_ids) {
-        info.add_load_ids()->CopyFrom(load_id);
-    }
-    _primary_key_mgr->try_remove_primary_index_cache(tablet_id());
-    _fail_next_index_load = true;
-    std::vector<TxnInfoPB> txns{info};
-    auto st = publish_version(_tablet_mgr.get(), PublishTabletInfo(tablet_id()), _version, _version + 1, txns, false)
-                      .status();
-    _fail_next_index_load = false;
-    ASSERT_OK(st);
-    _version++;
-    EXPECT_EQ(expected, read(_version));
+    ASSERT_EQ(expected, read(_version));
+    ASSERT_EQ(expected.size(), live_rows_by_stats(_version));
+    check_index_agrees(&expected);
 }
+
+// Upserts and deletes of the same keys spread over the statements of one transaction. The batch apply merges
+// them into one rowset, so recover has to replay each statement's deletes at their position between the
+// segments, both while the transaction publishes and on a later publish.
+TEST_F(LakePrimaryKeyRecoverTest, multi_statement_upsert_and_delete) {
+    ConfigResetGuard<bool> order_guard(&config::lake_enable_pk_preserve_txn_delete_order, true);
+    Rows expected;
+    const std::vector<std::vector<Op>> base = {upserts(0, 16, 0, 0)};
+    publish(write_rows(base), false);
+    apply(&expected, base);
+
+    const std::vector<Statement> statements = {
+            statement(upserts(0, 8, 100, 100)),   statement(deletes(4, 12)),
+            statement(upserts(6, 10, 200, 200)),  statement(deletes(0, 2)),
+            statement(upserts(14, 18, 300, 300)),
+    };
+    publish_multi_statement(statements, true);
+    for (const auto& stmt : statements) {
+        apply(&expected, stmt);
+    }
+    ASSERT_EQ(expected, read(_version));
+
+    const std::vector<std::vector<Op>> later = {upserts(30, 32, 0, 0)};
+    publish(write_rows(later), true);
+    apply(&expected, later);
+    ASSERT_EQ(expected, read(_version));
+    check_index_agrees(&expected);
+}
+
+// A partial update followed by full upserts and deletes in one multi-statement transaction. The partial update
+// comes first: one that follows a statement writing the same keys fails the batch apply even without recover,
+// since it looks for those rows in segments that are still pending.
+class LakePrimaryKeyRecoverMultiStatementPartialTest : public LakePrimaryKeyRecoverTest,
+                                                       public testing::WithParamInterface<PartialUpdateMode> {
+public:
+    LakePrimaryKeyRecoverMultiStatementPartialTest()
+            : LakePrimaryKeyRecoverTest("test_lake_primary_key_recover_multi_statement_partial") {}
+};
+
+TEST_P(LakePrimaryKeyRecoverMultiStatementPartialTest, partial_update) {
+    const PartialUpdateMode mode = GetParam();
+    Rows expected;
+    const std::vector<std::vector<Op>> base = {upserts(0, 16, 0, 1000)};
+    publish(write_rows(base), false);
+    apply(&expected, base);
+
+    const std::vector<Statement> statements = {
+            partial_statement(2, 20, 500, mode),
+            statement(upserts(4, 6, 100, 100)),
+            statement(deletes(0, 3)),
+    };
+    publish_multi_statement(statements, true);
+    for (const auto& stmt : statements) {
+        apply(&expected, stmt);
+    }
+    ASSERT_EQ(expected, read(_version));
+
+    const std::vector<std::vector<Op>> later = {upserts(30, 32, 0, 0)};
+    publish(write_rows(later), true);
+    apply(&expected, later);
+    ASSERT_EQ(expected, read(_version));
+    check_index_agrees(&expected);
+}
+
+INSTANTIATE_TEST_SUITE_P(LakePrimaryKeyRecoverMultiStatementPartialTest, LakePrimaryKeyRecoverMultiStatementPartialTest,
+                         testing::Values(PartialUpdateMode::ROW_MODE, PartialUpdateMode::COLUMN_UPDATE_MODE,
+                                         PartialUpdateMode::COLUMN_UPSERT_MODE));
+
+// A batch apply that fails on its second statement, after the first one has already updated the index, appended
+// delete vectors, added its segments to the pending rowset and counted its deletes into the base rowset. The
+// parameter is the failure: an inconsistent delete vector (recover, then publish again) or an unknown segment
+// in the del stats (recover without publishing, which for a single txn log means the log is already applied).
+// Either way the whole batch has to be applied again on the recovered state, without any trace of the failed
+// attempt.
+class LakePrimaryKeyRecoverMidBatchTest : public LakePrimaryKeyRecoverTest,
+                                          public testing::WithParamInterface<const char*> {
+public:
+    LakePrimaryKeyRecoverMidBatchTest() : LakePrimaryKeyRecoverTest("test_lake_primary_key_recover_mid_batch") {}
+};
+
+TEST_P(LakePrimaryKeyRecoverMidBatchTest, fail_on_second_statement) {
+    const std::string sync_point = GetParam();
+    ConfigResetGuard<bool> order_guard(&config::lake_enable_pk_preserve_txn_delete_order, true);
+    Rows expected;
+    const std::vector<std::vector<Op>> base = {upserts(0, 16, 0, 0)};
+    publish(write_rows(base), false);
+    apply(&expected, base);
+    ASSERT_EQ(expected.size(), live_rows_by_stats(_version));
+
+    // Each statement deletes rows of the base rowset, so each one hits both sync points.
+    const std::vector<Statement> statements = {statement(upserts(0, 4, 100, 100)), statement(deletes(2, 6)),
+                                               statement(upserts(4, 8, 200, 200))};
+    int hits = 0;
+    SyncPoint::GetInstance()->SetCallBack(sync_point, [&](void* arg) {
+        if (++hits == 2) {
+            *(Status*)arg = Status::InternalError("injected inconsistency on the second statement");
+        }
+    });
+    DeferOp clear([&]() { SyncPoint::GetInstance()->ClearCallBack(sync_point); });
+    publish_multi_statement(statements, false);
+    // The failure was injected, and the batch was applied again after it.
+    ASSERT_GT(hits, 2);
+    for (const auto& stmt : statements) {
+        apply(&expected, stmt);
+    }
+    ASSERT_EQ(expected, read(_version));
+    // The failed attempt's deletes must not be counted twice.
+    ASSERT_EQ(expected.size(), live_rows_by_stats(_version));
+    check_index_agrees(&expected);
+}
+
+INSTANTIATE_TEST_SUITE_P(LakePrimaryKeyRecoverMidBatchTest, LakePrimaryKeyRecoverMidBatchTest,
+                         testing::Values("delvec_inconsistent", "update_num_del_stat"));
 
 } // namespace starrocks::lake

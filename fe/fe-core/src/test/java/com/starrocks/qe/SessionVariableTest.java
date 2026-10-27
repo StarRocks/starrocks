@@ -26,6 +26,12 @@ import java.util.Map;
 public class SessionVariableTest {
 
     @Test
+    public void testAITopNThresholdRegistersValidatedSetter() throws Exception {
+        Assertions.assertEquals(SessionVariable.class.getMethod("setAiTopnPushdownMaxGlobalLimit", long.class),
+                SessionVariable.SETTER_MAP.get("aiTopnPushdownMaxGlobalLimit"));
+    }
+
+    @Test
     public void testBroadcastCostMultiplierState() throws Exception {
         SessionVariable variables = new SessionVariable();
         variables.replayFromJson("{\"exec_mem_limit\":4294967296}");
@@ -58,16 +64,39 @@ public class SessionVariableTest {
     }
 
     @Test
+    public void testBroadcastMemThresholdState() throws Exception {
+        SessionVariable variables = new SessionVariable();
+        Assertions.assertEquals(2147483648L, variables.getBroadcastMemThreshold());
+        variables.replayFromJson("{\"exec_mem_limit\":4294967296}");
+        Assertions.assertEquals(4294967296L, variables.getMaxExecMemByte());
+        Assertions.assertEquals(2147483648L, variables.getBroadcastMemThreshold());
+
+        variables.setBroadcastMemThreshold(1024);
+        Assertions.assertEquals(1024L,
+                variables.getNonDefaultVariables().get(SessionVariable.BROADCAST_MEM_THRESHOLD).actualValue);
+        SessionVariable clone = variables.clone();
+        SessionVariable restored = new SessionVariable();
+        restored.replayFromJson(variables.getJsonString());
+        Assertions.assertEquals(1024L, clone.getBroadcastMemThreshold());
+        Assertions.assertEquals(1024L, restored.getBroadcastMemThreshold());
+        clone.setBroadcastMemThreshold(Long.MAX_VALUE);
+        Assertions.assertEquals(1024L, variables.getBroadcastMemThreshold());
+        Assertions.assertEquals(Long.MAX_VALUE, clone.getBroadcastMemThreshold());
+        Assertions.assertThrows(SemanticException.class, () -> variables.setBroadcastMemThreshold(-1));
+        Assertions.assertEquals(1024L, variables.getBroadcastMemThreshold());
+    }
+
+    @Test
     public void testAITopNThresholdValidationAndState() throws Exception {
         SessionVariable variables = new SessionVariable();
-        Assertions.assertTrue(variables.isEnableAiTopnPushdown());
-        Assertions.assertEquals(1000, variables.getAiTopnPushdownMaxGlobalLimit());
+        Assertions.assertTrue(variables.isEnableAITopnPushdown());
+        Assertions.assertEquals(1000, variables.getAITopnPushdownMaxGlobalLimit());
         variables.replayFromJson("{}");
-        Assertions.assertTrue(variables.isEnableAiTopnPushdown());
-        Assertions.assertEquals(1000, variables.getAiTopnPushdownMaxGlobalLimit());
+        Assertions.assertTrue(variables.isEnableAITopnPushdown());
+        Assertions.assertEquals(1000, variables.getAITopnPushdownMaxGlobalLimit());
 
         variables.setAiTopnPushdownMaxGlobalLimit(0);
-        variables.setEnableAiTopnPushdown(false);
+        variables.setEnableAITopnPushdown(false);
         Assertions.assertEquals(false,
                 variables.getNonDefaultVariables().get(SessionVariable.ENABLE_AI_TOPN_PUSHDOWN).actualValue);
         Assertions.assertEquals(0L,
@@ -75,19 +104,19 @@ public class SessionVariableTest {
         SessionVariable clone = variables.clone();
         SessionVariable restored = new SessionVariable();
         restored.replayFromJson(variables.getJsonString());
-        Assertions.assertFalse(clone.isEnableAiTopnPushdown());
-        Assertions.assertFalse(restored.isEnableAiTopnPushdown());
-        Assertions.assertEquals(0, clone.getAiTopnPushdownMaxGlobalLimit());
-        Assertions.assertEquals(0, restored.getAiTopnPushdownMaxGlobalLimit());
+        Assertions.assertFalse(clone.isEnableAITopnPushdown());
+        Assertions.assertFalse(restored.isEnableAITopnPushdown());
+        Assertions.assertEquals(0, clone.getAITopnPushdownMaxGlobalLimit());
+        Assertions.assertEquals(0, restored.getAITopnPushdownMaxGlobalLimit());
 
         clone.setAiTopnPushdownMaxGlobalLimit(Long.MAX_VALUE);
-        clone.setEnableAiTopnPushdown(true);
-        Assertions.assertTrue(clone.isEnableAiTopnPushdown());
-        Assertions.assertFalse(variables.isEnableAiTopnPushdown());
-        Assertions.assertEquals(Long.MAX_VALUE, clone.getAiTopnPushdownMaxGlobalLimit());
-        Assertions.assertEquals(0, variables.getAiTopnPushdownMaxGlobalLimit());
+        clone.setEnableAITopnPushdown(true);
+        Assertions.assertTrue(clone.isEnableAITopnPushdown());
+        Assertions.assertFalse(variables.isEnableAITopnPushdown());
+        Assertions.assertEquals(Long.MAX_VALUE, clone.getAITopnPushdownMaxGlobalLimit());
+        Assertions.assertEquals(0, variables.getAITopnPushdownMaxGlobalLimit());
         Assertions.assertThrows(SemanticException.class, () -> variables.setAiTopnPushdownMaxGlobalLimit(-1));
-        Assertions.assertEquals(0, variables.getAiTopnPushdownMaxGlobalLimit());
+        Assertions.assertEquals(0, variables.getAITopnPushdownMaxGlobalLimit());
     }
 
     @Test

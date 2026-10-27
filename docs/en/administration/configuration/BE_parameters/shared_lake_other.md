@@ -239,6 +239,15 @@ This topic introduces the following types of BE configurations:
 - Description: An override of the Primary Key compaction score gate. When a below-threshold level's total bytes exceed `ratio * largest_rowset_bytes * size_tiered_level_multiple` (that is, `ratio` times the natural next-tier promotion target), compaction is forced to bound long-tail mid-tier accumulation. The default `2.0` tolerates twice the natural promotion threshold before forcing a merge. Set to `0` to disable this override, so that there is no size cap.
 - Introduced in: v4.2
 
+### lake_pk_partial_update_use_segment_cache
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether a Primary Key table publish in a shared-data cluster reads the base segments it needs through the segment metadata cache instead of opening each of them from scratch. This covers both row-mode partial updates and condition updates, which re-read old values from the same segments. Opening a segment parses its footer and builds one column reader per column of the tablet schema, so on a wide table a frequent partial-update stream repeats that cost on every publish for the same base segments. Reading through the cache lets a later publish reuse an already-opened segment. Tables containing JSON, ARRAY, MAP, or STRUCT columns, or columns enabled in `zstd_compression_columns`, use the original open path because their nested metadata or compression dictionaries are not covered by the column-count estimate. Such tables continue to bypass the cache when dictionary writing is disabled, because existing segments can still contain dictionaries. The cache is only used while the tablet's base segments fit in `lake_metadata_cache_limit` and each segment's estimated size fits in one cache shard; otherwise, filling the cache would evict entries as fast as it adds them, so the original behavior is used instead. The tablet's whole set is the relevant one because successive publishes read different subsets of it. Set this item to `false` to always open the segments from scratch.
+- Introduced in: v4.2
+
 ### enable_lake_prepared_split_pre_refinement
 
 - Default: true
@@ -632,6 +641,15 @@ This topic introduces the following types of BE configurations:
 - Is mutable: No
 - Description: Whether to use a unified Data Cache instance to manage data caching for both internal catalog and external catalog in a shared-data cluster.
 - Introduced in: v3.4.0
+
+### external_table_clear_corrupted_cache_data
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to allow the system to clear the corrupted data cache of external table files (for example, Hive and Iceberg tables). When a scan fails to decode a file whose content was read from the data cache, the system drops the cached blocks it read, so that the next read of the file recovers from the remote storage. For Parquet files, if no row has been returned yet, the system first reads the file again bypassing the data cache, and drops the cached blocks only if this read succeeds. This item does not affect the internal tables of shared-data clusters, which are controlled by `lake_clear_corrupted_cache_data`.
+- Introduced in: -
 
 ### jdbc_connection_idle_timeout_ms
 

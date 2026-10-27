@@ -435,6 +435,15 @@ This topic introduces the following types of FE configurations:
 - Description: The time range for retaining historical data versions in a shared-data cluster. Historical data versions within this time range are not automatically cleaned via AutoVacuum after Compactions. You need to set this value greater than the maximum query time to avoid that the data accessed by running queries get deleted before the queries finish. The default value has been changed from `5` to `30` since v3.3.0, v3.2.5, and v3.1.10.
 - Introduced in: v3.1.0
 
+### `lake_autovacuum_max_versions_per_round`
+
+- Default: 500
+- Type: Long
+- Unit: -
+- Is mutable: Yes
+- Description: Per-round work cap for the incremental (bounded, resumable) AutoVacuum in a shared-data cluster: the maximum number of metadata versions a single AutoVacuum round may commit and propose for a partition. The incremental protocol is always on and cannot be disabled, because the legacy one-shot path cannot safely resume after it (it would stop at the chain holes a bounded round leaves and miss the garbage below them). This value only bounds how much work each round does, so that a large backlog of historical versions drains across many rounds instead of repeatedly timing out a single RPC. Values below `100` are clamped up to `100` (a smaller per-round budget would need too many rounds to drain a backlog). It does not change tablet-to-node routing.
+- Introduced in: v4.1.0
+
 ### `lake_autovacuum_parallel_partitions`
 
 - Default: 8
@@ -461,6 +470,15 @@ This topic introduces the following types of FE configurations:
 - Is mutable: Yes
 - Description: If a partition has no updates (loading, DELETE, or Compactions) within this time range, the system will not perform AutoVacuum on this partition.
 - Introduced in: v3.1.0
+
+### `lake_vacuum_reset_partition_ids`
+
+- Default: (empty)
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: A recovery escape hatch for a wedged incremental AutoVacuum in a shared-data cluster: a semicolon-separated list of physical partition IDs (format `id1;id2`) whose incremental vacuum state should be force-reset. When the AutoVacuum daemon next processes a listed partition it discards the in-flight proposal, resume cursor, and tablet generation (while preserving the already-vacuumed retain floor, so the fresh pass does not re-read already-deleted versions), skips that round, and starts a clean pass on the next round. Each ID is consumed exactly once — the daemon removes it from the list immediately after resetting — so a stuck pass is nudged once rather than reset every round. Only the serving leader acts on this item: `ADMIN SET FRONTEND CONFIG` broadcasts the value to every FE, and each FE discards whatever it inherited at the moment it becomes leader, so a request issued shortly before a failover is lost and must be re-issued against the new leader. Leave it empty in normal operation.
+- Introduced in: v26.2.0
 
 ### `lake_compaction_allow_partial_success`
 

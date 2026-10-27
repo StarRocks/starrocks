@@ -258,8 +258,10 @@ public class ReorderJoinRule extends Rule {
                 }
                 enumerate(new JoinReorderLeftDeep(context), context, innerJoinRoot, multiJoinNode, true);
                 // If there is no statistical information, the DP and greedy reorder algorithm are disabled,
-                // and the query plan degenerates to the left deep tree
+                // and the query plan degenerates to the left deep tree, unless
+                // cbo_join_reorder_with_unknown_stats asks to reorder on the estimates anyway
                 if (Utils.hasUnknownColumnsStats(innerJoinRoot) &&
+                        !context.getSessionVariable().isCboJoinReorderWithUnknownStats() &&
                         (!FeConstants.runningUnitTest || FeConstants.isReplayFromQueryDump)) {
                     continue;
                 }

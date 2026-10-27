@@ -4,7 +4,7 @@ create external catalog iceberg_sql_test_${uuid0} PROPERTIES ("type"="iceberg", 
 -- !result
 select * from iceberg_sql_test_${uuid0}.iceberg_oss_db.t_scan_bug$files;
 -- result:
-0	oss://starrocks-ci-test/dla_test_data/iceberg/t_scan_bug_new/data/00000-0-614af1fa-d44f-4be0-ae46-14d0c5418439-0-00001.parquet	PARQUET	0	1	407	{1:39}	{1:1}	{1:0}	{}	{1:"1"}	{1:"1"}	[4]	0	None	None
+0	oss://starrocks-ci-test/dla_test_data/iceberg/t_scan_bug_new/data/00000-0-614af1fa-d44f-4be0-ae46-14d0c5418439-0-00001.parquet	PARQUET	0	1	407	{1:39}	{1:1}	{1:0}	{}	{1:"1"}	{1:"1"}	[4]	0	None	None	None	None	None	None
 -- !result
 select * from iceberg_sql_test_${uuid0}.iceberg_oss_db.t_scan_bug;
 -- result:

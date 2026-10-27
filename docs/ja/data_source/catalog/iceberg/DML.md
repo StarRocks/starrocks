@@ -126,7 +126,8 @@ Iceberg テーブルにロードされるクエリストートメントの結果
 ### 構文
 
 ```SQL
-DELETE FROM <table_name> WHERE <condition>
+DELETE FROM <table_name> [FOR VERSION AS OF <branch_name>]
+WHERE <condition>
 ```
 
 ### パラメーター
@@ -135,6 +136,8 @@ DELETE FROM <table_name> WHERE <condition>
   - 完全修飾名：`catalog_name.database_name.table_name`
   - データベース修飾名（catalog 設定後）：`database_name.table_name`
   - テーブル名のみ（catalog とデータベースの設定後）：`table_name`
+
+- `branch_name`: 行を削除するブランチ。ブランチから行を読み取り、変更をそのブランチにコミットします。タグではなくブランチである必要があります。
 
 - `condition`: 削除する行を識別する条件。以下を含めることができます：
   - 比較演算子：`=`、`!=`、`>`、`<`、`>=`、`<=`、`<>`
@@ -221,7 +224,7 @@ UPDATE は Iceberg V2 の **Merge-On-Read** モデルで実装しています。
 ### 構文
 
 ```SQL
-UPDATE <table_name>
+UPDATE <table_name> [FOR VERSION AS OF <branch_name>]
 SET <column_name> = <expression> [, <column_name> = <expression> ...]
 WHERE <condition>
 ```
@@ -234,6 +237,8 @@ WHERE <condition>
   - テーブル名のみ（catalog とデータベース設定後）：`table_name`
 
 - `column_name = expression`: 更新対象列と新しい値。式は同一行の他の列、およびほかのサポートされている任意のスカラー関数を参照できます。
+
+- `branch_name`: 更新するブランチ。ブランチから行を読み取り、変更をそのブランチにコミットします。タグではなくブランチである必要があります。
 
 - `condition`: 更新する行を識別する述語。サポートされる演算子は `DELETE` と同じです（比較演算子、論理演算子、`IN` / `NOT IN`、`BETWEEN`、`LIKE`、`IS NULL` / `IS NOT NULL`、`IN` / `EXISTS` サブクエリ）。
 
@@ -327,7 +332,7 @@ MERGE INTO は UPDATE と同じ Iceberg V2 の **Merge-On-Read** コミットパ
 ### 構文
 
 ```SQL
-MERGE INTO <target_table> [ [AS] <target_alias> ]
+MERGE INTO <target_table> [FOR VERSION AS OF <branch_name>] [ [AS] <target_alias> ]
 USING <source_relation> [ [AS] <source_alias> ]
 ON <merge_condition>
 [ WHEN MATCHED [ AND <condition> ] THEN { UPDATE SET <column_name> = <expression> [, ...] | DELETE } ]
@@ -342,6 +347,8 @@ ON <merge_condition>
   - 完全修飾名：`catalog_name.database_name.table_name`
   - データベース修飾名（catalog 設定後）：`database_name.table_name`
   - テーブル名のみ（catalog とデータベース設定後）：`table_name`
+
+- `branch_name`: マージ先のブランチ。ブランチからターゲット行を読み取り、変更をそのブランチにコミットします。タグではなくブランチである必要があります。
 
 - `source_relation`: merge を駆動するデータソース。テーブル、ビュー、または括弧で囲まれたサブクエリを指定できます。`ON` 条件または `WHEN` 句がその列を参照する場合は、エイリアスを付けてください。
 

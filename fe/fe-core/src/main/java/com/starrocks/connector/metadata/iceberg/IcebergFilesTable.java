@@ -66,6 +66,12 @@ public class IcebergFilesTable extends MetadataTable {
                         .column("sort_id", INT)
                         .column("equality_ids", ARRAY_INT)
                         .column("key_metadata", VARBINARY)
+                        // format v3: the first row id of a data file, and the data file and blob range a deletion
+                        // vector applies to
+                        .column("first_row_id", BIGINT)
+                        .column("referenced_data_file", VarcharType.VARCHAR)
+                        .column("content_offset", BIGINT)
+                        .column("content_size_in_bytes", BIGINT)
                         .build(),
                 originDb,
                 originTable,

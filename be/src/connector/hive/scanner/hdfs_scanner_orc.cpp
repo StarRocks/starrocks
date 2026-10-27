@@ -28,6 +28,7 @@
 #include "formats/orc/orc_min_max_decoder.h"
 #include "formats/orc/utils.h"
 #include "formats/paimon/paimon_delete_file_builder.h"
+#include "formats/reserved_columns.h"
 #include "gen_cpp/orc_proto.pb.h"
 #include "runtime/chunk_helper.h"
 #include "runtime/runtime_state.h"
@@ -36,10 +37,13 @@ namespace starrocks {
 
 struct SplitContext : public FileScanSplitContext {
     std::shared_ptr<std::string> footer;
+    // the file's deletes, built once by the task that splits the file: they are keyed by file-level row numbers
+    SkipRowsContextPtr skip_rows_ctx;
 
     FileScanSplitContextPtr clone() override {
         auto ctx = std::make_unique<SplitContext>();
         ctx->footer = footer;
+        ctx->skip_rows_ctx = skip_rows_ctx;
         return ctx;
     }
 };
@@ -133,7 +137,8 @@ bool OrcRowReaderFilter::filterMinMax(size_t rowGroupIdx,
             auto* max_col = max_chunk->get_column_raw_ptr_by_index(i);
             DCHECK(!min_col->is_constant() && !max_col->is_constant());
             int64_t tz_offset_in_seconds = _reader->tzoffset_in_seconds() - _writer_tzoffset_in_seconds;
-            Status st = OrcMinMaxDecoder::decode(slot, orc_type, stats, min_col, max_col, tz_offset_in_seconds);
+            Status st = OrcMinMaxDecoder::decode(slot, orc_type, stats, min_col, max_col, tz_offset_in_seconds,
+                                                 &_reader->tzinfo());
             if (!st.ok()) {
                 LOG(INFO) << strings::Substitute(
                         "OrcMinMaxDecoder decode failed, may occur performance degradation. Because SR's column($0) "
@@ -336,7 +341,7 @@ Status HdfsOrcScanner::build_iceberg_delete_builder() {
 
     for (const auto& delete_file : _scanner_ctx->table_specific.iceberg_delete_files) {
         if (delete_file->file_content == TIcebergFileContent::POSITION_DELETES) {
-            RETURN_IF_ERROR(iceberg_delete_builder.build_orc(*delete_file));
+            RETURN_IF_ERROR(iceberg_delete_builder.build_position_delete(*delete_file, THdfsFileFormat::ORC));
         } else {
             const auto s = strings::Substitute("Unsupported iceberg file content: $0 in the scanner thread",
                                                delete_file->file_content);
@@ -430,6 +435,18 @@ Status HdfsOrcScanner::resolve_columns(orc::Reader* reader) {
         return Status::OK();
     }
 
+    _row_position_slot = nullptr;
+    for (const auto* slot : _scanner_ctx->format_scan_context.reserved_field_slots) {
+        if (slot->col_name() == formats::kIcebergRowPositionColumnName) {
+            _row_position_slot = slot;
+            // the scanner fills _pos itself, so it also evaluates the single-slot conjuncts on it
+            auto it = _scanner_ctx->format_scan_context.conjuncts.by_slot.find(slot->id());
+            if (it != _scanner_ctx->format_scan_context.conjuncts.by_slot.end()) {
+                _eval_conjunct_ctxs_by_materialized_slot.emplace(it->first, it->second);
+            }
+        }
+    }
+
     int src_slot_index = 0;
     for (const auto& column : _scanner_ctx->format_scan_context.materialized_columns) {
         auto col_name = Utils::format_name(column.name(), _scanner_ctx->format_scan_context.options.case_sensitive);
@@ -473,6 +490,7 @@ Status HdfsOrcScanner::build_split_tasks(orc::Reader* reader, const std::vector<
     for (const auto& info : stripes) {
         auto ctx = std::make_unique<SplitContext>();
         ctx->footer = footer;
+        ctx->skip_rows_ctx = _skip_rows_ctx;
         ctx->start_offset = info.offset();
         ctx->end_offset = info.offset() + info.length();
         _scanner_ctx->format_scan_context.split.split_tasks.emplace_back(std::move(ctx));
@@ -525,6 +543,20 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     // select stripes to read and resolve columns aganist this orc file.
     std::vector<DiskRange> stripes;
     RETURN_IF_ERROR(build_stripes(reader.get(), &stripes));
+    // resolved before the deletes are loaded: a conjunct on a column the file lacks may skip the whole file
+    RETURN_IF_ERROR(resolve_columns(reader.get()));
+    if (_should_skip_file) {
+        return Status::OK();
+    }
+    // a split task reuses the deletes of the task that split the file; the others build them before splitting,
+    // unless they read no stripe
+    if (_scanner_ctx->format_scan_context.split_context != nullptr) {
+        auto* split_context = down_cast<const SplitContext*>(_scanner_ctx->format_scan_context.split_context);
+        _skip_rows_ctx = split_context->skip_rows_ctx;
+    } else if (!stripes.empty()) {
+        RETURN_IF_ERROR(build_iceberg_delete_builder());
+        RETURN_IF_ERROR(build_paimon_delete_file_builder());
+    }
     RETURN_IF_ERROR(build_split_tasks(reader.get(), stripes));
     if (_scanner_ctx->format_scan_context.split.split_tasks.size() > 0) {
         _scanner_ctx->format_scan_context.split.has_split_tasks = true;
@@ -533,10 +565,6 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     }
 
     RETURN_IF_ERROR(build_io_ranges(orc_hdfs_file_stream, stripes));
-    RETURN_IF_ERROR(resolve_columns(reader.get()));
-    if (_should_skip_file) {
-        return Status::OK();
-    }
 
     // create orc chunk reader .
     _orc_reader = std::make_unique<OrcChunkReader>(runtime_state->chunk_size(), _src_slot_descriptors);
@@ -576,10 +604,6 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     }
     const OrcPredicates orc_predicates{&conjuncts, _scanner_ctx->runtime_filter_collector};
     RETURN_IF_ERROR(_orc_reader->init(std::move(reader), &orc_predicates));
-
-    // create iceberg delete builder at last
-    RETURN_IF_ERROR(build_iceberg_delete_builder());
-    RETURN_IF_ERROR(build_paimon_delete_file_builder());
     return Status::OK();
 }
 
@@ -653,6 +677,7 @@ StatusOr<size_t> HdfsOrcScanner::_do_get_next(ChunkPtr* chunk) {
         size_t read_num_values = 0;
         bool has_used_dict_filter = false;
         MutableColumnPtr row_delete_filter = BooleanColumn::create();
+        MutableColumnPtr row_positions;
         {
             SCOPED_RAW_TIMER(&_app_stats.column_read_ns);
             RETURN_IF_ERROR(_orc_reader->read_next(&position));
@@ -663,11 +688,22 @@ StatusOr<size_t> HdfsOrcScanner::_do_get_next(ChunkPtr* chunk) {
             }
             // read num values is how many rows actually read before doing dict filtering.
             read_num_values = position.num_values;
+            if (_row_position_slot != nullptr) {
+                row_positions =
+                        ColumnHelper::create_column(_row_position_slot->type(), _row_position_slot->is_nullable());
+                int64_t first_row = _orc_reader->current_row_number();
+                for (size_t i = 0; i < read_num_values; i++) {
+                    row_positions->append_datum(Datum(static_cast<int64_t>(first_row + i)));
+                }
+            }
             RETURN_IF_ERROR(_orc_reader->apply_dict_filter_eval_cache(_orc_row_reader_filter->_dict_filter_eval_cache,
                                                                       &_dict_filter));
             if (_orc_reader->get_cvb_size() != read_num_values) {
                 has_used_dict_filter = true;
                 row_delete_filter->filter(_dict_filter);
+                if (row_positions != nullptr) {
+                    row_positions->filter(_dict_filter);
+                }
             }
         }
 
@@ -686,6 +722,9 @@ StatusOr<size_t> HdfsOrcScanner::_do_get_next(ChunkPtr* chunk) {
                 }
                 RETURN_IF_ERROR(ret);
                 *chunk = std::move(ret.value());
+            }
+            if (row_positions != nullptr) {
+                ck->append_column(std::move(row_positions), _row_position_slot->id());
             }
 
             // we need to append none existed column before do eval, just for count(*) optimization
@@ -773,17 +812,16 @@ Status HdfsOrcScanner::do_init(RuntimeState* runtime_state, const HdfsScannerCon
 }
 
 void HdfsOrcScanner::do_update_counter(HdfsScannerProfile* profile) {
+    const std::string orcProfileSectionPrefix = "ORC";
+    RuntimeProfile* root_profile = profile->runtime_profile;
+    ADD_COUNTER(root_profile, orcProfileSectionPrefix, TUnit::NONE);
+    // the deletes are built only by the task that splits the file, not by its split tasks
+    do_update_iceberg_v2_counter(root_profile, orcProfileSectionPrefix);
     // if we have split tasks, we don't need to update counter
     // and we will update those counters in sub io tasks.
     if (has_split_tasks()) {
         return;
     }
-    const std::string orcProfileSectionPrefix = "ORC";
-
-    RuntimeProfile* root_profile = profile->runtime_profile;
-    ADD_COUNTER(root_profile, orcProfileSectionPrefix, TUnit::NONE);
-
-    do_update_iceberg_v2_counter(root_profile, orcProfileSectionPrefix);
 
     RuntimeProfile::Counter* total_stripe_size_counter = root_profile->add_child_counter(
             "TotalStripeSize", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TCounterAggregateType::SUM),

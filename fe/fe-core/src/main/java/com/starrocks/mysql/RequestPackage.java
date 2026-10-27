@@ -16,5 +16,9 @@ package com.starrocks.mysql;
 
 import java.nio.ByteBuffer;
 
-public record RequestPackage(int packageId, ByteBuffer byteBuffer) {
+// compressedSequenceId is the id of the compressed packet that ended this request, or -1 without compression.
+public record RequestPackage(int packageId, ByteBuffer byteBuffer, int compressedSequenceId) {
+    public RequestPackage(int packageId, ByteBuffer byteBuffer) {
+        this(packageId, byteBuffer, -1);
+    }
 }

@@ -20,6 +20,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.BucketProperty;
+import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.RemoteFileInfoDefaultSource;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.planner.PartitionIdGenerator;
@@ -29,6 +30,7 @@ import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.planner.TupleId;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.thrift.TExprNodeType;
+import com.starrocks.thrift.THdfsFileFormat;
 import com.starrocks.thrift.THdfsPartition;
 import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TScanRangeLocations;
@@ -50,7 +52,9 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import static com.starrocks.type.IntegerType.BIGINT;
 import static com.starrocks.type.IntegerType.INT;
@@ -142,6 +146,91 @@ public class IcebergConnectorScanRangeSourceTest extends TableTestBase {
         }
     }
 
+    // A position delete file is sent with its own format, which may differ from its data file's.
+    @Test
+    public void testPositionDeleteFileFormat() {
+        DataFile orcFile = DataFiles.builder(SPEC_A)
+                .withPath("/path/to/data-a-orc.orc")
+                .withFormat(FileFormat.ORC)
+                .withFileSizeInBytes(10)
+                .withPartitionPath("data_bucket=0")
+                .withRecordCount(2)
+                .build();
+        DeleteFile parquetDeletes = FileMetadata.deleteFileBuilder(SPEC_A).ofPositionDeletes()
+                .withPath("/path/to/data-a-orc-deletes.parquet").withFormat(FileFormat.PARQUET)
+                .withFileSizeInBytes(10).withRecordCount(1).withPartitionPath("data_bucket=0").build();
+        TestTables.TestTable v2Table = create(SCHEMA_A, SPEC_A, "ta_v2_orc_pos_delete", 2);
+        v2Table.newFastAppend().appendFile(orcFile).commit();
+        v2Table.newRowDelta().addDeletes(parquetDeletes).commit();
+        IcebergTable icebergTable = new IcebergTable(1, "iceberg_table", "iceberg_catalog", "resource", "db",
+                "table", "", Lists.newArrayList(new Column("id", INT), new Column("data", VARCHAR)), v2Table,
+                Maps.newHashMap());
+        List<RemoteFileInfo> infos = new ArrayList<>();
+        v2Table.newScan().planFiles().forEach(task -> infos.add(new IcebergRemoteFileInfo(task)));
+        IcebergConnectorScanRangeSource source = new IcebergConnectorScanRangeSource(icebergTable,
+                new RemoteFileInfoDefaultSource(infos), IcebergMORParams.EMPTY, tupleDescriptor, Optional.empty(),
+                PartitionIdGenerator.of(), false, false, false);
+
+        THdfsScanRange range = source.getSourceOutputs(100).get(0).getScan_range().getHdfs_scan_range();
+        Assertions.assertEquals(THdfsFileFormat.ORC, range.getFile_format());
+        Assertions.assertEquals(THdfsFileFormat.PARQUET, range.getDelete_files().get(0).getFile_format());
+    }
+
+    @Test
+    public void testBucketsOfOneIdentityPartitionShareAPartitionId() throws Exception {
+        PartitionSpec spec = PartitionSpec.builderFor(SCHEMA_B).identity("k2").bucket("k1", 4).build();
+        TestTables.TestTable nativeTable = create(SCHEMA_B, spec, "t_identity_bucket", 2);
+        DataFile k2Is1Bucket0 = DataFiles.builder(spec).withPath("/path/to/k2=1/k1_bucket=0/a.parquet")
+                .withFileSizeInBytes(10).withPartitionPath("k2=1/k1_bucket=0").withRecordCount(1).build();
+        DataFile k2Is1Bucket1 = DataFiles.builder(spec).withPath("/path/to/k2=1/k1_bucket=1/b.parquet")
+                .withFileSizeInBytes(10).withPartitionPath("k2=1/k1_bucket=1").withRecordCount(1).build();
+        DataFile k2Is2Bucket0 = DataFiles.builder(spec).withPath("/path/to/k2=2/k1_bucket=0/c.parquet")
+                .withFileSizeInBytes(10).withPartitionPath("k2=2/k1_bucket=0").withRecordCount(1).build();
+        nativeTable.newFastAppend().appendFile(k2Is1Bucket0).appendFile(k2Is1Bucket1).appendFile(k2Is2Bucket0).commit();
+
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(5));
+        SlotDescriptor k1Slot = new SlotDescriptor(new SlotId(1), desc);
+        k1Slot.setType(INT);
+        k1Slot.setColumn(new Column("k1", INT));
+        desc.addSlot(k1Slot);
+        SlotDescriptor k2Slot = new SlotDescriptor(new SlotId(2), desc);
+        k2Slot.setType(INT);
+        k2Slot.setColumn(new Column("k2", INT));
+        desc.addSlot(k2Slot);
+
+        IcebergTable icebergTable = new IcebergTable(1, "iceberg_table", "iceberg_catalog", "resource", "db",
+                "table", "", Lists.newArrayList(new Column("k1", INT), new Column("k2", INT)), nativeTable,
+                Maps.newHashMap());
+        IcebergConnectorScanRangeSource scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable,
+                RemoteFileInfoDefaultSource.EMPTY, IcebergMORParams.EMPTY, desc, Optional.empty(),
+                PartitionIdGenerator.of(), false, false);
+
+        Map<String, Long> idByFile = Maps.newHashMap();
+        Map<String, Long> k2ByFile = Maps.newHashMap();
+        Map<String, THdfsPartition> valueByFile = Maps.newHashMap();
+        for (FileScanTask task : nativeTable.newScan().planFiles()) {
+            long partitionId = scanRangeSource.addPartition(task);
+            // a second call hits the cache and returns the same id
+            Assertions.assertEquals(partitionId, scanRangeSource.addPartition(task));
+            THdfsScanRange range = scanRangeSource.buildScanRange(task, task.file(), partitionId);
+            idByFile.put(task.file().location(), partitionId);
+            valueByFile.put(task.file().location(), range.getPartition_value());
+            k2ByFile.put(task.file().location(),
+                    range.getPartition_value().getPartition_key_exprs().get(0).getNodes().get(0).getInt_literal().getValue());
+        }
+
+        Assertions.assertEquals(idByFile.get(k2Is1Bucket0.location()), idByFile.get(k2Is1Bucket1.location()));
+        Assertions.assertNotEquals(idByFile.get(k2Is1Bucket0.location()), idByFile.get(k2Is2Bucket0.location()));
+        Assertions.assertEquals(1L, k2ByFile.get(k2Is1Bucket0.location()));
+        Assertions.assertEquals(1L, k2ByFile.get(k2Is1Bucket1.location()));
+        Assertions.assertEquals(2L, k2ByFile.get(k2Is2Bucket0.location()));
+        // files of one partition id share one thrift partition value
+        Assertions.assertSame(valueByFile.get(k2Is1Bucket0.location()), valueByFile.get(k2Is1Bucket1.location()));
+        Assertions.assertNotSame(valueByFile.get(k2Is1Bucket0.location()), valueByFile.get(k2Is2Bucket0.location()));
+        // the partition count still counts every (k2, bucket) combination
+        Assertions.assertEquals(3, scanRangeSource.selectedPartitionCount());
+    }
+
     @Test
     public void testSamePartitionIdForSamePartitionKeysAcrossDifferentSources() throws Exception {
         List<Column> schema = new ArrayList<>();
@@ -193,6 +282,54 @@ public class IcebergConnectorScanRangeSourceTest extends TableTestBase {
 
         Assertions.assertFalse(fullSchema.stream().anyMatch(
                 column -> column.getName().equals(IcebergTable.LAST_UPDATED_SEQUENCE_NUMBER)));
+    }
+
+    // A runtime-filter pruning column of an equality delete scan holds the delete file's identity partition value,
+    // also without a session (incremental scan ranges), and a delete file that cannot provide it fails the query.
+    @Test
+    public void testEqualityDeleteRangeTakesPruningColumnFromPartition() throws Exception {
+        ConnectContext.remove();
+        DeleteFile eqDelete = FileMetadata.deleteFileBuilder(SPEC_B)
+                .ofEqualityDeletes(1)
+                .withPath("/path/to/data-b1-eq-deletes.parquet")
+                .withFormat(FileFormat.PARQUET)
+                .withFileSizeInBytes(10)
+                .withPartitionPath("k2=2")
+                .withRecordCount(1)
+                .build();
+        mockedNativeTableC.newFastAppend().appendFile(FILE_B_1).commit();
+        mockedNativeTableC.newRowDelta().addDeletes(eqDelete).commit();
+        List<Column> schema = Lists.newArrayList(new Column("k1", INT), new Column("k2", INT));
+        IcebergTable icebergTable = new IcebergTable(1, "iceberg_table", "iceberg_catalog",
+                "resource", "db", "table", "", schema, mockedNativeTableC, Maps.newHashMap());
+
+        TupleDescriptor localTupleDescriptor = new TupleDescriptor(new TupleId(3));
+        for (Column column : schema) {
+            SlotDescriptor slot = new SlotDescriptor(new SlotId(localTupleDescriptor.getSlots().size() + 1),
+                    localTupleDescriptor);
+            slot.setType(INT);
+            slot.setColumn(column);
+            localTupleDescriptor.addSlot(slot);
+        }
+        IcebergMORParams eqDeleteParams = IcebergMORParams.of(IcebergMORParams.ScanTaskType.EQ_DELETE, List.of(1));
+        FileScanTask task = Lists.newArrayList(mockedNativeTableC.newScan().planFiles()).get(0);
+
+        IcebergConnectorScanRangeSource source = new IcebergConnectorScanRangeSource(icebergTable,
+                RemoteFileInfoDefaultSource.EMPTY, eqDeleteParams, localTupleDescriptor, Optional.empty(),
+                PartitionIdGenerator.of(), false, false);
+        source.setRuntimeFilterPruningColumns(Set.of("k2"));
+        List<TScanRangeLocations> ranges = source.toScanRanges(task);
+        Assertions.assertEquals(1, ranges.size());
+        THdfsScanRange range = ranges.get(0).getScan_range().getHdfs_scan_range();
+        Assertions.assertTrue(range.getPartition_id() >= 0);
+        Assertions.assertEquals(List.of(localTupleDescriptor.getColumnSlot("k2").getId().asInt()),
+                range.getIdentity_partition_slot_ids());
+
+        IcebergConnectorScanRangeSource notPartitioned = new IcebergConnectorScanRangeSource(icebergTable,
+                RemoteFileInfoDefaultSource.EMPTY, eqDeleteParams, localTupleDescriptor, Optional.empty(),
+                PartitionIdGenerator.of(), false, false);
+        notPartitioned.setRuntimeFilterPruningColumns(Set.of("k1"));
+        Assertions.assertThrows(StarRocksConnectorException.class, () -> notPartitioned.toScanRanges(task));
     }
 
     @Test

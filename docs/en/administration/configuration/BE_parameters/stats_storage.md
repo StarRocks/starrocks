@@ -727,6 +727,15 @@ This topic introduces the following types of BE configurations:
 - Description: The maximum number of rowsets that can be merged in a single Compaction for Primary Key tables.
 - Introduced in: -
 
+### max_update_compaction_num_level_minus_one_rowsets
+
+- Default: 10000
+- Type: Int
+- Unit: Rowsets
+- Is mutable: Yes
+- Description: Maximum number of level -1 rowsets selected per size-tiered Primary Key compaction. Values below 2 are treated as 2. Level -1 includes rowsets with zero rows or zero estimated live bytes. This limit applies to level -1 inputs, not to the total number of inputs when other levels are also selected.
+- Introduced in: -
+
 ### memory_limitation_per_thread_for_schema_change
 
 - Default: 2
@@ -1350,6 +1359,15 @@ This topic introduces the following types of BE configurations:
 - Is mutable: Yes
 - Description: The count of threads for shared-data table tablet metadata fetch operations (e.g., `get_tablet_stats`, `get_tablet_metadatas`).
 - Introduced in: v3.5.16, v4.0.9
+
+### tablet_writer_add_segment_lock_timeout_ms
+
+- Default: 0
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: Total lock-wait budget on a secondary BE for receiving replicated segments in shared-nothing clusters. A value less than or equal to `0` uses `be_exit_after_disk_write_hang_second` converted to milliseconds; a positive value overrides that budget. The LoadChannel mutex and LocalTabletsChannel shared lock use one deadline, calculated once at the start of the BRPC request handler. If either lock times out, the RPC returns a timeout error before submitting the segment for writing. This budget is independent of the RPC timeout and does not limit subsequent segment flush or commit work. It applies only to segment replication reception. The writer hang exit timer has a separate starting point, so this budget does not guarantee that lock timeout precedes a BE exit.
+- Introduced in: -
 
 ### tablet_writer_open_rpc_timeout_sec
 

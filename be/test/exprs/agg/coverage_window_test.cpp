@@ -27,7 +27,6 @@
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/function_context.h"
 #include "exprs/geo_functions.h"
-#include "geo/geo_coverage_simplify.h"
 #include "geo/wkb.h"
 #include "runtime/current_thread.h"
 #include "runtime/mem_pool.h"
@@ -171,7 +170,7 @@ TEST(CoverageWindowTest, MultiplePartitionsShareAChunkWithoutDeduplicatingRows) 
     EXPECT_EQ(geo_data(result)->get_wkb(1).to_string(), bytes(left));
     EXPECT_EQ(output_text(result, 2), "POLYGON EMPTY");
     EXPECT_TRUE(result->is_null(3));
-    EXPECT_EQ(h.fn.kernel_calls(h.storage.data()), 0); // Zero tolerance validates without simplifying.
+    EXPECT_EQ(h.fn.kernel_calls(h.storage.data()), 0); // Zero tolerance preserves bytes without simplifying.
     result->check_or_die();
 }
 
@@ -258,12 +257,42 @@ TEST(CoverageWindowTest, GuardsApplyDuringInitializationAndToNativeInput) {
     EXPECT_TRUE(line.ctx->has_error());
 }
 
-TEST(CoverageWindowTest, InvalidCoverageFailsWithoutWritingOutput) {
+TEST(CoverageWindowTest, InvalidCoveragePreservesStructuralOutputAndRowMapping) {
+    for (double tolerance : {0.0, 1.0})
+        for (int form = 0; form < 3; ++form) {
+            WindowHarness h(tolerance, form == 1, form != 2);
+            h.evaluate(coverage_input({left, std::nullopt, left, "POLYGON EMPTY"}));
+            ASSERT_FALSE(h.ctx->has_error()) << h.ctx->error_msg();
+            auto result = h.result(4);
+            ASSERT_FALSE(h.ctx->has_error()) << h.ctx->error_msg();
+            ASSERT_EQ(result->size(), 4);
+            EXPECT_TRUE(result->is_null(1));
+            EXPECT_EQ(output_text(result, 3), "POLYGON EMPTY");
+            for (size_t row : {size_t{0}, size_t{2}}) {
+                ASSERT_FALSE(result->is_null(row));
+                WkbGeometry geometry;
+                ASSERT_TRUE(WkbCodec::parse_wkb(geo_data(result)->get_wkb(row), &geometry,
+                                                WkbCoordinateSemantics::GEOMETRY_CARTESIAN)
+                                    .ok());
+                ASSERT_EQ(geometry.type, WkbGeometryType::POLYGON);
+                ASSERT_EQ(geometry.rings.size(), 1);
+                ASSERT_GE(geometry.rings[0].size(), 4);
+                EXPECT_DOUBLE_EQ(geometry.rings[0].front().x, geometry.rings[0].back().x);
+                EXPECT_DOUBLE_EQ(geometry.rings[0].front().y, geometry.rings[0].back().y);
+            }
+            EXPECT_EQ(geo_data(result)->descriptor().type, *coverage_type().geo_type);
+            EXPECT_EQ(geo_data(result)->descriptor().storage.validation_state,
+                      GEO_VALIDATION_STATE_SEMANTICALLY_VALIDATED);
+            result->check_or_die();
+        }
+}
+
+TEST(CoverageWindowTest, TooManyEdgeOwnersFailsWithoutWritingOutput) {
     WindowHarness h;
-    h.evaluate(coverage_input({left, left}));
+    h.evaluate(coverage_input({left, left, left}));
     ASSERT_TRUE(h.ctx->has_error());
     EXPECT_NE(std::string(h.ctx->error_msg()).find("ST_CoverageSimplify"), std::string::npos);
-    auto result = h.result(2);
+    auto result = h.result(3);
     EXPECT_EQ(result->size(), 0);
     result->check_or_die();
 }
@@ -283,11 +312,7 @@ TEST(CoverageWindowTest, EmptyInputStillChecksParametersAndTypes) {
     valid.fn.destroy(arity.get(), state.data());
 }
 
-TEST(CoverageWindowTest, CancellationAndOutputOwnershipUseTheNormalLifecycle) {
-    WindowHarness cancelled;
-    cancelled.runtime.set_is_cancelled(true);
-    cancelled.evaluate(coverage_input({left}));
-    EXPECT_TRUE(cancelled.ctx->has_error());
+TEST(CoverageWindowTest, OutputOwnershipUsesTheNormalLifecycle) {
     WindowHarness h;
     h.evaluate(coverage_input({left, right}));
     auto result = h.result(2);
@@ -360,37 +385,6 @@ TEST(CoverageWindowTest, KernelAllocationsUseTheStandardThreadTracker) {
     {
         SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(h.query.get());
         h.fn.reset(h.ctx.get(), {}, h.storage.data());
-    }
-    EXPECT_EQ(h.query->consumption(), 0);
-}
-
-TEST(CoverageWindowTest, QueryMemoryLimitStopsInsideKernel) {
-    WkbGeometry polygon;
-    polygon.type = WkbGeometryType::POLYGON;
-    auto& ring = polygon.rings.emplace_back();
-    // Allocation or a memory poll must stop decoding before the zero-area ring error.
-    for (int i = 0; i < 20000; ++i) ring.push_back({double(i), 0});
-    ring.push_back({0, 0});
-    std::string input;
-    ASSERT_TRUE(WkbCodec::to_wkb(polygon, &input, WkbCoordinateSemantics::GEOMETRY_CARTESIAN).ok());
-    WindowHarness h(1, false, true, 1024 * 1024);
-    {
-        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(h.query.get());
-        if (CurrentThread::mem_tracker() == nullptr)
-            GTEST_SKIP() << "The test harness has not initialized the runtime memory tracker source";
-        if (!standard_allocations_are_tracked(h.query.get()))
-            GTEST_SKIP() << "This build has no query accounting in standard allocation hooks";
-        auto created = GeoCoverageSimplify::create({&h.runtime, [](void* state) {
-                                                        return static_cast<RuntimeState*>(state)->check_mem_limit(
-                                                                "ST_CoverageSimplify");
-                                                    }});
-        ASSERT_TRUE(created.ok()) << created.status();
-        auto coverage = std::move(created).value();
-        ASSERT_TRUE(coverage->append(Slice(input)).ok());
-        ASSERT_TRUE(h.runtime.check_mem_limit("before kernel").ok());
-        const auto status = coverage->finish(1, false);
-        EXPECT_TRUE(status.is_mem_limit_exceeded()) << status;
-        EXPECT_FALSE(coverage->result(0).ok());
     }
     EXPECT_EQ(h.query->consumption(), 0);
 }

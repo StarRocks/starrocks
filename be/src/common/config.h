@@ -504,6 +504,8 @@ CONF_mInt32(update_compaction_per_tablet_min_interval_seconds, "120"); // 2min
 // set this value to none zero if auto algorithm isn't working well
 CONF_mInt32(update_compaction_chunk_size_for_row_store, "0");
 CONF_mInt64(max_update_compaction_num_singleton_deltas, "500");
+// Maximum number of level -1 rowsets selected per size-tiered primary key compaction. Values below 2 are treated as 2.
+CONF_mInt64(max_update_compaction_num_level_minus_one_rowsets, "10000");
 CONF_mInt64(update_compaction_size_threshold, "268435456");
 CONF_mInt64(update_compaction_result_bytes, "1073741824");
 // This config controls the io amp ratio of delvec files.
@@ -814,6 +816,10 @@ CONF_Int32(streaming_load_rpc_max_alive_time_sec, "1200");
 // The timeout of a rpc to open the tablet writer in remote BE.
 // actual timeout is min(tablet_writer_open_rpc_timeout_sec, load_timeout_sec / 2)
 CONF_mInt32(tablet_writer_open_rpc_timeout_sec, "300");
+// Combined lock-wait budget for receiving a replicated segment, in milliseconds.
+// The deadline is computed at the BRPC handler entry and shared by both channel locks.
+// Nonpositive values use be_exit_after_disk_write_hang_second converted to milliseconds; a positive value overrides it.
+CONF_mInt32(tablet_writer_add_segment_lock_timeout_ms, "0");
 // make_snapshot rpc timeout
 CONF_Int32(make_snapshot_rpc_timeout_ms, "20000");
 // Deprecated, use query_timeout instread
@@ -1693,6 +1699,19 @@ CONF_mBool(experimental_lake_ignore_pk_consistency_check, "false");
 // default; set it to false before rolling back to (or running a mixed cluster with) a pre-fix BE so
 // the legacy path is used and no incompatible on-disk state is written.
 CONF_mBool(lake_enable_pk_preserve_txn_delete_order, "true");
+// Whether a Primary Key publish reads the base segments it needs through the segment metacache
+// (TabletManager::load_segment) instead of a static Segment::open. This covers every base-segment
+// read in UpdateManager::get_column_values -- row-mode partial update and condition update alike,
+// since both re-read old values from the same segments and pay the same cost. The static open
+// neither looks up nor fills the cache, so every publish re-parses the footer and rebuilds a column
+// reader for every column of the tablet schema, a cost paid again on each publish for base segments
+// that a high frequency update stream keeps touching. The cache is used only while the tablet's base
+// segments fit in lake_metadata_cache_limit and each segment's estimate fits in a cache shard;
+// otherwise, publish falls back to the static open rather than thrash. The auto-increment branch
+// always uses the static open: it reads this transaction's own segment through a schema restricted
+// to the partial-update columns, which must never be published into the cache. Set to false to
+// restore the static open everywhere.
+CONF_mBool(lake_pk_partial_update_use_segment_cache, "true");
 CONF_mInt64(lake_publish_version_slow_log_ms, "1000");
 // Timeout guard in milliseconds for writing txn log (put_txn_log / put_combined_txn_log).
 // When writing a txn log takes longer than this threshold, the stack trace of the slow thread
@@ -1829,6 +1848,8 @@ CONF_mBool(lake_enable_protobuf_file_checksum, "true");
 CONF_mBool(lake_clear_corrupted_cache_meta, "true");
 // clear *.data cache for lake table
 CONF_mBool(lake_clear_corrupted_cache_data, "false");
+// clear corrupted datacache for external tables, as lake_clear_corrupted_cache_data does for lake tables
+CONF_mBool(external_table_clear_corrupted_cache_data, "true");
 // The maximum number of files which need to rebuilt in cloud native pk index.
 // If files which need to rebuilt larger than this, we will flush memtable immediately.
 CONF_mInt32(cloud_native_pk_index_rebuild_files_threshold, "50");
@@ -2634,13 +2655,6 @@ CONF_mString(ai_function_on_error, "ignore");
 CONF_mInt32(ai_function_rate_limit_qps_chat, "128");
 CONF_mInt32(ai_function_rate_limit_qps_embedding, "128");
 CONF_mInt32(ai_function_max_inflight, "512");
-
-// Legacy ai_query runtime configuration. It is intentionally independent from the AI function runtime.
-CONF_Int32(llm_max_queue_size, "4096");
-
-CONF_Int32(llm_max_concurrent_queries, "8");
-
-CONF_Int32(llm_cache_size, "131072");
 
 CONF_mBool(enable_pipeline_driver_parallel_prepare, "true");
 // When enabled, ScanExecutor uses LockFreeWorkGroupScanTaskQueue for OLAP and connector scan task scheduling.

@@ -168,6 +168,12 @@ public:
     // Uses the same coordinate preparation and S2 topology policy as from_coords.
     static bool is_valid_ring(const GeoCoordinateList& coordinates);
 
+    // Check small rings directly with the same S2 predicates; large rings use is_valid_ring.
+    static bool is_valid_ring_direct(const GeoCoordinateList& coordinates);
+
+    // Upper bound for the direct O(V^2) ring check; chosen by a paired sweep over 4..512 vertices.
+    static constexpr size_t kMaxDirectVertices = 512;
+
     GeoShapeType type() const override { return GEO_SHAPE_POLYGON; }
     const S2Polygon* polygon() const { return _polygon.get(); }
 

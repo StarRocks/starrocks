@@ -430,14 +430,15 @@ public class CostModel {
                     result = CostEstimate.of(outputSize * aliveBackendNumber,
                             outputSize * beNum,
                             Math.max(outputSize * beNum, 1));
+                    long broadcastMemThreshold = sessionVariable.getBroadcastMemThreshold();
                     double broadcastMemExceededPenaltyFactor =
                             sessionVariable.getBroadcastMemExceededPenaltyFactor();
-                    if (outputSize > sessionVariable.getMaxExecMemByte()) {
+                    if (outputSize > broadcastMemThreshold) {
                         result = result.multiplyBy(broadcastMemExceededPenaltyFactor);
                     }
-                    LOG.debug("beNum: {}, aliveBeNum: {}, outputSize: {}, execMemLimit: {}, " +
+                    LOG.debug("beNum: {}, aliveBeNum: {}, outputSize: {}, broadcastMemThreshold: {}, " +
                                     "broadcastMemExceededPenaltyFactor: {}.",
-                            beNum, aliveBackendNumber, outputSize, sessionVariable.getMaxExecMemByte(),
+                            beNum, aliveBackendNumber, outputSize, broadcastMemThreshold,
                             broadcastMemExceededPenaltyFactor);
                     break;
                 case SHUFFLE:

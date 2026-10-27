@@ -236,9 +236,12 @@ Status FlatJsonColumnCompactor::_merge_columns(MutableColumns& json_datas) {
             auto j = merger->merge(json_col->get_flat_fields());
 
             if (col->is_nullable()) {
-                auto n_ptr = NullableColumn::create(j, null_col)->as_mutable_raw_ptr();
-                auto* n = down_cast<NullableColumn*>(n_ptr);
-                n->set_has_null(col->has_null());
+                // Hold the column while it is written. as_mutable_raw_ptr() hands back a raw
+                // pointer without taking a reference, so taking it off the temporary that create()
+                // returns left it dangling at the semicolon: set_has_null() wrote into freed memory
+                // and append() read it back out.
+                ColumnPtr n = NullableColumn::create(j, null_col);
+                down_cast<NullableColumn*>(n->as_mutable_raw_ptr())->set_has_null(col->has_null());
                 RETURN_IF_ERROR(_json_writer->append(*n));
             } else {
                 RETURN_IF_ERROR(_json_writer->append(*j));

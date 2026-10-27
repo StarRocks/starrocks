@@ -17,7 +17,9 @@ create external catalog hive_eq_scope_${uuid0} PROPERTIES ("type"="hive",
     "aws.s3.endpoint"="${oss_endpoint}"
 );
 
-create database iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0};
+create database iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0} properties (
+    "location" = "oss://${oss_bucket}/eq_scope_db_${uuid0}/db"
+);
 
 -- the equality key (id) does not contain the partition column: p=a deletes id 1, p=b deletes id 2
 create table iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.by_id(
@@ -41,7 +43,11 @@ select * from iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.by_id order by p, i
 select count(*) from iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.by_id;
 select * from iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.by_id where p = 'b' order by id;
 select * from iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.by_id where id = 1 order by p;
+-- with runtime filter pruning the identity column p does the partition match in place of $partition_key
+set enable_iceberg_eq_delete_runtime_filter_pruning = false;
 function: assert_explain_contains('select * from iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.by_id', '$partition_key')
+set enable_iceberg_eq_delete_runtime_filter_pruning = true;
+function: assert_explain_not_contains('select * from iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.by_id', '$partition_key')
 
 -- the equality key contains the identity partition column (as in a Flink upsert table): a key match already
 -- implies the same partition, so the plan needs no partition check
@@ -94,12 +100,47 @@ create table hive_eq_scope_${uuid0}.eq_scope_db_${uuid0}.mixed_part_deletes(
 
 insert into hive_eq_scope_${uuid0}.eq_scope_db_${uuid0}.mixed_part_deletes values (2, 'a');
 
--- deletes under two specs are read (and can be added) only with this session variable
-set enable_read_iceberg_equality_delete_with_partition_evolution = true;
+-- deletes under two specs are read (and can be added) by default
 alter table iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.mixed execute add_equality_delete_files(location="oss://${oss_bucket}/eq_scope_db_${uuid0}/mixed_part_deletes", file_format="parquet", equality_columns="id");
 
 select * from iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.mixed order by p, id;
+
+-- a global delete by id next to a partitioned delete by (id, p) of an older spec: the global one deletes id 2
+-- from the older spec's data file as well, so only (1, a1, a) is left
+create table iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.global_key(
+    id int,
+    v string,
+    p string
+) partition by(p) properties ("format-version" = "2");
+
+insert into iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.global_key values (1, 'a1', 'a'), (2, 'b2', 'b');
+
+create table hive_eq_scope_${uuid0}.eq_scope_db_${uuid0}.global_key_part_deletes(
+    id int,
+    p string
+) properties ("location" = "oss://${oss_bucket}/eq_scope_db_${uuid0}/global_key_part_deletes/p=b");
+
+insert into hive_eq_scope_${uuid0}.eq_scope_db_${uuid0}.global_key_part_deletes values (9, 'b');
+
+alter table iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.global_key execute add_equality_delete_files(location="oss://${oss_bucket}/eq_scope_db_${uuid0}/global_key_part_deletes", file_format="parquet", equality_columns="id,p");
+
+alter table iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.global_key drop partition column p;
+
+create table hive_eq_scope_${uuid0}.eq_scope_db_${uuid0}.global_key_deletes(
+    id int
+) properties ("location" = "oss://${oss_bucket}/eq_scope_db_${uuid0}/global_key_deletes");
+
+insert into hive_eq_scope_${uuid0}.eq_scope_db_${uuid0}.global_key_deletes values (2);
+
+alter table iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.global_key execute add_equality_delete_files(location="oss://${oss_bucket}/eq_scope_db_${uuid0}/global_key_deletes", file_format="parquet", equality_columns="id");
+
+select * from iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.global_key order by id;
+select count(*) from iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.global_key where id = 2;
+
+-- with the session variable off, equality deletes under two specs are still rejected
 set enable_read_iceberg_equality_delete_with_partition_evolution = false;
+select * from iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.global_key order by id;
+set enable_read_iceberg_equality_delete_with_partition_evolution = true;
 
 -- two equality keys in one partition: a delete by a and a delete by b. Each delete applies only by its own key,
 -- so the row whose a is NULL is kept (the b delete has no a column, which must not read as a = NULL)
@@ -135,6 +176,9 @@ drop table hive_eq_scope_${uuid0}.eq_scope_db_${uuid0}.two_keys_a_deletes force;
 drop table hive_eq_scope_${uuid0}.eq_scope_db_${uuid0}.two_keys_b_deletes force;
 drop table iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.by_id force;
 drop table iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.mixed force;
+drop table iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.global_key force;
+drop table hive_eq_scope_${uuid0}.eq_scope_db_${uuid0}.global_key_part_deletes force;
+drop table hive_eq_scope_${uuid0}.eq_scope_db_${uuid0}.global_key_deletes force;
 drop table hive_eq_scope_${uuid0}.eq_scope_db_${uuid0}.mixed_global_deletes force;
 drop table hive_eq_scope_${uuid0}.eq_scope_db_${uuid0}.mixed_part_deletes force;
 drop table iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.by_id_p force;
