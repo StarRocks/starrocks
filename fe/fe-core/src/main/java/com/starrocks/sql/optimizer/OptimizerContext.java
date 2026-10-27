@@ -89,6 +89,8 @@ public class OptimizerContext {
 
     // source tables count in the query
     private int sourceTablesCount = 0;
+    // see JoinKeyContainmentBound: column id -> upper bound on its distinct values, for join keys unknown on both sides
+    private Map<Integer, Double> joinKeyNdvBounds = Map.of();
 
     OptimizerContext(ConnectContext context) {
         this.connectContext = context;
@@ -332,5 +334,13 @@ public class OptimizerContext {
                     "3. enlarge new_planner_optimize_timeout session variable",
                     ErrorType.INTERNAL_ERROR);
         }
+    }
+
+    public Map<Integer, Double> getJoinKeyNdvBounds() {
+        return joinKeyNdvBounds;
+    }
+
+    public void setJoinKeyNdvBounds(Map<Integer, Double> joinKeyNdvBounds) {
+        this.joinKeyNdvBounds = joinKeyNdvBounds;
     }
 }
