@@ -41,12 +41,16 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionNames;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.InternalErrorCode;
+import com.starrocks.common.LoadException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.common.util.PulsarUtil;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.epack.warehouse.cngroup.CNGroupResource;
 import com.starrocks.load.RoutineLoadDesc;
 import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.metric.TableMetricsRegistry;
@@ -56,6 +60,7 @@ import com.starrocks.persist.RoutineLoadOperation;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.AlterRoutineLoadStmt;
 import com.starrocks.sql.ast.ColumnSeparator;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
@@ -65,10 +70,12 @@ import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TKafkaRLTaskProgress;
 import com.starrocks.thrift.TRoutineLoadJobInfo;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.warehouse.cngroup.CRAcquireContext;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Expectations;
 import mockit.Injectable;
@@ -84,6 +91,8 @@ import java.util.List;
 import java.util.Map;
 
 public class RoutineLoadJobTest {
+
+    private static final long AZ_CN_GROUP_ID = 10001L;
 
     @BeforeEach
     public void setUp() throws Exception {
@@ -811,6 +820,255 @@ public class RoutineLoadJobTest {
         Assertions.assertEquals(RoutineLoadJob.JobState.NEED_SCHEDULE, routineLoadJob.getState());
         Assertions.assertEquals(Lists.newArrayList("p1", "p2"),
                 Deencapsulation.getField(routineLoadJob, "currentPulsarPartitions"));
+    }
+
+    // A shared-data warehouse laid out the way CelerData Cloud builds a multi-AZ one: every CN sits
+    // in an AZ-named CN group, and the builtin CN group 0 is empty. Group 0 of default_warehouse is
+    // also the compute resource that a routine load job holds until prepare() acquires one.
+    private static void mockEmptyBuiltinCnGroup(long aliveComputeNodeId) {
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public List<Long> getAllComputeNodeIds(ComputeResource computeResource) {
+                return computeResource.getWorkerGroupId() == AZ_CN_GROUP_ID
+                        ? Lists.newArrayList(aliveComputeNodeId) : Lists.newArrayList();
+            }
+
+            @Mock
+            public boolean isResourceAvailable(ComputeResource computeResource) {
+                return computeResource.getWorkerGroupId() == AZ_CN_GROUP_ID;
+            }
+
+            @Mock
+            public ComputeResource acquireComputeResource(CRAcquireContext acquireContext) {
+                return CNGroupResource.of(acquireContext.getWarehouseId(), AZ_CN_GROUP_ID);
+            }
+        };
+    }
+
+    // Records which compute resource each partition fetch is routed through, and fails like the real
+    // proxy request when that resource has no alive CN.
+    private static List<ComputeResource> mockKafkaPartitionFetch(List<Integer> partitions) {
+        List<ComputeResource> fetchedVia = Lists.newArrayList();
+        new MockUp<KafkaUtil>() {
+            @Mock
+            public List<Integer> getAllKafkaPartitions(String brokerList, String topic,
+                                                       ImmutableMap<String, String> properties,
+                                                       ComputeResource computeResource) throws StarRocksException {
+                fetchedVia.add(computeResource);
+                if (!GlobalStateMgr.getCurrentState().getWarehouseMgr().isResourceAvailable(computeResource)) {
+                    throw new LoadException(
+                            "Failed to send get kafka partition info request. err: No alive backends or compute nodes");
+                }
+                return partitions;
+            }
+        };
+        return fetchedVia;
+    }
+
+    @Test
+    public void testUpdateKafkaFetchSkipsEmptyBuiltinCnGroup(@Injectable KafkaProgress kafkaProgress)
+            throws StarRocksException {
+        long dbId = 32L;
+        Database database = new Database(dbId, "testDb");
+        OlapTable table = new OlapTable(22L, "test", null, null, null, null);
+        database.registerTableUnlocked(table);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().replayCreateDb(database);
+
+        mockEmptyBuiltinCnGroup(20001L);
+        List<ComputeResource> fetchedVia = mockKafkaPartitionFetch(Lists.newArrayList(0, 1, 2));
+
+        // a new job: NEED_SCHEDULE and still holding the default resource, prepare() has not run
+        RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob(118L, "test", dbId, 22L, "brokerList", "topic");
+        Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.NEED_SCHEDULE);
+        Deencapsulation.setField(routineLoadJob, "progress", kafkaProgress);
+        routineLoadJob.update();
+
+        // the fetch avoids the empty CN group 0, so the job is not paused before prepare()
+        Assertions.assertEquals(RoutineLoadJob.JobState.NEED_SCHEDULE, routineLoadJob.getState());
+        Assertions.assertEquals(Lists.newArrayList(0, 1, 2),
+                Deencapsulation.getField(routineLoadJob, "currentKafkaPartitions"));
+        Assertions.assertEquals(Lists.newArrayList(
+                CNGroupResource.of(WarehouseManager.DEFAULT_WAREHOUSE_ID, AZ_CN_GROUP_ID)), fetchedVia);
+        // the fetch does not write the job's compute resource; only prepare() does
+        Assertions.assertSame(WarehouseManager.DEFAULT_RESOURCE, routineLoadJob.getComputeResource());
+    }
+
+    @Test
+    public void testUpdateKafkaFetchUsesJobWarehouse(@Injectable KafkaProgress kafkaProgress)
+            throws StarRocksException {
+        long dbId = 33L;
+        Database database = new Database(dbId, "testDb");
+        OlapTable table = new OlapTable(22L, "test", null, null, null, null);
+        database.registerTableUnlocked(table);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().replayCreateDb(database);
+
+        mockEmptyBuiltinCnGroup(20001L);
+        List<ComputeResource> fetchedVia = mockKafkaPartitionFetch(Lists.newArrayList(0, 1, 2));
+
+        // prepared while the job ran in default_warehouse, then ALTERed to another warehouse and resumed:
+        // the old resource still has alive CNs but no longer belongs to the job's warehouse
+        long jobWarehouseId = 1L;
+        RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob(119L, "test", dbId, 22L, "brokerList", "topic");
+        routineLoadJob.setWarehouseId(jobWarehouseId);
+        Deencapsulation.setField(routineLoadJob, "computeResource",
+                CNGroupResource.of(WarehouseManager.DEFAULT_WAREHOUSE_ID, AZ_CN_GROUP_ID));
+        Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.NEED_SCHEDULE);
+        Deencapsulation.setField(routineLoadJob, "progress", kafkaProgress);
+        routineLoadJob.update();
+
+        Assertions.assertEquals(RoutineLoadJob.JobState.NEED_SCHEDULE, routineLoadJob.getState());
+        Assertions.assertEquals(Lists.newArrayList(CNGroupResource.of(jobWarehouseId, AZ_CN_GROUP_ID)), fetchedVia);
+    }
+
+    @Test
+    public void testUpdateKafkaFetchKeepsAvailableComputeResource(@Injectable KafkaProgress kafkaProgress)
+            throws StarRocksException {
+        long dbId = 34L;
+        Database database = new Database(dbId, "testDb");
+        OlapTable table = new OlapTable(22L, "test", null, null, null, null);
+        database.registerTableUnlocked(table);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().replayCreateDb(database);
+
+        mockEmptyBuiltinCnGroup(20001L);
+        List<ComputeResource> fetchedVia = mockKafkaPartitionFetch(Lists.newArrayList(1, 2, 3));
+
+        ComputeResource preparedResource = CNGroupResource.of(WarehouseManager.DEFAULT_WAREHOUSE_ID, AZ_CN_GROUP_ID);
+        RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob(120L, "test", dbId, 22L, "brokerList", "topic");
+        Deencapsulation.setField(routineLoadJob, "computeResource", preparedResource);
+        Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.RUNNING);
+        Deencapsulation.setField(routineLoadJob, "progress", kafkaProgress);
+        Deencapsulation.setField(routineLoadJob, "currentKafkaPartitions", Lists.newArrayList(1, 2, 3));
+        routineLoadJob.update();
+
+        // a usable resource that prepare() already acquired is reused as is, not re-acquired
+        Assertions.assertEquals(1, fetchedVia.size());
+        Assertions.assertSame(preparedResource, fetchedVia.get(0));
+        Assertions.assertEquals(RoutineLoadJob.JobState.RUNNING, routineLoadJob.getState());
+    }
+
+    @Test
+    public void testUpdateKafkaFetchPausesWhenWarehouseUnavailable(@Injectable KafkaProgress kafkaProgress)
+            throws StarRocksException {
+        long dbId = 35L;
+        Database database = new Database(dbId, "testDb");
+        OlapTable table = new OlapTable(22L, "test", null, null, null, null);
+        database.registerTableUnlocked(table);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().replayCreateDb(database);
+
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+        // no CN group of the warehouse has an alive CN
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public boolean isResourceAvailable(ComputeResource computeResource) {
+                return false;
+            }
+
+            @Mock
+            public ComputeResource acquireComputeResource(CRAcquireContext acquireContext) {
+                throw ErrorReportException.report(ErrorCode.ERR_WAREHOUSE_UNAVAILABLE,
+                        WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            }
+        };
+        List<ComputeResource> fetchedVia = mockKafkaPartitionFetch(Lists.newArrayList(0, 1, 2));
+
+        RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob(121L, "test", dbId, 22L, "brokerList", "topic");
+        Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.NEED_SCHEDULE);
+        Deencapsulation.setField(routineLoadJob, "progress", kafkaProgress);
+        routineLoadJob.update();
+
+        // the failed acquisition is handled like a failed fetch: the job is paused, not left to break
+        // the scheduler round
+        Assertions.assertTrue(fetchedVia.isEmpty());
+        Assertions.assertEquals(RoutineLoadJob.JobState.PAUSED, routineLoadJob.getState());
+        ErrorReason reason = routineLoadJob.pauseReason;
+        Assertions.assertEquals(InternalErrorCode.PARTITIONS_ERR, reason.getCode());
+        Assertions.assertTrue(reason.getMsg().contains("Warehouse default_warehouse is not available"),
+                reason.getMsg());
+    }
+
+    @Test
+    public void testUpdatePulsarFetchSkipsEmptyBuiltinCnGroup(@Injectable PulsarProgress pulsarProgress)
+            throws StarRocksException {
+        long dbId = 36L;
+        Database database = new Database(dbId, "testDb");
+        OlapTable table = new OlapTable(22L, "test", null, null, null, null);
+        database.registerTableUnlocked(table);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().replayCreateDb(database);
+
+        mockEmptyBuiltinCnGroup(20001L);
+        List<ComputeResource> fetchedVia = Lists.newArrayList();
+        new MockUp<PulsarUtil>() {
+            @Mock
+            public List<String> getAllPulsarPartitions(String serviceUrl, String topic, String subscription,
+                                                      ImmutableMap<String, String> properties,
+                                                      ComputeResource computeResource) throws StarRocksException {
+                fetchedVia.add(computeResource);
+                if (!GlobalStateMgr.getCurrentState().getWarehouseMgr().isResourceAvailable(computeResource)) {
+                    throw new LoadException("Failed to send proxy request. No alive backends or computeNodes");
+                }
+                return Lists.newArrayList("p1", "p2");
+            }
+        };
+
+        RoutineLoadJob routineLoadJob = new PulsarRoutineLoadJob(217L, "test", dbId, 22L,
+                "http://pulsar-service", "topic1", "sub1");
+        Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.NEED_SCHEDULE);
+        Deencapsulation.setField(routineLoadJob, "progress", pulsarProgress);
+        routineLoadJob.update();
+
+        Assertions.assertEquals(RoutineLoadJob.JobState.NEED_SCHEDULE, routineLoadJob.getState());
+        Assertions.assertEquals(Lists.newArrayList("p1", "p2"),
+                Deencapsulation.getField(routineLoadJob, "currentPulsarPartitions"));
+        Assertions.assertEquals(Lists.newArrayList(
+                CNGroupResource.of(WarehouseManager.DEFAULT_WAREHOUSE_ID, AZ_CN_GROUP_ID)), fetchedVia);
+        Assertions.assertSame(WarehouseManager.DEFAULT_RESOURCE, routineLoadJob.getComputeResource());
+    }
+
+    // One scheduler round for a new Kafka job whose topic partitions are not pinned, on a warehouse
+    // whose builtin CN group 0 is empty: the job used to be paused with "No alive backends or compute
+    // nodes" on every round, because the partition fetch ran before prepare() picked a CN group.
+    @Test
+    public void testSchedulerRunsNewKafkaJobWhenBuiltinCnGroupIsEmpty(@Injectable KafkaProgress kafkaProgress)
+            throws StarRocksException {
+        long dbId = 37L;
+        Database database = new Database(dbId, "testDb");
+        OlapTable table = new OlapTable(22L, "test", null, null, null, null);
+        database.registerTableUnlocked(table);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().replayCreateDb(database);
+
+        ComputeNode computeNode = new ComputeNode(20001L, "127.0.0.1", 9050);
+        computeNode.setAlive(true);
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addComputeNode(computeNode);
+        mockEmptyBuiltinCnGroup(computeNode.getId());
+        mockKafkaPartitionFetch(Lists.newArrayList(0, 1, 2));
+
+        RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob(122L, "test", dbId, 22L, "brokerList", "topic");
+        Deencapsulation.setField(routineLoadJob, "progress", kafkaProgress);
+        RoutineLoadMgr routineLoadMgr = new RoutineLoadMgr();
+        routineLoadMgr.replayCreateRoutineLoadJob(routineLoadJob);
+        Assertions.assertEquals(RoutineLoadJob.JobState.NEED_SCHEDULE, routineLoadJob.getState());
+
+        try {
+            Deencapsulation.invoke(new RoutineLoadScheduler(routineLoadMgr), "process");
+        } finally {
+            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().dropComputeNode(computeNode);
+        }
+
+        Assertions.assertEquals(RoutineLoadJob.JobState.RUNNING, routineLoadJob.getState(),
+                String.valueOf(routineLoadJob.pauseReason));
+        Assertions.assertEquals(CNGroupResource.of(WarehouseManager.DEFAULT_WAREHOUSE_ID, AZ_CN_GROUP_ID),
+                routineLoadJob.getComputeResource());
     }
 
     @Test

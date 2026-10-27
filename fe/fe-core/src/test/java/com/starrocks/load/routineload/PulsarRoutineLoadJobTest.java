@@ -22,6 +22,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.PulsarUtil;
+import com.starrocks.epack.warehouse.cngroup.CNGroupResource;
 import com.starrocks.proto.PPulsarMetaProxyResult;
 import com.starrocks.proto.PPulsarProxyRequest;
 import com.starrocks.proto.PPulsarProxyResult;
@@ -31,9 +32,12 @@ import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.warehouse.cngroup.CRAcquireContext;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -139,6 +143,38 @@ public class PulsarRoutineLoadJobTest {
         Assertions.assertThrows(StarRocksException.class, () -> {
             job.getAllPulsarPartitions();
         });
+    }
+
+    @Test
+    public void checkCustomPartition_usesAcquiredComputeResource() {
+        PulsarRoutineLoadJob job = new PulsarRoutineLoadJob(1L, "routine_load", 1L, 1L,
+                "http://pulsar-service", "topic1", "sub1");
+        Deencapsulation.setField(job, "customPulsarPartitions", Lists.newArrayList("p1"));
+
+        ComputeResource acquiredResource = CNGroupResource.of(WarehouseManager.DEFAULT_WAREHOUSE_ID, 10001L);
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public ComputeResource acquireComputeResource(CRAcquireContext acquireContext) {
+                return acquiredResource;
+            }
+        };
+        List<ComputeResource> fetchedVia = Lists.newArrayList();
+        new MockUp<PulsarUtil>() {
+            @Mock
+            public List<String> getAllPulsarPartitions(String serviceUrl, String topic, String subscription,
+                                                       ImmutableMap<String, String> properties,
+                                                       ComputeResource computeResource) {
+                fetchedVia.add(computeResource);
+                return Lists.newArrayList("p1", "p2");
+            }
+        };
+
+        Deencapsulation.invoke(job, "checkCustomPartition");
+
+        // the CREATE-time check is routed through a resource acquired for the job's warehouse, not the
+        // default CN group 0 that the not-yet-scheduled job still holds, which may have no alive CN
+        Assertions.assertEquals(Lists.newArrayList(acquiredResource), fetchedVia);
+        Assertions.assertSame(WarehouseManager.DEFAULT_RESOURCE, job.getComputeResource());
     }
 
     @Test
