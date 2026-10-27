@@ -1428,6 +1428,8 @@ public class AlterMaterializedViewTest extends MVTestBase  {
             Assertions.assertEquals(state, task.getState(), "replaying the inactivation suspended the task");
             Assertions.assertFalse(mv.isActive());
             MVActiveChecker.tryToActivate(mv);
+            // MVActiveChecker.tryToActivate removes the thread's context when it is done.
+            connectContext.setThreadLocalInfo();
             Assertions.assertTrue(mv.isActive(), mv.getInactiveReason());
         } finally {
             starRocksAssert.dropMaterializedView("refresh_gone_mv");
