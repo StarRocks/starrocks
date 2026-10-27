@@ -105,7 +105,7 @@ feature only skips the final gather, it does not change how work is distributed.
 | Query shape | Fans out? | Why |
 | --- | --- | --- |
 | Large scan `SELECT [cols] FROM t [WHERE ...]` | Yes | The scan spreads across instances; each holds a result shard. |
-| High-cardinality `GROUP BY` | Yes | Final aggregation is hash-partitioned across instances, so the grouped result is already sharded. |
+| High-cardinality `GROUP BY` | Yes | Final aggregation is hash-partitioned across instances, so the grouped result is already sharded (measured ~3.9x, see Benchmark row D). |
 | `JOIN` feeding a distributed result | Yes | As long as the final stage stays partitioned (no single-node gather). |
 | Global `ORDER BY` | No | Needs a single-node merge for total order, so the result collapses to one instance. Endpoints are also read unordered, so order could not be preserved anyway. |
 | Scalar aggregate (`COUNT(*)`, `SUM(...)` with no `GROUP BY`) | No | Produces one row gathered onto one node. |
@@ -237,18 +237,25 @@ ADBC handles the per-partition (CN) connection and credentials for you, so the
 
 ## Benchmark
 
-Methodology: full-table `SELECT *` result egress, run twice toggling only the
-session variable, with every endpoint read on a dedicated thread. Measured on a
-15-CN shared-data cluster.
+Methodology: run the same query twice toggling only the session variable, with
+every endpoint read on a dedicated thread. Measured on a 15-CN shared-data
+cluster. Rows A-C are full-table `SELECT *` egress; row D is a high-cardinality
+`GROUP BY` (distributed aggregation).
 
-| Result set | Storage | Fan-out | Single-endpoint | Multi-endpoint | Speedup |
-| --- | --- | --- | --- | --- | --- |
-| 638 MB, 2,941,805 rows | Iceberg | 15 | 0.62 s / 1031 MB/s | 0.24 s / 2694 MB/s | ~2.6x |
-| 40 GB, 287,958,559 rows | Iceberg | 15 | 35.36 s / 1145 MB/s | 14.93 s / 2712 MB/s | ~2.4x |
-| 6.4 GB, 29,418,050 rows | native OLAP | 7 | 10.76 s / 593 MB/s | 2.79 s / 2288 MB/s | ~3.9x |
+| # | Result set | Query | Fan-out | Single-endpoint | Multi-endpoint | Speedup |
+| --- | --- | --- | --- | --- | --- | --- |
+| A | 638 MB, 2,941,805 rows | `SELECT *` (Iceberg) | 15 | 0.62 s / 1031 MB/s | 0.24 s / 2694 MB/s | ~2.6x |
+| B | 40 GB, 287,958,559 rows | `SELECT *` (Iceberg) | 15 | 35.3 s / 1145 MB/s | 14.17 s / 2857 MB/s | ~2.4x |
+| C | 6.4 GB, 29,418,050 rows | `SELECT *` (native OLAP) | 7 | 10.76 s / 593 MB/s | 2.79 s / 2288 MB/s | ~3.9x |
+| D | 1.3 GB, 40,548,302 groups | high-card `GROUP BY` (Iceberg) | 15 | 3.26 s / 387 MB/s | 0.83 s / 1515 MB/s | ~3.9x |
+| E | 13.8 GB, 500,000,000 groups | high-card `GROUP BY` (Iceberg) | 15 | 25.12 s / 549 MB/s | 6.95 s / 1985 MB/s | ~3.6x |
+| F | 7.5 KB, 366 groups | low-card `GROUP BY` date (Iceberg) | 15 | 0.04 s | 0.03 s | ~1x (no gain) |
 
 Every multi-endpoint run returned the exact same row count as single-endpoint
-(no data loss), sharded across the result-producing nodes.
+(no data loss), sharded evenly across the result-producing nodes. Rows B, E,
+and F were measured with a warmup + 3-run loop (multi-endpoint uses the median;
+rows B and E cite the single-endpoint leg conservatively - its fastest run -
+given its run-to-run variance). Rows A, C, and D are single representative runs.
 
 Notes:
 
@@ -262,9 +269,40 @@ Notes:
   shards in parallel past the single-client ceiling and widen the gap.
   Correspondingly, the observed speedup tracks how slow the single-endpoint leg
   is rather than the result size alone.
+- The single-endpoint leg is noisy run to run - all egress goes through one node
+  subject to that node's momentary load, and it can degrade under sustained load.
+  Row E's three runs were 14.1 / 25.2 / 25.1 s; row B's were 35.3 / 67.7 / 67.7 s
+  (bimodal). Multi-endpoint stays stable (E 6.8-7.2 s, B 14.1-15.0 s) because 15
+  nodes average the jitter out - that stability is itself a benefit. Rows B and E
+  cite the speedup **conservatively against the best-case (fastest) single run**;
+  against a loaded single node the gap is wider (row B reached ~4.8x vs its 67.7 s
+  single run).
 - Multi-endpoint helps large, order-independent results that stay distributed.
   It does nothing for single-row scalar aggregates or globally-ordered results,
   which collapse to one node by design and so return a single endpoint.
+- Rows D and E show a distributed `GROUP BY` fans out exactly like a scan: 40.5M
+  groups (~3.9x) and 500M groups (~3.5x), each spread 15-way and balanced across
+  CNs, holding up at half a billion rows. Their lower MB/s versus the scans
+  reflects narrower grouped rows - here the client is bound by rows per second
+  (~49-70M/s) rather than bytes.
+- Row F is the counter-case: a low-cardinality `GROUP BY` (group by date, 366
+  groups) shows ~1x - warm, single is ~0.04 s and multi ~0.03 s, within noise.
+  The whole cost is the scan+aggregate (identical in both modes); the 366-row
+  result is nothing to parallelize. It is not slower either - the 15 small reads
+  add negligible overhead at single-query scale - but there is no gain. (A cold
+  first touch had shown 0.12 s on the single leg; the warmup run removes that, so
+  the median reflects steady state.)
+
+### When to enable
+
+Enable multi-endpoint for queries whose **result set is large and stays
+distributed** - big scans and high-cardinality aggregations. It is neutral for
+small results (no gain, negligible harm per query) and has no effect on
+single-node-gather shapes (global `ORDER BY`, scalar aggregates). A gateway or
+client layer that sets this automatically should prefer **selective**
+enablement - e.g. gate on expected result size - because each query opens one
+connection per endpoint, which is free at low query rates but adds up under high
+QPS for results too small to benefit.
 
 ### Reference client
 
