@@ -1685,10 +1685,9 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             // See doInactiveMaterializedViewOnly for the reset epoch bumped on both sides of the clear.
             mv.markVersionMapReset();
             try {
-                GlobalStateMgr.getCurrentState().getEditLog().logAlterMvStatus(log, wal -> {
-                    mv.setInactiveAndReason(inactiveReason);
-                    mv.getRefreshScheme().clearVersionState();
-                });
+                mv.setInactiveAndReason(inactiveReason);
+                mv.getRefreshScheme().clearVersionState();
+                GlobalStateMgr.getCurrentState().getEditLog().logAlterMvStatus(log);
             } finally {
                 mv.markVersionMapReset();
             }

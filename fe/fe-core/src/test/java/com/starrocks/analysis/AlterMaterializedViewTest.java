@@ -57,11 +57,7 @@ import com.starrocks.sql.ast.RefreshSchemeClause;
 import com.starrocks.sql.ast.SyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
-<<<<<<< HEAD
-=======
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
-import com.starrocks.sql.parser.SqlParser;
->>>>>>> 3d98365 ([BugFix] Journal the MV inactivation a refresh does, and keep its task scheduled (#81660))
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.LockProbe;
 import com.starrocks.utframe.UtFrameUtils;
