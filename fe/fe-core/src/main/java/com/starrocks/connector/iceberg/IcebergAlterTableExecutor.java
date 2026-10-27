@@ -445,18 +445,6 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
         return null;
     }
 
-<<<<<<< HEAD
-=======
-    private static boolean isMaintenanceOperation(IcebergTableOperation operation) {
-        return operation == IcebergTableOperation.EXPIRE_SNAPSHOTS
-                || operation == IcebergTableOperation.REMOVE_ORPHAN_FILES
-                || operation == IcebergTableOperation.REWRITE_MANIFESTS;
-    }
-
-    private String getOriginSql() {
-        return stmt != null && stmt.getOrigStmt() != null ? stmt.getOrigStmt().originStmt : null;
-    }
-
     // A NOT NULL column can only be added to a v3 table, and only with a default: rows in the existing data
     // files read the default as the column's initial-default.
     private void addColumn(UpdateSchema updateSchema, ColumnDef columnDef) {
@@ -476,7 +464,6 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
         }
     }
 
->>>>>>> a0da6e39b03... [Enhancement][RB-225] Allow adding a NOT NULL column with a default to an Iceberg v3 table (#66940)
     private Literal<?> buildIcebergDefaultLiteral(ColumnDef columnDef, org.apache.iceberg.types.Type icebergType) {
         if (!columnDef.getDefaultValueDef().isSet) {
             return null;
