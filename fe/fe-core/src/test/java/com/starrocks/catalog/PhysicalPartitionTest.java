@@ -184,6 +184,22 @@ public class PhysicalPartitionTest {
     }
 
     @Test
+    public void testRestoreClearsProvenRowCounts() {
+        MaterializedIndex baseIndex = new MaterializedIndex(2);
+        PhysicalPartition p = new PhysicalPartition(1, 1, baseIndex);
+        p.updateVisibleVersion(10);
+        baseIndex.setRowCount(120L, 10L);
+
+        // restored to an older snapshot: the count proven at version 10 doesn't describe the restored data
+        p.updateVersionForRestore(5);
+        Assertions.assertEquals(120L, baseIndex.getRowCount());
+        Assertions.assertEquals(-1L, baseIndex.getRowCountAtVersion(10L));
+        // and a tablet stat round can replace it again
+        Assertions.assertTrue(baseIndex.setRowCountUnlessProven(80L, 5L));
+        Assertions.assertEquals(80L, baseIndex.getRowCount());
+    }
+
+    @Test
     public void testPhysicalPartitionEqual() throws Exception {
         PhysicalPartition p1 = new PhysicalPartition(1, 1, new MaterializedIndex(2));
         PhysicalPartition p2 = new PhysicalPartition(1, 1, new MaterializedIndex(2));

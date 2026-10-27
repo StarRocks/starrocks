@@ -320,8 +320,23 @@ TEST_F(PublishVersionTaskTest, test_publish_version) {
     ASSERT_EQ(1, finish_task_request.tablet_versions.size());
     ASSERT_EQ(3, finish_task_request.tablet_versions[0].version);
     ASSERT_EQ(12345, finish_task_request.tablet_versions[0].tablet_id);
+    // the duplicate-key tablet's row count at exactly that version: 1024 rows each from versions 2 and 3
+    ASSERT_TRUE(finish_task_request.tablet_versions[0].__isset.row_count);
+    ASSERT_EQ(2048, finish_task_request.tablet_versions[0].row_count);
     // no actually publish
     ASSERT_EQ(0, affected_dirs.size());
+
+    // With a delete predicate on the tablet, the rows it removed would still be counted: no count is reported.
+    {
+        std::unique_lock wrlock(tablet->get_header_lock());
+        DeletePredicatePB delete_predicate;
+        delete_predicate.set_version(3);
+        tablet->tablet_meta()->add_delete_predicate(delete_predicate, 3);
+    }
+    TFinishTaskRequest finish_with_delete;
+    run_publish_version_task(token.get(), publish_version_req, finish_with_delete, affected_dirs, 0);
+    ASSERT_EQ(1, finish_with_delete.tablet_versions.size());
+    ASSERT_FALSE(finish_with_delete.tablet_versions[0].__isset.row_count);
 }
 
 TEST_F(PublishVersionTaskTest, test_publish_version2) {

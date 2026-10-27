@@ -282,4 +282,18 @@ public class PartitionCommitInfoTest {
         Assertions.assertEquals(0, copied.getLastPublishFailureTime());
         Assertions.assertEquals(1_000_500L, copied.getVersionTime());
     }
+
+    @Test
+    public void testIndexRowCountsArePersistedAndCopied() {
+        PartitionCommitInfo info = new PartitionCommitInfo(1L, 11L, 0L);
+        Assertions.assertTrue(info.getIndexIdToRowCount().isEmpty());
+
+        info.setIndexIdToRowCount(new HashMap<>(Map.of(1L, 150L, 2L, 30L)));
+        PartitionCommitInfo read = GsonUtils.GSON.fromJson(
+                GsonUtils.GSON.toJson(info), PartitionCommitInfo.class);
+        Assertions.assertEquals(Map.of(1L, 150L, 2L, 30L), read.getIndexIdToRowCount());
+        // the copy made for the edit log carries them too
+        Assertions.assertEquals(Map.of(1L, 150L, 2L, 30L),
+                new PartitionCommitInfo(info).getIndexIdToRowCount());
+    }
 }
