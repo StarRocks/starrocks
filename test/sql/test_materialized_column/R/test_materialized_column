@@ -67,6 +67,340 @@ DROP TABLE t;
 DROP DATABASE test_create_table;
 -- result:
 -- !result
+<<<<<<< HEAD
+=======
+-- name: test_materialized_column_insert
+CREATE DATABASE test_insert;
+-- result:
+-- !result
+USE test_insert;
+-- result:
+-- !result
+CREATE TABLE t ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, mc DOUBLE AS (array_avg(array_data)) ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
+-- result:
+-- !result
+INSERT INTO t VALUES (1, [1,2], 0.0);
+-- result:
+E: (5604, "Getting analyzing error. Detail message: Inserted target column count: 2 doesn't match select/value column count: 3.")
+-- !result
+INSERT INTO t (id, array_data, mc) VALUES (1, [1,2], 0.0);
+-- result:
+E: (1064, "Getting analyzing error. Detail message: generated column 'mc' can not be specified.")
+-- !result
+INSERT INTO t VALUES (1, [1,2]);
+-- result:
+-- !result
+INSERT INTO t (id, array_data) VALUES (2, [3,4]);
+-- result:
+-- !result
+CREATE TABLE t1 ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, mc DOUBLE AS (array_avg(array_data)) ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
+-- result:
+-- !result
+INSERT INTO t1 VALUES (3, [10,20]);
+-- result:
+-- !result
+INSERT INTO t1 (id, array_data) VALUES (4, [30,40]);
+-- result:
+-- !result
+INSERT INTO t SELECT id, array_data FROM t1;
+-- result:
+-- !result
+SELECT * FROM t ORDER BY id;
+-- result:
+1	[1,2]	1.5
+2	[3,4]	3.5
+3	[10,20]	15.0
+4	[30,40]	35.0
+-- !result
+DROP TABLE t;
+-- result:
+-- !result
+DROP TABLE t1;
+-- result:
+-- !result
+DROP DATABASE test_insert;
+-- result:
+-- !result
+-- name: test_materialized_column_in_materialized_view
+CREATE DATABASE test_materialized_column_in_materialized_view;
+-- result:
+-- !result
+USE test_materialized_column_in_materialized_view;
+-- result:
+-- !result
+CREATE TABLE t ( id BIGINT NOT NULL, mc BIGINT AS (id + 1) ) Unique KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv1 DISTRIBUTED BY HASH(id) BUCKETS 10 REFRESH ON_CHANGE AS SELECT id, mc FROM t;
+-- result:
+-- !result
+INSERT INTO t VALUES (1);
+-- result:
+-- !result
+SELECT * FROM t;
+-- result:
+1	2
+-- !result
+REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
+SELECT * FROM mv1;
+-- result:
+1	2
+-- !result
+DROP MATERIALIZED VIEW mv1;
+-- result:
+-- !result
+DROP TABLE t;
+-- result:
+-- !result
+DROP DATABASE test_materialized_column_in_materialized_view;
+-- result:
+-- !result
+-- name: test_materialized_column_alter_table_with_concurrent_insert
+CREATE DATABASE test_materialized_column_alter_table_with_concurrent_insert;
+-- result:
+-- !result
+USE test_materialized_column_alter_table_with_concurrent_insert;
+-- result:
+-- !result
+CREATE TABLE t ( id BIGINT NOT NULL, mc BIGINT AS (id) ) Unique KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
+-- result:
+-- !result
+ALTER TABLE t MODIFY COLUMN mc BIGINT AS (id + 10);
+-- result:
+-- !result
+INSERT INTO t VALUES (1);
+-- result:
+-- !result
+INSERT INTO t VALUES (2);
+-- result:
+-- !result
+INSERT INTO t VALUES (3);
+-- result:
+-- !result
+INSERT INTO t VALUES (4);
+-- result:
+-- !result
+INSERT INTO t VALUES (5);
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+SELECT * FROM t ORDER BY id;
+-- result:
+1	11
+2	12
+3	13
+4	14
+5	15
+-- !result
+DROP TABLE t;
+-- result:
+-- !result
+CREATE TABLE t ( id BIGINT NOT NULL, mc BIGINT AS (id) ) Unique KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
+-- result:
+-- !result
+ALTER TABLE t DROP COLUMN mc;
+-- result:
+-- !result
+INSERT INTO t VALUES (1);
+-- result:
+-- !result
+INSERT INTO t VALUES (2);
+-- result:
+-- !result
+INSERT INTO t VALUES (3);
+-- result:
+-- !result
+INSERT INTO t VALUES (4);
+-- result:
+-- !result
+INSERT INTO t VALUES (5);
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+SELECT * FROM t ORDER BY id;
+-- result:
+1
+2
+3
+4
+5
+-- !result
+DROP TABLE t;
+-- result:
+-- !result
+CREATE TABLE t ( id BIGINT NOT NULL, mc BIGINT AS (id) ) Unique KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
+-- result:
+-- !result
+ALTER TABLE t ADD COLUMN name BIGINT AS (id + 10);
+-- result:
+-- !result
+INSERT INTO t VALUES (1);
+-- result:
+-- !result
+INSERT INTO t VALUES (2);
+-- result:
+-- !result
+INSERT INTO t VALUES (3);
+-- result:
+-- !result
+INSERT INTO t VALUES (4);
+-- result:
+-- !result
+INSERT INTO t VALUES (5);
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+SELECT * FROM t ORDER BY id;
+-- result:
+1	1	11
+2	2	12
+3	3	13
+4	4	14
+5	5	15
+-- !result
+DROP TABLE t;
+-- result:
+-- !result
+DROP DATABASE test_materialized_column_alter_table_with_concurrent_insert;
+-- result:
+-- !result
+-- name: test_materialized_column_schema_change
+CREATE DATABASE test_materialized_column_schema_change;
+-- result:
+-- !result
+USE test_materialized_column_schema_change;
+-- result:
+-- !result
+CREATE TABLE t ( id BIGINT NOT NULL, job INT NOT NULL, incr BIGINT AUTO_INCREMENT, array_data ARRAY<int> NOT NULL ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
+-- result:
+-- !result
+INSERT INTO t VALUES (1, 2, DEFAULT, [1,2]);
+-- result:
+-- !result
+ALTER TABLE t ADD COLUMN mc_1 DOUBLE AS (array_avg(array_data));
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+ALTER TABLE t ADD COLUMN mc_2 INT AS (job);
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+SELECT * FROM t ORDER BY id;
+-- result:
+1	2	1	[1,2]	1.5	2
+-- !result
+ALTER TABLE t ADD COLUMN mc_3 INT AS (array_avg(array_data));
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Illegal expression type for Generated Column Column Type: INT, Expression Type: DOUBLE.')
+-- !result
+ALTER TABLE t ADD COLUMN mc_3 DOUBLE AS NOT NULL (array_avg(array_data));
+-- result:
+E: (1064, "Getting syntax error at line 1, column 49. Detail message: Unexpected input '(', the most similar input is {<EOF>, ';'}.")
+-- !result
+ALTER TABLE t ADD COLUMN mc_3 DOUBLE AS AUTO_INCREMENT (array_avg(array_data));
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 40 to line 1, column 77. Detail message: No matching function with signature: auto_increment(double).')
+-- !result
+ALTER TABLE t ADD COLUMN mc_3 DOUBLE AS DEFAULT "1.0" (array_avg(array_data));
+-- result:
+E: (1064, "Getting syntax error at line 1, column 40. Detail message: Unexpected input 'DEFAULT', the most similar input is {a legal identifier}.")
+-- !result
+ALTER TABLE t ADD COLUMN mc_3 DOUBLE AS (mc_1);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Expression can not refers to other generated columns: mc_1.')
+-- !result
+ALTER TABLE t ADD COLUMN mc_3 DOUBLE AS (incr);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Expression can not refers to AUTO_INCREMENT columns: incr.')
+-- !result
+ALTER TABLE t ADD COLUMN mc_3 BIGINT AS (sum(id));
+-- result:
+E: (1064, "Getting analyzing error. Detail message: Generated Column don't support aggregation function.")
+-- !result
+ALTER TABLE t ADD COLUMN mc_3 BIGINT KEY AS (id);
+-- result:
+E: (1064, 'Getting syntax error. Detail message: Generated Column can not be KEY.')
+-- !result
+ALTER TABLE t MODIFY COLUMN mc_1 ARRAY<int> AS (array_sort(array_data));
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+SELECT * FROM t ORDER BY id;
+-- result:
+1	2	1	[1,2]	[1,2]	2
+-- !result
+ALTER TABLE t MODIFY COLUMN mc_1 INT AS (array_avg(array_data));
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Illegal expression type for Generated Column Column Type: INT, Expression Type: DOUBLE.')
+-- !result
+ALTER TABLE t MODIFY COLUMN mc_1 DOUBLE AS NOT NULL (array_avg(array_data));
+-- result:
+E: (1064, "Getting syntax error at line 1, column 52. Detail message: Unexpected input '(', the most similar input is {<EOF>, ';'}.")
+-- !result
+ALTER TABLE t MODIFY COLUMN mc_1 DOUBLE AS AUTO_INCREMENT (array_avg(array_data));
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 43 to line 1, column 80. Detail message: No matching function with signature: auto_increment(double).')
+-- !result
+ALTER TABLE t MODIFY COLUMN mc_1 DOUBLE AS DEFAULT "1.0" (array_avg(array_data));
+-- result:
+E: (1064, "Getting syntax error at line 1, column 43. Detail message: Unexpected input 'DEFAULT', the most similar input is {a legal identifier}.")
+-- !result
+ALTER TABLE t MODIFY COLUMN mc_1 DOUBLE AS (mc_2);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Expression can not refers to other generated columns: mc_2.')
+-- !result
+ALTER TABLE t MODIFY COLUMN mc_1 BIGINT AS (sum(id));
+-- result:
+E: (1064, "Getting analyzing error. Detail message: Generated Column don't support aggregation function.")
+-- !result
+ALTER TABLE t MODIFY COLUMN mc_1 BIGINT AS (incr);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Expression can not refers to AUTO_INCREMENT columns: incr.')
+-- !result
+ALTER TABLE t MODIFY COLUMN mc_1 BIGINT KEY AS (id);
+-- result:
+E: (1064, 'Getting syntax error. Detail message: Generated Column can not be KEY.')
+-- !result
+ALTER TABLE t MODIFY COLUMN mc_2 INT;
+-- result:
+E: (1064, 'Can not modify a generated column to a non-generated column')
+-- !result
+ALTER TABLE t MODIFY COLUMN job BIGINT AS (id);
+-- result:
+E: (1064, 'Can not modify a non-generated column to a generated column')
+-- !result
+ALTER TABLE t DROP COLUMN mc_2;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+DROP TABLE t;
+-- result:
+-- !result
+DROP DATABASE test_materialized_column_schema_change;
+-- result:
+-- !result
+>>>>>>> fd979c1df9b... [Feature] Introduce ON_CHANGE for base-table-change-triggered MV refresh (#62037)
 -- name: test_normal_column_schema_change @native
 CREATE DATABASE test_normal_column_schema_change;
 -- result:

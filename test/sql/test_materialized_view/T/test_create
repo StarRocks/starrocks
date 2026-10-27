@@ -67,7 +67,7 @@ WHERE table_schema = 'test_create_mv';
 
 -- simplified syntax case 1
 CREATE MATERIALIZED VIEW `mv1`
-REFRESH ASYNC 
+REFRESH ON_CHANGE 
 AS
 select t0.k1, t1.v1
 from t_hash t0 join t_random t1 on t0.k1 = t1.k1;
@@ -75,14 +75,14 @@ SELECT * FROM verify_result WHERE table_name = 'mv1';
 
 -- simplified syntax case 2
 CREATE MATERIALIZED VIEW `mv2`
-REFRESH ASYNC 
+REFRESH ON_CHANGE 
 AS
 select k1, count(v1)  from t_random group by k1;
 SELECT * FROM verify_result WHERE table_name = 'mv2';
 
 -- simplified syntax for partition table
 CREATE MATERIALIZED VIEW `mv3`
-REFRESH ASYNC 
+REFRESH ON_CHANGE 
 AS
 select t0.k1, t1.v1
 from t_hash t0 join t1 on t0.k1 = t1.k1;
@@ -90,7 +90,7 @@ SELECT * FROM verify_result WHERE table_name = 'mv3';
 
 -- simplified syntax for partition table
 CREATE MATERIALIZED VIEW `mv4`
-REFRESH ASYNC 
+REFRESH ON_CHANGE 
 AS
 select t0.k1, t1.v1
 from t_random t0 join t1 on t0.k1 = t1.k1;
@@ -98,7 +98,7 @@ SELECT * FROM verify_result WHERE table_name = 'mv4';
 
 -- simplified syntax for partition table
 CREATE MATERIALIZED VIEW `mv_part1`
-REFRESH ASYNC 
+REFRESH ON_CHANGE 
 AS
 select t1.k1, t2.v1
 from t1 join t2 on t1.k1 = t2.k1;
@@ -109,7 +109,7 @@ SELECT * FROM verify_result WHERE table_name = 'mv_part1';
 CREATE MATERIALIZED VIEW `mv5`
 PARTITION BY (`k1`)
 DISTRIBUTED BY HASH(`k1`) BUCKETS 2
-REFRESH ASYNC
+REFRESH ON_CHANGE
 PROPERTIES (
 "replication_num" = "1",
 "storage_medium" = "HDD"
@@ -123,7 +123,7 @@ SELECT * FROM verify_result WHERE table_name = 'mv5';
 CREATE MATERIALIZED VIEW `mv6`
 PARTITION BY (`k1`)
 DISTRIBUTED BY RANDOM
-REFRESH ASYNC
+REFRESH ON_CHANGE
 PROPERTIES (
 "replication_num" = "1",
 "storage_medium" = "HDD"

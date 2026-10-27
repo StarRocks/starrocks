@@ -37,7 +37,7 @@ INSERT INTO user_events (user_id, event_ts, event_name, session_id, event_type, 
 -- !result
 CREATE MATERIALIZED VIEW test_mv1
 PARTITION BY dt
-REFRESH ASYNC EVERY(INTERVAL 1 DAY)
+REFRESH SCHEDULE EVERY(INTERVAL 1 DAY)
 PROPERTIES (
   "partition_refresh_number" = "1"
 )

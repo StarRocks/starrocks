@@ -126,7 +126,7 @@ INSERT INTO fact_orders VALUES
 -- !result
 CREATE MATERIALIZED VIEW `mv_region_geohash`
 DISTRIBUTED BY RANDOM BUCKETS 1
-REFRESH ASYNC EVERY(INTERVAL 6 HOUR)
+REFRESH SCHEDULE EVERY(INTERVAL 6 HOUR)
 PROPERTIES (
 "replication_num" = "1")
 AS SELECT `t2`.`geohash`, 
@@ -150,7 +150,7 @@ CREATE MATERIALIZED VIEW `mv_fact_orders_1`
 PARTITION BY (`date_id`)
 DISTRIBUTED BY HASH(`geohash`)
 ORDER BY (vehicle_id)
-REFRESH ASYNC
+REFRESH ON_CHANGE
 PROPERTIES (
 "replication_num" = "1",
 "query_rewrite_consistency" = "loose"
@@ -174,7 +174,7 @@ CREATE MATERIALIZED VIEW `mv_fact_orders_2`
 PARTITION BY (`date_id`)
 DISTRIBUTED BY HASH(`geohash`)
 ORDER BY (country_id)
-REFRESH ASYNC
+REFRESH ON_CHANGE
 PROPERTIES (
 "replication_num" = "1",
 "query_rewrite_consistency" = "loose")

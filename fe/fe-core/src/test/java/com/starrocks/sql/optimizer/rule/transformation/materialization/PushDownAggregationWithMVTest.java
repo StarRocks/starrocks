@@ -56,7 +56,7 @@ public class PushDownAggregationWithMVTest extends MVTestBase {
         // Create materialized view
         String createMvStmt = "CREATE MATERIALIZED VIEW test_agg_pushdown.mv1 \n" +
                 "DISTRIBUTED BY HASH(`id`) BUCKETS 3\n" +
-                "REFRESH ASYNC\n" +
+                "REFRESH ON_CHANGE\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ")\n" +

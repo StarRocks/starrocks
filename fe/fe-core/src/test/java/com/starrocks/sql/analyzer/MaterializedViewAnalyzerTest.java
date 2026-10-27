@@ -222,7 +222,7 @@ public class MaterializedViewAnalyzerTest {
                 .withMaterializedView("CREATE MATERIALIZED VIEW `mv1` (a comment \"a1\", b comment \"b2\", c)\n" +
                         "COMMENT \"MATERIALIZED_VIEW\"\n" +
                         "DISTRIBUTED BY HASH(a) BUCKETS 12\n" +
-                        "REFRESH ASYNC\n" +
+                        "REFRESH ON_CHANGE\n" +
                         "PROPERTIES (\n" +
                         "\"compression\" = \"zstd\",\n" +
                         "\"replication_num\" = \"1\",\n" +
@@ -397,7 +397,7 @@ public class MaterializedViewAnalyzerTest {
 
             // Not supported
             String mvSql = "CREATE MATERIALIZED VIEW denorm_mv_root_order\n" +
-                    "REFRESH ASYNC " +
+                    "REFRESH ON_CHANGE " +
                     "PARTITION BY date_trunc('day', sequence_timestamp)\n" +
                     "PROPERTIES(\n" +
                     "  \"partition_refresh_number\" = \"4\")\n" +
@@ -414,7 +414,7 @@ public class MaterializedViewAnalyzerTest {
 
             // Not supported: with subquery
             mvSql = "CREATE MATERIALIZED VIEW denorm_mv_root_order\n" +
-                    "REFRESH ASYNC \n" +
+                    "REFRESH ON_CHANGE \n" +
                     "PARTITION BY date_trunc('day', sequence_timestamp)\n" +
                     "PROPERTIES(\n" + "  \"partition_refresh_number\" = \"4\")\n" +
                     "AS\n" +
@@ -432,7 +432,7 @@ public class MaterializedViewAnalyzerTest {
 
             // Supported: with subquery
             mvSql = "CREATE MATERIALIZED VIEW denorm_mv_root_order\n" +
-                    "REFRESH ASYNC \n" +
+                    "REFRESH ON_CHANGE \n" +
                     "PARTITION BY date_trunc('day', sequence_timestamp)\n" +
                     "PROPERTIES(\n" + "  \"partition_refresh_number\" = \"4\")\n" +
                     "AS\n" +
@@ -448,7 +448,7 @@ public class MaterializedViewAnalyzerTest {
 
             // Not supported: with CTE
             mvSql = "CREATE MATERIALIZED VIEW denorm_mv_root_order\n" +
-                    "REFRESH ASYNC \n" +
+                    "REFRESH ON_CHANGE \n" +
                     "PARTITION BY date_trunc('day', sequence_timestamp)\n" +
                     "PROPERTIES(\n" + "  \"partition_refresh_number\" = \"4\")\n" +
                     "AS\n" +
@@ -467,7 +467,7 @@ public class MaterializedViewAnalyzerTest {
 
             // Supported: with CTE
             mvSql = "CREATE MATERIALIZED VIEW denorm_mv_root_order\n" +
-                    "REFRESH ASYNC \n" +
+                    "REFRESH ON_CHANGE \n" +
                     "PARTITION BY date_trunc('day', sequence_timestamp)\n" +
                     "PROPERTIES(\n" + "  \"partition_refresh_number\" = \"4\")\n" +
                     "AS\n" +
