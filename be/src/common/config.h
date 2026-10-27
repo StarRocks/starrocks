@@ -1848,6 +1848,8 @@ CONF_mBool(lake_enable_protobuf_file_checksum, "true");
 CONF_mBool(lake_clear_corrupted_cache_meta, "true");
 // clear *.data cache for lake table
 CONF_mBool(lake_clear_corrupted_cache_data, "false");
+// clear corrupted datacache for external tables, as lake_clear_corrupted_cache_data does for lake tables
+CONF_mBool(external_table_clear_corrupted_cache_data, "true");
 // The maximum number of files which need to rebuilt in cloud native pk index.
 // If files which need to rebuilt larger than this, we will flush memtable immediately.
 CONF_mInt32(cloud_native_pk_index_rebuild_files_threshold, "50");
@@ -2653,13 +2655,6 @@ CONF_mString(ai_function_on_error, "ignore");
 CONF_mInt32(ai_function_rate_limit_qps_chat, "128");
 CONF_mInt32(ai_function_rate_limit_qps_embedding, "128");
 CONF_mInt32(ai_function_max_inflight, "512");
-
-// Legacy ai_query runtime configuration. It is intentionally independent from the AI function runtime.
-CONF_Int32(llm_max_queue_size, "4096");
-
-CONF_Int32(llm_max_concurrent_queries, "8");
-
-CONF_Int32(llm_cache_size, "131072");
 
 CONF_mBool(enable_pipeline_driver_parallel_prepare, "true");
 // When enabled, ScanExecutor uses LockFreeWorkGroupScanTaskQueue for OLAP and connector scan task scheduling.

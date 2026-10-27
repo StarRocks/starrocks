@@ -62,8 +62,9 @@ import java.util.Set;
  * </ul>
  *
  * <p>Off the violation path the cost is one thread-local read plus up to two sharded lock-table
- * lookups. Only a copier holding no table lock pays for finding the table's database, which scans the
- * database map.
+ * lookups, none of which copies the lock's owner set. Only a copier holding no table lock pays for finding
+ * the table's database: a map lookup by the database id the analyzer recorded on the table, and a scan of
+ * the database map only when that id is missing or stale.
  *
  * @see LockTargetValidator the same channel, enforcing who may be locked at all
  */
@@ -88,8 +89,8 @@ public class SnapshotCopyValidator {
             ImmutableSet.of("copyOnlyForQuery", "buildBookmarkScopedTable", "getShadowCopyTable");
 
     /**
-     * The known violation the current thread is inside, if any. Read only once a violation has been
-     * established, so the conforming path never touches it.
+     * The known violation the current thread is inside, if any. Read first, so a copy inside an exempted
+     * scope pays for neither the lock lookups nor the database search.
      */
     private static final ThreadLocal<String> KNOWN_VIOLATION = new ThreadLocal<>();
 
@@ -131,7 +132,7 @@ public class SnapshotCopyValidator {
      */
     public static void validateCopySource(OlapTable source) {
         Mode mode = LockInvariantViolations.currentSnapshotCopyMode();
-        if (mode == Mode.OFF) {
+        if (mode == Mode.OFF || KNOWN_VIOLATION.get() != null) {
             return;
         }
 
@@ -145,7 +146,7 @@ public class SnapshotCopyValidator {
             return;
         }
 
-        if (detail != null && KNOWN_VIOLATION.get() == null) {
+        if (detail != null) {
             LockInvariantViolations.reportAtSite(KIND_SNAPSHOT_COPY_WITHOUT_LOCK, detail, REMEDY, mode,
                     callerOfTheCopy());
         }
@@ -164,7 +165,7 @@ public class SnapshotCopyValidator {
             return null;
         }
 
-        Database db = owningDatabase(state, tableId);
+        Database db = owningDatabase(state, source);
         if (db == null) {
             return null;
         }
@@ -177,8 +178,7 @@ public class SnapshotCopyValidator {
     }
 
     private static boolean holdsReadOrWrite(LockManager lockManager, long rid) {
-        return lockManager.isOwnedByCurrentThread(rid, LockType.READ)
-                || lockManager.isOwnedByCurrentThread(rid, LockType.WRITE);
+        return lockManager.isReadOrWriteOwnedByCurrentThread(rid);
     }
 
     /**
@@ -186,8 +186,19 @@ public class SnapshotCopyValidator {
      * a copier still holding an object that was replaced under the same id is reading what the lock on that
      * id protects. Only an olap table counts as the publisher: the system databases mint their own small ids, which
      * a table that was never published can share.
+     *
+     * <p>The database id the analyzer records on the table is tried first, so a copier holding only its
+     * database's lock does not scan every database on every copy. It is a hint, verified the same way.
      */
-    private static Database owningDatabase(GlobalStateMgr state, long tableId) {
+    private static Database owningDatabase(GlobalStateMgr state, OlapTable source) {
+        long tableId = source.getId();
+        Long dbIdHint = source.dbId;
+        if (dbIdHint != null) {
+            Database db = state.getLocalMetastore().getDb(dbIdHint);
+            if (db != null && db.getTable(tableId) instanceof OlapTable) {
+                return db;
+            }
+        }
         for (Database db : state.getLocalMetastore().getIdToDb().values()) {
             if (db.getTable(tableId) instanceof OlapTable) {
                 return db;
@@ -198,18 +209,15 @@ public class SnapshotCopyValidator {
 
     /**
      * The innermost frame outside the lock layer and the copy plumbing -- the code that decided to copy.
-     * Walks the stack, so it runs only once a violation has already been established.
+     * Walks the stack (lazily, see {@link LockInvariantViolations#STACK_WALKER}), so it runs only once a
+     * violation has already been established.
      */
     private static String callerOfTheCopy() {
-        for (StackTraceElement frame : Thread.currentThread().getStackTrace()) {
-            String className = frame.getClassName();
-            if (className.startsWith("java.") || className.startsWith("jdk.")
-                    || className.startsWith(LockInvariantViolations.LOCK_PACKAGE)
-                    || COPY_METHODS.contains(frame.getMethodName())) {
-                continue;
-            }
-            return className + "." + frame.getMethodName() + ":" + frame.getLineNumber();
-        }
-        return LockInvariantViolations.UNKNOWN_SITE;
+        return LockInvariantViolations.STACK_WALKER.walk(frames -> frames
+                .filter(frame -> !LockInvariantViolations.isJdkOrLockLayer(frame.getClassName())
+                        && !COPY_METHODS.contains(frame.getMethodName()))
+                .findFirst()
+                .map(LockInvariantViolations::siteOf)
+                .orElse(LockInvariantViolations.UNKNOWN_SITE));
     }
 }

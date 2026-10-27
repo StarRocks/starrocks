@@ -97,6 +97,8 @@ public class IcebergManifestsTableScanner extends AbstractIcebergMetadataScanner
                 return file.deletedFilesCount();
             case "deleted_rows_count":
                 return file.deletedRowsCount();
+            case "content":
+                return file.content().id();
             case "partitions":
                 return buildPartitionSummaries(file.partitions(), partitionSpecsById.get(file.partitionSpecId()));
             default:

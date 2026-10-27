@@ -19,6 +19,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.DeadlockException;
 import com.starrocks.common.util.concurrent.lock.LockException;
+import com.starrocks.common.util.concurrent.lock.LockHoldDepth;
 import com.starrocks.common.util.concurrent.lock.LockInvariantViolations;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.server.GlobalStateMgr;
@@ -79,11 +80,25 @@ public class LockTestUtils {
      * Nothing clears the counts before a test: a drain zeroes only what it read, so a violation recorded after it --
      * by a task the previous test left running, or by class setup -- is reported by the next test instead of being
      * thrown away. Surefire forks a JVM per class, so it never crosses into another class.
+     * <p>
+     * Also fails if the test thread still holds a metadata lock, see {@link #assertNoMetaLockHeld()}: a leaked lock
+     * silences the snapshot-copy check for every later test of the class.
      */
     public static void assertNoLockInvariantViolations() {
         Map<String, Long> violations = LockInvariantViolations.drainViolations();
         Assertions.assertTrue(violations.isEmpty(),
                 "lock invariant violated during the test, grep LOCK_INVARIANT_VIOLATION in the log: " + violations);
+        assertNoMetaLockHeld();
+    }
+
+    /**
+     * Fail if the test thread still holds an FE metadata lock. A lock leaked by one test -- a locker taken by the
+     * code under test and never closed -- makes every later check on the same thread see it as held, so the
+     * snapshot-copy check passes the next test's unlocked copy of that table without a word.
+     */
+    public static void assertNoMetaLockHeld() {
+        Assertions.assertEquals(0, LockHoldDepth.current(),
+                "the test thread still holds FE metadata lock(s); close the locker the test took");
     }
 
     /**

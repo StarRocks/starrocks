@@ -217,16 +217,14 @@ public class AIFunctionAuthorizationTest extends PlanTestNoneDBBase {
     }
 
     @Test
-    public void testLegacyAIQueryRemainsAnOrdinaryBuiltin() {
-        StatementBase statement = analyze("SELECT ai_query('prompt', parse_json('{}'))", caller);
-        Assertions.assertDoesNotThrow(() -> Authorizer.check(statement, caller));
-        FunctionCallExpr call = (FunctionCallExpr) ((SelectRelation) ((QueryStatement) statement).getQueryRelation())
-                .getOutputExpression().get(0);
-        Assertions.assertFalse(call.getFn().isAI());
+    public void testRemovedAIQueryCannotBeResolved() {
+        SemanticException error = Assertions.assertThrows(SemanticException.class,
+                () -> analyze("SELECT ai_query('prompt', parse_json('{}'))", caller));
+        Assertions.assertTrue(error.getMessage().contains("No matching function"), error.getMessage());
     }
 
     @Test
-    public void testLegacyAIQueryIsNotAGrantableAIFamily() {
+    public void testRemovedAIQueryIsNotAGrantableAIFamily() {
         Assertions.assertNull(GlobalStateMgr.getCurrentState().getGrantableAIFunctionFamily("ai_query"));
         Assertions.assertThrows(SemanticException.class,
                 () -> analyze("GRANT USAGE ON AI FUNCTION ai_query TO '" + user + "'", connectContext));

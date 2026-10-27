@@ -132,8 +132,8 @@ public class AIFunctionArgumentsTest {
                 "ai_extract('x',['a'])", "ai_fix_grammar('x')", "ai_redact('x',['a'])",
                 "ai_translate('x','English','Chinese')", "ai_similarity('x','y')",
                 "ai_summarize('x')", "ai_filter('x','condition')"};
-        long[] ids = {200001, 200002, 200003, 200004, 200005, 200006, 200007, 200008, 200009,
-                200010, 200011, 200012, 200013};
+        long[] ids = {200000, 200001, 200002, 200003, 200004, 200005, 200006, 200007, 200008,
+                200009, 200010, 200011, 200012};
         for (int i = 0; i < calls.length; i++) {
             FunctionCallExpr defaults = analyze(calls[i]);
             assertEquals(ids[i], defaults.getFn().getFunctionId());
@@ -185,7 +185,7 @@ public class AIFunctionArgumentsTest {
         for (String sql : List.of("ai_extract(input => 'Alice', labels => ['name'])",
                 "ai_extract(labels => ['name'], input => 'Alice')", "ai_extract('Alice', ['name'])")) {
             FunctionCallExpr call = analyze(sql);
-            assertEquals(200007, call.getFn().getFunctionId());
+            assertEquals(200006, call.getFn().getFunctionId());
             assertEquals("labels", call.getFn().getArgNames()[1]);
             assertTrue(AIModelConfigs.shouldUseDefaultProvider(call));
             assertEquals("chat_provider", AIModelConfigs.resolveProvider(providers, call).getName());
@@ -205,11 +205,11 @@ public class AIFunctionArgumentsTest {
 
     @Test
     public void testRenamedArgumentsAndFileOverloads() {
-        assertEquals(200001, analyze("ai_complete(prompt => 'hello')").getFn().getFunctionId());
-        assertEquals(200002, analyze("ai_complete(file => file_column, prompt => 'hello')").getFn().getFunctionId());
-        assertEquals(200003, analyze("ai_embed(input => 'hello')").getFn().getFunctionId());
+        assertEquals(200000, analyze("ai_complete(prompt => 'hello')").getFn().getFunctionId());
+        assertEquals(200001, analyze("ai_complete(file => file_column, prompt => 'hello')").getFn().getFunctionId());
+        assertEquals(200002, analyze("ai_embed(input => 'hello')").getFn().getFunctionId());
         FunctionCallExpr file = analyze("ai_embed(input => file_column)");
-        assertEquals(200004, file.getFn().getFunctionId());
+        assertEquals(200003, file.getFn().getFunctionId());
         reject("ai_complete(input => 'hello')", "does not support parameter");
         reject("ai_embed(file => file_column)", "does not support parameter");
         reject("ai_complete()", "Missing required parameter");
@@ -308,7 +308,7 @@ public class AIFunctionArgumentsTest {
         analyze("ai_translate(input => 'hello', source_language => '', target_language => 'Chinese')");
         reject("ai_embed(input => NULL)", "required parameter 'input' cannot be NULL");
         FunctionCallExpr call = analyze("ai_complete('x', NULL)");
-        assertEquals(200001, call.getFn().getFunctionId());
+        assertEquals(200000, call.getFn().getFunctionId());
         assertEquals("", stringArgument(call, AIModelConfigs.getProviderArgument(call.getFn())));
         // JSON contents, including reserved keys, are checked by BE before dispatch.
         analyze("ai_complete(prompt => 'x', options => json_object('model','bad'))");

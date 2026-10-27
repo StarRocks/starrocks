@@ -26,7 +26,9 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.common.util.concurrent.lock.SnapshotCopyValidator;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.ast.KeysType;
+import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.AfterEach;
@@ -37,6 +39,8 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class SnapshotCopyValidatorTest {
     private static final long DB_ID = 70001L;
@@ -213,6 +217,69 @@ public class SnapshotCopyValidatorTest {
             }
             copyIsAllowed();
         }
+        copyIsRefused();
+    }
+
+    /** An exempted copy is settled before the check looks anything up. */
+    @Test
+    public void testKnownViolationSkipsTheLookups() {
+        AtomicInteger lookups = new AtomicInteger();
+        new MockUp<LockManager>() {
+            @Mock
+            public boolean isReadOrWriteOwnedByCurrentThread(Invocation invocation, long rid) {
+                lookups.incrementAndGet();
+                return invocation.proceed();
+            }
+        };
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public ConcurrentHashMap<Long, Database> getIdToDb(Invocation invocation) {
+                lookups.incrementAndGet();
+                return invocation.proceed();
+            }
+        };
+        Locker locker = new Locker();
+        locker.lockDatabase(DB_ID, LockType.INTENTION_SHARED);
+        try (SnapshotCopyValidator.KnownViolation ignored = SnapshotCopyValidator.exemptKnownViolation("test")) {
+            copyIsAllowed();
+        } finally {
+            locker.unLockDatabase(DB_ID, LockType.INTENTION_SHARED);
+        }
+        Assertions.assertEquals(0, lookups.get());
+    }
+
+    /**
+     * A copier holding only the database lock finds the database by the id the analyzer recorded on the table, not
+     * by scanning every database; a missing or stale recorded id falls back to the scan.
+     */
+    @Test
+    public void testDatabaseIsFoundByTheRecordedId() {
+        AtomicInteger scans = new AtomicInteger();
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public ConcurrentHashMap<Long, Database> getIdToDb(Invocation invocation) {
+                scans.incrementAndGet();
+                return invocation.proceed();
+            }
+        };
+        Locker locker = new Locker();
+        locker.lockDatabase(DB_ID, LockType.READ);
+        try {
+            Assertions.assertNull(table.dbId);
+            copyIsAllowed();
+            Assertions.assertEquals(1, scans.get());
+
+            table.dbId = DB_ID + 100;
+            copyIsAllowed();
+            Assertions.assertEquals(2, scans.get());
+
+            table.dbId = DB_ID;
+            copyIsAllowed();
+            Assertions.assertEquals(2, scans.get());
+        } finally {
+            locker.unLockDatabase(DB_ID, LockType.READ);
+        }
+        // Found by the recorded id, the database is still the one whose lock must be held.
         copyIsRefused();
     }
 

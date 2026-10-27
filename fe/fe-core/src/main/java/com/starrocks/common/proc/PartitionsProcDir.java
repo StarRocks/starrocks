@@ -128,7 +128,8 @@ public class PartitionsProcDir implements ProcDirInterface {
                     .add("VersionTxnType")
                     .add("MetaSwitchVersion")
                     .add("LastUpdateTime")
-                    .add("LastAccessTime");
+                    .add("LastAccessTime")
+                    .add("VacuumVersion");
             this.titleNames = builder.build();
         } else {
             ImmutableList.Builder<String> builder = new ImmutableList.Builder<String>()
@@ -369,6 +370,7 @@ public class PartitionsProcDir implements ProcDirInterface {
         long lastAccessTime = accessTimes.getOrDefault(partition.getId(), 0L);
         partitionInfo.add(lastAccessTime == 0 ? FeConstants.NULL_STRING
                 : TimeUtils.longToTimeString(lastAccessTime)); // LastAccessTime
+        partitionInfo.add(physicalPartition.getLastSuccVacuumVersion()); // VacuumVersion
         return partitionInfo;
     }
 

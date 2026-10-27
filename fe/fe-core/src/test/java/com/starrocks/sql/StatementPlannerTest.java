@@ -96,28 +96,32 @@ class StatementPlannerTest extends PlanTestBase {
 
     @Test
     public void testDeferLock() throws Exception {
+        // Not deferred means analyzeStatement took the lock and left it to the caller: close every locker.
         {
             FeConstants.runningUnitTest = true;
             String sql = "insert into t0 select * from t0";
             StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            PlannerMetaLocker locker = new PlannerMetaLocker(connectContext, stmt);
-            assertTrue(StatementPlanner.analyzeStatement(stmt, connectContext, locker));
+            try (PlannerMetaLocker locker = new PlannerMetaLocker(connectContext, stmt)) {
+                assertTrue(StatementPlanner.analyzeStatement(stmt, connectContext, locker));
+            }
         }
 
         {
             FeConstants.runningUnitTest = false;
             String sql = "insert into t0 select * from t0";
             StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            PlannerMetaLocker locker = new PlannerMetaLocker(connectContext, stmt);
-            assertFalse(StatementPlanner.analyzeStatement(stmt, connectContext, locker));
+            try (PlannerMetaLocker locker = new PlannerMetaLocker(connectContext, stmt)) {
+                assertFalse(StatementPlanner.analyzeStatement(stmt, connectContext, locker));
+            }
         }
 
         {
             FeConstants.runningUnitTest = true;
             String sql = "submit task as insert into t0 select * from t0";
             StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            PlannerMetaLocker locker = new PlannerMetaLocker(connectContext, stmt);
-            assertTrue(StatementPlanner.analyzeStatement(stmt, connectContext, locker));
+            try (PlannerMetaLocker locker = new PlannerMetaLocker(connectContext, stmt)) {
+                assertTrue(StatementPlanner.analyzeStatement(stmt, connectContext, locker));
+            }
         }
     }
 
@@ -145,8 +149,10 @@ class StatementPlannerTest extends PlanTestBase {
                 }
             });
 
-            boolean deferred = StatementPlanner.analyzeStatement(stmt, connectContext, locker);
-            assertFalse(deferred);
+            // Not deferred: analyzeStatement leaves the lock it took to the caller.
+            try (PlannerMetaLocker ignored = locker) {
+                assertFalse(StatementPlanner.analyzeStatement(stmt, connectContext, locker));
+            }
 
             List<FileTableFunctionRelation> relations =
                     AnalyzerUtils.collectFileTableFunctionRelation(((InsertStmt) stmt).getQueryStatement());
