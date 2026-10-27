@@ -84,7 +84,11 @@ public class MVPartitionPruner {
                 // we should add predicate c3 < 2000 and c1 = 1 into scan operator to do pruning
                 boolean isAddMvPrunePredicate = isAddMVPrunePredicate(olapScanOperator);
                 if (isAddMvPrunePredicate) {
-                    builder.setPredicate(getMVPrunePredicate(olapScanOperator));
+                    // Column pruning has already run. Restore any inputs needed by the MV pruning
+                    // conjunct before it becomes a residual or pruned partition predicate.
+                    LogicalOlapScanOperator enforcedScan = new ColumnEnforcer(optExpression,
+                            Utils.extractColumnRef(mvRewriteContext.getMvPruneConjunct())).enforce().getOp().cast();
+                    builder.withOperator(enforcedScan).setPredicate(getMVPrunePredicate(olapScanOperator));
                 }
                 LogicalOlapScanOperator cloned = builder.build();
 
