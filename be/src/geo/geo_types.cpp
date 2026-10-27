@@ -409,6 +409,7 @@ static bool has_no_crossings_direct(const std::vector<S2Point>& points) {
     }
     return true;
 }
+
 bool GeoPolygon::is_valid_ring(const GeoCoordinateList& coordinates) {
     std::vector<S2Point> points;
     if (to_s2loop_points(coordinates, &points) != GEO_PARSE_OK || !has_valid_loop_vertices(points)) return false;
@@ -420,6 +421,7 @@ bool GeoPolygon::is_valid_ring(const GeoCoordinateList& coordinates) {
 
 bool GeoPolygon::is_valid_ring_direct(const GeoCoordinateList& coordinates) {
     // A paired sweep over 4..512 vertices favored direct checks at every tested size.
+    // Raw size bounds the converted size; retain the old path without converting twice.
     if (coordinates.list.size() > kMaxDirectVertices + 1) return is_valid_ring(coordinates);
     std::vector<S2Point> points;
     return to_s2loop_points(coordinates, &points) == GEO_PARSE_OK && has_valid_loop_vertices(points) &&
