@@ -623,6 +623,19 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
                 )
                 distributed_by = starrocks_distribution
 
+        if distributed_by and utils.is_range_distribution(distributed_by):
+            # Range distribution has no DISTRIBUTED BY syntax: StarRocks applies it when the clause
+            # is omitted from a table that declares a key type or ORDER BY.
+            parsed_distribution = StarRocksTableDefinitionParser.parse_distribution(distributed_by)
+            if parsed_distribution and parsed_distribution.buckets is not None:
+                logger.warning(
+                    "Table %r: BUCKETS is ignored for RANGE distribution, which has no bucket count.", table.name)
+            if not key_desc and not opts.get(TableInfoKey.ORDER_BY) and not opts.get(TableInfoKey.REFRESH):
+                logger.warning(
+                    "Table %r: RANGE distribution requires a key type or ORDER BY; without one, "
+                    "StarRocks creates the table with RANDOM distribution.", table.name)
+            distributed_by = None
+
         if distributed_by:
             table_opts.append(f'DISTRIBUTED BY {distributed_by}')
 
@@ -1201,6 +1214,10 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
         """Compile ALTER TABLE DISTRIBUTED BY DDL for StarRocks."""
         # TODO:
         table_name = format_table_name(self, alter.table_name, alter.schema)
+        if utils.is_range_distribution(alter.distribution_method):
+            raise exc.CompileError(
+                f"Cannot ALTER table {table_name} to RANGE distribution: StarRocks has no "
+                "DISTRIBUTED BY RANGE syntax. Range distribution can only be set when the table is created.")
         distribution_clause = f"DISTRIBUTED BY {alter.distribution_method}"
         if alter.buckets is not None:
             distribution_clause += f" BUCKETS {alter.buckets}"
