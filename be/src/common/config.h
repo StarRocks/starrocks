@@ -2179,7 +2179,9 @@ CONF_mInt32(put_combined_txn_log_thread_pool_num_max, "64");
 // Keep it separate from pip_sink_io, where other sinks run multi-MB uploads. Must be greater than 0; changes at
 // runtime resize the pool without interrupting closes already running.
 CONF_mInt32(load_sink_close_thread_pool_num_max, "64");
-CONF_mBool(enable_put_combinded_txn_log_parallel, "false");
+// Shared-data only. Write the combined txn logs of a load's partitions to object storage in parallel, on
+// put_combined_txn_log_thread_pool, instead of one partition after another.
+CONF_mBool(enable_put_combinded_txn_log_parallel, "true");
 // used to control whether the metrics/ interface collects table metrics
 CONF_mBool(enable_collect_table_metrics, "true");
 // use to decide whether to enable the collection of table metrics
