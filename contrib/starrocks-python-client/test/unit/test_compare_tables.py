@@ -1702,6 +1702,22 @@ class TestPropertiesNotReportedByDatabase:
     def test_value_case_sensitive_otherwise(self):
         assert self._run({"colocate_with": "grp"}, {"colocate_with": "GRP"}) == {"colocate_with": "GRP"}
 
+    @pytest.mark.parametrize("prop_key, conn_value, meta_value", [
+        ("query_rewrite_consistency", "LOOSE", "loose"),
+        ("force_external_table_query_rewrite", "CHECKED", "checked"),
+        ("partition_refresh_strategy", "adaptive", "ADAPTIVE"),
+        ("refresh_mode", "pct", "PCT"),
+    ])
+    def test_mv_value_case_insensitive(self, prop_key, conn_value, meta_value):
+        from starrocks.alembic.compare import _compare_table_properties_impl
+
+        to_set, _ = _compare_table_properties_impl(
+            "test_db", "test_mv",
+            {TableInfoKey.PROPERTIES: {prop_key: conn_value}}, {TableInfoKey.PROPERTIES: {prop_key: meta_value}},
+            SystemRunMode.SHARED_NOTHING, default_cls=ReflectionMVDefaults,
+        )
+        assert to_set == {}
+
 
 class TestORMTableObjects:
     """Tests using real SQLAlchemy ORM Table objects with __table_args__."""

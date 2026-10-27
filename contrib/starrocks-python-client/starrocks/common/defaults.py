@@ -235,6 +235,15 @@ class ReflectionMVDefaults(ReflectionViewDefaults):
         'replication_num': '1',  # Different for shared-data
     }, **_DEFAULT_PROPERTIES}
 
+    # StarRocks accepts these in any case; it reports query_rewrite_consistency and
+    # force_external_table_query_rewrite uppercased, the others as written.
+    _CASE_INSENSITIVE_PROPERTIES: frozenset = ReflectionViewDefaults._CASE_INSENSITIVE_PROPERTIES | {
+        'force_external_table_query_rewrite',
+        'partition_refresh_strategy',
+        'query_rewrite_consistency',
+        'refresh_mode',
+    }
+
     # Properties that information_schema.tables_config omits for materialized views, and which
     # must therefore be read from the PROPERTIES clause of the CREATE MATERIALIZED VIEW ddl.
     # Without this, such a property looks absent on the reflected side while being present in
