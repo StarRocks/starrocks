@@ -1,9 +1,10 @@
 // Arrow Flight SQL throughput benchmark: single-endpoint funnel vs multi-endpoint fan-out.
-// Auths with a JWT bearer token (env SR_JWT) sent as an Authorization header on every call
-// (FE getFlightInfo + each CN getStream). Reads the full result both ways and reports
-// rows, MB, wall-clock, rows/s, MB/s.
-//   SR_JWT=<jwt> java --add-opens=java.base/java.nio=ALL-UNNAMED \
-//        -cp "/opt/starrocks/fe/lib/*" AfBench.java <feHost> <fePort> <db.table>
+// Logs in with a JWT (env SR_JWT) over Arrow Flight, runs the query WARMUP times (discarded)
+// then RUNS times per mode, reads every endpoint in parallel, and reports the median
+// wall-clock / throughput (with min/max). Optional SR_QUERY overrides the default SELECT *.
+//   SR_JWT=<jwt> [SR_USER=<dsid>] [RUNS=3] [WARMUP=1] [SR_QUERY="SELECT ..."] \
+//     java --add-opens=java.base/java.nio=ALL-UNNAMED -cp "/opt/starrocks/fe/lib/*" \
+//     AfBench.java <feHost> <fePort> <db.table>
 import org.apache.arrow.flight.CallOption;
 import org.apache.arrow.flight.FlightCallHeaders;
 import org.apache.arrow.flight.FlightClient;
@@ -44,8 +45,19 @@ public class AfBench {
             System.exit(2);
         }
 
-        String qOff = "SELECT /*+ SET_VAR(enable_arrow_flight_multi_endpoint=false) */ * FROM " + table;
-        String qOn  = "SELECT /*+ SET_VAR(enable_arrow_flight_multi_endpoint=true)  */ * FROM " + table;
+        // Base query: either a full custom query via SR_QUERY (e.g. a high-cardinality
+        // GROUP BY) or the default full-table scan of <table>. The multi-endpoint SET_VAR
+        // hint is injected right after the leading SELECT so the same query runs both ways.
+        String custom = System.getenv("SR_QUERY");
+        String qOff, qOn;
+        if (custom != null && !custom.trim().isEmpty()) {
+            qOff = withHint(custom, false);
+            qOn = withHint(custom, true);
+            System.out.println("[query] custom: " + custom.trim());
+        } else {
+            qOff = "SELECT /*+ SET_VAR(enable_arrow_flight_multi_endpoint=false) */ * FROM " + table;
+            qOn  = "SELECT /*+ SET_VAR(enable_arrow_flight_multi_endpoint=true)  */ * FROM " + table;
+        }
 
         allocator = new RootAllocator();
         feLocation = Location.forGrpcInsecure(host, port);
@@ -66,50 +78,80 @@ public class AfBench {
                     new CredentialCallOption(new BearerCredentialWriter("bearertoken"))};
             System.out.println("[auth] user=" + user + " jwt-login token=" + cred.isPresent() + "  table=" + table);
 
-            FlightInfo off = sql.execute(qOff, feOpts);
-            bench("single-endpoint", off);
-            FlightInfo on = sql.execute(qOn, feOpts);
-            bench("multi-endpoint ", on);
+            int runs = Integer.parseInt(System.getenv().getOrDefault("RUNS", "3"));
+            int warmup = Integer.parseInt(System.getenv().getOrDefault("WARMUP", "1"));
+            System.out.printf("[config] runs=%d warmup=%d%n", runs, warmup);
+
+            runMode(sql, "single-endpoint", qOff, runs, warmup);
+            runMode(sql, "multi-endpoint ", qOn, runs, warmup);
         } finally {
             sql.close();
         }
     }
 
-    static void bench(String label, FlightInfo info) throws Exception {
-        List<FlightEndpoint> eps = info.getEndpoints();
-        System.out.printf("%s  endpoints=%d%n", label, eps.size());
-        for (int i = 0; i < eps.size(); i++) {
-            FlightEndpoint ep = eps.get(i);
-            String loc = ep.getLocations().isEmpty() ? "(none->FE)" : ep.getLocations().get(0).getUri().toString();
-            System.out.printf("    ep[%d] loc=%s ticketBytes=%d%n", i, loc, ep.getTicket().getBytes().length);
+    // Insert the multi-endpoint SET_VAR hint right after the leading SELECT keyword.
+    static String withHint(String q, boolean on) {
+        String t = q.trim();
+        if (t.regionMatches(true, 0, "SELECT", 0, 6)) {
+            return "SELECT /*+ SET_VAR(enable_arrow_flight_multi_endpoint=" + on + ") */" + t.substring(6);
         }
-        long t0 = System.nanoTime();
+        return t;  // not a SELECT; run as-is (hint not applied)
+    }
+
+    // Run one mode: WARMUP discarded passes (to warm scan/datacache so both modes compete
+    // warm), then RUNS measured passes; report the median wall-clock with min/max.
+    static void runMode(FlightSqlClient sql, String label, String query, int runs, int warmup) throws Exception {
+        for (int i = 0; i < warmup; i++) {
+            readAll(sql.execute(query, feOpts));
+        }
+        double[] secs = new double[runs];
+        long rows = 0, bytes = 0;
+        int eps = 0;
+        for (int i = 0; i < runs; i++) {
+            FlightInfo info = sql.execute(query, feOpts);
+            if (i == 0) {
+                List<FlightEndpoint> e = info.getEndpoints();
+                System.out.printf("  %s fan-out: %d endpoints%n", label.trim(), e.size());
+                for (FlightEndpoint ep : e) {
+                    String loc = ep.getLocations().isEmpty() ? "(none->FE)" : ep.getLocations().get(0).getUri().toString();
+                    System.out.printf("    %s%n", loc);
+                }
+            }
+            long t0 = System.nanoTime();
+            long[] rb = readAll(info);
+            secs[i] = (System.nanoTime() - t0) / 1e9;
+            rows = rb[0];
+            bytes = rb[1];
+            eps = info.getEndpoints().size();
+            System.out.printf("  %s run %d/%d: %.2fs%n", label.trim(), i + 1, runs, secs[i]);
+        }
+        java.util.Arrays.sort(secs);
+        double median = secs[runs / 2];
+        double min = secs[0], max = secs[runs - 1];
+        double mb = bytes / 1048576.0;
+        System.out.printf("%s  endpoints=%d  rows=%,d  %.1f MB  median %.2fs (min %.2f / max %.2f)  |  %,.0f rows/s  %.1f MB/s%n",
+                label, eps, rows, mb, median, min, max, rows / median, mb / median);
+    }
+
+    // Read every endpoint in parallel. Throws if any endpoint fails (so a dropped shard is loud).
+    static long[] readAll(FlightInfo info) throws Exception {
+        List<FlightEndpoint> eps = info.getEndpoints();
         ExecutorService pool = Executors.newFixedThreadPool(Math.max(eps.size(), 1));
         java.util.List<Future<long[]>> futs = new java.util.ArrayList<>();
         for (FlightEndpoint ep : eps) {
             futs.add(pool.submit((Callable<long[]>) () -> readEndpoint(ep)));
         }
-        // Read every endpoint independently; record per-endpoint outcome instead of
-        // aborting the whole pass on the first failing fetch.
-        long rows = 0, bytes = 0, ok = 0, failed = 0;
-        for (int i = 0; i < futs.size(); i++) {
-            try {
-                long[] rb = futs.get(i).get();
+        long rows = 0, bytes = 0;
+        try {
+            for (Future<long[]> f : futs) {
+                long[] rb = f.get();
                 rows += rb[0];
                 bytes += rb[1];
-                ok++;
-                System.out.printf("    ep[%d] OK rows=%,d bytes=%,d%n", i, rb[0], rb[1]);
-            } catch (Exception e) {
-                failed++;
-                Throwable c = e.getCause() != null ? e.getCause() : e;
-                System.out.printf("    ep[%d] FAIL %s%n", i, c.getMessage());
             }
+        } finally {
+            pool.shutdown();
         }
-        pool.shutdown();
-        double sec = (System.nanoTime() - t0) / 1e9;
-        double mb = bytes / 1048576.0;
-        System.out.printf("%s  endpoints=%d ok=%d failed=%d  rows=%,d  %.1f MB  %.2fs  |  %,.0f rows/s  %.1f MB/s%n",
-                label, eps.size(), ok, failed, rows, mb, sec, rows / sec, mb / sec);
+        return new long[]{rows, bytes};
     }
 
     static long[] readEndpoint(FlightEndpoint ep) throws Exception {
