@@ -395,7 +395,7 @@ public class FunctionSetTest {
                 .sorted(Comparator.comparingLong(Function::getFunctionId))
                 .toList();
 
-        long[] expectedIds = {200001L, 200002L};
+        long[] expectedIds = {200000L, 200001L};
         Type[][] expectedArgs = {
                 {VarcharType.VARCHAR, VarcharType.VARCHAR, VarcharType.VARCHAR, JsonType.JSON},
                 {VarcharType.VARCHAR, FileType.FILE, VarcharType.VARCHAR, VarcharType.VARCHAR, JsonType.JSON}
@@ -428,7 +428,7 @@ public class FunctionSetTest {
     @Test
     public void testAIQueryIsRemoved() {
         Assertions.assertTrue(functionSet.getBuiltinFunctions().stream()
-                .noneMatch(fn -> fn.getFunctionId() == 200000L || "ai_query".equals(fn.functionName())));
+                .noneMatch(fn -> "ai_query".equals(fn.functionName())));
         Assertions.assertNull(functionSet.getGrantableAIFunctionFamily("ai_query"));
         Assertions.assertNull(functionSet.getGrantableAIFunctionFamily("AI_QUERY"));
     }
@@ -458,7 +458,7 @@ public class FunctionSetTest {
                 {VarcharType.VARCHAR, VarcharType.VARCHAR, VarcharType.VARCHAR, JsonType.JSON},
                 {VarcharType.VARCHAR, FileType.FILE, VarcharType.VARCHAR, VarcharType.VARCHAR, JsonType.JSON}
         };
-        long[] expectedIds = {200001L, 200002L};
+        long[] expectedIds = {200000L, 200001L};
 
         for (int i = 0; i < concreteArgs.length; i++) {
             Function resolved = functionSet.getFunction(

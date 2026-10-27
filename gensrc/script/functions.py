@@ -20,7 +20,6 @@
 #   <function id> <name>, <exception_safe>, <check_overflow>, <return_type>, [<args>], <backend fn>
 # With an optional
 #   <prepare fn>, <close fn>
-# AIProject functions omit backend/prepare/close symbols and append a metadata dict instead.
 #
 # example:
 #   [1, "add", "TINYINT", ["TINYINT", "TINYINT"], "Math::add", "Math::add_prepare", "Math::add_close"]
@@ -1778,9 +1777,10 @@ vectorized_functions = [
     [190000, 'tokenize', True, False, 'ARRAY_VARCHAR', ['VARCHAR', 'VARCHAR'], 'GinFunctions::tokenize', 'GinFunctions::tokenize_prepare', 'GinFunctions::tokenize_close'],
 
     # ai functions
-    # AIProject functions declare named-argument and AI metadata without backend scalar symbols.
-    [200001, 'ai_complete', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'VARCHAR', 'JSON'],
-     {
+    # AIProject functions keep the standard declaration layout. The backend symbol is nullptr
+    # because AIProject executes them asynchronously using AI metadata, not scalar function pointers.
+    [200000, 'ai_complete', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'VARCHAR', 'JSON'],
+     'nullptr', {
          'named_args': [
              {'name': 'prompt'},
              {'name': 'provider', 'default': ''},
@@ -1789,8 +1789,8 @@ vectorized_functions = [
          ],
          'ai': ai_metadata('CHAT', 'PASSTHROUGH', 'STRING', inputs=('prompt',))
      }],
-    [200002, 'ai_complete', True, False, 'VARCHAR', ['VARCHAR', 'FILE', 'VARCHAR', 'VARCHAR', 'JSON'],
-     {
+    [200001, 'ai_complete', True, False, 'VARCHAR', ['VARCHAR', 'FILE', 'VARCHAR', 'VARCHAR', 'JSON'],
+     'nullptr', {
          'named_args': [
              {'name': 'prompt'},
              {'name': 'file'},
@@ -1800,8 +1800,8 @@ vectorized_functions = [
          ],
          'ai': ai_metadata('CHAT', 'PASSTHROUGH', 'STRING', inputs=('prompt',))
      }],
-    [200003, 'ai_embed', True, False, 'ARRAY_FLOAT', ['VARCHAR', 'VARCHAR', 'VARCHAR', 'JSON'],
-     {
+    [200002, 'ai_embed', True, False, 'ARRAY_FLOAT', ['VARCHAR', 'VARCHAR', 'VARCHAR', 'JSON'],
+     'nullptr', {
          'named_args': [
              {'name': 'input'},
              {'name': 'provider', 'default': ''},
@@ -1810,8 +1810,8 @@ vectorized_functions = [
          ],
          'ai': ai_metadata('EMBEDDING', 'PASSTHROUGH', 'EMBEDDING', inputs=('input',))
      }],
-    [200004, 'ai_embed', True, False, 'ARRAY_FLOAT', ['FILE', 'VARCHAR', 'VARCHAR', 'JSON'],
-     {
+    [200003, 'ai_embed', True, False, 'ARRAY_FLOAT', ['FILE', 'VARCHAR', 'VARCHAR', 'JSON'],
+     'nullptr', {
          'named_args': [
              {'name': 'input'},
              {'name': 'provider', 'default': ''},
@@ -1820,8 +1820,8 @@ vectorized_functions = [
          ],
          'ai': ai_metadata('EMBEDDING', 'NONE', 'EMBEDDING', inputs=())
      }],
-    [200005, 'ai_sentiment', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'VARCHAR'],
-     {
+    [200004, 'ai_sentiment', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'VARCHAR'],
+     'nullptr', {
          'named_args': [
              {'name': 'input'},
              {'name': 'provider', 'default': ''},
@@ -1829,8 +1829,8 @@ vectorized_functions = [
          ],
          'ai': ai_metadata('CHAT', 'SENTIMENT', 'SENTIMENT', inputs=('input',))
      }],
-    [200006, 'ai_classify', True, False, 'JSON', ['VARCHAR', 'ARRAY_VARCHAR', 'VARCHAR', 'VARCHAR'],
-     {
+    [200005, 'ai_classify', True, False, 'JSON', ['VARCHAR', 'ARRAY_VARCHAR', 'VARCHAR', 'VARCHAR'],
+     'nullptr', {
          'named_args': [
              {'name': 'input'},
              {'name': 'categories'},
@@ -1839,8 +1839,8 @@ vectorized_functions = [
          ],
          'ai': ai_metadata('CHAT', 'CLASSIFY', 'JSON', inputs=('input', 'categories'))
      }],
-    [200007, 'ai_extract', True, False, 'JSON', ['VARCHAR', 'ARRAY_VARCHAR', 'VARCHAR', 'VARCHAR'],
-     {
+    [200006, 'ai_extract', True, False, 'JSON', ['VARCHAR', 'ARRAY_VARCHAR', 'VARCHAR', 'VARCHAR'],
+     'nullptr', {
          'named_args': [
              {'name': 'input'},
              {'name': 'labels'},
@@ -1849,8 +1849,8 @@ vectorized_functions = [
          ],
          'ai': ai_metadata('CHAT', 'EXTRACT', 'JSON', inputs=('input', 'labels'))
      }],
-    [200008, 'ai_fix_grammar', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'VARCHAR'],
-     {
+    [200007, 'ai_fix_grammar', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'VARCHAR'],
+     'nullptr', {
          'named_args': [
              {'name': 'input'},
              {'name': 'provider', 'default': ''},
@@ -1858,8 +1858,8 @@ vectorized_functions = [
          ],
          'ai': ai_metadata('CHAT', 'FIX_GRAMMAR', 'STRING', inputs=('input',))
      }],
-    [200009, 'ai_redact', True, False, 'VARCHAR', ['VARCHAR', 'ARRAY_VARCHAR', 'VARCHAR', 'VARCHAR'],
-     {
+    [200008, 'ai_redact', True, False, 'VARCHAR', ['VARCHAR', 'ARRAY_VARCHAR', 'VARCHAR', 'VARCHAR'],
+     'nullptr', {
          'named_args': [
              {'name': 'input'},
              {'name': 'categories'},
@@ -1868,8 +1868,8 @@ vectorized_functions = [
          ],
          'ai': ai_metadata('CHAT', 'REDACT', 'STRING', inputs=('input', 'categories'))
      }],
-    [200010, 'ai_translate', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'VARCHAR', 'VARCHAR', 'VARCHAR'],
-     {
+    [200009, 'ai_translate', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'VARCHAR', 'VARCHAR', 'VARCHAR'],
+     'nullptr', {
          'named_args': [
              {'name': 'input'},
              {'name': 'source_language'},
@@ -1881,8 +1881,8 @@ vectorized_functions = [
                            null_as_empty=('source_language',),
                            blank_as_null=('target_language',))
      }],
-    [200011, 'ai_similarity', True, False, 'FLOAT', ['VARCHAR', 'VARCHAR', 'VARCHAR', 'VARCHAR'],
-     {
+    [200010, 'ai_similarity', True, False, 'FLOAT', ['VARCHAR', 'VARCHAR', 'VARCHAR', 'VARCHAR'],
+     'nullptr', {
          'named_args': [
              {'name': 'input'},
              {'name': 'other'},
@@ -1891,8 +1891,8 @@ vectorized_functions = [
          ],
          'ai': ai_metadata('CHAT', 'SIMILARITY', 'SIMILARITY', inputs=('input', 'other'))
      }],
-    [200012, 'ai_summarize', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'VARCHAR'],
-     {
+    [200011, 'ai_summarize', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'VARCHAR'],
+     'nullptr', {
          'named_args': [
              {'name': 'input'},
              {'name': 'provider', 'default': ''},
@@ -1900,8 +1900,8 @@ vectorized_functions = [
          ],
          'ai': ai_metadata('CHAT', 'SUMMARIZE', 'STRING', inputs=('input',))
      }],
-    [200013, 'ai_filter', True, False, 'BOOLEAN', ['VARCHAR', 'VARCHAR', 'VARCHAR', 'VARCHAR'],
-     {
+    [200012, 'ai_filter', True, False, 'BOOLEAN', ['VARCHAR', 'VARCHAR', 'VARCHAR', 'VARCHAR'],
+     'nullptr', {
          'named_args': [
              {'name': 'input'},
              {'name': 'condition'},
