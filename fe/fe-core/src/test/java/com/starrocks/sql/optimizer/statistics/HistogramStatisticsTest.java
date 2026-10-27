@@ -14,10 +14,13 @@
 
 package com.starrocks.sql.optimizer.statistics;
 
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.type.BooleanType;
@@ -606,6 +609,110 @@ public class HistogramStatisticsTest {
         Assertions.assertEquals(0.0, estimated.getColumnStatistic(columnRefOperator).getNullsFraction(), 0.001);
     }
 
+    private static final ColumnRefOperator STRING_COLUMN = new ColumnRefOperator(0, VarcharType.VARCHAR, "s", true);
+
+    // A string column as stats collection stores it: the MCVs plus one [+inf, +inf] placeholder bucket that
+    // holds the remaining rows. 1000 rows: 'hot' x 600, then 200 other values x 2 rows each.
+    private static Statistics stringColumnWithPlaceholderBucket() {
+        Map<String, Long> mcv = Maps.newHashMap();
+        mcv.put("hot", 600L);
+        List<Bucket> placeholderBucket = List.of(
+                new Bucket(Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY, 400L, 0L));
+        ColumnStatistic columnStatistic = new ColumnStatistic(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY,
+                0, 20, 201, new Histogram(placeholderBucket, mcv), ColumnStatistic.StatisticType.ESTIMATE);
+        return Statistics.builder()
+                .setOutputRowCount(1000)
+                .addColumnStatistic(STRING_COLUMN, columnStatistic)
+                .build();
+    }
+
+    private static Statistics estimateStringComparison(BinaryType binaryType, String value) {
+        Statistics statistics = stringColumnWithPlaceholderBucket();
+        ConstantOperator constant = ConstantOperator.createVarchar(value);
+        return BinaryPredicateStatisticCalculator.estimateColumnToConstantComparison(Optional.of(STRING_COLUMN),
+                statistics.getColumnStatistic(STRING_COLUMN), new BinaryPredicateOperator(binaryType, STRING_COLUMN,
+                        constant), Optional.of(constant), statistics);
+    }
+
+    @Test
+    public void testPlaceholderBucketEqualMcv() {
+        // Given a string column whose histogram has MCV {'hot': 600} and only a [+inf, +inf] placeholder bucket
+        // CASE WHEN s = 'hot'  correct row estimate is returned END
+
+        String mcvValue = "hot";
+        double expectedRowCount = 600;
+
+        Statistics actual = estimateStringComparison(BinaryType.EQ, mcvValue);
+
+        Assertions.assertEquals(expectedRowCount, actual.getOutputRowCount(), 0.001);
+    }
+
+    @Test
+    public void testPlaceholderBucketNotEqualMcv() {
+        // Given a string column whose histogram has MCV {'hot': 600} and only a [+inf, +inf] placeholder bucket
+        // CASE WHEN s <> 'hot' then row count is 1000-600 = 400 rows END
+
+        String mcvValue = "hot";
+        double expectedRowCount = 400;
+
+        Statistics actual = estimateStringComparison(BinaryType.NE, mcvValue);
+
+        Assertions.assertEquals(expectedRowCount, actual.getOutputRowCount(), 0.001);
+    }
+
+    @Test
+    public void testPlaceholderBucketEqualNonMcv() {
+        // Given a string column whose histogram has MCV {'hot': 600} and only a [+inf, +inf] placeholder bucket
+        // CASE WHEN s = 'cold' misses the MCV THEN 400 non-MCV rows / 200 non-MCV values = 2 rows END
+
+        String nonMcvValue = "cold";
+        double expectedRowCount = 2;
+
+        Statistics actual = estimateStringComparison(BinaryType.EQ, nonMcvValue);
+
+        Assertions.assertEquals(expectedRowCount, actual.getOutputRowCount(), 0.001);
+    }
+
+
+    @Test
+    public void testCoalesceJoinOnBucketUpperBound() {
+        // Given l.k holding 600 x 1, 300 x 2 and 100 NULL over 1000 rows, collected with one MCV as {1: 600}
+        // plus a [2, 2] bucket, and r.k holding 1000 x 2, collected as the MCV {2: 1000}
+        // CASE WHEN l JOIN r ON COALESCE(l.k, 0) = r.k is estimated THEN r.k's 2 lands on the upper bound of
+        // the coalesce bucket, which spreads the 300 rows outside its MCVs {1: 600, 0: 100} over its one
+        // remaining value, so 300 x 1000 = 300000 rows match END
+
+        final double leftRowCount = 1000;
+        final double rightRowCount = 1000;
+        final double expectedRowCount = 300_000;
+
+        final ColumnRefOperator leftKey = new ColumnRefOperator(0, IntegerType.INT, "l.k", true);
+        final ColumnRefOperator rightKey = new ColumnRefOperator(1, IntegerType.INT, "r.k", true);
+        final ColumnRefOperator coalescedKey = new ColumnRefOperator(2, IntegerType.INT, "coalesce", true);
+        final ColumnStatistic leftKeyStatistic = new ColumnStatistic(1, 2, 0.1, 4, 2,
+                new Histogram(List.of(new Bucket(2, 2, 300L, 300L)), Map.of("1", 600L)),
+                ColumnStatistic.StatisticType.ESTIMATE);
+        final ColumnStatistic rightKeyStatistic = new ColumnStatistic(2, 2, 0, 4, 1,
+                new Histogram(Map.of("2", 1000L)), ColumnStatistic.StatisticType.ESTIMATE);
+
+        final Statistics leftStatistics = Statistics.builder()
+                .setOutputRowCount(leftRowCount)
+                .addColumnStatistic(leftKey, leftKeyStatistic)
+                .build();
+        final CallOperator coalesce = new CallOperator(FunctionSet.COALESCE, IntegerType.INT,
+                Lists.newArrayList(leftKey, ConstantOperator.createInt(0)));
+        final Statistics crossJoinStatistics = Statistics.builder()
+                .setOutputRowCount(leftRowCount * rightRowCount)
+                .addColumnStatistic(coalescedKey, ExpressionStatisticCalculator.calculate(coalesce, leftStatistics))
+                .addColumnStatistic(rightKey, rightKeyStatistic)
+                .build();
+        UtFrameUtils.createDefaultCtx().getSessionVariable().setCboEnableHistogramJoinEstimation(true);
+
+        final Statistics actual = PredicateStatisticsCalculator.statisticsCalculate(
+                new BinaryPredicateOperator(BinaryType.EQ, coalescedKey, rightKey), crossJoinStatistics);
+
+        Assertions.assertEquals(expectedRowCount, actual.getOutputRowCount(), 0.001);
+    }
 
     @Test
     public void testUpdateHistWithJoin() {
