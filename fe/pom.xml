@@ -1699,6 +1699,12 @@ under the License.
                 <version>${jetty.version}</version>
             </dependency>
 
+            <dependency>
+                <groupId>org.openjdk.nashorn</groupId>
+                <artifactId>nashorn-core</artifactId>
+                <version>15.6</version>
+            </dependency>
+
             <!-- https://mvnrepository.com/artifact/org.apache.ranger/ranger-plugins-common -->
             <dependency>
                 <groupId>org.apache.ranger</groupId>
