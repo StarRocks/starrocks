@@ -208,16 +208,15 @@ def add_function(fn_data):
     else:
         entry["args_nums"] = len(fn_data[5])
 
-    entry["fn"] = "&" + fn_data[6] if fn_data[6] != "nullptr" else "nullptr"
-
-    if len(fn_data) >= 9:
-        entry["prepare"] = "&" + fn_data[7] if fn_data[7] != "nullptr" else "nullptr"
-        entry["close"] = "&" + fn_data[8] if fn_data[8] != "nullptr" else "nullptr"
-
     entry["named_args"] = metadata.get('named_args', [])
     if 'ai' in metadata:
         entry["binary_type"] = "AI"
         entry["ai"] = validate_ai_metadata(fn_data, metadata['ai'], entry["named_args"])
+    else:
+        entry["fn"] = "&" + fn_data[6] if fn_data[6] != "nullptr" else "nullptr"
+        if len(fn_data) >= 9:
+            entry["prepare"] = "&" + fn_data[7] if fn_data[7] != "nullptr" else "nullptr"
+            entry["close"] = "&" + fn_data[8] if fn_data[8] != "nullptr" else "nullptr"
 
     function_list.append(entry)
     return entry
