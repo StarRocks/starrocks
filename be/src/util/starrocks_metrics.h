@@ -458,6 +458,9 @@ public:
     METRIC_DEFINE_INT_COUNTER(short_circuit_request_total, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(short_circuit_request_duration_us, MetricUnit::MICROSECONDS);
 
+    // Flat JSON compactions written as their chunks arrive instead of buffering the whole output segment.
+    METRIC_DEFINE_INT_COUNTER(flat_json_compaction_streaming_total, MetricUnit::OPERATIONS);
+
     // data cache metrics
     METRIC_DEFINE_INT_GAUGE(datacache_mem_quota_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(datacache_mem_used_bytes, MetricUnit::BYTES);

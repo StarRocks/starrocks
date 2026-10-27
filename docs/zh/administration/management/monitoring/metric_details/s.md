@@ -178,6 +178,12 @@ description: "Alphabetical s"
 - 单位: 计数
 - 描述: 读取的有效行数（不包括格式无效的行）。标签: `file_format`, `scan_type`。
 
+## `starrocks_be_flat_json_compaction_streaming_total`
+
+- 单位: 计数
+- 类型: 累积值
+- 描述: 边读边写、不再缓存整个输出 segment 的 flat JSON compaction 次数。当已缓存的输入超过 `compaction_memory_limit_per_worker` 的八分之一且全部具有相同的扁平布局时触发。
+
 ## `starrocks_be_lake_tablet_metadata_get_not_found_total`
 
 - 单位: 计数
