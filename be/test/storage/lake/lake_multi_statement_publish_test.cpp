@@ -114,8 +114,8 @@ protected:
     StatusOr<TabletMetadataPtr> publish_multi_statement(int64_t new_version, int64_t txn_id,
                                                         const std::vector<PUniqueId>& load_ids) {
         std::vector<TxnInfoPB> txns{make_txn_info(txn_id, load_ids)};
-        return publish_version(_tablet_mgr.get(), PublishTabletInfo(_tablet_metadata->id()), new_version - 1, new_version,
-                               txns, false);
+        return publish_version(_tablet_mgr.get(), PublishTabletInfo(_tablet_metadata->id()), new_version - 1,
+                               new_version, txns, false);
     }
 
     Status publish_multi_statement_log_version(int64_t log_version, int64_t txn_id,
