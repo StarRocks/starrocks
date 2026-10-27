@@ -342,10 +342,53 @@ public class RefreshMaterializedViewTest extends MVTestBase {
     }
 
     @Test
+<<<<<<< HEAD
     public void testIncrementalRefreshModeRejectsForceRefresh() throws Exception {
         // Create a MV with PCT mode (no Iceberg required), then flip the persisted refresh_mode
         // to "incremental" so the FORCE-rejection branch in the analyzer fires. This isolates the
         // analyzer check from the IVM eligibility constraints of the CREATE path.
+=======
+    public void testAutoRefreshModeRejectsPartitionRefreshButAllowsForce() throws Exception {
+        // AUTO may fall back to PCT at refresh time but is still an incrementally maintained
+        // view, so it keeps INCREMENTAL's restrictions on how a refresh can be asked for.
+        starRocksAssert.withMaterializedView("create materialized view test.mv_auto_refresh_forms\n" +
+                "PARTITION BY k1\n" +
+                "distributed by hash(k2) buckets 3\n" +
+                "refresh manual\n" +
+                "properties (\"refresh_mode\" = \"pct\")\n" +
+                "as select k1, k2, v1 from test.tbl_with_mv;");
+        try {
+            MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState()
+                    .getLocalMetastore().getTable("test", "mv_auto_refresh_forms");
+            mv.getTableProperty().setMvRefreshMode("auto");
+            mv.getTableProperty().modifyTableProperties(PropertyAnalyzer.PROPERTIES_MV_REFRESH_MODE, "auto");
+
+            Exception partitionRefresh = Assertions.assertThrows(Exception.class,
+                    () -> UtFrameUtils.parseStmtWithNewParser("REFRESH MATERIALIZED VIEW test.mv_auto_refresh_forms "
+                            + "PARTITION START('2022-02-03') END ('2022-02-25');", connectContext));
+            Assertions.assertTrue(partitionRefresh.getMessage().contains(
+                            "Partition refresh is not supported for materialized views with refresh_mode=AUTO."),
+                    "expected partition refresh rejection, got: " + partitionRefresh.getMessage());
+
+            Exception partitionForce = Assertions.assertThrows(Exception.class,
+                    () -> UtFrameUtils.parseStmtWithNewParser("REFRESH MATERIALIZED VIEW test.mv_auto_refresh_forms "
+                            + "PARTITION START('2022-02-03') END ('2022-02-25') FORCE;", connectContext));
+            Assertions.assertTrue(partitionForce.getMessage().contains(
+                            "Partition refresh is not supported for materialized views with refresh_mode=AUTO."),
+                    "expected partition refresh rejection, got: " + partitionForce.getMessage());
+
+            UtFrameUtils.parseStmtWithNewParser("REFRESH MATERIALIZED VIEW test.mv_auto_refresh_forms FORCE;",
+                    connectContext);
+        } finally {
+            starRocksAssert.dropMaterializedView("test.mv_auto_refresh_forms");
+        }
+    }
+
+    @Test
+    public void testIncrementalRefreshModeAllowsForceRefresh() throws Exception {
+        // Created as PCT and flipped to "incremental", which keeps the CREATE path's IVM eligibility
+        // checks out of an analyzer test.
+>>>>>>> 10f258ff916... [Feature] Support FORCE refresh for incrementally maintained materialized views (#64692)
         starRocksAssert.withMaterializedView("create materialized view test.mv_incremental_force_refresh\n" +
                 "distributed by hash(k2) buckets 3\n" +
                 "refresh manual\n" +
@@ -359,12 +402,8 @@ public class RefreshMaterializedViewTest extends MVTestBase {
             mv.getTableProperty().setMvRefreshMode("incremental");
             mv.getTableProperty().modifyTableProperties(PropertyAnalyzer.PROPERTIES_MV_REFRESH_MODE, "incremental");
 
-            String sql = "REFRESH MATERIALIZED VIEW test.mv_incremental_force_refresh FORCE;";
-            Exception e = Assertions.assertThrows(Exception.class,
-                    () -> UtFrameUtils.parseStmtWithNewParser(sql, connectContext));
-            Assertions.assertTrue(e.getMessage().contains(
-                    "FORCE refresh is not supported for materialized views with refresh_mode=INCREMENTAL."),
-                    "expected FORCE rejection error, got: " + e.getMessage());
+            UtFrameUtils.parseStmtWithNewParser("REFRESH MATERIALIZED VIEW test.mv_incremental_force_refresh FORCE;",
+                    connectContext);
         } finally {
             starRocksAssert.dropMaterializedView("test.mv_incremental_force_refresh");
         }
@@ -381,7 +420,6 @@ public class RefreshMaterializedViewTest extends MVTestBase {
                 "as select k1, k2, v1 from test.tbl_with_mv;");
         try {
             String sql = "REFRESH MATERIALIZED VIEW test.mv_pct_force_refresh FORCE;";
-            // Should parse without error: FORCE is only blocked on INCREMENTAL/AUTO MVs.
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } finally {
             starRocksAssert.dropMaterializedView("test.mv_pct_force_refresh");

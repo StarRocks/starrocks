@@ -36,12 +36,18 @@ public class MVRefreshProcessorFactory {
         MaterializedView.RefreshMode refreshMode = mv.getCurrentRefreshMode();
         switch (refreshMode) {
             case INCREMENTAL:
+<<<<<<< HEAD
                 // Route through the hybrid processor when any base table lacks a TVR baseline so
                 // PCT can rebuild it. Otherwise run pure IVM with strict semantics (no fallback).
                 // A queued batch of a rebuild goes there too: once another refresh has recorded the baseline, only
                 // the pct path can tell the batch its job was superseded.
                 if (mvContext.getProperties().get(TaskRun.PINNED_REFRESH_JOB_ID) != null
                         || needsPctBaselineRebuild(mv)) {
+=======
+                // Route through the hybrid processor for a FORCE rebuild, or when any base table lacks a TVR
+                // baseline so PCT can rebuild it. Otherwise run pure IVM with strict semantics (no fallback).
+                if (Boolean.parseBoolean(mvContext.getProperties().get(TaskRun.FORCE)) || needsPctBaselineRebuild(mv)) {
+>>>>>>> 10f258ff916... [Feature] Support FORCE refresh for incrementally maintained materialized views (#64692)
                     return new MVHybridRefreshProcessor(db, mv, mvContext, mvEntity, refreshMode);
                 }
                 return new MVIVMRefreshProcessor(db, mv, mvContext, mvEntity, refreshMode);
