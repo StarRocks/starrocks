@@ -84,7 +84,10 @@ StatusOr<AIProjectModelConfig> AIProviderConfigParser::parse(std::string_view id
     default:
         return invalid_provider();
     }
-    RETURN_IF_ERROR(validate_ai_protocol(config.protocol, config.capability));
+    // Unsupported protocol/capability pairs are invalid wire metadata.
+    if (!validate_ai_protocol(config.protocol, config.capability).ok()) {
+        return invalid_provider();
+    }
     if (!is_non_blank(config.endpoint) || contains_control_character(config.endpoint) || !is_non_blank(config.model) ||
         contains_control_character(config.model) || contains_control_character(config.api_key)) {
         return invalid_provider();

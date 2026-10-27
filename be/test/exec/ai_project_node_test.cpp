@@ -301,11 +301,13 @@ TEST(AIProviderConfigParserTest, DecisionUsesTypedProviderSnapshotAndProtocol) {
     EXPECT_FALSE(parsed->dimensions.has_value());
     for (auto type : {TAIProviderType::CHAT, TAIProviderType::EMBEDDING}) {
         provider.__set_type(type);
-        EXPECT_FALSE(pipeline::AIProviderConfigParser::parse(provider.id, provider).ok());
+        auto invalid = pipeline::AIProviderConfigParser::parse(provider.id, provider);
+        EXPECT_TRUE(invalid.status().is_invalid_argument()) << invalid.status();
     }
     provider.__set_type(TAIProviderType::DECISION);
     provider.__set_protocol(TAIProviderProtocol::OPENAI);
-    EXPECT_FALSE(pipeline::AIProviderConfigParser::parse(provider.id, provider).ok());
+    auto mismatched = pipeline::AIProviderConfigParser::parse(provider.id, provider);
+    EXPECT_TRUE(mismatched.status().is_invalid_argument()) << mismatched.status();
     provider.__set_protocol(TAIProviderProtocol::BAILIAN_DECISION);
     provider.params["timeout_ms"] = "0";
     auto invalid = pipeline::AIProviderConfigParser::parse(provider.id, provider);
