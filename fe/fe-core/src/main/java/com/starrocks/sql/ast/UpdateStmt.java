@@ -24,6 +24,9 @@ import java.util.List;
 import java.util.Set;
 
 public class UpdateStmt extends DmlStmt {
+    // the Iceberg branch to read and write, or null for the main branch
+    private final String targetBranch;
+
     private TableRef tableRef;
     private final List<ColumnAssignment> assignments;
     private final List<Relation> fromRelations;
@@ -43,7 +46,14 @@ public class UpdateStmt extends DmlStmt {
 
     public UpdateStmt(TableRef tableRef, List<ColumnAssignment> assignments, List<Relation> fromRelations,
                       Expr wherePredicate, List<CTERelation> commonTableExpressions, NodePosition pos) {
+        this(tableRef, assignments, fromRelations, wherePredicate, commonTableExpressions, null, pos);
+    }
+
+    public UpdateStmt(TableRef tableRef, List<ColumnAssignment> assignments, List<Relation> fromRelations,
+                      Expr wherePredicate, List<CTERelation> commonTableExpressions, String targetBranch,
+                      NodePosition pos) {
         super(pos);
+        this.targetBranch = targetBranch;
         this.tableRef = tableRef;
         this.assignments = assignments;
         this.fromRelations = fromRelations;
@@ -120,5 +130,9 @@ public class UpdateStmt extends DmlStmt {
 
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return ((AstVisitorExtendInterface<R, C>) visitor).visitUpdateStatement(this, context);
+    }
+
+    public String getTargetBranch() {
+        return targetBranch;
     }
 }
