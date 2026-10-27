@@ -28,6 +28,7 @@ set(DATA_WORKFLOWS_TEST_FILES
     load/tablet_writer/load_channel_test.cpp
     load/tablet_writer/local_tablets_channel_test.cpp
     load/routine_load/data_consumer_test.cpp
+    load/routine_load/data_consumer_pool_test.cpp
     load/routine_load/kafka_consumer_pipe_test.cpp
     push_handler_test.cpp
     rejected_record_sync_daemon_test.cpp
