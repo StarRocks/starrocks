@@ -2,7 +2,10 @@
 // Logs in with a JWT (env SR_JWT) over Arrow Flight, runs the query WARMUP times (discarded)
 // then RUNS times per mode, reads every endpoint in parallel, and reports the median
 // wall-clock / throughput (with min/max). Optional SR_QUERY overrides the default SELECT *.
-//   SR_JWT=<jwt> [SR_USER=<dsid>] [RUNS=3] [WARMUP=1] [SR_QUERY="SELECT ..."] \
+// Set SR_CHECKSUM=1 to also compute an order-independent value checksum per mode and assert
+// single-endpoint == multi-endpoint (data sanity across the fan-out); adds per-row CPU, so
+// leave it off for pure throughput runs.
+//   SR_JWT=<jwt> [SR_USER=<dsid>] [RUNS=3] [WARMUP=1] [SR_CHECKSUM=1] [SR_QUERY="SELECT ..."] \
 //     java --add-opens=java.base/java.nio=ALL-UNNAMED -cp "/opt/starrocks/fe/lib/*" \
 //     AfBench.java <feHost> <fePort> <db.table>
 import org.apache.arrow.flight.CallOption;
@@ -18,8 +21,10 @@ import org.apache.arrow.flight.grpc.CredentialCallOption;
 import org.apache.arrow.flight.sql.FlightSqlClient;
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.memory.RootAllocator;
+import org.apache.arrow.vector.FieldVector;
 import org.apache.arrow.vector.VectorSchemaRoot;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.Callable;
@@ -32,6 +37,8 @@ public class AfBench {
     static Location feLocation;
     static CallOption[] feOpts;   // FE session bearer (from JWT login) for getFlightInfo
     static CallOption[] cnOpts;   // CN/BE transport bearer for direct result reads
+    static final boolean CHECKSUM =
+            "1".equals(System.getenv("SR_CHECKSUM")) || "true".equalsIgnoreCase(System.getenv("SR_CHECKSUM"));
 
     public static void main(String[] args) throws Exception {
         String host = args.length > 0 ? args[0] : "127.0.0.1";
@@ -80,10 +87,21 @@ public class AfBench {
 
             int runs = Integer.parseInt(System.getenv().getOrDefault("RUNS", "3"));
             int warmup = Integer.parseInt(System.getenv().getOrDefault("WARMUP", "1"));
-            System.out.printf("[config] runs=%d warmup=%d%n", runs, warmup);
+            System.out.printf("[config] runs=%d warmup=%d checksum=%b%n", runs, warmup, CHECKSUM);
 
-            runMode(sql, "single-endpoint", qOff, runs, warmup);
-            runMode(sql, "multi-endpoint ", qOn, runs, warmup);
+            long[] off = runMode(sql, "single-endpoint", qOff, runs, warmup);
+            long[] on = runMode(sql, "multi-endpoint ", qOn, runs, warmup);
+
+            if (CHECKSUM) {
+                boolean ok = off[0] == on[0] && off[1] == on[1];
+                System.out.printf("[checksum] single rows=%,d cksum=%d | multi rows=%,d cksum=%d | %s%n",
+                        off[0], off[1], on[0], on[1],
+                        ok ? "PASS (values identical across single vs multi)"
+                           : "FAIL (MISMATCH - rows or values differ!)");
+                if (!ok) {
+                    System.exit(1);
+                }
+            }
         } finally {
             sql.close();
         }
@@ -100,12 +118,13 @@ public class AfBench {
 
     // Run one mode: WARMUP discarded passes (to warm scan/datacache so both modes compete
     // warm), then RUNS measured passes; report the median wall-clock with min/max.
-    static void runMode(FlightSqlClient sql, String label, String query, int runs, int warmup) throws Exception {
+    // Returns {rows, checksum} for the single-vs-multi value-sanity comparison.
+    static long[] runMode(FlightSqlClient sql, String label, String query, int runs, int warmup) throws Exception {
         for (int i = 0; i < warmup; i++) {
             readAll(sql.execute(query, feOpts));
         }
         double[] secs = new double[runs];
-        long rows = 0, bytes = 0;
+        long rows = 0, bytes = 0, checksum = 0;
         int eps = 0;
         for (int i = 0; i < runs; i++) {
             FlightInfo info = sql.execute(query, feOpts);
@@ -122,6 +141,7 @@ public class AfBench {
             secs[i] = (System.nanoTime() - t0) / 1e9;
             rows = rb[0];
             bytes = rb[1];
+            checksum = rb[2];
             eps = info.getEndpoints().size();
             System.out.printf("  %s run %d/%d: %.2fs%n", label.trim(), i + 1, runs, secs[i]);
         }
@@ -129,11 +149,16 @@ public class AfBench {
         double median = secs[runs / 2];
         double min = secs[0], max = secs[runs - 1];
         double mb = bytes / 1048576.0;
-        System.out.printf("%s  endpoints=%d  rows=%,d  %.1f MB  median %.2fs (min %.2f / max %.2f)  |  %,.0f rows/s  %.1f MB/s%n",
-                label, eps, rows, mb, median, min, max, rows / median, mb / median);
+        System.out.printf("%s  endpoints=%d  rows=%,d  %.1f MB  median %.2fs (min %.2f / max %.2f)  |  %,.0f rows/s  %.1f MB/s%s%n",
+                label, eps, rows, mb, median, min, max, rows / median, mb / median,
+                CHECKSUM ? ("  cksum=" + checksum) : "");
+        return new long[]{rows, checksum};
     }
 
     // Read every endpoint in parallel. Throws if any endpoint fails (so a dropped shard is loud).
+    // Returns {rows, bytes, checksum}. checksum is a commutative (order-independent) sum of
+    // per-row hashes, so it is comparable across single-endpoint and multi-endpoint regardless
+    // of how rows are split across shards or ordered. Only computed when SR_CHECKSUM is set.
     static long[] readAll(FlightInfo info) throws Exception {
         List<FlightEndpoint> eps = info.getEndpoints();
         ExecutorService pool = Executors.newFixedThreadPool(Math.max(eps.size(), 1));
@@ -141,17 +166,18 @@ public class AfBench {
         for (FlightEndpoint ep : eps) {
             futs.add(pool.submit((Callable<long[]>) () -> readEndpoint(ep)));
         }
-        long rows = 0, bytes = 0;
+        long rows = 0, bytes = 0, checksum = 0;
         try {
             for (Future<long[]> f : futs) {
                 long[] rb = f.get();
                 rows += rb[0];
                 bytes += rb[1];
+                checksum += rb[2];   // commutative sum -> order-independent across shards
             }
         } finally {
             pool.shutdown();
         }
-        return new long[]{rows, bytes};
+        return new long[]{rows, bytes, checksum};
     }
 
     static long[] readEndpoint(FlightEndpoint ep) throws Exception {
@@ -159,13 +185,44 @@ public class AfBench {
         try (FlightClient c = FlightClient.builder(allocator, loc)
                      .maxInboundMessageSize(Integer.MAX_VALUE).build();
              FlightStream s = c.getStream(ep.getTicket(), cnOpts)) {
-            long rows = 0, bytes = 0;
+            long rows = 0, bytes = 0, checksum = 0;
             while (s.next()) {
                 VectorSchemaRoot root = s.getRoot();
-                rows += root.getRowCount();
+                int rc = root.getRowCount();
+                rows += rc;
                 bytes += root.getFieldVectors().stream().mapToLong(v -> v.getBufferSize()).sum();
+                if (CHECKSUM) {
+                    List<FieldVector> vecs = root.getFieldVectors();
+                    for (int r = 0; r < rc; r++) {
+                        checksum += rowHash(vecs, r);   // wrapping add; commutative across rows
+                    }
+                }
             }
-            return new long[]{rows, bytes};
+            return new long[]{rows, bytes, checksum};
         }
+    }
+
+    // 64-bit FNV-1a over the row's cell values (column index mixed in to catch column swaps,
+    // nulls given a distinct sentinel). Independent of batching/ordering.
+    static long rowHash(List<FieldVector> vecs, int r) {
+        long h = 0xcbf29ce484222325L;
+        for (int c = 0; c < vecs.size(); c++) {
+            h = fnv(h, (byte) c);
+            Object o = vecs.get(c).getObject(r);
+            byte[] b = (o == null) ? NULL_SENTINEL : o.toString().getBytes(StandardCharsets.UTF_8);
+            for (byte x : b) {
+                h = fnv(h, x);
+            }
+            h = fnv(h, (byte) 0x1f);   // field separator
+        }
+        return h;
+    }
+
+    static final byte[] NULL_SENTINEL = new byte[]{0, 'N', 'U', 'L', 'L'};
+
+    static long fnv(long h, byte b) {
+        h ^= (b & 0xffL);
+        h *= 0x100000001b3L;
+        return h;
     }
 }
