@@ -25,6 +25,12 @@ on:
     workflows: ["CD SYNC CI PIPELINE", "PR CHECKER", "CI DOC Checker", "MERGE PIPELINE", "Contributed Backport Label"]
     types: [completed]
 
+  # Daily, and by hand for a backfill: record again every PR whose open state in CI Metrics
+  # disagrees with GitHub (a close no event reported, a PR never recorded). See `reconcile`.
+  schedule:
+    - cron: '17 19 * * *'  # 03:17 Asia/Shanghai
+  workflow_dispatch:
+
 permissions:
   contents: read
   pull-requests: read
@@ -71,3 +77,19 @@ jobs:
     steps:
       - name: record the PR
         run: python3 /var/lib/ci-tool/lib/pr_record.py --event "${GITHUB_EVENT_NAME}"
+
+  reconcile:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    concurrency:
+      group: pr-record-reconcile
+      cancel-in-progress: false
+    runs-on: [self-hosted, pr-record]
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+      CI_METRICS_TOKEN: ${{ secrets.CI_METRICS_TOKEN }}
+      CI_METRICS_CA: ${{ secrets.CI_METRICS_CA }}
+      SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+    steps:
+      - name: record the PRs whose open state disagrees with GitHub
+        run: python3 /var/lib/ci-tool/lib/pr_record.py --reconcile --repo "${GITHUB_REPOSITORY}"
