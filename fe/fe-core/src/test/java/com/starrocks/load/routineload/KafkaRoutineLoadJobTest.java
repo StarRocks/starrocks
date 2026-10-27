@@ -199,6 +199,124 @@ public class KafkaRoutineLoadJobTest {
         Assertions.assertEquals(expected, sourceString);
     }
 
+    // ===== SHOW CREATE ROUTINE LOAD prints kafka_partitions/kafka_offsets only when the job was created
+    // with them. currentKafkaPartitions is runtime state (always empty on a follower FE, every
+    // discovered partition on the leader) and must not leak into the DDL. =====
+    @Test
+    public void testDataSourcePropertiesToSqlWithoutCustomPartitions() {
+        KafkaRoutineLoadJob job = new KafkaRoutineLoadJob(1L, "kafka_routine_load_job", 1L, 1L,
+                "127.0.0.1:9020", "topic1");
+        String expected = "(\n\"kafka_broker_list\"=\"127.0.0.1:9020\",\n\"kafka_topic\"=\"topic1\"\n)";
+
+        // follower FE: the scheduler never ran here, so no partition has been discovered
+        Assertions.assertEquals(expected, job.dataSourcePropertiesToSql());
+
+        // leader FE: the scheduler discovered the topic's partitions
+        Deencapsulation.setField(job, "currentKafkaPartitions", Lists.newArrayList(2, 0, 1));
+        Assertions.assertEquals(expected, job.dataSourcePropertiesToSql());
+    }
+
+    @Test
+    public void testDataSourcePropertiesToSqlWithCustomPartitions() {
+        KafkaRoutineLoadJob job = new KafkaRoutineLoadJob(1L, "kafka_routine_load_job", 1L, 1L,
+                "127.0.0.1:9020", "topic1");
+        List<Pair<Integer, Long>> partitionOffsets = Lists.newArrayList(
+                Pair.create(2, 100L),
+                Pair.create(0, KafkaProgress.OFFSET_BEGINNING_VAL),
+                Pair.create(1, KafkaProgress.OFFSET_END_VAL));
+        Deencapsulation.setField(job, "customeKafkaPartitionOffsets", partitionOffsets);
+        Deencapsulation.setField(job, "customKafkaPartitions", Lists.newArrayList(2, 0, 1));
+        Deencapsulation.setField(job, "currentKafkaPartitions", Lists.newArrayList(2, 0, 1));
+
+        Assertions.assertEquals("(\n\"kafka_broker_list\"=\"127.0.0.1:9020\",\n\"kafka_topic\"=\"topic1\",\n"
+                        + "\"kafka_partitions\"=\"0,1,2\",\n\"kafka_offsets\"=\"OFFSET_BEGINNING,OFFSET_END,100\"\n)",
+                job.dataSourcePropertiesToSql());
+        // the DDL is sorted on a copy: the job's own list keeps the order it was created with
+        Assertions.assertEquals(Integer.valueOf(2), partitionOffsets.get(0).first);
+        Assertions.assertEquals(Integer.valueOf(1), partitionOffsets.get(2).first);
+    }
+
+    // A pinned job persisted by a release that did not yet keep the CREATE-time offsets (the "ckpo"
+    // field) still prints its partition list, so re-creating it from the DDL keeps it pinned. The list
+    // comes from the pinned partitions, not from the runtime list (left empty here on purpose).
+    @Test
+    public void testDataSourcePropertiesToSqlWithLegacyCustomPartitions() {
+        KafkaRoutineLoadJob job = new KafkaRoutineLoadJob(1L, "kafka_routine_load_job", 1L, 1L,
+                "127.0.0.1:9020", "topic1");
+        Deencapsulation.setField(job, "customKafkaPartitions", Lists.newArrayList(1, 0));
+
+        Assertions.assertEquals("(\n\"kafka_broker_list\"=\"127.0.0.1:9020\",\n\"kafka_topic\"=\"topic1\",\n"
+                + "\"kafka_partitions\"=\"0,1\"\n)", job.dataSourcePropertiesToSql());
+    }
+
+    @Test
+    public void testDataSourcePropertiesToSqlWhenLegacyPartitionsAreUnpinned() throws Exception {
+        KafkaRoutineLoadJob job = new KafkaRoutineLoadJob(1L, "kafka_routine_load_job", 1L, 1L,
+                "127.0.0.1:9020", "topic1");
+        Deencapsulation.setField(job, "state", RoutineLoadJob.JobState.PAUSED);
+        Map<String, String> properties = Maps.newHashMap();
+        properties.put("property.kafka_partition_discovery", "true");
+        RoutineLoadDataSourceProperties change = new RoutineLoadDataSourceProperties("KAFKA", properties);
+        change.analyze();
+
+        // Deterministically replay ALTER after SHOW checks the legacy list but before it copies it.
+        // The hook avoids timing-dependent threads and uses the real ALTER application path.
+        List<Integer> originalPartitions = new ArrayList<Integer>(Arrays.asList(1, 0)) {
+            private boolean altered;
+
+            @Override
+            public boolean isEmpty() {
+                boolean empty = super.isEmpty();
+                if (!altered) {
+                    altered = true;
+                    job.replayModifyJob(null, null, change);
+                }
+                return empty;
+            }
+        };
+        Deencapsulation.setField(job, "customKafkaPartitions", originalPartitions);
+        Deencapsulation.setField(job, "currentKafkaPartitions", originalPartitions);
+
+        String ddl = "CREATE ROUTINE LOAD db1.recreated_job ON tbl1 FROM KAFKA " + job.dataSourcePropertiesToSql();
+        CreateRoutineLoadStmt stmt = (CreateRoutineLoadStmt) SqlParser.parse(ddl, 0).get(0);
+        stmt.checkDataSourceProperties();
+        Assertions.assertEquals(Lists.newArrayList(Pair.create(0, KafkaProgress.OFFSET_END_VAL),
+                Pair.create(1, KafkaProgress.OFFSET_END_VAL)), stmt.getKafkaPartitionOffsets());
+        Assertions.assertTrue(stmt.isKafkaPartitionDiscovery());
+        Assertions.assertEquals(Lists.newArrayList(1, 0), originalPartitions);
+
+        // A subsequent SHOW observes the unpinned job and omits both properties, without reviving the old list.
+        List<Integer> currentPartitions = Deencapsulation.getField(job, "customKafkaPartitions");
+        Assertions.assertTrue(currentPartitions.isEmpty());
+        Assertions.assertEquals("(\n\"kafka_broker_list\"=\"127.0.0.1:9020\",\n\"kafka_topic\"=\"topic1\"\n)",
+                job.dataSourcePropertiesToSql());
+    }
+
+    // ALTER ROUTINE LOAD can enable kafka_partition_discovery on a job that has no CREATE-time partition
+    // list. The property is only meaningful together with kafka_partitions (CREATE ROUTINE LOAD rejects it
+    // otherwise) and such a job already consumes every partition of the topic, so the DDL leaves the
+    // property out instead of producing a statement that cannot be run.
+    @Test
+    public void testDataSourcePropertiesToSqlDropsPartitionDiscoveryWithoutPartitions() {
+        KafkaRoutineLoadJob job = new KafkaRoutineLoadJob(1L, "kafka_routine_load_job", 1L, 1L,
+                "127.0.0.1:9020", "topic1");
+        Map<String, String> customProperties = Maps.newHashMap();
+        customProperties.put(CreateRoutineLoadStmt.KAFKA_PARTITION_DISCOVERY, "true");
+        customProperties.put(CreateRoutineLoadStmt.KAFKA_DEFAULT_OFFSETS, "OFFSET_BEGINNING");
+        Deencapsulation.setField(job, "customProperties", customProperties);
+
+        // unpinned job: discovery was enabled by ALTER, there is no partition list to print
+        Assertions.assertEquals("(\n\"kafka_broker_list\"=\"127.0.0.1:9020\",\n\"kafka_topic\"=\"topic1\",\n"
+                + "\"property.kafka_default_offsets\"=\"OFFSET_BEGINNING\"\n)", job.dataSourcePropertiesToSql());
+
+        // seed-only job: created with kafka_partitions and discovery, both are printed back
+        Deencapsulation.setField(job, "customeKafkaPartitionOffsets",
+                Lists.newArrayList(Pair.create(0, KafkaProgress.OFFSET_BEGINNING_VAL)));
+        String sql = job.dataSourcePropertiesToSql();
+        Assertions.assertTrue(sql.contains("\"kafka_partitions\"=\"0\",\n\"kafka_offsets\"=\"OFFSET_BEGINNING\",\n"), sql);
+        Assertions.assertTrue(sql.contains("\"property.kafka_partition_discovery\"=\"true\""), sql);
+    }
+
     @Test
     public void testDivideRoutineLoadJob(@Injectable RoutineLoadMgr routineLoadManager,
                                          @Mocked RoutineLoadDesc routineLoadDesc)
