@@ -23,20 +23,30 @@ import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
 import com.starrocks.connector.iceberg.procedure.RemoveOrphanFilesProcedure;
 import com.starrocks.connector.iceberg.procedure.RollbackToSnapshotProcedure;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.AddColumnClause;
+import com.starrocks.sql.ast.AddColumnsClause;
+import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterTableOperationClause;
 import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ProcedureArgument;
 import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import org.apache.iceberg.PartitionSpec;
+import org.apache.iceberg.Schema;
 import org.apache.iceberg.Snapshot;
+import org.apache.iceberg.types.Types;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -246,5 +256,48 @@ public class IcebergTableOperationTest extends TableTestBase {
                 connectContext,
                 HDFS_ENVIRONMENT);
         executor.execute();
+    }
+
+    private static ColumnDef intColumnDef(String name, boolean allowNull, String defaultValue) {
+        ColumnDef.DefaultValueDef defaultValueDef = defaultValue == null ? ColumnDef.DefaultValueDef.NOT_SET
+                : new ColumnDef.DefaultValueDef(true, new StringLiteral(defaultValue));
+        return new ColumnDef(name, new TypeDef(IntegerType.INT), false, null, null, allowNull, defaultValueDef, null);
+    }
+
+    private void addColumns(org.apache.iceberg.Table table, ColumnDef... columnDefs) throws Exception {
+        AlterClause clause = columnDefs.length == 1
+                ? new AddColumnClause(columnDefs[0], null, null, Map.of())
+                : new AddColumnsClause(List.of(columnDefs), null, Map.of());
+        new IcebergAlterTableExecutor(new AlterTableStmt(
+                new TableRef(QualifiedName.of(List.of(CATALOG_NAME, "db", table.name())), null, NodePosition.ZERO),
+                List.of(clause)), table, null, connectContext, HDFS_ENVIRONMENT).execute();
+        table.refresh();
+    }
+
+    @Test
+    public void testAddRequiredColumnWithDefault() throws Exception {
+        Schema schema = new Schema(Types.NestedField.optional(1, "id", Types.IntegerType.get()));
+        org.apache.iceberg.Table v3 = create(schema, PartitionSpec.unpartitioned(), "v3", 3);
+
+        // v3: a NOT NULL column with a default is added as required, with the default as initial- and write-default
+        addColumns(v3, intColumnDef("c1", false, "7"));
+        addColumns(v3, intColumnDef("c2", false, "8"), intColumnDef("c3", true, null));
+        Types.NestedField c1 = v3.schema().findField("c1");
+        Assertions.assertTrue(c1.isRequired());
+        Assertions.assertEquals(7, c1.initialDefault());
+        Assertions.assertEquals(7, c1.writeDefault());
+        Assertions.assertTrue(v3.schema().findField("c2").isRequired());
+        Assertions.assertTrue(v3.schema().findField("c3").isOptional());
+
+        // v3 without a default: rows in the existing data files would have no value
+        Assertions.assertThrows(DdlException.class, () -> addColumns(v3, intColumnDef("c4", false, null)));
+
+        // v2 has no column defaults
+        org.apache.iceberg.Table v2 = create(schema, PartitionSpec.unpartitioned(), "v2", 2);
+        Assertions.assertThrows(DdlException.class, () -> addColumns(v2, intColumnDef("c1", false, "7")));
+        Assertions.assertThrows(DdlException.class,
+                () -> addColumns(v2, intColumnDef("c1", true, null), intColumnDef("c2", false, "7")));
+        v2.refresh();
+        Assertions.assertNull(v2.schema().findField("c1"));
     }
 }

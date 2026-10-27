@@ -223,3 +223,61 @@ select * from ice_def_schema${uuid0}.ice_def_db${uuid0}.schema_test order by id;
 drop catalog ice_def_schema${uuid0};
 
 shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_v3_default_value_schema/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+
+-- name: testIcebergV3RequiredColumnWithDefault
+-- A NOT NULL column with a default can be added to a v3 table; INSERT ... DEFAULT writes the write-default
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_iceberg_v3_default_value_required/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+
+create external catalog `ice_def_req${uuid0}`
+properties (
+"type"  =  "iceberg",
+"iceberg.catalog.type"  =  "hadoop",
+"iceberg.catalog.warehouse"="oss://${oss_bucket}/test_iceberg_v3_default_value_required/${uuid0}"
+);
+
+create database ice_def_req${uuid0}.ice_def_db${uuid0};
+
+create table ice_def_req${uuid0}.ice_def_db${uuid0}.required_test (
+    id int,
+    name string
+) properties (
+    "format-version" = "3"
+);
+
+insert into ice_def_req${uuid0}.ice_def_db${uuid0}.required_test values (1, 'alice');
+
+alter table ice_def_req${uuid0}.ice_def_db${uuid0}.required_test add column age int not null default "20";
+alter table ice_def_req${uuid0}.ice_def_db${uuid0}.required_test add column (score int not null default "60", note string);
+
+-- a NOT NULL column without a default is still rejected
+alter table ice_def_req${uuid0}.ice_def_db${uuid0}.required_test add column level int not null;
+
+function: assert_query_contains("show create table ice_def_req${uuid0}.ice_def_db${uuid0}.required_test", 'age` int(11) NOT NULL DEFAULT "20"')
+
+-- the row written before the ALTER reads the defaults
+select * from ice_def_req${uuid0}.ice_def_db${uuid0}.required_test order by id;
+
+-- omitted columns and DEFAULT both take the write-default
+insert into ice_def_req${uuid0}.ice_def_db${uuid0}.required_test (id, name) values (2, 'bob');
+insert into ice_def_req${uuid0}.ice_def_db${uuid0}.required_test values (3, 'carol', DEFAULT, DEFAULT, 'x');
+insert into ice_def_req${uuid0}.ice_def_db${uuid0}.required_test values (4, 'dave', 25, 70, 'y');
+
+-- DEFAULT on a column without a default, and NULL into a required column, are rejected
+insert into ice_def_req${uuid0}.ice_def_db${uuid0}.required_test values (5, 'eve', 30, 80, DEFAULT);
+insert into ice_def_req${uuid0}.ice_def_db${uuid0}.required_test values (6, 'frank', null, 80, 'z');
+
+select * from ice_def_req${uuid0}.ice_def_db${uuid0}.required_test order by id;
+select count(*) from ice_def_req${uuid0}.ice_def_db${uuid0}.required_test where age = 20;
+
+-- v2 tables have no column defaults: NOT NULL is still rejected
+create table ice_def_req${uuid0}.ice_def_db${uuid0}.required_v2 (
+    id int
+) properties (
+    "format-version" = "2"
+);
+alter table ice_def_req${uuid0}.ice_def_db${uuid0}.required_v2 add column age int not null default "20";
+
+drop catalog ice_def_req${uuid0};
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_v3_default_value_required/${uuid0} >/dev/null || echo "exit 0" >/dev/null
