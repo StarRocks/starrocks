@@ -2583,8 +2583,11 @@ public class IcebergMetadata implements ConnectorMetadata {
                            ConnectContext context) {
         // Skip the commit entirely when there is nothing to write — a zero-row INSERT/UPDATE/DELETE
         // would otherwise produce an empty `append` snapshot that pollutes snapshot history and
-        // confuses downstream CDC consumers.
-        if (commitInfos.isEmpty()) {
+        // confuses downstream CDC consumers. A rewrite that only drops files (every row of them deleted) has
+        // no data file to add but must still commit.
+        boolean rewriteOnlyRemovesFiles = commitInfos.isEmpty() && extra instanceof IcebergSinkExtra sinkExtra
+                && sinkExtra.isRewrite() && !sinkExtra.getScannedDataFiles().isEmpty();
+        if (commitInfos.isEmpty() && !rewriteOnlyRemovesFiles) {
             LOG.info("Skipping empty Iceberg commit for {}.{} (no data or delete files produced)", dbName, tableName);
             return;
         }
@@ -2616,7 +2619,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             }
         } else {
             isOverwrite = false;
-            isRewrite = false;
+            isRewrite = rewriteOnlyRemovesFiles;
         }
 
         final List<TIcebergDataFile> dataFiles = commitInfos.stream()
@@ -3387,6 +3390,9 @@ public class IcebergMetadata implements ConnectorMetadata {
         // Spec of the table descriptor the BE partitions this DML's output by, frozen at plan time.
         private Integer writeSpecId;
         private OperationType operationType = OperationType.UPDATE;
+        // Set by rewrite_data_files. A rewrite whose scanned files hold no live row writes no data file, yet it
+        // must still commit to remove those files and their deletion vectors.
+        private boolean rewrite = false;
 
         public IcebergSinkExtra() {
             this.scannedDataFiles = new HashSet<>();
@@ -3399,6 +3405,14 @@ public class IcebergMetadata implements ConnectorMetadata {
 
         public OperationType getOperationType() {
             return operationType;
+        }
+
+        public void setRewrite(boolean rewrite) {
+            this.rewrite = rewrite;
+        }
+
+        public boolean isRewrite() {
+            return rewrite;
         }
 
         public void addScannedDataFiles(Set<DataFile> o) {

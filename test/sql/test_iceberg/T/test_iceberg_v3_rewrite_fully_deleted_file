@@ -1,0 +1,32 @@
+-- name: test_iceberg_v3_rewrite_fully_deleted_file
+-- StarRocks does not write deletion vectors, so a DELETE on a format-version 3 table fails and the rewrite of a
+-- fully deleted data file cannot be reproduced here. Only checks _row_id of a v3 table under distributed planning.
+
+create external catalog iceberg_v3_rw_${uuid0} PROPERTIES ("type"="iceberg",
+    "iceberg.catalog.type"="hive",
+    "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+);
+
+create database iceberg_v3_rw_${uuid0}.db_${uuid0};
+set catalog iceberg_v3_rw_${uuid0};
+use db_${uuid0};
+
+-- _row_id under distributed planning: the data files planned on BE carry their first_row_id back to FE
+create table rid_t(id int) properties ("format-version" = "3", "location" = "oss://${oss_bucket}/v3_rw_${uuid0}/rid_t");
+insert into rid_t values (1), (2), (3);
+insert into rid_t values (4), (5);
+-- expected: 0..4 for both plan modes
+set plan_mode = 'distributed';
+select id, _row_id from rid_t order by id;
+set plan_mode = 'local';
+select id, _row_id from rid_t order by id;
+
+drop table rid_t force;
+drop database db_${uuid0};
+set catalog default_catalog;
+drop catalog iceberg_v3_rw_${uuid0};
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/v3_rw_${uuid0} >/dev/null || echo "exit 0" >/dev/null

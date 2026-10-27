@@ -125,7 +125,8 @@ SELECT * FROM [<catalog>.][<database>.]table$manifests;
 | existing_rows_count       | Manifest 文件中所有状态为 `EXISTING` 数据文件的总行数。 |
 | deleted_data_files_count  | Manifest 文件中状态为 `DELETED` 的数据文件数量。        |
 | deleted_rows_count        | Manifest 文件中所有状态为 `DELETED` 数据文件的总行数。  |
-| partition_summaries       | 分区范围元数据。                                        |
+| partitions                | 分区范围元数据。                                        |
+| content                   | Manifest 文件的内容类型。有效值：`DATA(0)`、`DELETES(1)`。对于 Delete Manifest，`*_data_files_count` 和 `*_rows_count` 字段统计的是其中的删除文件和被删除的行。 |
 
 ## `partitions` 表
 
@@ -178,6 +179,10 @@ SELECT * FROM [<catalog>.][<database>.]table$files;
 | sort_id            | 代表该文件排序顺序的 ID。                                    |
 | equality_ids       | 用于在相等删除文件（Equality Delete File）中进行相等比较的字段 ID 集。 |
 | key_metadata       | 文件加密所使用的密钥元数据（如适用）。                       |
+| first_row_id       | 格式版本 3 的表中，数据文件第一行的行 ID。删除文件为 `NULL`。 |
+| referenced_data_file | Deletion Vector 或文件级 Position Delete 文件所作用的数据文件的位置。数据文件为 `NULL`。 |
+| content_offset     | Deletion Vector 在其 Puffin 文件中的偏移量。其他文件为 `NULL`。 |
+| content_size_in_bytes | Deletion Vector 在其 Puffin 文件中的大小。其他文件为 `NULL`。 |
 
 ## `refs` 表
 

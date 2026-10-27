@@ -310,6 +310,7 @@ public class IcebergRewriteDataJob {
                 return RewriteMetrics.EMPTY;
             }
             IcebergSinkExtra extra = new IcebergSinkExtra();
+            extra.setRewrite(true);
             extra.setBaseSnapshotId(baseSnapshotId);
             List<TSinkCommitInfo> faList = Lists.newArrayList();
             for (FinishArgs fa : collected) {

@@ -125,7 +125,8 @@ SELECT * FROM [<catalog>.][<database>.]table$manifests;
 | existing_rows_count       | マニフェストファイル内で `EXISTING` ステータスのすべてのデータファイルの総行数。 |
 | deleted_data_files_count  | マニフェストファイル内で `DELETED` ステータスのデータファイルの数。 |
 | deleted_rows_count        | マニフェストファイル内で `DELETED` ステータスのすべてのデータファイルの総行数。 |
-| partition_summaries       | パーティション範囲のメタデータ。                             |
+| partitions                | パーティション範囲のメタデータ。                             |
+| content                   | マニフェストファイルのコンテンツタイプ。有効な値：`DATA(0)`、`DELETES(1)`。削除マニフェストの場合、`*_data_files_count` と `*_rows_count` フィールドは削除ファイルと削除された行を数えます。 |
 
 ## `partitions` テーブル
 
@@ -178,6 +179,10 @@ SELECT * FROM [<catalog>.][<database>.]table$files;
 | sort_id            | このファイルのソート順序を表す ID。                          |
 | equality_ids       | Equality Delete ファイルでの等価比較に使用されるフィールド ID のセット。 |
 | key_metadata       | このファイルを暗号化するために使用される暗号化キーに関するメタデータ（該当する場合）。 |
+| first_row_id       | フォーマットバージョン 3 のテーブルにおける、データファイルの最初の行の行 ID。削除ファイルの場合は `NULL`。 |
+| referenced_data_file | 削除ベクトルまたはファイル単位の位置削除ファイルが適用されるデータファイルの場所。データファイルの場合は `NULL`。 |
+| content_offset     | Puffin ファイル内の削除ベクトルのオフセット。その他のファイルの場合は `NULL`。 |
+| content_size_in_bytes | Puffin ファイル内の削除ベクトルのサイズ。その他のファイルの場合は `NULL`。 |
 
 ## `refs` テーブル
 
