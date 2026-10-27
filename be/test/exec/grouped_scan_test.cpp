@@ -102,6 +102,25 @@ TEST(GroupedScanQueueTest, grouped_queues_preserve_internal_parallel_policy_and_
     }
 }
 
+TEST(GroupedScanQueueTest, DisabledRandomRoutingIsQueryableWithoutLocalShuffle) {
+    for (auto [local_shuffle, random_append] : {std::pair{false, false}, {true, false}, {true, true}}) {
+        std::map<int, MorselQueuePtr> queues;
+        queues.emplace(0, std::make_unique<FixedMorselQueue>(Morsels{}));
+        queues.emplace(1, std::make_unique<FixedMorselQueue>(Morsels{}));
+        IndividualMorselQueueFactory factory(std::move(queues), local_shuffle, random_append);
+        EXPECT_EQ(random_append, factory.enable_random_append_split_morsel());
+    }
+#ifndef NDEBUG
+    const auto invalid_random_routing = [] {
+        std::map<int, MorselQueuePtr> queues;
+        queues.emplace(0, std::make_unique<FixedMorselQueue>(Morsels{}));
+        IndividualMorselQueueFactory factory(std::move(queues), false, true);
+        (void)factory.enable_random_append_split_morsel();
+    };
+    EXPECT_DEATH_IF_SUPPORTED(invalid_random_routing(), "Check failed");
+#endif
+}
+
 TEST(GroupedScanQueueTest, grouped_requests_reject_global_unowned_or_cross_driver_groups) {
     ObjectPool pool;
     DescriptorTbl desc;
