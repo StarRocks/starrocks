@@ -353,7 +353,8 @@ public class FlussScanTest extends PlanTestBase {
         if (partitioned) {
             descriptorBuilder.partitionedBy("category");
         }
-        return TableInfo.of(TablePath.of(DB, tableName), 42L, 7, descriptorBuilder.build(), 1000L, 2000L);
+        return TableInfo.of(TablePath.of(DB, tableName), 42L, 7, descriptorBuilder.build(),
+                null, 1000L, 2000L);
     }
 
     private static class FakeConnection implements Connection {
@@ -375,6 +376,11 @@ public class FlussScanTest extends PlanTestBase {
 
         @Override
         public org.apache.fluss.client.table.Table getTable(TablePath tablePath) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public org.apache.fluss.client.table.MultiTable getMultiTable() {
             throw new UnsupportedOperationException();
         }
 
