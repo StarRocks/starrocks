@@ -1612,8 +1612,9 @@ TEST_F(LakeDataSourceTest, init_counter_registers_prepared_split_counters) {
         }
     }
 
-    // Predicate rewrite and context construction are children of SegmentInit.
-    for (const auto* name : {"RewritePredicates", "InitContext"}) {
+    // These init phases are children of SegmentInit.
+    for (const auto* name : {"SegmentInitPrepare", "RowidRangeFilter", "PrecomputedRangeFilter", "TabletRangeFilter",
+                             "DelVectorApply", "SegmentInitFinalize", "RewritePredicates", "InitContext"}) {
         auto it = profile->_counter_map.find(name);
         ASSERT_NE(it, profile->_counter_map.end()) << name;
         EXPECT_EQ(it->second.second, "SegmentInit") << name;
