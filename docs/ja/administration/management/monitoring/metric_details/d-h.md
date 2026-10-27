@@ -22,6 +22,18 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 - 単位: カウント
 - 説明: BEでExchangeレシーバーとして機能するインスタンスの累積数。
 
+## `datacache_corruption_removed_files`
+
+- 単位: カウント
+- タイプ: 累積
+- 説明: データキャッシュから読み取った内容のデコードにスキャンが失敗した後、破損したキャッシュブロックを削除した外部テーブルファイルの累積数。`external_table_clear_corrupted_cache_data` で制御されます。
+
+## `datacache_corruption_retried_files`
+
+- 単位: カウント
+- タイプ: 累積
+- 説明: キャッシュされたコピーが破損しているかどうかを検証するために、データキャッシュをバイパスして再読み取りした外部テーブルファイルの累積数。再読み取りされるのは Parquet ファイルのみです。
+
 ## `datacache_disk_quota_bytes`
 
 - 単位: バイト

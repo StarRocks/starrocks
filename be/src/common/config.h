@@ -1848,6 +1848,8 @@ CONF_mBool(lake_enable_protobuf_file_checksum, "true");
 CONF_mBool(lake_clear_corrupted_cache_meta, "true");
 // clear *.data cache for lake table
 CONF_mBool(lake_clear_corrupted_cache_data, "false");
+// clear corrupted datacache for external tables, as lake_clear_corrupted_cache_data does for lake tables
+CONF_mBool(external_table_clear_corrupted_cache_data, "true");
 // The maximum number of files which need to rebuilt in cloud native pk index.
 // If files which need to rebuilt larger than this, we will flush memtable immediately.
 CONF_mInt32(cloud_native_pk_index_rebuild_files_threshold, "50");
