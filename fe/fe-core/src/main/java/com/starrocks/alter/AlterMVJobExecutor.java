@@ -1374,6 +1374,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 }
 
                 AlterJobMgr alterJobMgr = GlobalStateMgr.getCurrentState().getAlterJobMgr();
+<<<<<<< HEAD
                 // Analyzed in resolveBeforeLock.
                 AlterJobMgr.AlterMaterializedViewStatusContext statusContext = takePreResolvedActivate(materializedView);
                 AlterMaterializedViewStatusLog log = new AlterMaterializedViewStatusLog(materializedView.getDbId(),
@@ -1394,6 +1395,38 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 // inactivation the drop missed.
                 long activatedAtEpoch = materializedView.getStatusSnapshot().epoch();
                 postUnlockActions.add(() -> materializedView.inactivateIfBaseTableDroppedMeanwhile(activatedAtEpoch));
+=======
+                AlterJobMgr.AlterMaterializedViewStatusContext statusContext =
+                        alterJobMgr.prepareAlterMaterializedViewStatus(materializedView, status, "", false);
+                // Rebuild the relationship BEFORE journaling, and journal only once the MV is really
+                // active. fixRelationship() swallows its own failure and just leaves the MV inactive, and
+                // checkIsActiveOnLoadBlocking() reports a clean negative verdict without throwing at all,
+                // so isActive() is the only criterion covering both. Journaling first would record an
+                // activation that never happened -- the entry is durable and nothing revokes it, so a
+                // permanently broken MV grew one bogus entry per MVActiveChecker round, without bound.
+                // Captured before the rebuild so a failed journal write can restore exactly the state the
+                // statement started from.
+                String inactiveReasonBeforeActivate = materializedView.getInactiveReason();
+                alterJobMgr.rebuildRelationshipForActivate(materializedView, statusContext);
+                if (!materializedView.isActive()) {
+                    throw new AlterJobException(String.format("Can not active materialized view [%s]: %s",
+                            materializedView.getName(), materializedView.getInactiveReason()));
+                }
+                AlterMaterializedViewStatusLog log = new AlterMaterializedViewStatusLog(materializedView.getDbId(),
+                        materializedView.getId(), status, "");
+                try {
+                    GlobalStateMgr.getCurrentState().getEditLog().logAlterMvStatus(log, wal ->
+                            alterJobMgr.resumeTaskForActivate(statusContext, false));
+                } catch (Throwable t) {
+                    // The rebuild already ran setActive(), which republishes the MV to the query-rewrite
+                    // cache. A journal write that never commits means the activation did not happen, so
+                    // undo it: otherwise this leader would keep rewriting queries with an MV that is
+                    // active in memory only, and whose refresh task was never resumed either -- so it
+                    // would never be refreshed again. setInactiveAndReason evicts the rewrite cache.
+                    materializedView.setInactiveAndReason(inactiveReasonBeforeActivate);
+                    throw t;
+                }
+>>>>>>> b8c60df8cac... [BugFix] Journal an MV activation only after it actually succeeded (#62587)
                 // for manual refresh type, do not refresh
                 if (materializedView.getRefreshScheme().getType() != MaterializedViewRefreshType.MANUAL) {
                     GlobalStateMgr.getCurrentState().getLocalMetastore()
