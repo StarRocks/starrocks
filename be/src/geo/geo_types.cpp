@@ -376,6 +376,9 @@ bool GeoLine::decode(const void* data, size_t size) {
     return _polyline->Decode(&decoder);
 }
 
+GeoRingScratch::GeoRingScratch() = default;
+GeoRingScratch::~GeoRingScratch() = default;
+
 GeoPolygon::GeoPolygon() = default;
 GeoPolygon::~GeoPolygon() = default;
 
@@ -429,9 +432,9 @@ bool GeoPolygon::is_valid_ring_direct(const GeoCoordinateList& coordinates) {
 }
 
 bool GeoPolygon::point_relation_direct(const GeoCoordinateList& coordinates, const GeoPoint& point,
-                                       GeoPointPolygonRelation* relation) {
+                                       GeoRingScratch* scratch, GeoPointPolygonRelation* relation) {
     if (coordinates.list.size() > kMaxDirectVertices + 1) return false;
-    auto& points = _ring_points;
+    auto& points = scratch->_points;
     if (to_s2loop_points(coordinates, &points) != GEO_PARSE_OK) return false;
     // A 60-degree cap is convex and strictly smaller than a hemisphere. Its
     // complement contains -points[0], outside the region selected by Normalize().

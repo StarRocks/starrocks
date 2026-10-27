@@ -157,6 +157,17 @@ private:
     std::unique_ptr<Impl> _impl;
 };
 
+// Reusable buffer for GeoPolygon::point_relation_direct; opaque so callers don't need S2 headers.
+class GeoRingScratch {
+public:
+    GeoRingScratch();
+    ~GeoRingScratch();
+
+private:
+    friend class GeoPolygon;
+    std::vector<S2Point> _points;
+};
+
 class GeoPolygon : public GeoShape {
 public:
     GeoPolygon();
@@ -176,8 +187,8 @@ public:
     static constexpr size_t kMaxDirectVertices = 512;
 
     // False means not applicable; the caller must use point_relation on a full polygon.
-    bool point_relation_direct(const GeoCoordinateList& coordinates, const GeoPoint& point,
-                               GeoPointPolygonRelation* relation);
+    static bool point_relation_direct(const GeoCoordinateList& coordinates, const GeoPoint& point,
+                                      GeoRingScratch* scratch, GeoPointPolygonRelation* relation);
 
     GeoShapeType type() const override { return GEO_SHAPE_POLYGON; }
     const S2Polygon* polygon() const { return _polygon.get(); }
@@ -197,8 +208,6 @@ protected:
 
 private:
     std::unique_ptr<S2Polygon> _polygon;
-    // Keep S2 scratch here: including S2 types in exprs conflicts with gutil typedefs.
-    std::vector<S2Point> _ring_points;
 };
 
 class GeoCircle : public GeoShape {

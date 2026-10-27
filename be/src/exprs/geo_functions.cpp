@@ -844,14 +844,14 @@ Status prepare_spherical_polygon(const WkbGeometry& polygon, GeoPolygon* native_
 }
 
 StatusOr<PointPolygonRelation> spherical_polygon_relation(const WkbGeometry& polygon, const GeoPoint& point,
-                                                          std::unique_ptr<GeoPolygon>* prepared, GeoPolygon* direct,
-                                                          GeoCoordinateList* ring) {
+                                                          std::unique_ptr<GeoPolygon>* prepared,
+                                                          GeoRingScratch* scratch, GeoCoordinateList* ring) {
     if (prepared == nullptr && polygon.rings.size() == 1 &&
         polygon.rings[0].size() <= GeoPolygon::kMaxDirectVertices + 1) {
         ring->list.clear();
         for (const auto& coordinate : polygon.rings[0]) ring->add({coordinate.x, coordinate.y});
         GeoPointPolygonRelation relation;
-        if (direct->point_relation_direct(*ring, point, &relation)) {
+        if (GeoPolygon::point_relation_direct(*ring, point, scratch, &relation)) {
             return relation == GeoPointPolygonRelation::INSIDE ? PointPolygonRelation::INSIDE
                                                                : PointPolygonRelation::OUTSIDE;
         }
@@ -899,8 +899,8 @@ struct NativeGeoContainmentThreadState final : FunctionThreadState {
 };
 
 StatusOr<PointPolygonRelation> spherical_polygon_family_relation(const WkbGeometry& polygon, const GeoPoint& point,
-                                                                 SphericalPolygonFamilyCache* cache, GeoPolygon* direct,
-                                                                 GeoCoordinateList* ring) {
+                                                                 SphericalPolygonFamilyCache* cache,
+                                                                 GeoRingScratch* scratch, GeoCoordinateList* ring) {
     const size_t component_count = polygon.type == WkbGeometryType::POLYGON ? 1 : polygon.children.size();
     if (cache != nullptr && cache->components.empty()) cache->components.resize(component_count);
     PointPolygonRelation result = PointPolygonRelation::OUTSIDE;
@@ -908,7 +908,7 @@ StatusOr<PointPolygonRelation> spherical_polygon_family_relation(const WkbGeomet
         const auto& component = polygon.type == WkbGeometryType::POLYGON ? polygon : polygon.children[i];
         if (component.empty) continue;
         auto* prepared = cache == nullptr ? nullptr : &cache->components[i];
-        ASSIGN_OR_RETURN(auto relation, spherical_polygon_relation(component, point, prepared, direct, ring));
+        ASSIGN_OR_RETURN(auto relation, spherical_polygon_relation(component, point, prepared, scratch, ring));
         if (relation == PointPolygonRelation::BOUNDARY) return relation;
         if (relation == PointPolygonRelation::INSIDE) result = relation;
     }
@@ -1035,7 +1035,7 @@ StatusOr<ColumnPtr> geo_containment_predicate(FunctionContext* context, const Co
     std::optional<WkbGeometry> constant_right;
     std::optional<GeoPoint> constant_spherical_point;
     SphericalPolygonFamilyCache constant_spherical_polygon;
-    GeoPolygon direct_polygon;
+    GeoRingScratch direct_scratch;
     GeoCoordinateList direct_ring;
     std::optional<GeoPoint> varying_spherical_point;
     WkbGeometry varying_left;
@@ -1090,7 +1090,7 @@ StatusOr<ColumnPtr> geo_containment_predicate(FunctionContext* context, const Co
                                                               : &constant_spherical_polygon)
                                           : nullptr;
             ASSIGN_OR_RETURN(relation, spherical_polygon_family_relation(polygon, *native_point, polygon_cache,
-                                                                         &direct_polygon, &direct_ring));
+                                                                         &direct_scratch, &direct_ring));
         } else {
             relation = planar_polygon_family_relation(polygon, point.coordinates[0]);
         }

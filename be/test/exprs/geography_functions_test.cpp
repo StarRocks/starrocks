@@ -1928,7 +1928,7 @@ TEST_F(geographyFunctionsTest, nativeGeographyDirectRingAcceptsApplicableCases) 
     for (double longitude : {60.0 - 1e-8, 60.0 + 1e-8}) {
         cases.push_back({{{0, 0}, {longitude, 0}, {0, 10}, {0, 0}}, {1, 1}, longitude < 60, Relation::INSIDE});
     }
-    GeoPolygon direct;
+    GeoRingScratch scratch;
     for (size_t i = 0; i < cases.size(); ++i) {
         SCOPED_TRACE(i);
         const auto& test = cases[i];
@@ -1937,7 +1937,7 @@ TEST_F(geographyFunctionsTest, nativeGeographyDirectRingAcceptsApplicableCases) 
         GeoPoint point;
         ASSERT_EQ(GEO_PARSE_OK, point.from_coord(test.point));
         Relation relation;
-        ASSERT_EQ(test.applicable, direct.point_relation_direct(ring, point, &relation));
+        ASSERT_EQ(test.applicable, GeoPolygon::point_relation_direct(ring, point, &scratch, &relation));
         if (!test.applicable) continue;
         EXPECT_EQ(test.expected, relation);
         GeoCoordinateListList rings;
@@ -1956,12 +1956,12 @@ TEST_F(geographyFunctionsTest, nativeGeographyDirectRingRejectsHemisphereAmbigui
             for (double longitude : {0.0, 90.0, 180.0, -90.0}) ring.add({longitude, latitude});
             if (reverse) std::reverse(ring.list.begin(), ring.list.end());
             ring.add(ring.list[0]);
-            GeoPolygon direct;
+            GeoRingScratch scratch;
             for (double point_latitude : {-90.0, 0.0, 90.0}) {
                 GeoPoint point;
                 ASSERT_EQ(GEO_PARSE_OK, point.from_coord(0, point_latitude));
                 GeoPointPolygonRelation relation;
-                EXPECT_FALSE(direct.point_relation_direct(ring, point, &relation));
+                EXPECT_FALSE(GeoPolygon::point_relation_direct(ring, point, &scratch, &relation));
             }
         }
     }
@@ -1989,14 +1989,14 @@ TEST_F(geographyFunctionsTest, nativeGeographyDirectRingRejectsMalformedCoordina
             {{0, 10}, {90, 10}, {inf, 10}, {0, 10}},
             {{0, 0}, {-inf, 0}, {10, 10}, {0, 0}},
     };
-    GeoPolygon direct;
+    GeoRingScratch scratch;
     GeoPoint point;
     ASSERT_EQ(GEO_PARSE_OK, point.from_coord(1, 1));
     for (const auto& coordinates : cases) {
         GeoCoordinateList ring;
         ring.list = coordinates;
         GeoPointPolygonRelation relation;
-        EXPECT_FALSE(direct.point_relation_direct(ring, point, &relation));
+        EXPECT_FALSE(GeoPolygon::point_relation_direct(ring, point, &scratch, &relation));
     }
 }
 
