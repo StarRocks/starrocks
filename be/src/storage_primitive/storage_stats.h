@@ -299,6 +299,12 @@ struct OlapReaderStatistics {
         segment_init_ns += other.segment_init_ns;
         column_iterator_init_ns += other.column_iterator_init_ns;
         bitmap_index_iterator_init_ns += other.bitmap_index_iterator_init_ns;
+        segment_init_prepare_ns += other.segment_init_prepare_ns;
+        rowid_range_filter_ns += other.rowid_range_filter_ns;
+        precomputed_range_filter_ns += other.precomputed_range_filter_ns;
+        tablet_range_filter_ns += other.tablet_range_filter_ns;
+        del_vector_apply_ns += other.del_vector_apply_ns;
+        segment_init_finalize_ns += other.segment_init_finalize_ns;
         rewrite_predicates_ns += other.rewrite_predicates_ns;
         init_context_ns += other.init_context_ns;
         zone_map_filter_ns += other.zone_map_filter_ns;
