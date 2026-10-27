@@ -371,7 +371,7 @@ After you enter the StarRocks monitoring Dashboard, you can manually refresh the
 
 ## Step 2: Understand the core monitoring metrics
 
-To accommodate the needs of development, operations, DBA, and more, StarRocks provides a wide range of monitoring metrics. This section only introduces some important metrics commonly used in business and their alert rules. For other metric details, please refer to [Monitoring Metrics](./metrics.md).
+To accommodate the needs of development, operations, DBA, and more, StarRocks provides a wide range of monitoring metrics. This section only introduces some important metrics commonly used in business and their alert rules. For other metric details, please refer to [Monitoring Metrics](./metric_details/metric_details.mdx).
 
 ### 2.1 Metrics for FE and BE status
 
