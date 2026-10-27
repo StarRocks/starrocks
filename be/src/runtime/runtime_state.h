@@ -479,6 +479,10 @@ public:
 
     const phmap::flat_hash_map<uint32_t, int64_t>& load_dict_versions() { return _load_dict_versions; }
 
+    const phmap::flat_hash_map<uint32_t, int64_t>& load_dict_content_identities() const {
+        return _load_dict_content_identities;
+    }
+
     using GlobalDictLists = std::vector<TGlobalDict>;
     Status init_query_global_dict(const GlobalDictLists& global_dict_list);
     Status init_load_global_dict(const GlobalDictLists& global_dict_list);
@@ -576,7 +580,8 @@ private:
     Status create_error_log_file();
 
     Status _build_global_dict(const GlobalDictLists& global_dict_list, GlobalDictMaps* result,
-                              phmap::flat_hash_map<uint32_t, int64_t>* version);
+                              phmap::flat_hash_map<uint32_t, int64_t>* version,
+                              phmap::flat_hash_map<uint32_t, int64_t>* column_id_to_identity = nullptr);
 
     // put runtime state before _obj_pool, so that it will be deconstructed after
     // _obj_pool. Because some object in _obj_pool will use profile when deconstructing.
@@ -699,6 +704,7 @@ private:
     GlobalDictMaps _query_global_dicts;
     GlobalDictMaps _load_global_dicts;
     phmap::flat_hash_map<uint32_t, int64_t> _load_dict_versions;
+    phmap::flat_hash_map<uint32_t, int64_t> _load_dict_content_identities;
     DictOptimizeParser _dict_optimize_parser;
 
     pipeline::QueryContext* _query_ctx = nullptr;

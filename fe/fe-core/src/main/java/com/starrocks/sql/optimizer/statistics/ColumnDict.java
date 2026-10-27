@@ -16,18 +16,22 @@ package com.starrocks.sql.optimizer.statistics;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.hash.Hasher;
+import com.google.common.hash.Hashing;
 import com.starrocks.common.Config;
 
 import java.nio.ByteBuffer;
+import java.util.Arrays;
 import java.util.Comparator;
 
 public final class ColumnDict {
     /**
      * Unsigned-byte lexicographic comparator. BE sorts dictionary strings via memcmp, which the C
-     * standard defines to compare bytes as unsigned char. ByteBuffer.compareTo on JDK 8 instead
-     * compares bytes as signed (Java 9 fixed this to unsigned), so any UTF-8 string with a high-bit
-     * byte (Cyrillic, CJK, etc.) sorts the opposite way on the two sides. Always use this comparator
-     * when ordering dictionary keys on the FE so the result matches BE regardless of JDK version.
+     * standard defines to compare bytes as unsigned char. ByteBuffer.compareTo instead compares
+     * bytes as signed (it is specified in terms of Byte.compare, on every JDK including 17 and 21),
+     * so any UTF-8 string with a high-bit byte (Cyrillic, CJK, etc.) sorts the opposite way on the
+     * two sides. Never order dictionary keys with ByteBuffer's natural order (sorted(), TreeSet,
+     * TreeMap); always use this comparator so the result matches BE.
      */
     public static final Comparator<ByteBuffer> UNSIGNED_LEX = (a, b) -> {
         int aPos = a.position();
@@ -45,6 +49,7 @@ public final class ColumnDict {
     };
 
     private final ImmutableMap<ByteBuffer, Integer> dict;
+    private final long contentIdentity;
     // olap table use time info as version info.
     // table on lake use num as version, collectedVersion means historical version num,
     // while version means version in current period.
@@ -61,6 +66,7 @@ public final class ColumnDict {
         this.collectedVersion = version;
         this.version = version;
         this.byteSize = computeByteSize(dict);
+        this.contentIdentity = computeContentIdentity(dict);
     }
 
     public ColumnDict(ImmutableMap<ByteBuffer, Integer> dict, long collectedVersion, long version) {
@@ -68,6 +74,7 @@ public final class ColumnDict {
         this.collectedVersion = collectedVersion;
         this.version = version;
         this.byteSize = computeByteSize(dict);
+        this.contentIdentity = computeContentIdentity(dict);
     }
 
     private static int computeByteSize(ImmutableMap<ByteBuffer, Integer> dict) {
@@ -80,6 +87,20 @@ public final class ColumnDict {
 
     public int getByteSize() {
         return byteSize;
+    }
+
+    private static long computeContentIdentity(ImmutableMap<ByteBuffer, Integer> dict) {
+        ByteBuffer[] keys = dict.keySet().toArray(new ByteBuffer[0]);
+        Arrays.sort(keys, UNSIGNED_LEX);
+        Hasher hasher = Hashing.murmur3_128().newHasher().putInt(keys.length);
+        for (ByteBuffer key : keys) {
+            hasher.putInt(key.remaining()).putBytes(key.duplicate()).putInt(dict.get(key));
+        }
+        return hasher.hash().asLong();
+    }
+
+    public long getContentIdentity() {
+        return contentIdentity;
     }
 
     public ImmutableMap<ByteBuffer, Integer> getDict() {
