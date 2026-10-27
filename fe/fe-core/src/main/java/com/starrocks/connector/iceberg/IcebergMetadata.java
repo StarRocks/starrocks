@@ -2956,9 +2956,9 @@ public class IcebergMetadata implements ConnectorMetadata {
         Long baseSnapshotId = extra instanceof IcebergSinkExtra
                 ? ((IcebergSinkExtra) extra).getBaseSnapshotId() : null;
         if (baseSnapshotId == null) {
-            Snapshot currentSnapshot = nativeTbl.currentSnapshot();
-            if (currentSnapshot != null) {
-                baseSnapshotId = currentSnapshot.snapshotId();
+            Snapshot head = headSnapshot(nativeTbl, branch);
+            if (head != null) {
+                baseSnapshotId = head.snapshotId();
             }
         }
         if (baseSnapshotId != null) {
@@ -3005,8 +3005,8 @@ public class IcebergMetadata implements ConnectorMetadata {
                 transaction.commitTransaction();
             }, () -> invalidateCacheAfterCommit(dbName, tableName), dataFiles, dbName, tableName);
 
-            // Record metrics after successful commit
-            Snapshot newSnapshot = nativeTbl.currentSnapshot();
+            // Record metrics after successful commit, from the head of the branch it committed to
+            Snapshot newSnapshot = headSnapshot(nativeTbl, branch);
             if (newSnapshot != null && newSnapshot.summary() != null) {
                 Map<String, String> summary = newSnapshot.summary();
                 long deletedRows = Long.parseLong(
@@ -3029,6 +3029,11 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
 
         asyncRefreshOthersFeMetadataCache(dbName, tableName);
+    }
+
+    // The head of the branch a row delta commits to: validation must start from an ancestor of it
+    private static Snapshot headSnapshot(org.apache.iceberg.Table nativeTbl, String branch) {
+        return branch == null ? nativeTbl.currentSnapshot() : nativeTbl.snapshot(branch);
     }
 
     private void commitRowDeltaOperation(Transaction transaction, org.apache.iceberg.Table nativeTbl,
@@ -3066,14 +3071,14 @@ public class IcebergMetadata implements ConnectorMetadata {
 
         // Use the base snapshot id frozen at plan time so conflict detection covers every
         // commit landed between scan and commit. The MERGE/UPDATE planners freeze it from the
-        // target scan whenever existing rows are modified; the currentSnapshot fallback below
-        // covers paths that do not (plain appends, target-less MERGE).
+        // target scan whenever existing rows are modified; the fallback to the head of the target
+        // branch below covers paths that do not (plain appends, target-less MERGE).
         Long baseSnapshotId = extra instanceof IcebergSinkExtra
                 ? ((IcebergSinkExtra) extra).getBaseSnapshotId() : null;
         if (baseSnapshotId == null) {
-            Snapshot currentSnapshot = nativeTbl.currentSnapshot();
-            if (currentSnapshot != null) {
-                baseSnapshotId = currentSnapshot.snapshotId();
+            Snapshot head = headSnapshot(nativeTbl, branch);
+            if (head != null) {
+                baseSnapshotId = head.snapshotId();
             }
         }
         if (baseSnapshotId != null) {
@@ -3138,7 +3143,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             if (isMerge) {
                 ConnectorMetricsMgr.increaseIcebergMergeTotalSuccess();
 
-                Snapshot newSnapshot = nativeTbl.currentSnapshot();
+                Snapshot newSnapshot = headSnapshot(nativeTbl, branch);
                 if (newSnapshot != null && newSnapshot.summary() != null) {
                     // position_delete = target rows hit by UPDATE/DELETE (added position deletes);
                     // data = data rows written (UPDATE rewrites + INSERTs).
@@ -3163,7 +3168,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             } else {
                 ConnectorMetricsMgr.increaseUpdateTotalSuccess(ConnectorMetricsMgr.CONNECTOR_ICEBERG);
 
-                Snapshot updateSnapshot = nativeTbl.currentSnapshot();
+                Snapshot updateSnapshot = headSnapshot(nativeTbl, branch);
                 if (updateSnapshot != null && updateSnapshot.summary() != null) {
                     long affectedRows = Long.parseLong(updateSnapshot.summary()
                             .getOrDefault(SnapshotSummary.ADDED_POS_DELETES_PROP, "0"));

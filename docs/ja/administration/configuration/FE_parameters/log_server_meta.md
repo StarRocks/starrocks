@@ -444,7 +444,16 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Long
 - 単位：Milliseconds
 - 変更可能：Yes
-- 説明：同一の呼び出し箇所から出力されるロック不変条件違反のログ行の最小間隔。スロットリングはグローバルではなく呼び出し箇所ごとに行われるため、違反頻度の高い箇所が他の箇所をログから締め出すことはありません。調査時には `0` に設定すると、すべての違反がログに出力されます。`lock_target_validation_mode` または `lock_blocking_call_validation_mode` が `warn` の場合にのみ有効です。
+- 説明：同一の呼び出し箇所から出力されるロック不変条件違反のログ行の最小間隔。スロットリングはグローバルではなく呼び出し箇所ごとに行われるため、違反頻度の高い箇所が他の箇所をログから締め出すことはありません。調査時には `0` に設定すると、すべての違反がログに出力されます。`lock_target_validation_mode`、`lock_blocking_call_validation_mode`、または `lock_snapshot_copy_validation_mode` が `warn` の場合にのみ有効です。
+- 導入時期：v26.2
+
+### `lock_snapshot_copy_validation_mode`
+
+- デフォルト：warn
+- タイプ：String
+- 単位：-
+- 変更可能：Yes
+- 説明：スレッドがテーブルの読み取りロックまたは書き込みロックも、そのデータベースの読み取りロックまたは書き込みロックも保持せずに、クエリプランニング用にネイティブテーブルまたはマテリアライズドビューをコピーしたときの FE の動作。コピーはテーブルの現在のパーティションおよびインデックスのメタデータを読み取りますが、DDL、INSERT OVERWRITE、メタデータのリプレイは書き込みロックの下でこれらをその場で変更します。そのため、ロックなしのコピーは `ConcurrentModificationException` でステートメントを失敗させたり、一度も全体として公開されていないメタデータに基づいてプランを作成したりする可能性があります。有効な値：`off`（チェックしない）、`warn`（コピーした呼び出し元のスタックトレース付きで違反をログに記録し、コピーはそのまま続行する）、`error`（そのコピーを拒否する）。認識できない値は `warn` として扱われます。`warn` モードでは各違反が `LOCK_INVARIANT_VIOLATION` タグと `kind=snapshot_copy_without_lock` を付けた 1 行として出力されます。ログ量は `lock_invariant_violation_log_interval_ms` で制御します。
 - 導入時期：v26.2
 
 ### `lock_target_validation_mode`

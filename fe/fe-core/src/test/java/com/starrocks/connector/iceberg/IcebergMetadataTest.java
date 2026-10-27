@@ -4381,6 +4381,43 @@ public class IcebergMetadataTest extends TableTestBase {
     }
 
     @Test
+    public void testCommitTargetlessMergeToBranch() throws Exception {
+        // An insert-only MERGE whose target scan is optimized away has no plan-time base snapshot. On a branch the
+        // commit must validate from the branch head, not from main, which moved past the branch.
+        mockedNativeTableA.newFastAppend().appendFile(FILE_A).commit();
+        long branchHead = mockedNativeTableA.currentSnapshot().snapshotId();
+        mockedNativeTableA.manageSnapshots().createBranch("b1", branchHead).commit();
+        mockedNativeTableA.newFastAppend().appendFile(FILE_B_1).commit();
+        long mainHead = mockedNativeTableA.currentSnapshot().snapshotId();
+
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
+        new Expectations(metadata) {
+            {
+                metadata.getTable((ConnectContext) any, anyString, anyString);
+                result = icebergTable;
+                minTimes = 0;
+            }
+        };
+
+        TSinkCommitInfo dataCommit = new TSinkCommitInfo();
+        dataCommit.setIceberg_data_file(buildRowDeltaDataFile());
+        IcebergMetadata.IcebergSinkExtra extra = new IcebergMetadata.IcebergSinkExtra();
+        extra.setOperationType(IcebergMetadata.IcebergSinkExtra.OperationType.MERGE);
+
+        metadata.finishSink("iceberg_db", "iceberg_table", Lists.newArrayList(dataCommit), "b1", extra);
+
+        mockedNativeTableA.refresh();
+        Assertions.assertEquals(mainHead, mockedNativeTableA.currentSnapshot().snapshotId(), "main must not move");
+        Snapshot newBranchHead = mockedNativeTableA.snapshot("b1");
+        Assertions.assertNotEquals(branchHead, newBranchHead.snapshotId(), "the MERGE must commit to the branch");
+        Assertions.assertEquals(branchHead, newBranchHead.parentId());
+    }
+
+    @Test
     public void testCommitRowDeltaOperationSerializableIsolation() throws Exception {
         // SERIALIZABLE turns on validateNoConflictingDataFiles in addition to the
         // unconditional validateNoConflictingDeleteFiles. Cover both checks here.
@@ -5811,8 +5848,11 @@ public class IcebergMetadataTest extends TableTestBase {
         mockedNativeTableB.updateSchema().renameColumn("k2", "k2_renamed").commit();
         mockedNativeTableB.updateSchema().deleteColumn("k1").commit();
         mockedNativeTableB.updateSchema().addColumn("k1", Types.IntegerType.get()).commit();
+        // and partition by the new k1, so a DML on the branch writes with a spec the branch head does not use
+        mockedNativeTableB.updateSpec().addField("k1").commit();
         mockedNativeTableB.refresh();
         Schema currentSchema = mockedNativeTableB.schema();
+        int currentSpecId = mockedNativeTableB.spec().specId();
 
         new MockUp<IcebergMetadata>() {
             @Mock
@@ -5841,6 +5881,7 @@ public class IcebergMetadataTest extends TableTestBase {
         Schema branchReadSchema = ((IcebergTable) branchRelation.getTable()).getReadSchema();
         Assertions.assertEquals(currentSchema.schemaId(), branchReadSchema.schemaId());
         Assertions.assertEquals(currentSchema.findField("k1").fieldId(), branchReadSchema.findField("k1").fieldId());
+        Assertions.assertEquals(currentSpecId, ((IcebergTable) branchRelation.getTable()).getReadSpec().specId());
 
         QueryStatement tagStmt = (QueryStatement) AnalyzeTestUtil.analyzeSuccess(
                 "SELECT * FROM iceberg_branch_catalog.db.tb VERSION AS OF 'tag_s1'");
@@ -5848,6 +5889,7 @@ public class IcebergMetadataTest extends TableTestBase {
         TableRelation tagRelation = (TableRelation) ((SelectRelation) tagStmt.getQueryRelation()).getRelation();
         Schema tagReadSchema = ((IcebergTable) tagRelation.getTable()).getReadSchema();
         Assertions.assertNotEquals(currentSchema.findField("k1").fieldId(), tagReadSchema.findField("k1").fieldId());
+        Assertions.assertNotEquals(currentSpecId, ((IcebergTable) tagRelation.getTable()).getReadSpec().specId());
     }
 
     @Test

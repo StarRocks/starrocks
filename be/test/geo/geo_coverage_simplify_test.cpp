@@ -80,6 +80,23 @@ std::vector<std::string> horizontal_strips(size_t count) {
     return result;
 }
 
+void expect_polygon_outputs(const GeoCoverageSimplify& coverage, size_t rows) {
+    ASSERT_EQ(coverage.rows(), rows);
+    for (size_t row = 0; row < rows; ++row) {
+        const auto result = coverage.result(row);
+        ASSERT_TRUE(result.ok()) << result.status();
+        ASSERT_TRUE(result->has_value());
+        WkbGeometry geometry;
+        ASSERT_TRUE(WkbCodec::parse_wkb(result->value(), &geometry, kCartesian).ok());
+        ASSERT_EQ(geometry.type, WkbGeometryType::POLYGON);
+        for (const auto& ring : geometry.rings) {
+            ASSERT_GE(ring.size(), 4);
+            EXPECT_DOUBLE_EQ(ring.front().x, ring.back().x);
+            EXPECT_DOUBLE_EQ(ring.front().y, ring.back().y);
+        }
+    }
+}
+
 TEST(GeoCoverageTest, JointSeamAndBoundaryFlag) {
     auto coverage = make();
     ASSERT_NE(coverage, nullptr);
@@ -109,7 +126,7 @@ TEST(GeoCoverageTest, DefaultMatchesTrue) {
     for (size_t i = 0; i < inputs.size(); ++i)
         EXPECT_EQ(a->result(i)->value().to_string(), b->result(i)->value().to_string());
 }
-TEST(GeoCoverageTest, ZeroValidatesAndPreservesOriginalWkb) {
+TEST(GeoCoverageTest, ZeroPreservesOriginalWkb) {
     auto c = make();
     auto inputs = adjacent();
     append(*c, inputs);
@@ -171,9 +188,8 @@ TEST(GeoCoverageTest, RepeatedClosingCoordinatesOnSharedCoverageEdges) {
         }
     }
 }
-TEST(GeoCoverageTest, CircularDeduplicationDoesNotRepairInvalidRings) {
-    for (const auto& text : {"POLYGON ((0 0,0 2,2 2,0 0,2 0,0 0,0 0))", "POLYGON ((0 0,0 0,0 0,0 0,0 0))",
-                             "POLYGON ((0 0,0 2,0 0,0 0))"}) {
+TEST(GeoCoverageTest, CircularDeduplicationRetainsDegenerateRingErrors) {
+    for (const auto& text : {"POLYGON ((0 0,0 0,0 0,0 0,0 0))", "POLYGON ((0 0,0 2,0 0,0 0))"}) {
         SCOPED_TRACE(text);
         const auto input = wkb(text);
         for (double tolerance : {0.0, 1.0}) {
@@ -221,21 +237,58 @@ TEST(GeoCoverageTest, InvalidParametersEvenEmpty) {
         EXPECT_FALSE(c->result(0).ok());
     }
 }
-TEST(GeoCoverageTest, InvalidCoverageNotBypassedByZero) {
+TEST(GeoCoverageTest, InvalidCoverageProducesStructuralOutput) {
     std::vector<std::vector<std::string>> invalid{
             {"POLYGON ((0 0,0 4,4 4,4 0,0 0))", "POLYGON ((0 0,0 4,4 4,4 0,0 0))"},
             {"POLYGON ((0 0,0 4,4 4,4 0,0 0))", "POLYGON ((2 1,2 3,6 3,6 1,2 1))"},
             {"POLYGON ((0 0,0 8,8 8,8 0,0 0))", "POLYGON ((2 2,2 3,3 3,3 2,2 2))"},
             {"POLYGON ((0 0,0 2,2 2,2 0,0 0))", "POLYGON ((2 0,2 1,2 2,4 2,4 0,2 0))"},
+            {"POLYGON ((0 0,4 4,0 4,3 0,0 0))"},
+            {"POLYGON ((0 0,0 4,4 4,4 0,0 0),(5 5,5 6,6 6,6 5,5 5))"},
+            {"POLYGON ((0 0,0 2,2 2,0 0,2 0,0 0,0 0))"}};
+    for (const auto& text : invalid)
+        for (double tolerance : {0.0, 1.0, 64.0})
+            for (int form = 0; form < 3; ++form) {
+                SCOPED_TRACE(::testing::Message() << text[0] << " " << tolerance << " " << form);
+
+                auto c = make();
+                for (const auto& row : text) ASSERT_TRUE(c->append(Slice(wkb(row))).ok());
+                const auto status = form == 2 ? c->finish(tolerance) : c->finish(tolerance, form == 1);
+                ASSERT_TRUE(status.ok()) << status;
+                expect_polygon_outputs(*c, text.size());
+                c.reset();
+            }
+}
+TEST(GeoCoverageTest, ZeroAreaAndTooManyOwnersRemainErrors) {
+    const std::vector<std::vector<std::string>> cases{
             {"POLYGON ((0 0,3 3,0 3,3 0,0 0))"},
-            {"POLYGON ((0 0,0 4,4 4,4 0,0 0),(5 5,5 6,6 6,6 5,5 5))"}};
-    for (const auto& text : invalid) {
+            {"POLYGON ((0 0,1 0,2 0,0 0))"},
+            {"POLYGON ((0 0,0 4,4 4,4 0,0 0))", "POLYGON ((0 0,0 4,4 4,4 0,0 0))", "POLYGON ((0 0,0 4,4 4,4 0,0 0))"}};
+    for (size_t i = 0; i < cases.size(); ++i)
+        for (double tolerance : {0.0, 1.0}) {
+            auto c = make();
+            for (const auto& row : cases[i]) ASSERT_TRUE(c->append(Slice(wkb(row))).ok());
+            const auto status = c->finish(tolerance);
+            EXPECT_TRUE(status.is_invalid_argument()) << status;
+            EXPECT_NE(status.to_string().find(i == 2 ? "more than two coverage edge owners" : "zero-area polygon ring"),
+                      std::string::npos);
+            EXPECT_FALSE(c->result(0).ok());
+            c.reset();
+        }
+}
+TEST(GeoCoverageTest, NonfiniteCoordinatesRemainAdmissionErrors) {
+    for (double value : {std::numeric_limits<double>::quiet_NaN(), std::numeric_limits<double>::infinity(),
+                         -std::numeric_limits<double>::infinity()}) {
         auto c = make();
-        for (const auto& row : text) ASSERT_TRUE(c->append(Slice(wkb(row))).ok());
-        EXPECT_FALSE(c->finish(0).ok()) << text[0];
+        auto input = wkb("POLYGON ((0 0,0 4,4 4,4 0,0 0))");
+        memcpy(input.data() + 13, &value, sizeof(value));
+        const auto status = c->append(Slice(input));
+        EXPECT_TRUE(status.is_invalid_argument()) << status;
+        EXPECT_NE(status.to_string().find("nonfinite XY coordinate"), std::string::npos);
         EXPECT_FALSE(c->result(0).ok());
     }
 }
+
 TEST(GeoCoverageTest, FreeBoundaryAndHoleFrozen) {
     auto c = make();
     auto input = wkb("POLYGON ((0 0,0 8,4 8,8 8,8 0,0 0),(2 2,3 2,4 2,4 4,2 4,2 2))");
@@ -427,7 +480,7 @@ TEST(GeoCoverageTest, ExactArithmeticAtCapacityBoundary) {
                 c.reset();
             }
 }
-TEST(GeoCoverageTest, ExactMidpointRangesPreserveBoundaryAndHoleClassification) {
+TEST(GeoCoverageTest, BoundaryContactsAndHolesPreserveOutput) {
     const std::vector<std::vector<std::string>> cases{
             {"POLYGON ((0 0,8 0,8 8,0 8,0 0))", "POLYGON ((8 0,16 0,16 8,8 8,8 0))"},
             {"POLYGON ((0 8,8 16,16 8,8 0,0 8))", "POLYGON ((16 8,20 12,24 8,20 4,16 8))"},
@@ -450,7 +503,7 @@ TEST(GeoCoverageTest, ExactMidpointRangesPreserveBoundaryAndHoleClassification) 
                     for (size_t i = 0; i < inputs.size(); ++i) EXPECT_EQ(c->result(i)->value().to_string(), inputs[i]);
                 }
 }
-TEST(GeoCoverageTest, ExactMidpointRangesKeepNearlyCollinearSharedEdges) {
+TEST(GeoCoverageTest, NearlyCollinearSharedEdges) {
     for (double offset : {0.0, 1e6, 2e7}) {
         auto c = make();
         for (const auto& input : adjacent()) {
@@ -471,7 +524,7 @@ TEST(GeoCoverageTest, ExactMidpointRangesKeepNearlyCollinearSharedEdges) {
         EXPECT_EQ(c->result(1)->value().to_string(), transformed_wkb("POLYGON ((4 0,4 8,8 8,8 0,4 0))", 1, offset));
     }
 }
-TEST(GeoCoverageTest, ExactMidpointRangesDoNotHideNestedInteriors) {
+TEST(GeoCoverageTest, NestedInteriorsProduceStructuralOutput) {
     const std::vector<std::vector<std::string>> cases{
             {"POLYGON ((0 8,8 16,16 8,8 0,0 8))", "POLYGON ((7 7,10 7,8 10,7 7))"},
             {"POLYGON ((0 0,16 0,16 16,0 16,0 0),(2 8,8 14,14 8,8 2,2 8),(7 7,10 7,8 10,7 7))"}};
@@ -481,9 +534,8 @@ TEST(GeoCoverageTest, ExactMidpointRangesDoNotHideNestedInteriors) {
                 auto c = make();
                 for (const auto& row : text) ASSERT_TRUE(c->append(Slice(transformed_wkb(row, 1, offset))).ok());
                 const auto status = c->finish(tolerance);
-                EXPECT_FALSE(status.ok());
-                EXPECT_NE(status.to_string().find("overlapping"), std::string::npos) << status;
-                EXPECT_FALSE(c->result(0).ok());
+                ASSERT_TRUE(status.ok()) << status;
+                expect_polygon_outputs(*c, text.size());
             }
 }
 std::vector<std::string> interval_coverage() {
@@ -491,7 +543,7 @@ std::vector<std::string> interval_coverage() {
             "(7 1,7 3,9 3,9 1,7 1))",
             "POLYGON ((7 15,9 15,9 17,7 17,7 15))", "POLYGON ((7.5 1.5,8.5 1.5,8 2.5,7.5 1.5))"};
 }
-TEST(GeoCoverageTest, RingIntervalsRetainLongEdgesHolesAndClosedBounds) {
+TEST(GeoCoverageTest, LongEdgesHolesAndClosedBoundsPreserveOutput) {
     const std::pair<double, double> transforms[] = {{1, 0},
                                                     {1, -2e7},
                                                     {1, 2e7},
@@ -522,14 +574,14 @@ TEST(GeoCoverageTest, RingIntervalsRetainLongEdgesHolesAndClosedBounds) {
                 c.reset();
             }
 }
-TEST(GeoCoverageTest, RingIntervalsDoNotSkipContainingLongEdges) {
+TEST(GeoCoverageTest, NestedPolygonInsideLongEdgesProducesStructuralOutput) {
     for (double offset : {0.0, -2e7, 2e7}) {
         auto c = make();
         for (const auto& text : {interval_coverage()[0], std::string("POLYGON ((1 14,3 14,2 15,1 14))")})
             ASSERT_TRUE(c->append(Slice(transformed_wkb(text, 1, offset))).ok());
         const auto status = c->finish(0);
-        EXPECT_FALSE(status.ok());
-        EXPECT_NE(status.to_string().find("overlapping coverage interiors"), std::string::npos) << status;
+        ASSERT_TRUE(status.ok()) << status;
+        expect_polygon_outputs(*c, 2);
         c.reset();
     }
 }
@@ -798,7 +850,7 @@ TEST(GeoCoverageTest, LargeDegenerateCoordinatesRetainControlledError) {
     c.reset();
 }
 
-TEST(GeoCoverageTest, SharedEndpointStillRejectsCollinearOverlap) {
+TEST(GeoCoverageTest, CollinearOverlapAtSharedEndpointProducesStructuralOutput) {
     for (double offset : {0.0, -2e7, 2e7}) {
         auto c = make();
         for (const auto& text : {"POLYGON ((0 0,0 4,4 4,4 0,0 0))", "POLYGON ((0 0,0 2,2 2,2 0,0 0))"}) {
@@ -806,8 +858,8 @@ TEST(GeoCoverageTest, SharedEndpointStillRejectsCollinearOverlap) {
             ASSERT_TRUE(c->append(Slice(input)).ok());
         }
         const auto status = c->finish(0.0005);
-        EXPECT_TRUE(status.is_invalid_argument()) << status;
-        EXPECT_NE(status.to_string().find("invalid coverage crossing or mismatched subdivision"), std::string::npos);
+        ASSERT_TRUE(status.ok()) << status;
+        expect_polygon_outputs(*c, 2);
         c.reset();
     }
 }

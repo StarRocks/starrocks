@@ -453,7 +453,16 @@ This topic introduces the following types of FE configurations:
 - Type: Long
 - Unit: Milliseconds
 - Is mutable: Yes
-- Description: Minimum interval between lock-invariant violation log lines emitted from the same call site. Throttling is per call site rather than global, so a frequently violating site does not crowd the others out of the log. Set this to `0` to log every violation while investigating. Only has an effect when `lock_target_validation_mode` or `lock_blocking_call_validation_mode` is `warn`.
+- Description: Minimum interval between lock-invariant violation log lines emitted from the same call site. Throttling is per call site rather than global, so a frequently violating site does not crowd the others out of the log. Set this to `0` to log every violation while investigating. Only has an effect when `lock_target_validation_mode`, `lock_blocking_call_validation_mode` or `lock_snapshot_copy_validation_mode` is `warn`.
+- Introduced in: v26.2
+
+### `lock_snapshot_copy_validation_mode`
+
+- Default: warn
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: How the FE reacts when a thread takes a planning copy of a native table or materialized view while holding neither that table's read or write lock nor its database's read or write lock. The copy reads the table's live partition and index metadata, which DDL, INSERT OVERWRITE and metadata replay modify in place under the write lock, so an unlocked copy can fail the statement with a `ConcurrentModificationException` or plan off metadata that was never published as a whole. Valid values: `off` (do not check), `warn` (log the violation with the copying caller's stack trace and let the copy proceed), and `error` (refuse the copy). Any unrecognized value behaves as `warn`. In `warn` mode each violation is logged on a single line tagged `LOCK_INVARIANT_VIOLATION` with `kind=snapshot_copy_without_lock`; log volume is governed by `lock_invariant_violation_log_interval_ms`.
 - Introduced in: v26.2
 
 ### `lock_target_validation_mode`

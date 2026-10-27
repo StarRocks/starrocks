@@ -258,7 +258,9 @@ public class DeleteAnalyzer {
         }
 
         // Create table relation with WHERE predicate
-        Relation relation = new TableRelation(tableName);
+        TableRelation tableRelation = new TableRelation(tableName);
+        AnalyzerUtils.setIcebergWriteBranch(tableRelation, table, deleteStatement.getTargetBranch());
+        Relation relation = tableRelation;
         if (deleteStatement.getUsingRelations() != null) {
             for (Relation r : deleteStatement.getUsingRelations()) {
                 relation = new JoinRelation(null, relation, r, null, false);
@@ -299,6 +301,10 @@ public class DeleteAnalyzer {
         if (table instanceof IcebergTable) {
             analyzeIcebergTable(deleteStatement, table, session);
             return;
+        }
+
+        if (deleteStatement.getTargetBranch() != null) {
+            throw new SemanticException("Only an Iceberg table can be written on a branch");
         }
 
         if (table instanceof MaterializedView) {

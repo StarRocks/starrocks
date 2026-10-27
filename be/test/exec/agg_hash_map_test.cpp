@@ -16,9 +16,13 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <any>
+#include <map>
 #include <numeric>
+#include <optional>
 #include <set>
+#include <string>
 
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
@@ -595,6 +599,98 @@ TEST_F(AggHashMapKeyNotFoundsTest, TestAllocateAndComputeNonFounds_NullOneString
 TEST_F(AggHashMapKeyNotFoundsTest, TestAllocateAndComputeNonFounds_AggHashMapWithSerializedKey) {
     using TestAggHashMapKey = SerializedKeyAggHashMap<PhmapSeed1>;
     TestAggHashMapKeyWithStringType<TestAggHashMapKey>(true);
+}
+
+// build_hash_map_marking_new_groups must mark exactly the rows that created a group, including the row that
+// created the NULL-key group: the aggregator feeds first-value-only functions (any_value) only these rows.
+class AggHashMapNewGroupsTest : public ::testing::Test {
+protected:
+    template <typename HashMapWithKey>
+    struct AllocateState {
+        explicit AllocateState(MemPool* pool) : _pool(pool) {}
+        AggDataPtr operator()(const typename HashMapWithKey::KeyType& key) { return _pool->allocate(16); }
+        AggDataPtr operator()(std::nullptr_t) { return _pool->allocate(16); }
+        MemPool* _pool;
+    };
+
+    // nullopt = NULL key.
+    using Chunks = std::vector<std::vector<std::optional<int32_t>>>;
+
+    // A nullable chunk of NULLs only is passed as an only-null const column when `only_null_as_const`.
+    template <typename HashMapWithKey>
+    void check(bool nullable, bool string_key, const Chunks& chunks, bool only_null_as_const = true) {
+        RuntimeProfile profile("AggHashMapNewGroupsTest");
+        AggStatistics statistics(&profile);
+        HashMapWithKey key(4096, &statistics);
+        MemPool pool;
+        std::map<std::optional<int32_t>, AggDataPtr> states;
+        for (const auto& chunk : chunks) {
+            const size_t rows = chunk.size();
+            const bool all_null = only_null_as_const && nullable && rows > 0 &&
+                                  std::all_of(chunk.begin(), chunk.end(), [](const auto& v) { return !v; });
+            ColumnPtr column;
+            if (all_null) {
+                column = ColumnHelper::create_const_null_column(rows);
+            } else {
+                auto c = ColumnHelper::create_column(TypeDescriptor(string_key ? TYPE_VARCHAR : TYPE_INT), nullable);
+                for (const auto& v : chunk) {
+                    if (!v) {
+                        c->append_nulls(1);
+                    } else if (string_key) {
+                        std::string str = std::to_string(*v);
+                        c->append_datum(Datum(Slice(str)));
+                    } else {
+                        c->append_datum(Datum(*v));
+                    }
+                }
+                column = std::move(c);
+            }
+            Columns key_columns{column};
+            Buffer<AggDataPtr> agg_states(rows);
+            Filter new_groups;
+            key.build_hash_map_marking_new_groups(rows, key_columns, &pool, AllocateState<HashMapWithKey>(&pool),
+                                                  &agg_states, &new_groups);
+            ASSERT_EQ(rows, new_groups.size());
+            for (size_t i = 0; i < rows; i++) {
+                auto [it, inserted] = states.emplace(chunk[i], agg_states[i]);
+                EXPECT_EQ(inserted, new_groups[i] == 1) << "row " << i;
+                EXPECT_EQ(it->second, agg_states[i]) << "row " << i;
+            }
+        }
+    }
+
+    // The NULL-key group is created mid-chunk, then only hit again.
+    const Chunks _nullable_chunks{{1, 2, 1, std::nullopt, std::nullopt, 3},
+                                  {3, std::nullopt, 4, 4, 1},
+                                  {5, 6, 5, 6},
+                                  {std::nullopt, std::nullopt}};
+    // The NULL-key group is created by an only-null chunk.
+    const Chunks _only_null_first{{std::nullopt, std::nullopt, std::nullopt}, {1, std::nullopt, 1, 2}};
+    const Chunks _non_null_chunks{{1, 2, 1, 1}, {2, 3, 3, 4}, {}, {5, 5, 1, 6}};
+};
+
+TEST_F(AggHashMapNewGroupsTest, OneNumberKey) {
+    check<Int32AggHashMapWithOneNumberKey<PhmapSeed1>>(false, false, _non_null_chunks);
+}
+
+TEST_F(AggHashMapNewGroupsTest, NullableOneNumberKey) {
+    check<NullInt32AggHashMapWithOneNumberKey<PhmapSeed1>>(true, false, _nullable_chunks);
+    check<NullInt32AggHashMapWithOneNumberKey<PhmapSeed1>>(true, false, _only_null_first);
+    check<NullInt32AggHashMapWithOneNumberKey<PhmapSeed1>>(true, false, _non_null_chunks);
+}
+
+TEST_F(AggHashMapNewGroupsTest, OneStringKey) {
+    check<OneStringAggHashMap<PhmapSeed1>>(false, true, _non_null_chunks);
+}
+
+TEST_F(AggHashMapNewGroupsTest, NullableOneStringKey) {
+    check<NullOneStringAggHashMap<PhmapSeed1>>(true, true, _nullable_chunks);
+    check<NullOneStringAggHashMap<PhmapSeed1>>(true, true, _only_null_first);
+}
+
+TEST_F(AggHashMapNewGroupsTest, SerializedKey) {
+    check<SerializedKeyAggHashMap<PhmapSeed1>>(true, true, _nullable_chunks, false);
+    check<SerializedKeyAggHashMap<PhmapSeed1>>(false, true, _non_null_chunks);
 }
 
 // get_max_serialize_size() sizes the staging buffer for serialize_batch(), which writes the

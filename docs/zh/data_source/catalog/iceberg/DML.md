@@ -127,7 +127,7 @@ PARTITION (par_col1=<value> [, par_col2=<value>...])
 
 ```SQL
 [WITH <with_query> [, ...]]
-DELETE FROM <table_name>
+DELETE FROM <table_name> [FOR VERSION AS OF <branch_name>]
 [USING <relation> [, ...]]
 WHERE <condition>
 ```
@@ -138,6 +138,8 @@ WHERE <condition>
   - 完全限定名称：`catalog_name.database_name.table_name`
   - 数据库限定名称（设置 catalog 后）：`database_name.table_name`
   - 仅表名（设置 catalog 和数据库后）：`table_name`
+
+- `branch_name`：要删除数据的分支。从该分支读取数据，并将变更提交到该分支。必须是分支，不能是标签（tag）。
 
 - `relation`：`condition` 中与目标表关联的表或子查询。目标表的一行即使匹配到其中的多行，也只删除一次。
 
@@ -229,7 +231,7 @@ UPDATE 通过 Iceberg V2 的 **Merge-On-Read** 模型实现：每次 UPDATE 会�
 
 ```SQL
 [WITH <with_query> [, ...]]
-UPDATE <table_name>
+UPDATE <table_name> [FOR VERSION AS OF <branch_name>]
 SET <column_name> = <expression> [, <column_name> = <expression> ...]
 WHERE <condition>
 ```
@@ -242,6 +244,8 @@ WHERE <condition>
   - 仅表名（设置 catalog 和数据库后）：`table_name`
 
 - `column_name = expression`：要更新的列以及新值。表达式可以引用同一行的其它列，以及系统支持的标量函数。
+
+- `branch_name`：要更新的分支。从该分支读取数据，并将变更提交到该分支。必须是分支，不能是标签（tag）。
 
 - `with_query`：`condition` 中可以引用的公用表表达式（CTE）。
 
@@ -335,7 +339,7 @@ MERGE INTO 复用了与 UPDATE 相同的 Iceberg V2 **Merge-On-Read** 提交路�
 ### 语法
 
 ```SQL
-MERGE INTO <target_table> [ [AS] <target_alias> ]
+MERGE INTO <target_table> [FOR VERSION AS OF <branch_name>] [ [AS] <target_alias> ]
 USING <source_relation> [ [AS] <source_alias> ]
 ON <merge_condition>
 [ WHEN MATCHED [ AND <condition> ] THEN { UPDATE SET <column_name> = <expression> [, ...] | DELETE } ]
@@ -350,6 +354,8 @@ ON <merge_condition>
   - 完全限定名称：`catalog_name.database_name.table_name`
   - 数据库限定名称（设置 catalog 后）：`database_name.table_name`
   - 仅表名（设置 catalog 和数据库后）：`table_name`
+
+- `branch_name`：要合并到的分支。从该分支读取目标行，并将变更提交到该分支。必须是分支，不能是标签（tag）。
 
 - `source_relation`：驱动 merge 的数据源。可以是表、视图或带括号的子查询。当 `ON` 条件或 `WHEN` 子句需要引用其列时，请为其指定别名。
 

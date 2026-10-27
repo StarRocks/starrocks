@@ -138,7 +138,7 @@ You can use the DELETE statement to delete data from Iceberg tables based on spe
 
 ```SQL
 [WITH <with_query> [, ...]]
-DELETE FROM <table_name>
+DELETE FROM <table_name> [FOR VERSION AS OF <branch_name>]
 [USING <relation> [, ...]]
 WHERE <condition>
 ```
@@ -149,6 +149,8 @@ WHERE <condition>
   - Fully qualified name: `catalog_name.database_name.table_name`
   - Database-qualified name (after setting catalog): `database_name.table_name`
   - Table name only (after setting catalog and database): `table_name`
+
+- `branch_name`: The branch to delete rows from. The rows are read from the branch and the change is committed to it. It must be a branch, not a tag.
 
 - `relation`: The tables or sub-queries that `condition` joins the target table with. A target row that matches several of their rows is deleted once.
 
@@ -240,7 +242,7 @@ UPDATE is implemented using the Iceberg V2 **Merge-On-Read** model: each UPDATE 
 
 ```SQL
 [WITH <with_query> [, ...]]
-UPDATE <table_name>
+UPDATE <table_name> [FOR VERSION AS OF <branch_name>]
 SET <column_name> = <expression> [, <column_name> = <expression> ...]
 WHERE <condition>
 ```
@@ -253,6 +255,8 @@ WHERE <condition>
   - Table name only (after setting catalog and database): `table_name`
 
 - `column_name = expression`: The target column and the new value. The expression may reference other columns in the same row and any supported scalar functions.
+
+- `branch_name`: The branch to update. The rows are read from the branch and the change is committed to it. It must be a branch, not a tag.
 
 - `with_query`: Common table expressions that `condition` can reference.
 
@@ -348,7 +352,7 @@ MERGE INTO reuses the same Iceberg V2 **Merge-On-Read** commit path as UPDATE: m
 ### Syntax
 
 ```SQL
-MERGE INTO <target_table> [ [AS] <target_alias> ]
+MERGE INTO <target_table> [FOR VERSION AS OF <branch_name>] [ [AS] <target_alias> ]
 USING <source_relation> [ [AS] <source_alias> ]
 ON <merge_condition>
 [ WHEN MATCHED [ AND <condition> ] THEN { UPDATE SET <column_name> = <expression> [, ...] | DELETE } ]
@@ -363,6 +367,8 @@ ON <merge_condition>
   - Fully qualified name: `catalog_name.database_name.table_name`
   - Database-qualified name (after setting catalog): `database_name.table_name`
   - Table name only (after setting catalog and database): `table_name`
+
+- `branch_name`: The branch to merge into. The target rows are read from the branch and the change is committed to it. It must be a branch, not a tag.
 
 - `source_relation`: The data source that drives the merge. It can be a table, a view, or a parenthesized sub-query. Give it an alias when the `ON` condition or the `WHEN` clauses reference its columns.
 
