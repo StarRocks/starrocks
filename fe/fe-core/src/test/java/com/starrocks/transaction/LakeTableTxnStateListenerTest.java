@@ -15,14 +15,19 @@
 package com.starrocks.transaction;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
 import com.starrocks.lake.LakeTable;
+import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.lake.compaction.PartitionIdentifier;
 import com.starrocks.lake.compaction.Quantiles;
 import com.starrocks.proto.AbortTxnRequest;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.thrift.TStorageMedium;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.iceberg.exceptions.CommitFailedException;
@@ -124,7 +129,7 @@ public class LakeTableTxnStateListenerTest extends LakeTableTestHelper {
         TabletMeta subTabletMeta = new TabletMeta(dbId, tableId, subPartitionId, 0, TStorageMedium.HDD, true);
         GlobalStateMgr.getCurrentState().getTabletInvertedIndex().addTablet(subTabletId, subTabletMeta);
         subIndex.addTablet(new LakeTablet(subTabletId), subTabletMeta);
-        table.getPartition(partitionId).addSubPartition(new PhysicalPartition(subPartitionId, partitionId, subIndex));
+        table.getPartition(partitionId).addSubPartition(new PhysicalPartition(subPartitionId, "p0_1", partitionId, subIndex));
         table.addPhysicalPartition(table.getPartition(partitionId).getSubPartition(subPartitionId));
 
         DatabaseTransactionMgr databaseTransactionMgr = addDatabaseTransactionMgr();
