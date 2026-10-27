@@ -21,7 +21,6 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.alter.AlterMVJobExecutor;
 import com.starrocks.alter.OptimizeTask;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
@@ -33,8 +32,6 @@ import com.starrocks.catalog.UserIdentity;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.MaterializedViewExceptions;
-import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.LogUtil;
@@ -467,6 +464,7 @@ public class TaskRun implements Comparable<TaskRun> {
             task.incConsecutiveFailCount();
             LOG.warn("Failed to execute task run, task_id: {}, task_run_id: {}, failCount:{}",
                     taskId, taskRunId, task.getConsecutiveFailCount(), e);
+<<<<<<< HEAD
             if (Constants.TaskSource.MV.equals(task.getSource())
                     && MaterializedViewExceptions.isIncrementalBreakingFailure(e)) {
                 MaterializedView mv = TaskBuilder.getMvFromTask(task);
@@ -496,6 +494,9 @@ public class TaskRun implements Comparable<TaskRun> {
                         task.getName(), task.getConsecutiveFailCount(), mvName), e);
             }
             throw e;
+=======
+            throw processor == null ? e : processor.onFailure(task, e);
+>>>>>>> ef227c2e457... [BugFix][RB-390] Handle an MV refresh failure against the status the run saw (#65253)
         }
     }
 
