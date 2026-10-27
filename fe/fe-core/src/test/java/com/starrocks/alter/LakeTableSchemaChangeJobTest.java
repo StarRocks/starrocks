@@ -23,6 +23,7 @@ import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletInvertedIndex;
@@ -42,6 +43,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.OptimisticVersion;
 import com.starrocks.sql.ast.AlterMaterializedViewStatusClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
@@ -1010,6 +1012,29 @@ public class LakeTableSchemaChangeJobTest {
             Thread.sleep(100);
         }
         return job;
+    }
+
+    /**
+     * A query planned off a snapshot taken before the swap shares the swapped physical partitions, so the swap must
+     * invalidate that snapshot before it swaps the first origin index, or the planner rethrows instead of retrying.
+     */
+    @Test
+    public void testSwapInvalidatesEarlierPlansBeforeDroppingOriginIndex() throws Exception {
+        alterTable(connectContext, "ALTER TABLE t0 ADD COLUMN c1 BIGINT key NOT NULL default \"0\"");
+        long planStartTime = OptimisticVersion.generate();
+        List<Boolean> planValidAtSwap = new ArrayList<>();
+        new MockUp<PhysicalPartition>() {
+            @Mock
+            public boolean visualiseShadowIndex(Invocation inv, long shadowIndexId, boolean isBaseIndex) {
+                planValidAtSwap.add(OptimisticVersion.validateTableUpdate(table, planStartTime));
+                return inv.proceed(shadowIndexId, isBaseIndex);
+            }
+        };
+
+        runSchemaChangeJobToFinish(table);
+
+        Assertions.assertEquals(List.of(false), planValidAtSwap);
+        Assertions.assertFalse(OptimisticVersion.validateTableUpdate(table, planStartTime));
     }
 
     /**

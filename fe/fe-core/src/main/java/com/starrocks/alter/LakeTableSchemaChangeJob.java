@@ -1011,6 +1011,10 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             }
         }
 
+        // Lock-free plans share these physical partitions; invalidate them before the first origin index is dropped,
+        // so a plan that hits the half-swapped partitions retries instead of failing.
+        table.lastSchemaUpdateTime.set(System.nanoTime());
+
         // replace the origin index with shadow index, set index state as NORMAL
         for (PhysicalPartition partition : table.getPhysicalPartitions()) {
             Preconditions.checkState(commitVersionMap.containsKey(partition.getId()));
