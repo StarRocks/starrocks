@@ -355,8 +355,11 @@ class MaterializedView(View):
                 - starrocks_partition_by: Partition expression (e.g., 'date_trunc("day", created_at)')
                 - starrocks_distributed_by: Distribution method (e.g., 'HASH(user_id) BUCKETS 10')
                 - starrocks_order_by: Order by columns (e.g., 'user_id, created_at')
-                - starrocks_refresh: Refresh mode (e.g., 'ASYNC', 'MANUAL', 'IMMEDIATE ASYNC')
-                    Format: [IMMEDIATE|DEFERRED] [ASYNC|MANUAL]
+                - starrocks_refresh: Refresh mode (e.g., 'ON_CHANGE', 'MANUAL', 'IMMEDIATE ON_CHANGE')
+                    Format: [IMMEDIATE|DEFERRED] [ON_CHANGE|MANUAL|ASYNC EVERY(...)]
+                    ON_CHANGE replaced ASYNC in StarRocks 26.2 for the base-table-change-triggered
+                    mode; either spelling may be given and the dialect sends the one the connected
+                    server accepts.
                 - starrocks_properties: Additional properties dict (e.g., {'replication_num': '3'})
                 - Other dialect-specific parameters with starrocks_ prefix
 
@@ -368,7 +371,7 @@ class MaterializedView(View):
             MaterializedView('user_stats_mv', metadata,
                            definition='SELECT user_id, COUNT(*) FROM orders GROUP BY user_id',
                            starrocks_partition_by='user_id',
-                           starrocks_refresh='ASYNC')
+                           starrocks_refresh='ON_CHANGE')
 
             # With all options
             MaterializedView('order_mv', metadata,
@@ -379,7 +382,7 @@ class MaterializedView(View):
                            starrocks_partition_by='user_id',
                            starrocks_distributed_by='HASH(user_id) BUCKETS 10',
                            starrocks_order_by='user_id',
-                           starrocks_refresh='IMMEDIATE ASYNC',
+                           starrocks_refresh='IMMEDIATE ON_CHANGE',
                            starrocks_properties={'replication_num': '3'})
 
             # With columns (simplified syntax)
