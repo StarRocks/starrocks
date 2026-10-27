@@ -338,6 +338,26 @@ public class IcebergTableTest extends TableTestBase {
     }
 
     @Test
+    public void testShowCreateTableShowsDefaultOfRequiredColumn() {
+        Schema schema = new Schema(
+                Types.NestedField.optional(1, "id", Types.IntegerType.get()),
+                Types.NestedField.required("age").withId(2).ofType(Types.IntegerType.get())
+                        .withInitialDefault(20).withWriteDefault(20).build(),
+                Types.NestedField.required(3, "k", Types.IntegerType.get()),
+                Types.NestedField.optional("score").withId(4).ofType(Types.IntegerType.get())
+                        .withInitialDefault(60).withWriteDefault(60).build());
+        TestTables.TestTable table = TestTables.create(tableDir, "required_default", schema,
+                PartitionSpec.unpartitioned(), 3);
+        String ddl = AstToStringBuilder.getExternalCatalogTableDdlStmt(new IcebergTable(1, "required_default",
+                "iceberg_catalog", "resource", "db", "required_default", "",
+                IcebergApiConverter.toFullSchemas(schema, table), table, Maps.newHashMap()));
+        Assertions.assertTrue(ddl.contains("`id` int(11) DEFAULT NULL,"), ddl);
+        Assertions.assertTrue(ddl.contains("`age` int(11) NOT NULL DEFAULT \"20\","), ddl);
+        Assertions.assertTrue(ddl.contains("`k` int(11) NOT NULL,"), ddl);
+        Assertions.assertTrue(ddl.contains("`score` int(11) DEFAULT \"60\""), ddl);
+    }
+
+    @Test
     public void testToThriftWithHostLevelSortMode(@Mocked Table icebergNativeTable) {
         List<Column> columns = Lists.newArrayList(
                 new Column("k1", INT),

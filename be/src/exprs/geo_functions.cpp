@@ -142,6 +142,11 @@ bool decode_canonical_xy_point(Slice wkb, WkbCoordinate* point) {
     return std::isfinite(point->x) && std::isfinite(point->y);
 }
 
+bool decode_native_xy_point(Slice wkb, WkbCoordinate* point, WkbCoordinateSemantics semantics) {
+    return decode_canonical_xy_point(wkb, point) &&
+           (semantics == WkbCoordinateSemantics::GEOMETRY_CARTESIAN || is_valid_crs84_coordinate(point->x, point->y));
+}
+
 template <LogicalType Type, bool X>
 StatusOr<ColumnPtr> geo_coordinate(const Columns& columns) {
     constexpr auto semantics = Type == TYPE_GEOGRAPHY ? WkbCoordinateSemantics::GEOGRAPHY_CRS84
@@ -283,8 +288,9 @@ bool distance_point_coordinates(const GeoInput& input, size_t row, const NativeG
         *point = geometry.coordinates[0];
         return true;
     }
-    return decode_canonical_xy_point(input.wkb(row), point) &&
-           (Type != TYPE_GEOGRAPHY || is_valid_crs84_coordinate(point->x, point->y));
+    constexpr auto semantics = Type == TYPE_GEOGRAPHY ? WkbCoordinateSemantics::GEOGRAPHY_CRS84
+                                                      : WkbCoordinateSemantics::GEOMETRY_CARTESIAN;
+    return decode_native_xy_point(input.wkb(row), point, semantics);
 }
 
 template <LogicalType Type>
