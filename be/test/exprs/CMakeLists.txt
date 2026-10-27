@@ -112,6 +112,7 @@ set(EXPR_TEST_FILES
     unary_function_test.cpp
     unnest_core_test.cpp
     unnest_variant_test.cpp
+    variant_functions_test.cpp
     vectorized_literal_test.cpp
 )
 if (STARROCKS_JIT_ENABLE)
