@@ -201,7 +201,7 @@ class BinaryPlainPageDecoder final : public PageDecoder {
 public:
     // delta_offset must match how the page was written (selected by the column encoding:
     // PLAIN_ENCODING_DELTA_OFFSET -> true). When true, init() reconstructs absolute offsets
-    // from the on-disk deltas; otherwise it aliases the absolute offsets in the page.
+    // from the on-disk deltas; otherwise it decodes absolute offsets from the page.
     explicit BinaryPlainPageDecoder(Slice data, bool delta_offset = false) : _data(data), _delta_offset(delta_offset) {}
 
     Status init() override;
@@ -306,13 +306,7 @@ public:
             using OffsetValue = typename std::decay_t<decltype(offsets_buf)>::value_type;
             offsets_buf[0] = 0; // Start from 0
             for (uint32_t i = 0; i < _num_elems - 1; ++i) {
-#if __BYTE_ORDER == __LITTLE_ENDIAN
-                auto offset = _offsets_ptr[i + 1];
-#else
-                // direct call offset_uncheck() will break auto-vectorized
-                // maybe we can remove this condition compile after we upgrade the toolchain
                 auto offset = offset_uncheck(i + 1);
-#endif
                 // Convert absolute offset to relative offset from base
                 uint32_t current_offset = offset - base_offset;
                 offsets_buf[i + 1] = static_cast<OffsetValue>(current_offset);
@@ -343,20 +337,10 @@ private:
     uint32_t offset(int idx) const { return idx < _num_elems ? offset_uncheck(idx) : _offsets_pos; }
 
     uint32_t offset_uncheck(int idx) const {
-#if __BYTE_ORDER == __LITTLE_ENDIAN
-        // On little-endian, _offsets_ptr always points at native-order absolute offsets:
-        // either aliased into the page (legacy) or the reconstructed buffer (delta).
-        return _offsets_ptr[idx];
-#else
-        // On big-endian, delta pages were reconstructed into a native-order owned buffer in
-        // init(); read it directly. Legacy pages still decode the little-endian page bytes.
         if (_offsets_materialized) {
-            return _offsets_ptr[idx];
+            return _abs_offsets[idx];
         }
-        const uint32_t pos = _offsets_pos + idx * static_cast<uint32_t>(sizeof(uint32_t));
-        const auto* const p = reinterpret_cast<const uint8_t*>(&_data[pos]);
-        return decode_fixed32_le(p);
-#endif
+        return decode_fixed32_le(_encoded_offsets + idx * sizeof(uint32_t));
     }
 
     Status next_range_with_filter(uint32_t idx, uint32_t end, Column* dst,
@@ -386,13 +370,12 @@ private:
 
     uint32_t _num_elems{0};
     uint32_t _offsets_pos{0};
-    // Points at the absolute-offset array. For legacy pages this aliases into `_data`
-    // (zero-copy). For delta-encoded pages it points at `_abs_offsets`, reconstructed in init().
-    uint32_t* _offsets_ptr = nullptr;
+    // Points at the little-endian absolute-offset trailer for legacy pages. The trailer follows
+    // arbitrary-length string data and therefore must remain byte-addressed.
+    const uint8_t* _encoded_offsets = nullptr;
     // Owns the absolute offsets reconstructed from on-disk deltas; empty for legacy pages.
     std::vector<uint32_t> _abs_offsets;
-    // True when `_offsets_ptr` points at the native-order `_abs_offsets` buffer (delta pages)
-    // rather than aliasing the little-endian page bytes. Used by the big-endian read path.
+    // True when offsets were reconstructed into the native-order `_abs_offsets` buffer.
     bool _offsets_materialized = false;
 
     // Index of the currently seeked element in the page.
