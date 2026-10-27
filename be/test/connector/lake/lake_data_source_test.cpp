@@ -1612,11 +1612,8 @@ TEST_F(LakeDataSourceTest, init_counter_registers_prepared_split_counters) {
         }
     }
 
-<<<<<<< HEAD
-=======
-    // The remaining SegmentInit phases, parented on SegmentInit like every other init child.
-    for (const auto* name : {"SegmentInitPrepare", "RowidRangeFilter", "PrecomputedRangeFilter", "TabletRangeFilter",
-                             "DelVectorApply", "SegmentInitFinalize", "RewritePredicates", "InitContext"}) {
+    // Predicate rewrite and context construction are children of SegmentInit.
+    for (const auto* name : {"RewritePredicates", "InitContext"}) {
         auto it = profile->_counter_map.find(name);
         ASSERT_NE(it, profile->_counter_map.end()) << name;
         EXPECT_EQ(it->second.second, "SegmentInit") << name;
@@ -1632,7 +1629,6 @@ TEST_F(LakeDataSourceTest, init_counter_registers_prepared_split_counters) {
         EXPECT_EQ(it->second.first->value(), 0);
     }
 
->>>>>>> 1e5aec6147d... [Enhancement] Attribute _rewrite_predicates and the context build in SegmentInit (#63296)
     std::stringstream rendered;
     profile->pretty_print(&rendered);
     const auto text = rendered.str();

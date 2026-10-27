@@ -1108,17 +1108,8 @@ public class ExplainAnalyzer {
         appendMetric(uniqueMetrics, nodeInfo, "TotalColumnsDataPageCount");
         appendMetric(uniqueMetrics, nodeInfo, "ColumnIteratorInit");
         appendMetric(uniqueMetrics, nodeInfo, "BitmapIndexIteratorInit");
-<<<<<<< HEAD
-=======
-        appendMetric(uniqueMetrics, nodeInfo, "SegmentInitPrepare");
-        appendMetric(uniqueMetrics, nodeInfo, "RowidRangeFilter");
-        appendMetric(uniqueMetrics, nodeInfo, "PrecomputedRangeFilter");
-        appendMetric(uniqueMetrics, nodeInfo, "TabletRangeFilter");
-        appendMetric(uniqueMetrics, nodeInfo, "DelVectorApply");
-        appendMetric(uniqueMetrics, nodeInfo, "SegmentInitFinalize");
         appendMetric(uniqueMetrics, nodeInfo, "RewritePredicates");
         appendMetric(uniqueMetrics, nodeInfo, "InitContext");
->>>>>>> 1e5aec6147d... [Enhancement] Attribute _rewrite_predicates and the context build in SegmentInit (#63296)
         appendMetric(uniqueMetrics, nodeInfo, "FlatJsonInit");
         appendMetric(uniqueMetrics, nodeInfo, "FlatJsonMerge");
         popIndent();
@@ -1786,17 +1777,10 @@ public class ExplainAnalyzer {
                 "RawRowsRead", "RowsRead", "DictDecode", "DictDecodeCount", "ChunkCopy",
                 "IOTime", "BytesRead", "CompressedBytesRead", "UncompressedBytesRead", "ReadPagesNum",
                 "CachedPagesNum", "BlockFetch", "BlockFetchCount", "BlockSeek", "BlockSeekCount", "DecompressTime",
-<<<<<<< HEAD
                 "TabletCount", "SegmentsReadCount", "RowsetsReadCount", "PhySegmentsCount", "PhyRowsetsCount",
                 "TotalColumnsDataPageCount",
                 "ColumnIteratorInit", "BitmapIndexIteratorInit", "FlatJsonInit", "FlatJsonMerge",
-=======
-                "TabletCount", "SegmentsReadCount", "RowsetsReadCount", "TotalColumnsDataPageCount",
-                "SegmentInit", "ColumnIteratorInit", "BitmapIndexIteratorInit", "FlatJsonInit", "FlatJsonMerge",
-                "SegmentInitPrepare", "RowidRangeFilter", "PrecomputedRangeFilter", "TabletRangeFilter",
-                "DelVectorApply", "SegmentInitFinalize",
                 "RewritePredicates", "InitContext", "SegmentZoneMapFilter",
->>>>>>> 1e5aec6147d... [Enhancement] Attribute _rewrite_predicates and the context build in SegmentInit (#63296)
                 "IOTaskExecTime", "IOTaskWaitTime", "SubmitTaskCount", "SubmitTaskTime", "PrepareChunkSourceTime",
                 "MorselsCount", "PeakIOTasks", "PeakScanTaskQueueSize", "PeakChunkBufferMemoryUsage",
                 "PeakChunkBufferSize", "ChunkBufferCapacity", "DefaultChunkBufferCapacity",
