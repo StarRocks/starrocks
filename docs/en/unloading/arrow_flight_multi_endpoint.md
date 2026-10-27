@@ -5,13 +5,21 @@
 This feature lets Arrow Flight SQL clients read a query's result set in
 parallel from every result-producing node, instead of funneling the whole
 result through a single node. When enabled, a query's `FlightInfo` returns one
-`FlightEndpoint` per result-producing backend / compute node (CN); a Flight or
-ADBC client fans out `DoGet` calls and reads the result shards concurrently.
+`FlightEndpoint` per result-producing worker - a backend (BE) in a shared-nothing
+cluster or a compute node (CN) in a shared-data cluster; a Flight or ADBC client
+fans out `DoGet` calls and reads the result shards concurrently.
 
 It is opt-in (off by default), controlled by the session variable
 `enable_arrow_flight_multi_endpoint`, and is fully backward compatible: clients
 that do not opt in continue to see a single endpoint and behave exactly as
 before.
+
+The mechanism is architecture-agnostic: it fans out across whatever workers ran
+the query (BEs or CNs), which serve their result shards over the same Arrow
+Flight service. The benchmarks below were measured on a shared-data (CN)
+cluster; the shared-nothing (BE) path uses the identical code and is expected to
+behave the same, pending a BE-cluster run. Throughout this doc "node" means a BE
+or a CN depending on your deployment.
 
 ## Motivation
 
@@ -118,8 +126,9 @@ while a native table built with ~7 buckets fanned out only 7 ways.
 | `CoordinatorPreprocessor` | Allow a multi-instance `ResultSink` for the Arrow Flight sink type; the previous single-result-sink guard was MySQL-protocol oriented and rejected multi-instance result sinks. |
 | `DefaultCoordinator` | Do not reap fragment instances with `QUERY_FINISHED` on the FE's own result-stream EOS when the sink is Arrow Flight multi-endpoint. The client reads each instance's result buffer directly, so the FE must not cancel them; the BE's timed cleanup (`result_buffer_cancelled_interval_time`) reclaims them after the client has fetched. |
 
-No BE changes are required: the CN already serves per-instance result buffers
-keyed by `(queryId, fragmentInstanceId)` over its Arrow Flight port.
+No backend changes are required: each worker (BE or CN) already serves
+per-instance result buffers keyed by `(queryId, fragmentInstanceId)` over its
+Arrow Flight port.
 
 ### Why the DefaultCoordinator change matters
 
@@ -254,7 +263,7 @@ conn = flight_sql.connect(
 cur = conn.cursor()
 cur.execute("SET enable_arrow_flight_multi_endpoint = true")
 
-# One partition per result-producing CN.
+# One partition per result-producing node (BE or CN).
 partitions, schema = cur.adbc_execute_partitions("SELECT * FROM my_table")
 
 def read(partition):
@@ -414,3 +423,7 @@ Advantages.)
 - Live validation: deployed on a 15-CN shared-data cluster; verified 1 -> 15
   endpoints, full-result parity across all shards, and the throughput numbers
   above.
+- Architecture coverage: validated on shared-data (CN). Shared-nothing (BE) uses
+  the identical FE planning/coordination and the same backend Arrow Flight
+  service, so it is expected to behave the same; a BE-cluster run to confirm is
+  still pending.
