@@ -254,6 +254,11 @@ uint32_t AdaptiveNullableColumn::serialize(size_t idx, uint8_t* pos) const {
     return NullableColumn::serialize(idx, pos);
 }
 
+uint32_t AdaptiveNullableColumn::serialize_compact(size_t idx, uint8_t* pos) const {
+    materialized_nullable();
+    return NullableColumn::serialize_compact(idx, pos);
+}
+
 uint32_t AdaptiveNullableColumn::serialize_default(uint8_t* pos) const {
     materialized_nullable();
     bool null = true;
@@ -277,6 +282,11 @@ void AdaptiveNullableColumn::serialize_batch(uint8_t* dst, Buffer<uint32_t>& sli
 const uint8_t* AdaptiveNullableColumn::deserialize_and_append(const uint8_t* pos) {
     materialized_nullable();
     return NullableColumn::deserialize_and_append(pos);
+}
+
+const uint8_t* AdaptiveNullableColumn::deserialize_compact_and_append(const uint8_t* pos) {
+    materialized_nullable();
+    return NullableColumn::deserialize_compact_and_append(pos);
 }
 
 void AdaptiveNullableColumn::deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) {
