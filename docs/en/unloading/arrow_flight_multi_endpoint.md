@@ -28,6 +28,31 @@ shards onto one node just to stream them out serially wastes the aggregate
 egress capacity of the cluster. Multi-endpoint retrieval removes the gather and
 lets the client pull each shard directly from the node that produced it.
 
+## Advantages
+
+- **Parallel result egress / higher throughput.** Result bytes stream from every
+  result-producing node at once instead of funneling through one, so egress
+  scales with the cluster - measured ~2.4-3.9x on a 15-CN cluster, and more with
+  a distributed consumer (see Benchmark).
+- **No single-node bottleneck.** The default plan gathers the whole result onto
+  one node for egress; multi-endpoint removes that gather, so each node serves
+  only its own shard. There is no single-node funnel or all-to-one merge, and
+  throughput is stable run to run - immune to one node's momentary load (the
+  single-endpoint leg, by contrast, is the noisy one).
+- **Arrow-native, zero-transcoding path for bulk / AI-ML loading.** Results
+  arrive as Arrow batches straight into PyArrow / ADBC / Spark (and on to pandas,
+  numpy, tensors) with no row-by-row transcoding. Large, columnar,
+  order-independent pulls - feature sets, embeddings, training data - are the
+  ideal fit, and a distributed consumer (Spark / Ray / multiple workers each
+  taking a subset of partitions via `execute_partitions`) scales past a single
+  process's deserialization ceiling, cutting extraction time several-fold.
+- **Standard Arrow Flight, no custom client.** It uses the vanilla `FlightInfo`
+  multi-endpoint mechanism, so any spec-conformant client works - ADBC's
+  `execute_partitions` maps one-to-one to the endpoints. No protocol extension.
+- **Opt-in and backward compatible.** Off by default, controlled by a session
+  variable; existing single-endpoint clients are unaffected and results are
+  identical. FE-only - no BE or wire-format changes.
+
 ## How it works
 
 ### Plan shape
@@ -368,16 +393,8 @@ the FE's `arrow_flight_port` (metadata and login) and each CN's
 is why the consumer typically runs on the cluster network: an in-cluster gateway,
 or Spark / Python (PyArrow, ADBC) jobs colocated with the cluster. External
 clients that cannot reach the CN ports should use the gateway pattern above.
-
-**Fit for bulk / AI-ML extraction:** the strongest use case is pulling large
-columnar datasets into Arrow-native consumers - PyArrow / ADBC / Spark jobs
-loading feature sets, embeddings, or training data. Those results are large,
-columnar, and order-independent, and Arrow Flight hands batches straight to
-PyArrow (and on to pandas / numpy / tensors) without row-by-row transcoding.
-Multi-endpoint streams the shards in parallel, and a distributed consumer
-(Spark / Ray / multiple workers, each taking a subset of partitions via
-`execute_partitions`) scales past a single process's deserialization ceiling -
-cutting extraction time several-fold.
+(Bulk / AI-ML extraction is the prime example of such a colocated consumer - see
+Advantages.)
 
 ## Compatibility and rollout
 
