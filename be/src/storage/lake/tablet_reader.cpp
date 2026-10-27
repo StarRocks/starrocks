@@ -62,6 +62,16 @@
 
 namespace starrocks::lake {
 
+// The open loops below can run for minutes on a tablet with many segments, so they stop as soon as the
+// query is cancelled instead of opening the rest. A read without a RuntimeState (compaction, publish) is
+// never cancelled here.
+static Status check_cancelled(const TabletReaderParams& params, int64_t tablet_id) {
+    if (params.runtime_state != nullptr && params.runtime_state->is_cancelled()) {
+        return Status::Cancelled(fmt::format("cancelled while opening tablet:{}", tablet_id));
+    }
+    return Status::OK();
+}
+
 using ConjunctivePredicates = starrocks::ConjunctivePredicates;
 using Datum = starrocks::Datum;
 using Field = starrocks::Field;
@@ -512,6 +522,8 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
         split_morsel_queue->set_tablet_schema(_tablet_schema);
 
         while (true) {
+            // Every split can load a rowset's segments (PhysicalSplitMorselQueue::_init_segment).
+            RETURN_IF_ERROR(check_cancelled(read_params, _tablet_metadata->id()));
             auto split_status_or = split_morsel_queue->try_get();
             if (UNLIKELY(!split_status_or.ok())) {
                 LOG(WARNING) << "failed to get split morsel: " << split_status_or.status()
@@ -717,10 +729,13 @@ Status TabletReader::build_prepared_tablet_read_state(const TabletReaderParams& 
     rowset_segments.reserve(rowsets.size());
     rowset_prepared_states.reserve(rowsets.size());
     SCOPED_RAW_TIMER(&_stats.lake_prepared_tablet_segment_open_ns);
+    const std::atomic<bool>* is_cancelled =
+            params.runtime_state != nullptr ? &params.runtime_state->cancelled_ref() : nullptr;
     for (const auto& rowset : rowsets) {
+        RETURN_IF_ERROR(check_cancelled(params, _tablet_metadata->id()));
         // Include the failing rowset's candidate slots even if only some footers can be opened.
         _stats.lake_prepared_tablet_segments += rowset->num_segments();
-        ASSIGN_OR_RETURN(auto segments, rowset->segments(params.lake_io_opts, prepare_stats));
+        ASSIGN_OR_RETURN(auto segments, rowset->segments(params.lake_io_opts, prepare_stats, is_cancelled));
         std::vector<PreparedSegmentReadStatePtr> prepared_states;
         prepared_states.reserve(segments.size());
         for (size_t i = 0; i < segments.size(); ++i) {
@@ -856,6 +871,8 @@ Status TabletReader::build_initial_coarse_split_tasks(const TabletReaderParams& 
         ASSIGN_OR_RETURN(auto shared_segment_range, rowset->get_seek_range());
 
         for (size_t segment_idx = 0; segment_idx < segments.size(); ++segment_idx) {
+            // Building the coarse range can load the segment's short key index.
+            RETURN_IF_ERROR(check_cancelled(params, _tablet_metadata->id()));
             const auto& segment = segments[segment_idx];
             if (segment == nullptr || segment->num_rows() == 0) {
                 continue;
@@ -1098,6 +1115,8 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
         }
     });
     for (size_t rowset_idx = 0; rowset_idx < _rowsets.size(); ++rowset_idx) {
+        // Stop opening, and submitting, the remaining rowsets. Rowset::read() checks again per segment.
+        RETURN_IF_ERROR(check_cancelled(params, _tablet_metadata->id()));
         auto& rowset = _rowsets[rowset_idx];
         if (params.rowid_range_option != nullptr && !params.rowid_range_option->contains_rowset(rowset.get())) {
             continue;

@@ -39,6 +39,7 @@
 #include "common/logging.h"
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
+#include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "storage/compaction_utils.h"
 #include "storage/lake/filenames.h"
@@ -2607,6 +2608,152 @@ TEST_F(LakeRowsetTest, test_parallel_load_error_waits_all_futures) {
     auto rs = rowset->read(input_schema, rs_opts);
     ASSERT_FALSE(rs.ok());
     ASSERT_GE(total_hits.load(), 2);
+}
+
+// A query scan that is cancelled while it opens a rowset stops before the next segment instead of
+// loading every remaining footer, and releases the segments it had already loaded.
+TEST_F(LakeRowsetTest, test_read_stops_loading_segments_after_cancel) {
+    create_rowsets_for_testing();
+    ConfigResetGuard<bool> guard(&config::enable_load_segment_parallel, false);
+    auto* cache = _tablet_mgr->metacache();
+    cache->prune();
+
+    RuntimeState state;
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([] {
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    int loaded = 0;
+    SyncPoint::GetInstance()->SetCallBack("Rowset::load_segments::serial_loaded", [&](void*) {
+        ++loaded;
+        state.set_is_cancelled(true);
+    });
+
+    auto rowset = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0);
+    RowsetReadOptions rs_opts;
+    OlapReaderStatistics stats;
+    rs_opts.stats = &stats;
+    rs_opts.tablet_schema = _tablet_schema;
+    rs_opts.runtime_state = &state;
+    rs_opts.lake_io_opts.fill_metadata_cache = true;
+    auto input_schema = ChunkHelper::convert_schema(_tablet_schema, std::vector<ColumnId>{0});
+    auto res = rowset->read(input_schema, rs_opts);
+    ASSERT_TRUE(res.status().is_cancelled()) << res.status();
+    ASSERT_EQ(1, loaded);
+
+    const auto& rs_meta = _tablet_metadata->rowsets(0);
+    auto segment_path = [&](int i) {
+        return _tablet_mgr->segment_location(_tablet_metadata->id(), rs_meta.segment_metas(i).filename());
+    };
+    auto first = cache->lookup_segment(segment_path(0));
+    ASSERT_NE(nullptr, first);
+    EXPECT_EQ(nullptr, cache->lookup_segment(segment_path(1)));
+    EXPECT_EQ(nullptr, cache->lookup_segment(segment_path(2)));
+    // Nothing but the cache and this test holds the segment that was loaded before the cancel.
+    cache->prune();
+    EXPECT_EQ(1, first.use_count());
+}
+
+// A cancel that lands during the last segment's IO is caught before the iterators, and so the delete
+// vector loads, are created.
+TEST_F(LakeRowsetTest, test_read_stops_creating_iterators_after_cancel) {
+    create_rowsets_for_testing();
+    ConfigResetGuard<bool> guard(&config::enable_load_segment_parallel, false);
+
+    RuntimeState state;
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([] {
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    int loaded = 0;
+    SyncPoint::GetInstance()->SetCallBack("Rowset::load_segments::serial_loaded", [&](void*) {
+        if (++loaded == 3) {
+            state.set_is_cancelled(true);
+        }
+    });
+
+    auto rowset = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0);
+    RowsetReadOptions rs_opts;
+    OlapReaderStatistics stats;
+    rs_opts.stats = &stats;
+    rs_opts.tablet_schema = _tablet_schema;
+    rs_opts.runtime_state = &state;
+    auto input_schema = ChunkHelper::convert_schema(_tablet_schema, std::vector<ColumnId>{0});
+    auto res = rowset->read(input_schema, rs_opts);
+    ASSERT_TRUE(res.status().is_cancelled()) << res.status();
+    ASSERT_EQ(3, loaded);
+    EXPECT_EQ(0, stats.segments_read_count);
+}
+
+// Queued parallel load tasks see the cancel and skip their IO; the read still waits for all of them.
+TEST_F(LakeRowsetTest, test_parallel_load_stops_after_cancel) {
+    create_rowsets_for_testing();
+    ConfigResetGuard<bool> guard(&config::enable_load_segment_parallel, true);
+
+    RuntimeState state;
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([] {
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    std::atomic<int> started{0};
+    SyncPoint::GetInstance()->SetCallBack("Rowset::load_segments::parallel_load", [&](void*) {
+        started.fetch_add(1);
+        state.set_is_cancelled(true);
+    });
+
+    // Rowset captures _parallel_load in its constructor.
+    auto rowset = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0);
+    RowsetReadOptions rs_opts;
+    OlapReaderStatistics stats;
+    rs_opts.stats = &stats;
+    rs_opts.tablet_schema = _tablet_schema;
+    rs_opts.runtime_state = &state;
+    auto input_schema = ChunkHelper::convert_schema(_tablet_schema, std::vector<ColumnId>{0});
+    auto res = rowset->read(input_schema, rs_opts);
+    ASSERT_TRUE(res.status().is_cancelled()) << res.status();
+    ASSERT_GE(started.load(), 1);
+    ASSERT_LE(started.load(), 3);
+}
+
+// segments() is the prepared-split load path; it honors the flag, and loads normally without one.
+TEST_F(LakeRowsetTest, test_segments_stops_after_cancel) {
+    create_rowsets_for_testing();
+    ConfigResetGuard<bool> guard(&config::enable_load_segment_parallel, false);
+    auto* cache = _tablet_mgr->metacache();
+    cache->prune();
+
+    auto rowset = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0);
+    LakeIOOptions lake_io_opts{.fill_data_cache = false, .fill_metadata_cache = true};
+    std::atomic<bool> cancelled{true};
+    auto res = rowset->segments(lake_io_opts, nullptr, &cancelled);
+    ASSERT_TRUE(res.status().is_cancelled()) << res.status();
+    const auto& rs_meta = _tablet_metadata->rowsets(0);
+    for (int i = 0; i < 3; i++) {
+        EXPECT_EQ(nullptr, cache->lookup_segment(_tablet_mgr->segment_location(_tablet_metadata->id(),
+                                                                               rs_meta.segment_metas(i).filename())));
+    }
+
+    cancelled.store(false);
+    ASSIGN_OR_ABORT(auto segments, rowset->segments(lake_io_opts, nullptr, &cancelled));
+    ASSERT_EQ(3, segments.size());
+}
+
+// A query that is not cancelled reads exactly what it read before.
+TEST_F(LakeRowsetTest, test_read_with_runtime_state_not_cancelled) {
+    create_rowsets_for_testing();
+    RuntimeState state;
+    auto rowset = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0);
+    RowsetReadOptions rs_opts;
+    OlapReaderStatistics stats;
+    rs_opts.stats = &stats;
+    rs_opts.tablet_schema = _tablet_schema;
+    rs_opts.runtime_state = &state;
+    auto input_schema = ChunkHelper::convert_schema(_tablet_schema, std::vector<ColumnId>{0});
+    ASSIGN_OR_ABORT(auto iters, rowset->read(input_schema, rs_opts));
+    ASSERT_EQ(count_rows_from_iters(iters), 3 * (22 + 12));
 }
 
 // Test: collect_files_in_log collects .vi files for op_write abort
