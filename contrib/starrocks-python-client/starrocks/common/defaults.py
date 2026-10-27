@@ -255,6 +255,9 @@ class ReflectionMVDefaults(ReflectionViewDefaults):
     # merging them in would warn about an unmanaged database value on every autogenerate.
     _DDL_ONLY_PROPERTY_KEYS: frozenset = frozenset({
         'colocate_with',
+        'force_external_table_query_rewrite',
+        'query_rewrite_consistency',
+        'refresh_mode',
     })
 
     @classmethod
