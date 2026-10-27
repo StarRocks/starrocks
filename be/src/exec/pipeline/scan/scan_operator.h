@@ -63,6 +63,8 @@ public:
 
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
+    void set_precondition_ready(RuntimeState* state) override;
+
     void update_metrics(RuntimeState* state) override { _merge_chunk_source_profiles(state); }
 
     workgroup::ScanSchedEntityType sched_entity_type() const override { return workgroup::ScanSchedEntityType::OLAP; }
@@ -261,6 +263,7 @@ protected:
 
 protected:
     ScanNode* _scan_node = nullptr;
+    std::vector<ExprContext*> _post_scan_runtime_in_filters;
     const int32_t _dop;
     const bool _output_chunk_by_bucket;
     const int _io_tasks_per_scan_operator;
