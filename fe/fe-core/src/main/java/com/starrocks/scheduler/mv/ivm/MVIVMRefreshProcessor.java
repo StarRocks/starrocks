@@ -244,6 +244,24 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
         } finally {
             ctx.getSessionVariable().setEnableIVMRefresh(prevIvmEnabled);
             ctx.getSessionVariable().setTvrTargetMvid(prevTvrTargetMvId);
+<<<<<<< HEAD
+=======
+            ctx.setTvrStagingOwner(prevTvrStagingOwner);
+        }
+    }
+
+    /**
+     * The one place a backend CDC rejection is read as text: everything past here goes by its type. Anything else is
+     * returned as is, so the retry loop still recognizes a lock timeout.
+     */
+    @VisibleForTesting
+    public static Exception translateBackendFailure(Exception e) {
+        for (Throwable t : ExceptionUtils.getThrowableList(e)) {
+            Optional<CdcErrorUtils.Parsed> parsed = CdcErrorUtils.find(t.getMessage());
+            if (parsed.isPresent() && parsed.get().getCode() == TCdcErrorCode.CHANGE_NOT_TRACKABLE) {
+                return new ChangeNotTrackableException(t.getMessage(), parsed.get(), e);
+            }
+>>>>>>> fa899f92593... [Enhancement][RB-754] Make materialized view refresh failures say what failed and how to recover (#66969)
         }
     }
 

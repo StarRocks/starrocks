@@ -72,6 +72,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -478,11 +479,28 @@ public class TaskManager implements MemoryTrackable {
         } catch (InterruptedException | ExecutionException e) {
             Throwable rootCause = e.getCause();
             throw new DmlException("execute task %s failed: %s", rootCause, task.getName(), rootCause.getMessage());
+        } catch (CancellationException e) {
+            throw new DmlException("execute task %s failed: %s", e, task.getName(), cancelledRunMessage(task));
         } catch (Exception e) {
             throw new DmlException("execute task %s failed: %s", e, task.getName(), e.getMessage());
         } finally {
             taskRunScheduler.removeSyncRunningTaskRun(taskRun);
         }
+    }
+
+    // A pending run is cancelled when its task is suspended or dropped, e.g. by a refresh that inactivates its view.
+    private String cancelledRunMessage(Task task) {
+        String message = "the run was cancelled before it started";
+        if (getTask(task.getName()) == null) {
+            message += ": task " + task.getName() + " was dropped";
+        } else if (task.getState() == Constants.TaskState.PAUSE) {
+            message += ": task " + task.getName() + " was suspended";
+        }
+        MaterializedView mv = TaskBuilder.getMvFromTask(task);
+        if (mv != null && !mv.isActive()) {
+            message += ". " + MVTaskRunProcessor.notActiveError(task.getDbName(), mv);
+        }
+        return message;
     }
 
     /**

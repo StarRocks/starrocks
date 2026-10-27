@@ -14,6 +14,13 @@
 
 package com.starrocks.common;
 
+<<<<<<< HEAD
+=======
+import com.starrocks.alter.AlterJobMgr;
+import com.starrocks.scheduler.MVActiveChecker;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.analyzer.mv.IvmBrokenException;
+>>>>>>> fa899f92593... [Enhancement][RB-754] Make materialized view refresh failures say what failed and how to recover (#66969)
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.MVInactiveException;
 import org.junit.jupiter.api.Test;
@@ -79,6 +86,7 @@ public class MaterializedViewExceptionsTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testBreakingFailureReasonFollowsTheMatchedCause() {
         assertTrue(MaterializedViewExceptions.inactiveReasonForBreakingFailure(
                         new RuntimeException(MaterializedViewExceptions.inactiveReasonForColumnChanged(
@@ -88,5 +96,42 @@ public class MaterializedViewExceptionsTest {
         assertTrue(MaterializedViewExceptions.inactiveReasonForBreakingFailure(
                         new RuntimeException("x " + MaterializedViewExceptions.FE_NON_APPEND_ONLY_MARKER + " y"), "mv1")
                 .startsWith(MaterializedViewExceptions.INACTIVE_REASON_FOR_INCREMENTAL_BREAKING));
+=======
+    public void testRefreshFailureMessageIsTheClassifiedMessageElseTheRootCauseWithItsTopFrames() {
+        String detail = "Cannot incrementally refresh materialized view mv1: base table t1 was dropped and re-created. "
+                + "Run ALTER MATERIALIZED VIEW `db1`.`mv1` ACTIVE to recover.";
+        IvmBrokenException broken = new IvmBrokenException(RefreshFailureKind.BASELINE_UNREACHABLE, detail,
+                new IllegalStateException("connector detail"));
+        assertEquals(detail, MaterializedViewExceptions.refreshFailureMessage(
+                new DmlException("Refresh mv mv1 failed after 1 times", broken), "q1"));
+
+        IllegalStateException rootCause = new IllegalStateException("starlet err: object does not exist");
+        DmlException unclassified = new DmlException("Refresh mv mv1 failed after 1 times",
+                new RuntimeException("wrapped", rootCause));
+        String message = MaterializedViewExceptions.refreshFailureMessage(unclassified, "q1");
+        assertTrue(rootCause.getStackTrace().length > 5);
+        StringBuilder expected = new StringBuilder("IllegalStateException: starlet err: object does not exist");
+        for (int i = 0; i < 5; i++) {
+            expected.append("\n\tat ").append(rootCause.getStackTrace()[i]);
+        }
+        expected.append("\n\t... full stack trace in fe.log, query_id: q1");
+        assertEquals(expected.toString(), message);
+        assertEquals("", MaterializedViewExceptions.refreshFailureMessage(null, "q1"));
+    }
+
+    @Test
+    public void testOnlyBreakingKindsHaveAnInactiveReason() {
+        assertFalse(RefreshFailureKind.VIEW_INACTIVE.isBreaking());
+        assertThrows(IllegalStateException.class, () -> RefreshFailureKind.VIEW_INACTIVE.inactiveReason("mv1"));
+        assertEquals("incremental refresh broken by non-append-only base change: mv1",
+                RefreshFailureKind.INCREMENTAL_BROKEN.inactiveReason("mv1"));
+        assertEquals("incremental refresh broken: the base table state this view refreshes from is no longer "
+                + "available: mv1", RefreshFailureKind.BASELINE_UNREACHABLE.inactiveReason("mv1"));
+        assertEquals("incremental refresh broken: materialized view schema no longer matches its definition: mv1",
+                RefreshFailureKind.SCHEMA_MISMATCH.inactiveReason("mv1"));
+        assertTrue(RefreshFailureKind.INCREMENTAL_BROKEN.invalidatesBaseline());
+        assertTrue(RefreshFailureKind.BASELINE_UNREACHABLE.invalidatesBaseline());
+        assertFalse(RefreshFailureKind.SCHEMA_MISMATCH.invalidatesBaseline());
+>>>>>>> fa899f92593... [Enhancement][RB-754] Make materialized view refresh failures say what failed and how to recover (#66969)
     }
 }

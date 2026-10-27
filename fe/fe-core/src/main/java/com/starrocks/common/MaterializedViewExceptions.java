@@ -19,6 +19,12 @@ import com.starrocks.sql.common.MVInactiveException;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 
+<<<<<<< HEAD
+=======
+import java.util.Arrays;
+import java.util.List;
+import java.util.Optional;
+>>>>>>> fa899f92593... [Enhancement][RB-754] Make materialized view refresh failures say what failed and how to recover (#66969)
 import java.util.Set;
 
 /**
@@ -105,6 +111,7 @@ public class MaterializedViewExceptions {
     public static final String MV_SCHEMA_COLUMN_CHANGED_MARKER = "base table schema changed for columns: ";
     public static final String MV_SCHEMA_COLUMN_NOT_COMPATIBLE_MARKER = "column schema not compatible: ";
 
+<<<<<<< HEAD
     /**
      * Whether an MV refresh failure is a non-append-only breakage that permanently disables incremental
      * refresh (vs. a transient error). Covers the FE-detected non-append-only change and a stored schema
@@ -126,6 +133,42 @@ public class MaterializedViewExceptions {
             }
         }
         return false;
+=======
+    private static final int REPORTED_ROOT_CAUSE_FRAMES = 5;
+
+    /** The kind of the first classified failure along the cause chain; suppressed failures were handled already. */
+    public static Optional<RefreshFailureKind> kindOf(Throwable e) {
+        return ExceptionUtils.getThrowableList(e).stream()
+                .filter(ClassifiedRefreshFailure.class::isInstance)
+                .map(t -> ((ClassifiedRefreshFailure) t).kind())
+                .findFirst();
+>>>>>>> fa899f92593... [Enhancement][RB-754] Make materialized view refresh failures say what failed and how to recover (#66969)
+    }
+
+    /**
+     * What a refresh failure tells the user: a classified failure's own message, which is written for them; else the
+     * root cause with its top frames, and the query id under which fe.log has the full stack trace.
+     */
+    public static String refreshFailureMessage(Throwable e, String queryId) {
+        List<Throwable> chain = ExceptionUtils.getThrowableList(e);
+        Optional<String> classified = chain.stream()
+                .filter(ClassifiedRefreshFailure.class::isInstance)
+                .findFirst()
+                // SemanticException#getMessage frames the detail as an analyzing error, which a refresh failure is not
+                .map(t -> t instanceof SemanticException semantic ? semantic.getDetailMsg() : t.getMessage())
+                .filter(StringUtils::isNotEmpty);
+        if (classified.isPresent()) {
+            return classified.get();
+        }
+        if (chain.isEmpty()) {
+            return "";
+        }
+        Throwable rootCause = chain.get(chain.size() - 1);
+        StringBuilder message = new StringBuilder(ExceptionUtils.getMessage(rootCause));
+        Arrays.stream(rootCause.getStackTrace()).limit(REPORTED_ROOT_CAUSE_FRAMES)
+                .forEach(frame -> message.append("\n\tat ").append(frame));
+        message.append("\n\t... full stack trace in fe.log, query_id: ").append(queryId);
+        return message.toString();
     }
 
     public static String inactiveReasonForMetadataTableRestoreCorrupted(String tableName) {
