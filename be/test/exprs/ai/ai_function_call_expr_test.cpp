@@ -55,7 +55,7 @@
 namespace starrocks {
 namespace {
 
-constexpr int64_t kPromptFid = 200001;
+constexpr int64_t kPromptFid = 200000;
 constexpr std::string_view kDefaultConfigId = "provider:default_chat";
 
 // Use an explicitly typed expression node: Expr(TypeDescriptor) constructs a
@@ -423,7 +423,7 @@ TEST_F(AIFunctionCallExprTest, FactoryRejectsMalformedAIThriftWithoutDelegatingT
              [](TExprNode& node) { node.fn.arg_types.emplace_back(varchar_type().to_thrift()); }},
             {"wrong argument type",
              [](TExprNode& node) { node.fn.arg_types[0] = TypeDescriptor(TYPE_INT).to_thrift(); }},
-            {"mismatched fid", [](TExprNode& node) { node.fn.fid = 200005; }},
+            {"mismatched fid", [](TExprNode& node) { node.fn.fid = 200004; }},
     };
 
     for (const auto& [name, mutate] : malformed) {
@@ -1088,11 +1088,11 @@ TExpr make_extended_ai_expression(int64_t fid, const std::string& name, const Ty
     call.fn.__set_ret_type(result_type.to_thrift());
     call.__set_type(result_type.to_thrift());
     auto canonical_arguments = arguments;
-    const size_t count = fid == 200002 || fid == 200010 ? 5 : fid == 200005 || fid == 200008 || fid == 200012 ? 3 : 4;
+    const size_t count = fid == 200001 || fid == 200009 ? 5 : fid == 200004 || fid == 200007 || fid == 200011 ? 3 : 4;
     if (canonical_arguments.size() < count) {
         canonical_arguments.push_back(varchar_type());
         canonical_arguments.push_back(varchar_type());
-        if (fid == 200001 || fid == 200002 || fid == 200003 || fid == 200004) {
+        if (fid == 200000 || fid == 200001 || fid == 200002 || fid == 200003) {
             canonical_arguments.push_back(options_type());
         }
     }
@@ -1138,19 +1138,19 @@ std::vector<AIOverloadCase> ai_overload_cases() {
     const TypeDescriptor file(TYPE_FILE);
     using Result = AIFunctionResultKind;
     return {
-            {200001, "ai_complete", text, {text, text, text, options}, Result::STRING, 2, 1},
-            {200002, "ai_complete", text, {text, file, text, text, options}, Result::STRING, 3, 2},
-            {200005, "ai_sentiment", text, {text, text, text}, Result::SENTIMENT, 2, 1},
-            {200006, "ai_classify", json, {text, strings, text, text}, Result::JSON, 3, 2},
-            {200007, "ai_extract", json, {text, strings, text, text}, Result::JSON, 3, 2},
-            {200008, "ai_fix_grammar", text, {text, text, text}, Result::STRING, 2, 1},
-            {200009, "ai_redact", text, {text, strings, text, text}, Result::STRING, 3, 2},
-            {200010, "ai_translate", text, {text, text, text, text, text}, Result::STRING, 4, 3},
-            {200011, "ai_similarity", similarity, {text, text, text, text}, Result::SIMILARITY, 3, 2},
-            {200012, "ai_summarize", text, {text, text, text}, Result::STRING, 2, 1},
-            {200013, "ai_filter", boolean, {text, text, text, text}, Result::BOOLEAN, 3, 2},
-            {200003, "ai_embed", embedding, {text, text, text, options}, Result::EMBEDDING, 2, 1},
-            {200004, "ai_embed", embedding, {file, text, text, options}, Result::EMBEDDING, 2, 1},
+            {200000, "ai_complete", text, {text, text, text, options}, Result::STRING, 2, 1},
+            {200001, "ai_complete", text, {text, file, text, text, options}, Result::STRING, 3, 2},
+            {200004, "ai_sentiment", text, {text, text, text}, Result::SENTIMENT, 2, 1},
+            {200005, "ai_classify", json, {text, strings, text, text}, Result::JSON, 3, 2},
+            {200006, "ai_extract", json, {text, strings, text, text}, Result::JSON, 3, 2},
+            {200007, "ai_fix_grammar", text, {text, text, text}, Result::STRING, 2, 1},
+            {200008, "ai_redact", text, {text, strings, text, text}, Result::STRING, 3, 2},
+            {200009, "ai_translate", text, {text, text, text, text, text}, Result::STRING, 4, 3},
+            {200010, "ai_similarity", similarity, {text, text, text, text}, Result::SIMILARITY, 3, 2},
+            {200011, "ai_summarize", text, {text, text, text}, Result::STRING, 2, 1},
+            {200012, "ai_filter", boolean, {text, text, text, text}, Result::BOOLEAN, 3, 2},
+            {200002, "ai_embed", embedding, {text, text, text, options}, Result::EMBEDDING, 2, 1},
+            {200003, "ai_embed", embedding, {file, text, text, options}, Result::EMBEDDING, 2, 1},
     };
 }
 
@@ -1190,10 +1190,10 @@ TEST_F(AIFunctionCallExprTest, EveryRegisteredOverloadRetainsValidatedSemanticsW
             EXPECT_FALSE(AIFunctionCallExpr::create(&pool, invalid).ok());
         }
     }
-    // ai_query, the first unassigned ID, and retired AI overload IDs are not AIProject functions.
-    for (int64_t fid : {200000, 200014, 200100, 200101, 200102, 200103, 200104, 200108, 200109, 200110, 200111, 200112,
-                        200113, 200114, 200115, 200116, 200118, 200120, 200122, 200124, 200126, 200128, 200129, 200130,
-                        200134, 200138, 200139, 200140, 200141, 200142, 200143, 200144, 200150, 200164}) {
+    // Unassigned function IDs are not AIProject functions.
+    for (int64_t fid : {199999, 200013, 200014, 200100, 200101, 200102, 200103, 200104, 200108, 200109, 200110, 200111,
+                        200112, 200113, 200114, 200115, 200116, 200118, 200120, 200122, 200124, 200126, 200128, 200129,
+                        200130, 200134, 200138, 200139, 200140, 200141, 200142, 200143, 200144, 200150, 200164}) {
         EXPECT_FALSE(AIFunctionCallExpr::is_ai_function_id(fid)) << fid;
     }
     EXPECT_FALSE(AIFunctionCallExpr::is_ai_function_name("ai_query"));
@@ -1206,7 +1206,7 @@ TEST_F(AIFunctionCallExprTest, FileInputsPreserveNullsAndOwnInlineBytes) {
     files->append_nulls(1);
     files->append_datum(FileDatumBuilder::make(Slice("s3://private/object"), 0, -1, {}, {}, {}));
     ObjectPool pool;
-    auto wire = make_extended_ai_expression(200002, "ai_complete", varchar_type(),
+    auto wire = make_extended_ai_expression(200001, "ai_complete", varchar_type(),
                                             {varchar_type(), TypeDescriptor(TYPE_FILE)});
     auto created = AIFunctionCallExpr::create(&pool, wire.nodes.front());
     ASSERT_TRUE(created.ok()) << created.status();
@@ -1244,7 +1244,7 @@ TEST_F(AIFunctionCallExprTest, FileEmbeddingIsNotAStringCastAndEnforcesInputLimi
     auto files = FileColumn::create();
     files->append_datum(FileDatumBuilder::make({}, {}, {}, Slice("image/png"), {}, Slice(png)));
     ObjectPool pool;
-    auto wire = make_extended_ai_expression(200004, "ai_embed",
+    auto wire = make_extended_ai_expression(200003, "ai_embed",
                                             TypeDescriptor::create_array_type(TypeDescriptor(TYPE_FLOAT)),
                                             {TypeDescriptor(TYPE_FILE)});
     auto created = AIFunctionCallExpr::create(&pool, wire.nodes.front());
@@ -1274,7 +1274,7 @@ TEST_F(AIFunctionCallExprTest, FileReferencesAreRejectedWithoutDisclosingLocatio
     auto files = FileColumn::create();
     files->append_datum(FileDatumBuilder::make(Slice("s3://private/object?credential=secret"), 12, -1, {}, {}, {}));
     ObjectPool pool;
-    auto wire = make_extended_ai_expression(200002, "ai_complete", varchar_type(),
+    auto wire = make_extended_ai_expression(200001, "ai_complete", varchar_type(),
                                             {varchar_type(), TypeDescriptor(TYPE_FILE)});
     auto created = AIFunctionCallExpr::create(&pool, wire.nodes.front());
     ASSERT_TRUE(created.ok()) << created.status();
@@ -1304,7 +1304,7 @@ TEST_F(AIFunctionCallExprTest, MalformedInlineFilesFailOnlyTheirOwnRows) {
     files->append_datum(FileDatumBuilder::make({}, {}, {}, {}, {}, Slice("not-an-image")));
     files->append_datum(FileDatumBuilder::make({}, {}, {}, {}, {}, Slice(png)));
     ObjectPool pool;
-    auto wire = make_extended_ai_expression(200004, "ai_embed",
+    auto wire = make_extended_ai_expression(200003, "ai_embed",
                                             TypeDescriptor::create_array_type(TypeDescriptor(TYPE_FLOAT)),
                                             {TypeDescriptor(TYPE_FILE)});
     auto created = AIFunctionCallExpr::create(&pool, wire.nodes.front());
@@ -1334,7 +1334,7 @@ TEST_F(AIFunctionCallExprTest, FilterPromptRequestsUnquotedBooleanTokens) {
         SCOPED_TRACE(explicit_model);
         ObjectPool pool;
         std::vector<TypeDescriptor> arguments(4, varchar_type());
-        auto wire = make_extended_ai_expression(200013, "ai_filter", TypeDescriptor(TYPE_BOOLEAN), arguments);
+        auto wire = make_extended_ai_expression(200012, "ai_filter", TypeDescriptor(TYPE_BOOLEAN), arguments);
         auto created = AIFunctionCallExpr::create(&pool, wire.nodes.front());
         ASSERT_TRUE(created.ok()) << created.status();
         auto* expression = created.value();
@@ -1361,7 +1361,7 @@ TEST_F(AIFunctionCallExprTest, FilterPromptRequestsUnquotedBooleanTokens) {
 
 TEST_F(AIFunctionCallExprTest, TranslationAutoDetectsNullSourceAndUsesConstantModel) {
     ObjectPool pool;
-    auto wire = make_extended_ai_expression(200010, "ai_translate", varchar_type(),
+    auto wire = make_extended_ai_expression(200009, "ai_translate", varchar_type(),
                                             std::vector<TypeDescriptor>(5, varchar_type()));
     auto created = AIFunctionCallExpr::create(&pool, wire.nodes.front());
     ASSERT_TRUE(created.ok()) << created.status();
@@ -1390,7 +1390,7 @@ TEST_F(AIFunctionCallExprTest, TranslationNullAndBlankPoliciesApplyAtEveryDeclar
     for (bool explicit_model : {false, true}) {
         SCOPED_TRACE(explicit_model);
         ObjectPool pool;
-        auto wire = make_extended_ai_expression(200010, "ai_translate", varchar_type(),
+        auto wire = make_extended_ai_expression(200009, "ai_translate", varchar_type(),
                                                 std::vector<TypeDescriptor>(5, varchar_type()));
         auto created = AIFunctionCallExpr::create(&pool, wire.nodes.front());
         ASSERT_TRUE(created.ok()) << created.status();
@@ -1427,7 +1427,7 @@ TEST_F(AIFunctionCallExprTest, TranslationNullAndBlankPoliciesApplyAtEveryDeclar
 
 TEST_F(AIFunctionCallExprTest, ProviderSelectorIsConstantBindingNotTheProviderModel) {
     ObjectPool pool;
-    auto wire = make_extended_ai_expression(200001, "ai_complete", varchar_type(),
+    auto wire = make_extended_ai_expression(200000, "ai_complete", varchar_type(),
                                             {varchar_type(), varchar_type(), varchar_type(), options_type()}, true);
     auto created = AIFunctionCallExpr::create(&pool, wire.nodes.front());
     ASSERT_TRUE(created.ok()) << created.status();
@@ -1590,7 +1590,7 @@ TEST_F(AIFunctionCallExprTest, BatchBuilderRetainsArrayValidation) {
     const auto array_type = TypeDescriptor::create_array_type(varchar_type());
     for (auto categories : {make_string_array({}, true), make_string_array({"category"}, false)}) {
         ObjectPool pool;
-        auto wire = make_extended_ai_expression(200006, "ai_classify", TypeDescriptor(TYPE_JSON),
+        auto wire = make_extended_ai_expression(200005, "ai_classify", TypeDescriptor(TYPE_JSON),
                                                 {varchar_type(), array_type});
         auto created = AIFunctionCallExpr::create(&pool, wire.nodes.front());
         ASSERT_TRUE(created.ok()) << created.status();
@@ -1632,7 +1632,7 @@ TEST_F(AIFunctionCallExprTest, SemanticConstantArrayDoesNotRequireConstColumnSto
     ObjectPool pool;
     const auto array_type = TypeDescriptor::create_array_type(varchar_type());
     auto wire =
-            make_extended_ai_expression(200006, "ai_classify", TypeDescriptor(TYPE_JSON), {varchar_type(), array_type});
+            make_extended_ai_expression(200005, "ai_classify", TypeDescriptor(TYPE_JSON), {varchar_type(), array_type});
     auto created = AIFunctionCallExpr::create(&pool, wire.nodes.front());
     ASSERT_TRUE(created.ok());
     auto* prompt = pool.add(new CountingColumnExpr(varchar_type(), make_varchar_column({"hello"})));
@@ -1678,7 +1678,7 @@ TEST_F(AIFunctionCallExprTest, OpenPropagatesConstantArrayEvaluationErrors) {
         }
     };
     ObjectPool pool;
-    auto wire = make_extended_ai_expression(200006, "ai_classify", TypeDescriptor(TYPE_JSON),
+    auto wire = make_extended_ai_expression(200005, "ai_classify", TypeDescriptor(TYPE_JSON),
                                             {varchar_type(), TypeDescriptor::create_array_type(varchar_type())});
     auto created = AIFunctionCallExpr::create(&pool, wire.nodes.front());
     ASSERT_TRUE(created.ok()) << created.status();
@@ -1746,7 +1746,7 @@ TEST_F(AIFunctionCallExprTest, OpenValidatesNativeStringAndJsonArrayCasts) {
     for (const auto& test : test_cases) {
         SCOPED_TRACE(test.input);
         SCOPED_TRACE(test.from_json);
-        auto wire = make_extended_ai_expression(200007, "ai_extract", TypeDescriptor(TYPE_JSON),
+        auto wire = make_extended_ai_expression(200006, "ai_extract", TypeDescriptor(TYPE_JSON),
                                                 {varchar_type(), array_type, varchar_type(), varchar_type()});
         wire.nodes.resize(2); // Keep the call and input slot; append the array expression and selectors.
         wire.nodes.emplace_back(cast_node(test.from_json ? TypeDescriptor(TYPE_JSON) : varchar_type(), array_type));
@@ -1782,7 +1782,7 @@ TEST_F(AIFunctionCallExprTest, OpenValidatesNativeStringAndJsonArrayCasts) {
 
 TEST_F(AIFunctionCallExprTest, EmbeddingOptionsCannotOverrideProviderInput) {
     ObjectPool pool;
-    auto wire = make_extended_ai_expression(200003, "ai_embed",
+    auto wire = make_extended_ai_expression(200002, "ai_embed",
                                             TypeDescriptor::create_array_type(TypeDescriptor(TYPE_FLOAT)),
                                             {varchar_type(), varchar_type(), varchar_type(), options_type()});
     auto created = AIFunctionCallExpr::create(&pool, wire.nodes.front());
@@ -1807,7 +1807,7 @@ TEST_F(AIFunctionCallExprTest, EmbeddingOptionsCannotOverrideProviderInput) {
 TEST_F(AIFunctionCallExprTest, CapabilityAndResultKindMatchTheDescriptor) {
     ObjectPool pool;
     const auto embedding_type = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_FLOAT));
-    auto embedding = make_extended_ai_expression(200003, "ai_embed", embedding_type, {varchar_type()});
+    auto embedding = make_extended_ai_expression(200002, "ai_embed", embedding_type, {varchar_type()});
     auto created = AIFunctionCallExpr::create(&pool, embedding.nodes.front());
     ASSERT_TRUE(created.ok());
     EXPECT_EQ(AICapability::EMBEDDING, created.value()->capability());
@@ -1816,7 +1816,7 @@ TEST_F(AIFunctionCallExprTest, CapabilityAndResultKindMatchTheDescriptor) {
     EXPECT_EQ(created.value()->capability(), clone->capability());
     EXPECT_EQ(created.value()->result_kind(), clone->result_kind());
     EXPECT_EQ(created.value()->provider_id(), clone->provider_id());
-    auto translate = make_extended_ai_expression(200010, "ai_translate", varchar_type(),
+    auto translate = make_extended_ai_expression(200009, "ai_translate", varchar_type(),
                                                  std::vector<TypeDescriptor>(5, varchar_type()));
     created = AIFunctionCallExpr::create(&pool, translate.nodes.front());
     ASSERT_TRUE(created.ok());
@@ -1826,7 +1826,7 @@ TEST_F(AIFunctionCallExprTest, CapabilityAndResultKindMatchTheDescriptor) {
 TEST_F(AIFunctionCallExprTest, AIProviderBindingRejectsNonconstantOrBlankSelector) {
     for (bool constant : {false, true}) {
         ObjectPool pool;
-        auto wire = make_extended_ai_expression(200001, "ai_complete", varchar_type(),
+        auto wire = make_extended_ai_expression(200000, "ai_complete", varchar_type(),
                                                 {varchar_type(), varchar_type(), varchar_type(), options_type()}, true);
         auto created = AIFunctionCallExpr::create(&pool, wire.nodes.front());
         ASSERT_TRUE(created.ok());
@@ -1848,7 +1848,7 @@ TEST_F(AIFunctionCallExprTest, AIProviderBindingRejectsNonconstantOrBlankSelecto
 
 TEST_F(AIFunctionCallExprTest, ProviderCorrelationKeyIsExplicit) {
     ObjectPool pool;
-    auto wire = make_extended_ai_expression(200001, "ai_complete", varchar_type(),
+    auto wire = make_extended_ai_expression(200000, "ai_complete", varchar_type(),
                                             {varchar_type(), varchar_type(), varchar_type(), options_type()}, true);
     auto& node = wire.nodes.front();
     node.__set_ai_provider_id("opaque-correlation-key");

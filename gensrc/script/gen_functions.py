@@ -547,7 +547,6 @@ def generate_cpp(path):
         "ArrayFunctions",
         "MapFunctions",
         "GinFunctions",
-        "AIFunctions",
         "HttpRequestFunctions",
         "DictFunctions",
     ]

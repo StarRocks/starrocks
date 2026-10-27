@@ -229,7 +229,7 @@ public class AIProjectPlanTest extends PlanTestBase {
                 TAIProjectNode project = findOnlyAIProjectThriftNode(plan).getAi_project_node();
                 TExpr expression = findOnlyAIExpression(project.getSlot_map());
                 TExprNode call = expression.getNodes().get(0);
-                Assertions.assertEquals(embedding ? 200004 : 200002, call.getFn().getId());
+                Assertions.assertEquals(embedding ? 200003 : 200001, call.getFn().getId());
                 Assertions.assertEquals(embedding ? 4 : 5, call.getNum_children());
                 String configId = call.getAi_provider_id();
                 Assertions.assertEquals(configId, call.getAi_provider_id());
@@ -619,7 +619,7 @@ public class AIProjectPlanTest extends PlanTestBase {
             Assertions.assertFalse(getExecPlan(
                     "select ai_complete(v3) from tprimary1 where pk1 = 20").isShortCircuit());
             Assertions.assertTrue(getExecPlan(
-                    "select ai_query(v3, parse_json('{}')) from tprimary1 where pk1 = 20").isShortCircuit());
+                    "select lower(v3) from tprimary1 where pk1 = 20").isShortCircuit());
         } finally {
             connectContext.getSessionVariable().setEnableShortCircuit(shortCircuitEnabled);
         }
