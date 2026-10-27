@@ -602,7 +602,10 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(int64_t tablet_id
     // especially the shared version-1 object. The serialized PB in that object can carry the id of
     // the tablet that originally wrote it rather than |tablet_id|, but this tablet-id overload must
     // always return metadata whose id identifies the requested tablet. Do not normalize the returned
-    // PB in place because it may be shared through the metacache; copy before setting the id.
+    // PB in place because it may be shared through the metacache; copy only when the id differs.
+    if (tablet_metadata_or.value()->id() == tablet_id) {
+        return std::move(tablet_metadata_or).value();
+    }
     auto tablet_metadata = std::make_shared<TabletMetadata>(*tablet_metadata_or.value());
     tablet_metadata->set_id(tablet_id);
     return tablet_metadata;
