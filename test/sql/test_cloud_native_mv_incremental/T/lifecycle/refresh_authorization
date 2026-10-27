@@ -1,0 +1,109 @@
+-- A refresh reads the base tables as the view's creator, whatever the refresh mode. Once the creator loses SELECT on
+-- a base table, or is dropped, incremental, auto and pct views all fail to refresh and keep their old rows; granting
+-- SELECT back lets them catch up.
+
+-- name: test_ivm_refresh_needs_creator_select @cloud
+CREATE TABLE ra_base (dt date, k int, v bigint)
+DUPLICATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');
+INSERT INTO ra_base VALUES ('2026-10-01',1,10),('2026-10-02',2,20);
+DROP USER IF EXISTS ra_creator_${uuid0};
+CREATE USER ra_creator_${uuid0};
+GRANT IMPERSONATE ON USER root TO ra_creator_${uuid0};
+GRANT CREATE MATERIALIZED VIEW ON DATABASE ${db[0]} TO USER ra_creator_${uuid0};
+GRANT SELECT ON TABLE ${db[0]}.ra_base TO USER ra_creator_${uuid0};
+EXECUTE AS ra_creator_${uuid0} WITH NO REVERT;
+CREATE MATERIALIZED VIEW ${db[0]}.mv_ra_inc
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'incremental', 'partition_refresh_number' = '-1')
+AS SELECT dt, k, SUM(v) AS v, COUNT(*) AS c FROM ${db[0]}.ra_base GROUP BY dt, k;
+CREATE MATERIALIZED VIEW ${db[0]}.mv_ra_auto
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'auto', 'partition_refresh_number' = '-1')
+AS SELECT dt, k, SUM(v) AS v, COUNT(*) AS c FROM ${db[0]}.ra_base GROUP BY dt, k;
+CREATE MATERIALIZED VIEW ${db[0]}.mv_ra_pct
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'pct', 'partition_refresh_number' = '-1')
+AS SELECT dt, k, SUM(v) AS v, COUNT(*) AS c FROM ${db[0]}.ra_base GROUP BY dt, k;
+EXECUTE AS root WITH NO REVERT;
+USE ${db[0]};
+[UC]TASK_INC=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_ra_inc';
+[UC]TASK_AUTO=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_ra_auto';
+[UC]TASK_PCT=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_ra_pct';
+REFRESH MATERIALIZED VIEW mv_ra_inc WITH SYNC MODE;
+REFRESH MATERIALIZED VIEW mv_ra_auto WITH SYNC MODE;
+REFRESH MATERIALIZED VIEW mv_ra_pct WITH SYNC MODE;
+REVOKE SELECT ON TABLE ${db[0]}.ra_base FROM USER ra_creator_${uuid0};
+INSERT INTO ra_base VALUES ('2026-10-01',3,30),('2026-10-03',4,40);
+[UC]REFRESH MATERIALIZED VIEW mv_ra_inc WITH SYNC MODE;
+[UC]REFRESH MATERIALIZED VIEW mv_ra_auto WITH SYNC MODE;
+[UC]REFRESH MATERIALIZED VIEW mv_ra_pct WITH SYNC MODE;
+-- The auto view tries incremental first and falls back to pct, which is denied too.
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode'), COUNT(*) FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_INC}' AND STATE = 'FAILED' AND ERROR_MESSAGE LIKE '%Access denied%SELECT privilege(s) on TABLE ra_base %' GROUP BY 1;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode'), COUNT(*) FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_AUTO}' AND STATE = 'FAILED' AND ERROR_MESSAGE LIKE '%Access denied%SELECT privilege(s) on TABLE ra_base %' GROUP BY 1;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode'), COUNT(*) FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_PCT}' AND STATE = 'FAILED' AND ERROR_MESSAGE LIKE '%Access denied%SELECT privilege(s) on TABLE ra_base %' GROUP BY 1;
+SELECT TABLE_NAME, IS_ACTIVE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME LIKE 'mv_ra_%' ORDER BY TABLE_NAME;
+-- Reading the base table here would compare a view with itself.
+set enable_materialized_view_rewrite = false;
+SELECT dt, k, v, c FROM mv_ra_inc ORDER BY dt, k;
+SELECT dt, k, v, c FROM mv_ra_auto ORDER BY dt, k;
+SELECT dt, k, v, c FROM mv_ra_pct ORDER BY dt, k;
+GRANT SELECT ON TABLE ${db[0]}.ra_base TO USER ra_creator_${uuid0};
+REFRESH MATERIALIZED VIEW mv_ra_inc WITH SYNC MODE;
+REFRESH MATERIALIZED VIEW mv_ra_auto WITH SYNC MODE;
+REFRESH MATERIALIZED VIEW mv_ra_pct WITH SYNC MODE;
+SELECT STATE, get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_INC}' ORDER BY get_json_double(EXTRA_MESSAGE, '$.processStartTime') DESC LIMIT 1;
+-- The auto view's denied pct fallback dropped its incremental baseline, so its first refresh after the grant is pct.
+SELECT STATE, get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_AUTO}' ORDER BY get_json_double(EXTRA_MESSAGE, '$.processStartTime') DESC LIMIT 1;
+SELECT dt, k, v, c FROM mv_ra_inc ORDER BY dt, k;
+SELECT dt, k, v, c FROM mv_ra_auto ORDER BY dt, k;
+SELECT dt, k, v, c FROM mv_ra_pct ORDER BY dt, k;
+SELECT dt, k, SUM(v), COUNT(*) FROM ra_base GROUP BY dt, k ORDER BY dt, k;
+DROP USER ra_creator_${uuid0};
+
+-- name: test_ivm_refresh_fails_after_creator_is_dropped @cloud
+CREATE TABLE rd_base (dt date, k int, v bigint)
+DUPLICATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');
+INSERT INTO rd_base VALUES ('2026-10-01',1,10),('2026-10-02',2,20);
+DROP USER IF EXISTS rd_creator_${uuid0};
+CREATE USER rd_creator_${uuid0};
+GRANT IMPERSONATE ON USER root TO rd_creator_${uuid0};
+GRANT CREATE MATERIALIZED VIEW ON DATABASE ${db[0]} TO USER rd_creator_${uuid0};
+GRANT SELECT ON TABLE ${db[0]}.rd_base TO USER rd_creator_${uuid0};
+EXECUTE AS rd_creator_${uuid0} WITH NO REVERT;
+CREATE MATERIALIZED VIEW ${db[0]}.mv_rd_inc
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'incremental', 'partition_refresh_number' = '-1')
+AS SELECT dt, k, SUM(v) AS v, COUNT(*) AS c FROM ${db[0]}.rd_base GROUP BY dt, k;
+CREATE MATERIALIZED VIEW ${db[0]}.mv_rd_auto
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'auto', 'partition_refresh_number' = '-1')
+AS SELECT dt, k, SUM(v) AS v, COUNT(*) AS c FROM ${db[0]}.rd_base GROUP BY dt, k;
+EXECUTE AS root WITH NO REVERT;
+USE ${db[0]};
+[UC]TASK_INC=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_rd_inc';
+[UC]TASK_AUTO=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_rd_auto';
+REFRESH MATERIALIZED VIEW mv_rd_inc WITH SYNC MODE;
+REFRESH MATERIALIZED VIEW mv_rd_auto WITH SYNC MODE;
+DROP USER rd_creator_${uuid0};
+INSERT INTO rd_base VALUES ('2026-10-02',5,50);
+[UC]REFRESH MATERIALIZED VIEW mv_rd_inc WITH SYNC MODE;
+[UC]REFRESH MATERIALIZED VIEW mv_rd_auto WITH SYNC MODE;
+SELECT COUNT(*) FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_INC}' AND STATE = 'FAILED' AND ERROR_MESSAGE LIKE '%Access denied%SELECT privilege(s) on TABLE rd_base %';
+SELECT COUNT(*) FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_AUTO}' AND STATE = 'FAILED' AND ERROR_MESSAGE LIKE '%Access denied%SELECT privilege(s) on TABLE rd_base %';
+set enable_materialized_view_rewrite = false;
+SELECT dt, k, v, c FROM mv_rd_inc ORDER BY dt, k;
+SELECT dt, k, v, c FROM mv_rd_auto ORDER BY dt, k;
