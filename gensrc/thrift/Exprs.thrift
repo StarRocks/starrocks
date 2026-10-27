@@ -253,6 +253,9 @@ struct TExprNode {
   56: optional TDictionaryGetExpr dictionary_get_expr
   // whether this expr is only used in index
   57: optional bool is_index_only_filter
+
+  // Only explicit CAST(x AS CHAR(N)) truncates. Absent/false preserves assignment cast semantics.
+  59: optional bool cast_char_truncate
 }
 
 struct TPartitionLiteral {
