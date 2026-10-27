@@ -252,9 +252,10 @@ Status TxnManager::commit_txn(const TabletSharedPtr& tablet, TPartitionId partit
         // was acquired; do not resurrect that completed lifetime or persist its rowset.
         // Startup recovery is different: it reconstructs committed transactions from metadata.
         if (!is_recovery && (it == txn_tablet_map.end() || it->second.find(tablet_info) == it->second.end())) {
-            return Status::NotFound(fmt::format("Transaction was not prepared or has been cleared. tablet_id: {}, "
-                                               "partition_id: {}, txn_id: {}",
-                                               tablet_id, partition_id, transaction_id));
+            return Status::NotFound(
+                    fmt::format("Transaction was not prepared or has been cleared. tablet_id: {}, "
+                                "partition_id: {}, txn_id: {}",
+                                tablet_id, partition_id, transaction_id));
         }
         if (it != txn_tablet_map.end()) {
             auto load_itr = it->second.find(tablet_info);

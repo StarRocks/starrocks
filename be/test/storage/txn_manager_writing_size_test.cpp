@@ -549,7 +549,7 @@ TEST_P(TxnManagerWritingSizeTest, CleanupBeforeCommitRejectsFinishedWriter) {
             ASSERT_OK(_txn_mgr->rollback_txn(_tablet->partition_id(), _tablet, 1));
         } else {
             _txn_mgr->force_rollback_tablet_related_txns(_tablet->data_dir()->get_meta(), _tablet->tablet_id(),
-                                                        _tablet->schema_hash(), _tablet->tablet_uid());
+                                                         _tablet->schema_hash(), _tablet->tablet_uid());
         }
         expect_empty();
         auto status = _txn_mgr->commit_txn(_tablet->partition_id(), _tablet, 1, _load_id, rowset, false, false);
@@ -580,8 +580,8 @@ TEST_P(TxnManagerWritingSizeTest, ReprepareNormalizesAcceptedOldWriterWithoutDou
     add(1, bytes);
     EXPECT_EQ(bytes, _tablet->in_writing_data_size());
     auto different_rowset = build_rowset(1, true);
-    ASSERT_FALSE(_txn_mgr->commit_txn(_tablet->partition_id(), _tablet, 1, _load_id, different_rowset, false, false)
-                         .ok());
+    ASSERT_FALSE(
+            _txn_mgr->commit_txn(_tablet->partition_id(), _tablet, 1, _load_id, different_rowset, false, false).ok());
     EXPECT_EQ(bytes, _tablet->in_writing_data_size());
     ASSERT_OK(_txn_mgr->delete_txn(_tablet->partition_id(), _tablet, 1));
     expect_empty();
@@ -631,8 +631,8 @@ TEST_P(TxnManagerWritingSizeTest, CommitMetadataFailureKeepsEstimateForRetryOrCl
             SyncPoint::GetInstance()->EnableProcessing();
             TEST_ENABLE_ERROR_POINT("RowsetMetaManager::save", Status::IOError("injected committed write"));
             for (int attempt = 0; attempt < 2; ++attempt) {
-                ASSERT_FALSE(_txn_mgr->commit_txn(_tablet->partition_id(), _tablet, 1, _load_id, rowset, false, false)
-                                     .ok());
+                ASSERT_FALSE(
+                        _txn_mgr->commit_txn(_tablet->partition_id(), _tablet, 1, _load_id, rowset, false, false).ok());
                 EXPECT_EQ(bytes, _tablet->in_writing_data_size());
                 EXPECT_FALSE(RowsetMetaManager::check_rowset_meta(_tablet->data_dir()->get_meta(),
                                                                   _tablet->tablet_uid(), rowset->rowset_id()));
