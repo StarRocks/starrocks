@@ -323,7 +323,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether to enable the BACKUP and RESTORE of asynchronous materialized views when backing up or restoring a specific database. If this item is set to `false`, StarRocks will skip backing up asynchronous materialized views.
+- Description: Whether BACKUP includes asynchronous materialized views when you do not specify them by name, that is, when you back up a whole database or use `ON (ALL MATERIALIZED VIEWS)`. If this item is set to `false`, StarRocks skips them, and `ON (ALL MATERIALIZED VIEWS)` backs up nothing. Asynchronous materialized views specified by name are backed up regardless of this item. This item does not affect RESTORE.
 - Introduced in: v3.2.0
 
 ### `enable_collect_full_statistic`

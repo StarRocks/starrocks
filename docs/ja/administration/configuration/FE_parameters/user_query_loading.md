@@ -314,7 +314,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Boolean
 - 単位：-
 - 変更可能：Yes
-- 説明：特定のデータベースをバックアップまたは復元する際に、非同期マテリアライズドビューの BACKUP と RESTORE を有効にするかどうか。この項目が `false` に設定されている場合、StarRocks は非同期マテリアライズドビューのバックアップをスキップします。
+- 説明：非同期マテリアライズドビューを名前で指定しない場合（データベース全体のバックアップ、または `ON (ALL MATERIALIZED VIEWS)` の使用時）に、BACKUP が非同期マテリアライズドビューを含めるかどうか。この項目が `false` に設定されている場合、StarRocks はそれらをスキップし、`ON (ALL MATERIALIZED VIEWS)` では何もバックアップされません。名前で指定した非同期マテリアライズドビューは、この項目に関係なくバックアップされます。この項目は RESTORE には影響しません。
 - 導入時期：v3.2.0
 
 ### `enable_collect_full_statistic`
