@@ -1,0 +1,35 @@
+-- name: test_mv_default_refresh_mode_ignored @cloud
+[UC]ADMIN SET FRONTEND CONFIG ("default_mv_refresh_mode" = "incremental");
+CLEANUP {
+  ADMIN SET FRONTEND CONFIG ("default_mv_refresh_mode" = "pct");
+} END CLEANUP
+CREATE TABLE dm_b (dt DATE NOT NULL, k INT, v BIGINT) DUPLICATE KEY(dt)
+PARTITION BY RANGE(dt) (PARTITION p1 VALUES LESS THAN ('2024-01-02'), PARTITION p2 VALUES LESS THAN ('2024-01-03'))
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES('replication_num'='1');
+-- result:
+-- !result
+INSERT INTO dm_b VALUES ('2024-01-01', 1, 10), ('2024-01-02', 2, 20);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_dm PARTITION BY dt DISTRIBUTED BY HASH(k) BUCKETS 1 REFRESH DEFERRED MANUAL
+AS SELECT dt, k, SUM(v) AS s FROM dm_b GROUP BY dt, k;
+-- result:
+-- !result
+SELECT REFRESH_MODE, EFFECTIVE_REFRESH_MODE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'mv_dm';
+-- result:
+PCT	PCT
+-- !result
+REFRESH MATERIALIZED VIEW mv_dm WITH SYNC MODE;
+function: assert_explain_contains('SELECT dt, k, SUM(v) FROM dm_b GROUP BY dt, k', 'mv_dm')
+-- result:
+None
+-- !result
+INSERT INTO dm_b VALUES ('2024-01-01', 1, 5);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_dm PARTITION START ('2024-01-01') END ('2024-01-02') WITH SYNC MODE;
+SELECT dt, k, s FROM mv_dm ORDER BY dt, k;
+-- result:
+2024-01-01	1	15
+2024-01-02	2	20
+-- !result

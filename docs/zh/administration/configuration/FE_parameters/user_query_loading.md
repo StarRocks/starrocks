@@ -272,6 +272,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 是否在创建后立即刷新异步物化视图。当此项设置为 `true` 时，新创建的物化视图将立即刷新。
 - 引入版本: v3.2.3
 
+### `default_mv_refresh_mode`
+
+- 默认值: pct
+- 类型: String
+- 单位: -
+- 是否可变: Yes
+- 描述: 已废弃，不再生效。未指定 `refresh_mode` 属性创建的物化视图，无论该参数取何值，都使用并显示为 `PCT`。要创建增量物化视图，请在属性中指定 `refresh_mode`。有效取值仍为 `pct` 和 `incremental`（不区分大小写），已有的设置仍会被接受。
+- 引入版本: v4.1
+
 ### `dynamic_partition_check_interval_seconds`
 
 - 默认值: 600

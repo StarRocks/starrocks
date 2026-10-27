@@ -4692,7 +4692,8 @@ public class Config extends ConfigBase {
             "adaptive by default")
     public static String default_mv_partition_refresh_strategy = "adaptive";
 
-    @ConfField(mutable = true)
+    @ConfField(mutable = true, comment = "Deprecated and has no effect: a materialized view created without "
+            + "the refresh_mode property is always PCT")
     public static String default_mv_refresh_mode = "pct";
 
     @ConfField(mutable = true, comment = "Check the schema of materialized view's base table strictly or not")
