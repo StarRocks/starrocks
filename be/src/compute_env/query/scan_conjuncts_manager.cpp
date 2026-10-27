@@ -827,6 +827,15 @@ Status ChunkPredicateBuilder<E, Type>::normalize_join_runtime_filter(const SlotD
                     (l->type().type != slot.type().type && l->type().type != MappingType && !ignore_cast(slot, *l))) {
                     continue;
                 }
+                // Under a global dictionary MappingType is the dictionary code type, but only a predicate
+                // rewritten onto the codes holds codes. One still over the strings -- an IN list too long
+                // for normalize_in_or_equal_predicate, left unnormalized -- is a VARCHAR predicate, and
+                // reading it as the code type below is a bad cast. Leave it to be evaluated as a conjunct.
+                if constexpr (MappingType != SlotType) {
+                    if (l->type().type != MappingType) {
+                        continue;
+                    }
+                }
 
                 std::vector<SlotId> slot_ids;
                 if (1 != l->get_slot_ids(&slot_ids) || slot_ids[0] != slot.id()) {
