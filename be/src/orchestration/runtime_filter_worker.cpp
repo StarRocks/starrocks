@@ -14,13 +14,10 @@
 
 #include "orchestration/runtime_filter_worker.h"
 
-<<<<<<< HEAD
-=======
 #include <google/protobuf/field_mask.pb.h>
 #include <google/protobuf/util/field_mask_util.h>
 
 #include <algorithm>
->>>>>>> 2dcd5cf77cf... [Enhancement][RB-563] Degrade a global runtime filter to pass-all instead of losing it  (#66902)
 #include <utility>
 
 #include "common/config_exec_flow_fwd.h"
@@ -219,12 +216,6 @@ void RuntimeFilterWorker::receive_runtime_filter(const PTransmitRuntimeFilterPar
     }
     ev.query_id.hi = params.query_id().hi();
     ev.query_id.lo = params.query_id().lo();
-<<<<<<< HEAD
-    ev.transmit_rf_request = params;
-    _metrics->update_event_nums(ev.type, 1);
-    _metrics->update_rf_bytes(ev.type, ev.transmit_rf_request.data().size());
-    _queue.put(std::move(ev));
-=======
     if (!reach_queue_limit) {
         ev.transmit_rf_request = params;
     } else {
@@ -243,11 +234,9 @@ void RuntimeFilterWorker::receive_runtime_filter(const PTransmitRuntimeFilterPar
                      << params.query_id() << ", filter_id=" << params.filter_id() << ", size=" << params.data().size()
                      << "->" << ev.transmit_rf_request.data().size();
     }
-    // A skew join's broadcast rf is merged into the shuffle join's rf, so it goes with the shuffle join's filter.
-    const int32_t filter_id =
-            ev.type == RECEIVE_SKEW_JOIN_BROADCAST_RF ? params.skew_shuffle_filter_id() : params.filter_id();
-    _put(std::move(ev), filter_id);
->>>>>>> 2dcd5cf77cf... [Enhancement][RB-563] Degrade a global runtime filter to pass-all instead of losing it  (#66902)
+    _metrics->update_event_nums(ev.type, 1);
+    _metrics->update_rf_bytes(ev.type, ev.transmit_rf_request.data().size());
+    _queue.put(std::move(ev));
 }
 
 void RuntimeFilterWorker::execute() {

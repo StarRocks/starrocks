@@ -26,11 +26,7 @@ add_executable(orchestration_test
     fragment_mgr_test.cpp
     orchestration_metrics_test.cpp
     query_orchestrator_test.cpp
-<<<<<<< HEAD
-=======
     runtime_filter_delivery_test.cpp
-    runtime_filter_worker_test.cpp
->>>>>>> 2dcd5cf77cf... [Enhancement][RB-563] Degrade a global runtime filter to pass-all instead of losing it  (#66902)
     stream_load_orchestrator_test.cpp
 )
 target_link_libraries(orchestration_test Orchestration ${TEST_LINK_LIBS})
