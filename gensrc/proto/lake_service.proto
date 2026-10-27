@@ -554,7 +554,7 @@ message VacuumRequest {
     // (because vacuun request is send by <node, physical partition>)
     // All tablet metadata and their data files of these verisons should be retained and can not be
     // vaccummed.
-    repeated int64 retain_versions = 9 [deprecated = true]; // Dual-written during rolling upgrades.
+    repeated int64 retain_versions = 9; // Dual-written during rolling upgrades.
     // Whether enable shared file cleanup in vacuum.
     // This flag is used for both file-bundling tables and range-distribution tables.
     optional bool enable_shared_file_cleanup = 10;
