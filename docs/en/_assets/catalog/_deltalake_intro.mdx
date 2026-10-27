@@ -7,9 +7,8 @@ To ensure successful SQL workloads on your Delta Lake cluster, your StarRocks cl
 
 - Distributed file system (HDFS) or object storage like AWS S3, Microsoft Azure Storage, Google GCS, or other S3-compatible storage system (for example, MinIO)
 
-- Metastore like Hive metastore or AWS Glue
+- Metastore like Hive metastore, AWS Glue, or the Unity Catalog REST API
 
 :::note
-If you choose AWS S3 as storage, you can use HMS or AWS Glue as metastore. If you choose any other storage system, you can only use HMS as metastore.
+For AWS S3, use HMS or AWS Glue. For ADLS Gen2, use HMS or the Unity Catalog REST option described below. The Unity option supports read-only Parquet Delta tables with table-scoped SAS credentials. Other storage systems require HMS.
 :::
-

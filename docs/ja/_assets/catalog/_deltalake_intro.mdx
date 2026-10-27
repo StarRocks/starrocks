@@ -6,8 +6,8 @@ Delta Lake クラスターでの SQL ワークロードを成功させるため�
 
 - 分散ファイルシステム (HDFS) または AWS S3、Microsoft Azure Storage、Google GCS、その他の S3 互換ストレージシステム（例: MinIO）などのオブジェクトストレージ
 
-- Hive メタストアや AWS Glue などのメタストア
+- Hive メタストア、AWS Glue、Unity Catalog REST API などのメタストア
 
 :::note
-ストレージとして AWS S3 を選択した場合、メタストアとして HMS または AWS Glue を使用できます。他のストレージシステムを選択した場合、メタストアとして使用できるのは HMS のみです。
+AWS S3 には HMS または AWS Glue を使用します。ADLS Gen2 には HMS または以下の Unity Catalog REST オプションを使用できます。Unity オプションはテーブルスコープの SAS 認証情報による読み取り専用の Parquet Delta テーブルに対応します。他のストレージシステムには HMS が必要です。
 :::
