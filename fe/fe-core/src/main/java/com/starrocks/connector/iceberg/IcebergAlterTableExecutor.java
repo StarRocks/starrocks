@@ -116,17 +116,7 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
             ColumnPosition pos = clause.getColPos();
             ColumnDef columnDef = clause.getColumnDef();
 
-            // All non-partition columns must use NULL as the default value.
-            if (!columnDef.isAllowNull()) {
-                throw new StarRocksConnectorException("column in iceberg table must be nullable.");
-            }
-            org.apache.iceberg.types.Type icebergType = toIcebergColumnType(columnDef.getType());
-            Literal<?> defaultLiteral = buildIcebergDefaultLiteral(columnDef, icebergType);
-            if (defaultLiteral != null) {
-                updateSchema.addColumn(columnDef.getName(), icebergType, columnDef.getComment(), defaultLiteral);
-            } else {
-                updateSchema.addColumn(columnDef.getName(), icebergType, columnDef.getComment());
-            }
+            addColumn(updateSchema, columnDef);
 
             // AFTER column / FIRST
             if (pos != null) {
@@ -151,16 +141,7 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
             List<ColumnDef> columns = clause.getColumnDefs();
 
             for (ColumnDef columnDef : columns) {
-                if (!columnDef.isAllowNull()) {
-                    throw new StarRocksConnectorException("column in iceberg table must be nullable.");
-                }
-                org.apache.iceberg.types.Type icebergType = toIcebergColumnType(columnDef.getType());
-                Literal<?> defaultLiteral = buildIcebergDefaultLiteral(columnDef, icebergType);
-                if (defaultLiteral != null) {
-                    updateSchema.addColumn(columnDef.getName(), icebergType, columnDef.getComment(), defaultLiteral);
-                } else {
-                    updateSchema.addColumn(columnDef.getName(), icebergType, columnDef.getComment());
-                }
+                addColumn(updateSchema, columnDef);
             }
             updateSchema.commit();
         });
@@ -464,6 +445,38 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
         return null;
     }
 
+<<<<<<< HEAD
+=======
+    private static boolean isMaintenanceOperation(IcebergTableOperation operation) {
+        return operation == IcebergTableOperation.EXPIRE_SNAPSHOTS
+                || operation == IcebergTableOperation.REMOVE_ORPHAN_FILES
+                || operation == IcebergTableOperation.REWRITE_MANIFESTS;
+    }
+
+    private String getOriginSql() {
+        return stmt != null && stmt.getOrigStmt() != null ? stmt.getOrigStmt().originStmt : null;
+    }
+
+    // A NOT NULL column can only be added to a v3 table, and only with a default: rows in the existing data
+    // files read the default as the column's initial-default.
+    private void addColumn(UpdateSchema updateSchema, ColumnDef columnDef) {
+        org.apache.iceberg.types.Type icebergType = toIcebergColumnType(columnDef.getType());
+        Literal<?> defaultLiteral = buildIcebergDefaultLiteral(columnDef, icebergType);
+        if (!columnDef.isAllowNull()) {
+            if (defaultLiteral == null || !(table instanceof BaseTable baseTable)
+                    || baseTable.operations().current().formatVersion() < 3) {
+                throw new StarRocksConnectorException(
+                        "column in iceberg table must be nullable, unless it has a default value on a v3 table.");
+            }
+            updateSchema.addRequiredColumn(columnDef.getName(), icebergType, columnDef.getComment(), defaultLiteral);
+        } else if (defaultLiteral != null) {
+            updateSchema.addColumn(columnDef.getName(), icebergType, columnDef.getComment(), defaultLiteral);
+        } else {
+            updateSchema.addColumn(columnDef.getName(), icebergType, columnDef.getComment());
+        }
+    }
+
+>>>>>>> a0da6e39b03... [Enhancement][RB-225] Allow adding a NOT NULL column with a default to an Iceberg v3 table (#66940)
     private Literal<?> buildIcebergDefaultLiteral(ColumnDef columnDef, org.apache.iceberg.types.Type icebergType) {
         if (!columnDef.getDefaultValueDef().isSet) {
             return null;
