@@ -65,9 +65,15 @@ Status LakeDataSource::open(RuntimeState* state) {
     if (_provider->is_grouped_scan()) {
         RETURN_IF(!state->enable_pipeline_engine(),
                   Status::InvalidArgument("grouped scan requires pipeline execution"));
-        RETURN_IF(_split_context != nullptr || (_morsel != nullptr && (_morsel->get_split_context() != nullptr ||
-                                                                       _morsel->from_version() != 0)),
-                  Status::InvalidArgument("grouped scan does not support physical split or incremental history"));
+        RETURN_IF(
+                _morsel != nullptr && (_morsel->from_version() != 0 || _morsel->get_split_context() != _split_context),
+                Status::InvalidArgument("grouped scan does not support incremental history or mixed split contexts"));
+        if (_split_context != nullptr) {
+            const auto* child = dynamic_cast<const pipeline::LakeSplitContext*>(_split_context);
+            RETURN_IF(!_provider->could_split() || !_provider->could_split_physically() || child == nullptr ||
+                              child->rowid_range == nullptr || child->short_key_range != nullptr,
+                      Status::InvalidArgument("grouped scan requires an enabled ordinary physical rowid child"));
+        }
     }
     _runtime_state = state;
     const TLakeScanNode& thrift_lake_scan_node = _provider->_t_lake_scan_node;
@@ -138,7 +144,7 @@ Status LakeDataSource::open(RuntimeState* state) {
     RETURN_IF_ERROR(build_scan_range(_runtime_state));
 
     RETURN_IF_ERROR(init_tablet_reader(_runtime_state));
-    if (_params.grouped_range_task != nullptr && !_range_clip_task_counted) {
+    if (_params.grouped_range_task != nullptr && _split_context == nullptr && !_range_clip_task_counted) {
         COUNTER_UPDATE(ADD_COUNTER(_runtime_profile, "RangeClipTasks", TUnit::UNIT), 1);
         _range_clip_task_counted = true;
     }
@@ -1250,9 +1256,21 @@ StatusOr<pipeline::MorselQueuePtr> LakeDataSourceProvider::convert_scan_range_to
         RETURN_IF_ERROR(validate_scan_range(range.scan_range));
     }
     if (_is_grouped_scan) {
+        // Logical group DOP and root counts do not describe the available I/O slots.
+        // Preserve one policy even when converting an empty padded driver's queue.
+        _could_split = enable_tablet_internal_parallel;
+        _could_split_physically = enable_tablet_internal_parallel;
+        if (enable_tablet_internal_parallel) {
+            ASSIGN_OR_RETURN(splitted_scan_rows, _compute_splitted_scan_rows());
+        }
         pipeline::Morsels morsels;
         bool has_more = false;
         pipeline::ScanMorsel::build_scan_morsels(node_id, scan_ranges, true, &morsels, &has_more);
+        if (_could_split) {
+            auto queue = std::make_unique<pipeline::DynamicMorselQueue>(std::move(morsels), false);
+            queue->set_max_degree_of_parallelism(1);
+            return queue;
+        }
         return std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels));
     }
     int64_t lake_scan_parallelism = 0;
@@ -1338,12 +1356,7 @@ StatusOr<bool> LakeDataSourceProvider::_could_tablet_internal_parallel(
 #endif
     }
 
-    // splitted_scan_rows is restricted in the range [min_splitted_scan_rows, max_splitted_scan_rows].
-    *splitted_scan_rows =
-            config::tablet_internal_parallel_max_splitted_scan_bytes / _scan_node->estimated_scan_row_bytes();
-    *splitted_scan_rows =
-            std::max(config::tablet_internal_parallel_min_splitted_scan_rows,
-                     std::min(*splitted_scan_rows, config::tablet_internal_parallel_max_splitted_scan_rows));
+    ASSIGN_OR_RETURN(*splitted_scan_rows, _compute_splitted_scan_rows());
     *scan_parallelism = num_table_rows / *splitted_scan_rows;
 
     if (force_split) {
@@ -1359,6 +1372,14 @@ StatusOr<bool> LakeDataSourceProvider::_could_tablet_internal_parallel(
     }
 
     return could;
+}
+
+StatusOr<int64_t> LakeDataSourceProvider::_compute_splitted_scan_rows() const {
+    const size_t row_bytes = _scan_node != nullptr ? _scan_node->estimated_scan_row_bytes() : 0;
+    RETURN_IF(row_bytes == 0, Status::InternalError("estimated scan row bytes is not initialized"));
+    const int64_t rows = config::tablet_internal_parallel_max_splitted_scan_bytes / row_bytes;
+    return std::max(config::tablet_internal_parallel_min_splitted_scan_rows,
+                    std::min(rows, config::tablet_internal_parallel_max_splitted_scan_rows));
 }
 
 StatusOr<bool> LakeDataSourceProvider::_could_split_tablet_physically(

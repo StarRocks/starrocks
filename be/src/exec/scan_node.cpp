@@ -202,16 +202,17 @@ StatusOr<pipeline::MorselQueueFactoryPtr> ScanNode::convert_scan_range_to_morsel
             }
         }
         std::map<int, pipeline::MorselQueuePtr> queues;
-        // Preserve a fixed queue for every logical driver, with truly empty padding.
-        // The complete queue's EOS is the blocking aggregate finalization boundary.
+        // Preserve one queue per logical driver. Generated children remain on that driver.
+        // Retained active sources guard finalization while a root publishes its children.
         const std::vector<TScanRangeParams> empty_ranges;
         for (int driver = 0; driver < pipeline_dop; ++driver) {
             auto it = scan_ranges_per_driver_seq.find(driver);
             const auto& ranges = it == scan_ranges_per_driver_seq.end() ? empty_ranges : it->second;
-            ASSIGN_OR_RETURN(auto queue, convert_scan_range_to_morsel_queue(ranges, node_id, pipeline_dop, false,
+            ASSIGN_OR_RETURN(auto queue, convert_scan_range_to_morsel_queue(ranges, node_id, pipeline_dop,
+                                                                            enable_tablet_internal_parallel,
                                                                             tablet_internal_parallel_mode, task_count));
-            if (queue->type() != pipeline::MorselQueue::FIXED) {
-                return Status::InvalidArgument("grouped scan requires fixed independent driver queues");
+            if (queue->type() != pipeline::MorselQueue::FIXED && queue->type() != pipeline::MorselQueue::DYNAMIC) {
+                return Status::InvalidArgument("grouped scan requires independent fixed or dynamic driver queues");
             }
             queue->set_has_more_scan_ranges(false);
             queue->set_has_more_from_split(false);

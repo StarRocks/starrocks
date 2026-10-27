@@ -70,7 +70,7 @@ public:
     int64_t cpu_time_spent() const override { return _cpu_time_spent_ns; }
 
     void get_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks) override {
-        if (_reader != nullptr && !_wire_grouped_range_task.has_value()) {
+        if (_reader != nullptr) {
             _reader->get_split_tasks(split_tasks);
         }
     }
@@ -310,6 +310,7 @@ private:
                                                    TTabletInternalParallelMode::type tablet_internal_parallel_mode,
                                                    int64_t* scan_dop, int64_t* splitted_scan_rows) const;
     StatusOr<bool> _could_split_tablet_physically(const std::vector<TScanRangeParams>& scan_ranges) const;
+    StatusOr<int64_t> _compute_splitted_scan_rows() const;
 };
 
 } // namespace starrocks::connector

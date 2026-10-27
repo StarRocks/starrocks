@@ -34,6 +34,19 @@ public:
     GroupedQueueScanNode(ObjectPool* pool, const TPlanNode& node, const DescriptorTbl& desc)
             : ScanNode(pool, node, desc) {}
     Status set_scan_ranges(const std::vector<TScanRangeParams>&) override { return Status::OK(); }
+    StatusOr<MorselQueuePtr> convert_scan_range_to_morsel_queue(const std::vector<TScanRangeParams>& ranges,
+                                                                int node_id, int32_t, bool internal_parallel,
+                                                                TTabletInternalParallelMode::type, size_t) override {
+        Morsels morsels;
+        bool has_more = false;
+        ScanMorsel::build_scan_morsels(node_id, ranges, true, &morsels, &has_more);
+        if (internal_parallel) {
+            auto queue = std::make_unique<DynamicMorselQueue>(std::move(morsels), false);
+            queue->set_max_degree_of_parallelism(1);
+            return queue;
+        }
+        return std::make_unique<FixedMorselQueue>(std::move(morsels));
+    }
 };
 
 TScanRangeParams grouped_queue_task(int group, int tablet = 77) {
@@ -52,7 +65,7 @@ TScanRangeParams grouped_queue_task(int group, int tablet = 77) {
 }
 } // namespace
 
-TEST(GroupedScanQueueTest, grouped_queues_are_independent_fixed_and_padding_terminates) {
+TEST(GroupedScanQueueTest, grouped_queues_preserve_internal_parallel_policy_and_padding) {
     ObjectPool pool;
     DescriptorTbl desc;
     TPlanNode plan;
@@ -64,25 +77,28 @@ TEST(GroupedScanQueueTest, grouped_queues_are_independent_fixed_and_padding_term
                                                             {1, {grouped_queue_task(1)}},
                                                             {2, {padding}},
                                                             {3, {}}};
-    ASSIGN_OR_ABORT(auto factory,
-                    node.convert_scan_range_to_morsel_queue_factory({}, ranges, 1, 4, true, true,
-                                                                    TTabletInternalParallelMode::FORCE_SPLIT, true));
-    ASSERT_FALSE(factory->is_shared());
-    EXPECT_FALSE(factory->could_local_shuffle());
-    ASSERT_EQ(4, factory->size());
-    EXPECT_NE(factory->create(0), factory->create(1));
-    for (int i = 0; i < 4; ++i) {
-        auto* queue = factory->create(i);
-        EXPECT_EQ(MorselQueue::FIXED, queue->type());
-        EXPECT_FALSE(queue->has_more());
-        int count = 0;
-        while (!queue->empty()) {
-            ASSIGN_OR_ABORT(auto morsel, queue->try_get());
-            ASSERT_NE(nullptr, morsel);
-            EXPECT_EQ(i, morsel->get_scan_range()->grouped_range_task.group_id);
-            ++count;
+    for (bool enabled : {false, true}) {
+        ASSIGN_OR_ABORT(auto factory,
+                        node.convert_scan_range_to_morsel_queue_factory(
+                                {}, ranges, 1, 4, true, enabled, TTabletInternalParallelMode::FORCE_SPLIT, true));
+        ASSERT_FALSE(factory->is_shared());
+        EXPECT_FALSE(factory->could_local_shuffle());
+        ASSERT_EQ(4, factory->size());
+        EXPECT_NE(factory->create(0), factory->create(1));
+        for (int i = 0; i < 4; ++i) {
+            auto* queue = factory->create(i);
+            EXPECT_EQ(enabled ? MorselQueue::DYNAMIC : MorselQueue::FIXED, queue->type());
+            if (enabled) EXPECT_EQ(1, queue->max_degree_of_parallelism());
+            EXPECT_FALSE(queue->has_more());
+            int count = 0;
+            while (!queue->empty()) {
+                ASSIGN_OR_ABORT(auto morsel, queue->try_get());
+                ASSERT_NE(nullptr, morsel);
+                EXPECT_EQ(i, morsel->get_scan_range()->grouped_range_task.group_id);
+                ++count;
+            }
+            EXPECT_EQ(i == 0 ? 2 : i == 1 ? 1 : 0, count);
         }
-        EXPECT_EQ(i == 0 ? 2 : i == 1 ? 1 : 0, count);
     }
 }
 
