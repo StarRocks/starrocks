@@ -181,7 +181,6 @@ void HyperJsonTransformer::init_read_task(const std::vector<std::string>& paths,
                 mk.src_index.emplace_back(paths.size());
             }
             mk.merger = std::make_unique<JsonMerger>(p, t, has_remain);
-            // set_root_path("") would mark the root a new root and drop the keys only the remain holds
             if (!_dst_paths[mk.dst_index].empty()) {
                 mk.merger->set_root_path(_dst_paths[mk.dst_index]);
             }
