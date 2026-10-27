@@ -1,0 +1,86 @@
+-- name: test_subdivide_bitmap_scratch_bound
+-- subdivide_bitmap builds each sub-bitmap through a uint64 scratch buffer that it fills from a
+-- BitmapValueIter. The buffer used to be sized by the piece - `resize(min(split_size, remain))` - so
+-- it scaled with the split size the caller passed, at 8 bytes per value: subdivide_bitmap(b, 9500000)
+-- asked for 76MB of scratch to build a piece whose Roaring representation is around 1MB, and that
+-- allocation counts against the query's memory limit. It is now capped, and a piece larger than the
+-- cap is filled in several passes instead.
+--
+-- Two things need to hold, and they pull in opposite directions, so this case asserts both:
+--   1. the multi-pass fill puts exactly the same values in exactly the same pieces (below);
+--   2. the buffer no longer scales with the split size (the query_mem_limit assertion at the end).
+--
+-- The pre-existing test_subdivide_bitmap_bounded_batching covers the batching cursor itself, but only
+-- with split sizes of 1, 4 and 100 - all smaller than the cap, so none of them ever fills a piece in
+-- more than one pass. Every split size here is deliberately at or above it.
+CREATE DATABASE db_${uuid0};
+USE db_${uuid0};
+
+CREATE TABLE sbs (
+    `id` int(11) NULL COMMENT "",
+    `b` bitmap BITMAP_UNION NULL COMMENT ""
+)
+AGGREGATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+-- 10000 values, even numbers only. Not a contiguous range on purpose: over 1..10000 a piece that
+-- silently lost or repeated a value could still come out with the right min and max, and the sum
+-- below would be the only thing to catch it. Over the even numbers, every piece's min, max, count and
+-- sum have to agree with each other for the answer to be right.
+INSERT INTO sbs SELECT 1, bitmap_agg(generate_series) FROM TABLE(generate_series(2, 20000, 2));
+
+SET pipeline_dop = 1;
+
+-- A piece of 6000 values does not fit the 4096-value buffer, so it is filled in two passes
+-- (4096 + 1904). Expect 6000 values 2..12000 summing to 36006000, then 4000 values 12002..20000
+-- summing to 64004000 - the same split the single-pass fill produced.
+SELECT bitmap_count(subdivide_bitmap) AS cnt, bitmap_min(subdivide_bitmap) AS lo,
+       bitmap_max(subdivide_bitmap) AS hi, array_sum(bitmap_to_array(subdivide_bitmap)) AS total
+FROM sbs, subdivide_bitmap(b, 6000) ORDER BY lo;
+
+-- Exactly the buffer size: one full pass per piece and a `taken == 0` on the next one, the boundary
+-- where an off-by-one in the loop condition would either drop a piece or spin.
+SELECT bitmap_count(subdivide_bitmap) AS cnt, bitmap_min(subdivide_bitmap) AS lo,
+       bitmap_max(subdivide_bitmap) AS hi, array_sum(bitmap_to_array(subdivide_bitmap)) AS total
+FROM sbs, subdivide_bitmap(b, 4096) ORDER BY lo;
+
+-- One over the buffer, so the second pass of each full piece carries a single value.
+SELECT bitmap_count(subdivide_bitmap) AS cnt, bitmap_min(subdivide_bitmap) AS lo,
+       bitmap_max(subdivide_bitmap) AS hi, array_sum(bitmap_to_array(subdivide_bitmap)) AS total
+FROM sbs, subdivide_bitmap(b, 4097) ORDER BY lo;
+
+-- Three passes for the first piece (4096 + 4096 + 808), and its last piece is a short one that the
+-- iterator, not the split size, has to truncate.
+SELECT bitmap_count(subdivide_bitmap) AS cnt, bitmap_min(subdivide_bitmap) AS lo,
+       bitmap_max(subdivide_bitmap) AS hi, array_sum(bitmap_to_array(subdivide_bitmap)) AS total
+FROM sbs, subdivide_bitmap(b, 9000) ORDER BY lo;
+
+-- Multi-pass pieces crossing a process() boundary: split size 4097 gives 3 pieces, so at chunk_size 2
+-- the third one is emitted by a later call and the row's cursor - the cached BitmapValueIter plus the
+-- offset - has to survive in between, having been left mid-row by a loop that itself ran in passes.
+-- The answer must not depend on where that boundary fell, so the same query runs again unbatched.
+SET chunk_size = 2;
+SELECT bitmap_count(subdivide_bitmap) AS cnt, bitmap_min(subdivide_bitmap) AS lo,
+       bitmap_max(subdivide_bitmap) AS hi, array_sum(bitmap_to_array(subdivide_bitmap)) AS total
+FROM sbs, subdivide_bitmap(b, 4097) ORDER BY lo;
+SET chunk_size = 4096;
+
+-- The scratch bound itself. Cardinality 10000000, split size 9500000: two pieces, and the old buffer
+-- was min(9500000, 10000000) * 8 = 76MB. The query is capped at 32MB, which the whole thing now fits
+-- in several times over - the sub-bitmap being built is ~1MB of Roaring and the buffer is 32KB - but
+-- which the buffer alone used to blow through more than twice over, and TRY_CATCH_BAD_ALLOC around
+-- the table function turns that into "Memory of ... exceed limit" rather than a wrong answer.
+INSERT INTO sbs SELECT 2, bitmap_agg(generate_series) FROM TABLE(generate_series(1, 10000000));
+SELECT /*+ SET_VAR(query_mem_limit=33554432) */
+       bitmap_count(subdivide_bitmap) AS cnt, bitmap_min(subdivide_bitmap) AS lo, bitmap_max(subdivide_bitmap) AS hi
+FROM sbs, subdivide_bitmap(b, 9500000) WHERE id = 2 ORDER BY lo;
+
+-- The control, on the same bitmap under the same limit: a split size well below the cap allocated a
+-- small buffer even before the change, so it has to keep passing. It also covers the other half of
+-- the operator - the sub-bitmaps are never read here, so the counting path runs and builds none of
+-- them, which is the only way to ask for 10000 pieces of one row without materializing them.
+SELECT /*+ SET_VAR(query_mem_limit=33554432) */ count(1)
+FROM sbs, subdivide_bitmap(b, 1000) WHERE id = 2;
+
+DROP DATABASE db_${uuid0};
