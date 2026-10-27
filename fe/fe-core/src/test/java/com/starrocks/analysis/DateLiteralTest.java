@@ -22,10 +22,12 @@ import com.starrocks.common.util.DateUtils;
 import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprCastFunction;
+import com.starrocks.sql.ast.expression.FloatLiteral;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.type.DateType;
+import com.starrocks.type.FloatType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -83,55 +85,55 @@ public class DateLiteralTest {
     }
 
     @Test
-    public void testCompareLiteralMicro() {
-        DateLiteral thisEqual = new DateLiteral(2026, 10, 8, 8, 30, 18, 282585);
-        DateLiteral otherEqual = new DateLiteral(2026, 10, 8, 8, 30, 18, 282585);
+    public void testCompareLiteralMicro() throws ParsingException {
+        DateLiteral thisEqual = createDateLiteral("2026-10-08 08:30:18.282585", DateType.DATETIME);
+        DateLiteral otherEqual = createDateLiteral("2026-10-08 08:30:18.282585", DateType.DATETIME);
         Assertions.assertEquals(0, thisEqual.compareLiteral(otherEqual));
 
-        DateLiteral thisLess = new DateLiteral(2026, 10, 8, 8, 30, 18, 282585);
-        DateLiteral otherLess = new DateLiteral(2026, 10, 8, 8, 30, 18, 282586);
+        DateLiteral thisLess = createDateLiteral("2026-10-08 08:30:18.282585", DateType.DATETIME);
+        DateLiteral otherLess = createDateLiteral("2026-10-08 08:30:18.282586", DateType.DATETIME);
         Assertions.assertEquals(-1, thisLess.compareLiteral(otherLess));
 
-        DateLiteral thisGreater = new DateLiteral(2026, 10, 8, 8, 30, 18, 282586);
-        DateLiteral otherGreater = new DateLiteral(2026, 10, 8, 8, 30, 18, 282585);
+        DateLiteral thisGreater = createDateLiteral("2026-10-08 08:30:18.282586", DateType.DATETIME);
+        DateLiteral otherGreater = createDateLiteral("2026-10-08 08:30:18.282585", DateType.DATETIME);
         Assertions.assertEquals(1, thisGreater.compareLiteral(otherGreater));
 
-        DateLiteral thisLessSec = new DateLiteral(2026, 10, 8, 8, 30, 17, 282585);
-        DateLiteral otherLessSec = new DateLiteral(2026, 10, 8, 8, 30, 18, 282585);
+        DateLiteral thisLessSec = createDateLiteral("2026-10-08 08:30:17.282585", DateType.DATETIME);
+        DateLiteral otherLessSec = createDateLiteral("2026-10-08 08:30:18.282585", DateType.DATETIME);
         Assertions.assertEquals(-1, thisLessSec.compareLiteral(otherLessSec));
-        
-        DateLiteral thisGreaterSec = new DateLiteral(2026, 10, 8, 8, 30, 18, 282586);
-        DateLiteral otherGreaterSec = new DateLiteral(2026, 10, 8, 8, 30, 17, 282585);
+
+        DateLiteral thisGreaterSec = createDateLiteral("2026-10-08 08:30:18.282586", DateType.DATETIME);
+        DateLiteral otherGreaterSec = createDateLiteral("2026-10-08 08:30:17.282585", DateType.DATETIME);
         Assertions.assertEquals(1, thisGreaterSec.compareLiteral(otherGreaterSec));
     }
 
     @Test
-    public void testCompareLiteralMili() {
-        DateLiteral thisEqual = new DateLiteral(2026, 10, 8, 8, 30, 18, 282);
-        DateLiteral otherEqual = new DateLiteral(2026, 10, 8, 8, 30, 18, 282);
+    public void testCompareLiteralMili() throws ParsingException {
+        DateLiteral thisEqual = createDateLiteral("2026-10-08 08:30:18.000282", DateType.DATETIME);
+        DateLiteral otherEqual = createDateLiteral("2026-10-08 08:30:18.000282", DateType.DATETIME);
         Assertions.assertEquals(0, thisEqual.compareLiteral(otherEqual));
 
-        DateLiteral thisLess = new DateLiteral(2026, 10, 8, 8, 30, 18, 282);
-        DateLiteral otherLess = new DateLiteral(2026, 10, 8, 8, 30, 18, 283);
+        DateLiteral thisLess = createDateLiteral("2026-10-08 08:30:18.000282", DateType.DATETIME);
+        DateLiteral otherLess = createDateLiteral("2026-10-08 08:30:18.000283", DateType.DATETIME);
         Assertions.assertEquals(-1, thisLess.compareLiteral(otherLess));
 
-        DateLiteral thisGreater = new DateLiteral(2026, 10, 8, 8, 30, 18, 283);
-        DateLiteral otherGreater = new DateLiteral(2026, 10, 8, 8, 30, 18, 282);
+        DateLiteral thisGreater = createDateLiteral("2026-10-08 08:30:18.000283", DateType.DATETIME);
+        DateLiteral otherGreater = createDateLiteral("2026-10-08 08:30:18.000282", DateType.DATETIME);
         Assertions.assertEquals(1, thisGreater.compareLiteral(otherGreater));
     }
 
     @Test
-    public void testCompareLiteralLongOnly() {
-        DateLiteral thisEqual = new DateLiteral(2026, 10, 8, 8, 30, 18, 0);
-        DateLiteral otherEqual = new DateLiteral(2026, 10, 8, 8, 30, 18, 0);
+    public void testCompareLiteralLongOnly() throws ParsingException {
+        DateLiteral thisEqual = createDateLiteral("2026-10-08 08:30:18", DateType.DATETIME);
+        DateLiteral otherEqual = createDateLiteral("2026-10-08 08:30:18", DateType.DATETIME);
         Assertions.assertEquals(0, thisEqual.compareLiteral(otherEqual));
 
-        DateLiteral thisLess = new DateLiteral(2026, 10, 8, 8, 30, 18, 0);
-        DateLiteral otherLess = new DateLiteral(2026, 10, 8, 8, 30, 19, 0);
+        DateLiteral thisLess = createDateLiteral("2026-10-08 08:30:18", DateType.DATETIME);
+        DateLiteral otherLess = createDateLiteral("2026-10-08 08:30:19", DateType.DATETIME);
         Assertions.assertEquals(-1, thisLess.compareLiteral(otherLess));
 
-        DateLiteral thisGreater = new DateLiteral(2026, 10, 8, 8, 30, 19, 0);
-        DateLiteral otherGreater = new DateLiteral(2026, 10, 8, 8, 30, 18, 0);
+        DateLiteral thisGreater = createDateLiteral("2026-10-08 08:30:19", DateType.DATETIME);
+        DateLiteral otherGreater = createDateLiteral("2026-10-08 08:30:18", DateType.DATETIME);
         Assertions.assertEquals(1, thisGreater.compareLiteral(otherGreater));
     }
 
@@ -148,6 +150,11 @@ public class DateLiteralTest {
         DateLiteral thisGreater = new DateLiteral(0, 0, 0, 0, 0, 10, 0);
         LiteralExpr otherGreater = new IntLiteral(5);
         Assertions.assertEquals(1, thisGreater.compareLiteral(otherGreater));
+
+        LiteralExpr otherFloat = new FloatLiteral(0.5, FloatType.DOUBLE);
+        Assertions.assertEquals(thisEqual.getLongValue(), otherFloat.getLongValue());
+        Assertions.assertNotEquals(thisEqual.getDoubleValue(), otherFloat.getDoubleValue(), 0.0);
+        Assertions.assertEquals(-1, thisEqual.compareLiteral(otherFloat));
     }
 
     private DateLiteral createDateLiteral(String value, DateType type) throws ParsingException {
