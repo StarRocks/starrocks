@@ -137,7 +137,8 @@ bool OrcRowReaderFilter::filterMinMax(size_t rowGroupIdx,
             auto* max_col = max_chunk->get_column_raw_ptr_by_index(i);
             DCHECK(!min_col->is_constant() && !max_col->is_constant());
             int64_t tz_offset_in_seconds = _reader->tzoffset_in_seconds() - _writer_tzoffset_in_seconds;
-            Status st = OrcMinMaxDecoder::decode(slot, orc_type, stats, min_col, max_col, tz_offset_in_seconds);
+            Status st = OrcMinMaxDecoder::decode(slot, orc_type, stats, min_col, max_col, tz_offset_in_seconds,
+                                                 &_reader->tzinfo());
             if (!st.ok()) {
                 LOG(INFO) << strings::Substitute(
                         "OrcMinMaxDecoder decode failed, may occur performance degradation. Because SR's column($0) "

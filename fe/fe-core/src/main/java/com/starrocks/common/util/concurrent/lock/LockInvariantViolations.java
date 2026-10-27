@@ -14,10 +14,12 @@
 
 package com.starrocks.common.util.concurrent.lock;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.common.Config;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
@@ -80,7 +82,8 @@ public class LockInvariantViolations {
      * Deliberately not {@code FeConstants.runningUnitTest}: that flag is opt-in per test class
      * (every one of its uses in main code means "skip this when testing", none means "be stricter
      * when testing"), so it is set for far too few tests to be a usable gate. This property is set
-     * once for the whole surefire JVM in {@code fe-core/pom.xml}.
+     * once for the whole surefire JVM in {@code fe-core/pom.xml}, from {@code lock.invariant.strict}
+     * (default {@code true}).
      * <p>
      * {@code off} and an explicit {@code error} pass through untouched — code that means to lock a
      * synthetic id has to turn the check off and say why.
@@ -89,17 +92,24 @@ public class LockInvariantViolations {
 
     /**
      * The same escalation for the blocking-call rule, on its own property because the two rules are
-     * at different stages. The lock-target rule has a known-empty violation set and is enforced;
-     * the blocking-call rule is still <em>collecting</em> one, and until that set has stopped
-     * growing, escalating here would fail whichever tests happen to cover a site -- a fact about
-     * test coverage, not about the defect.
+     * switched separately: either can be backed out of the test JVM without disarming the other.
+     * {@code fe-core/pom.xml} sets it from {@code lock.blocking.strict} (default {@code true}).
      * <p>
-     * Not set anywhere yet, on purpose. Set it in {@code fe-core/pom.xml} next to the other one
-     * once the reported sites are fixed; that is what turns the rule from a report into a
-     * regression barrier, and it is a separate change with its own evidence.
+     * What an armed blocking-call rule proves is narrower than it reads: the connectors in unit
+     * tests are mocks that never reach a real transport, so a green run means no <em>test</em>
+     * went through a door under a lock, not that no <em>code</em> does. Production coverage still
+     * comes from the {@code warn} log.
      */
     private static final boolean BLOCKING_STRICT_IN_TEST =
             Boolean.getBoolean("starrocks.lock.blocking.strict.in.test");
+
+    /**
+     * The same escalation for the snapshot-copy rule ({@link SnapshotCopyValidator}), on its own
+     * property for the same reason. {@code fe-core/pom.xml} sets it from {@code lock.snapshot.strict}
+     * (default {@code true}).
+     */
+    private static final boolean SNAPSHOT_STRICT_IN_TEST =
+            Boolean.getBoolean("starrocks.lock.snapshot.strict.in.test");
 
     /**
      * Upper bound on distinct call sites tracked. Beyond it every further site shares one bucket:
@@ -148,6 +158,7 @@ public class LockInvariantViolations {
      */
     private static final ModeGate LOCK_TARGET_GATE = new ModeGate(STRICT_IN_TEST);
     private static final ModeGate BLOCKING_CALL_GATE = new ModeGate(BLOCKING_STRICT_IN_TEST);
+    private static final ModeGate SNAPSHOT_COPY_GATE = new ModeGate(SNAPSHOT_STRICT_IN_TEST);
 
     private static final class Site {
         private final AtomicLong count = new AtomicLong();
@@ -157,10 +168,12 @@ public class LockInvariantViolations {
 
     private static final class ModeCache {
         private final String raw;
+        private final boolean strictInTest;
         private final Mode mode;
 
-        private ModeCache(String raw, Mode mode) {
+        private ModeCache(String raw, boolean strictInTest, Mode mode) {
             this.raw = raw;
+            this.strictInTest = strictInTest;
             this.mode = mode;
         }
     }
@@ -172,23 +185,26 @@ public class LockInvariantViolations {
      * redundant parse.
      */
     private static final class ModeGate {
-        private final boolean strictInTest;
+        private final boolean armedByProperty;
+        private volatile boolean strictInTest;
         private volatile ModeCache cache;
 
-        private ModeGate(boolean strictInTest) {
-            this.strictInTest = strictInTest;
+        private ModeGate(boolean armedByProperty) {
+            this.armedByProperty = armedByProperty;
+            this.strictInTest = armedByProperty;
         }
 
         private Mode resolve(String configured) {
+            boolean strict = strictInTest;
             ModeCache cached = cache;
-            if (cached != null && cached.raw == configured) {
+            if (cached != null && cached.raw == configured && cached.strictInTest == strict) {
                 return cached.mode;
             }
             Mode mode = Mode.parse(configured);
-            if (mode == Mode.WARN && strictInTest) {
+            if (mode == Mode.WARN && strict) {
                 mode = Mode.ERROR;
             }
-            cache = new ModeCache(configured, mode);
+            cache = new ModeCache(configured, strict, mode);
             return mode;
         }
     }
@@ -217,6 +233,47 @@ public class LockInvariantViolations {
 
     public static Mode effectiveBlockingCallMode(String configured) {
         return BLOCKING_CALL_GATE.resolve(configured);
+    }
+
+    /**
+     * Lets {@code warn} mean {@code warn} again inside an armed test JVM, for a test of the warn
+     * path itself -- one that asserts a violation is counted and the call proceeds, or reads the
+     * reported call site. Such a test cannot be written against the escalated mode, and switching
+     * the rule {@code off} would skip the very code under test.
+     * <p>
+     * Not an opt-out for a test that trips the rule: that test is reporting a real site. Pair with
+     * {@link #restoreBlockingCallTestEscalation()} in teardown.
+     */
+    @VisibleForTesting
+    public static void suspendBlockingCallTestEscalation() {
+        BLOCKING_CALL_GATE.strictInTest = false;
+    }
+
+    @VisibleForTesting
+    public static void restoreBlockingCallTestEscalation() {
+        BLOCKING_CALL_GATE.strictInTest = BLOCKING_CALL_GATE.armedByProperty;
+    }
+
+    /**
+     * The mode the snapshot-copy check ({@link SnapshotCopyValidator}) runs in right now.
+     */
+    public static Mode currentSnapshotCopyMode() {
+        return effectiveSnapshotCopyMode(Config.lock_snapshot_copy_validation_mode);
+    }
+
+    public static Mode effectiveSnapshotCopyMode(String configured) {
+        return SNAPSHOT_COPY_GATE.resolve(configured);
+    }
+
+    /** As {@link #suspendBlockingCallTestEscalation()}, for the snapshot-copy rule. */
+    @VisibleForTesting
+    public static void suspendSnapshotCopyTestEscalation() {
+        SNAPSHOT_COPY_GATE.strictInTest = false;
+    }
+
+    @VisibleForTesting
+    public static void restoreSnapshotCopyTestEscalation() {
+        SNAPSHOT_COPY_GATE.strictInTest = SNAPSHOT_COPY_GATE.armedByProperty;
     }
 
     /**
@@ -341,5 +398,24 @@ public class LockInvariantViolations {
 
     public static void clearViolations() {
         SITES.clear();
+    }
+
+    /**
+     * Take the per-site counts recorded so far and zero them, one site at a time. Unlike reading
+     * {@link #violationsBySite()} and then calling {@link #clearViolations()}, a violation another
+     * thread records in between is never lost: its increment lands either before the swap, and is
+     * returned here, or after it, and is left for the next drain. Only sites with a non-zero count
+     * are returned.
+     */
+    @VisibleForTesting
+    public static Map<String, Long> drainViolations() {
+        Map<String, Long> drained = new HashMap<>();
+        for (Map.Entry<String, Site> entry : SITES.entrySet()) {
+            long count = entry.getValue().count.getAndSet(0);
+            if (count > 0) {
+                drained.put(entry.getKey(), count);
+            }
+        }
+        return drained;
     }
 }

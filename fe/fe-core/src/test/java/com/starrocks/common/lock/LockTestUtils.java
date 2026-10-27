@@ -13,21 +13,22 @@
 // limitations under the License.
 package com.starrocks.common.lock;
 
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
+import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.DeadlockException;
 import com.starrocks.common.util.concurrent.lock.LockException;
-<<<<<<< HEAD
-=======
 import com.starrocks.common.util.concurrent.lock.LockHoldDepth;
 import com.starrocks.common.util.concurrent.lock.LockInvariantViolations;
->>>>>>> e2c944c9059... [Enhancement][RB-374] Make the planning-copy lock check cheap on its conforming path (#65744)
 import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.server.GlobalStateMgr;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -37,6 +38,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 public class LockTestUtils {
     private static final String DEFAULT_BLOCKING_CALL_VALIDATION_MODE = Config.lock_blocking_call_validation_mode;
+    private static final String DEFAULT_SNAPSHOT_COPY_VALIDATION_MODE = Config.lock_snapshot_copy_validation_mode;
 
     /**
      * Opt a test out of the blocking-call-under-lock check.
@@ -55,8 +57,6 @@ public class LockTestUtils {
     }
 
     /**
-<<<<<<< HEAD
-=======
      * Copy a published table the way the planner does, under the table's read lock. For a test that needs a
      * planning copy of a table it created through SQL; copying without the lock trips snapshot_copy_without_lock.
      */
@@ -118,7 +118,6 @@ public class LockTestUtils {
     }
 
     /**
->>>>>>> e2c944c9059... [Enhancement][RB-374] Make the planning-copy lock check cheap on its conforming path (#65744)
      * Fake {@code ThreadPoolExecutor.submit} so the task runs on a thread of its own and is joined,
      * instead of running inline on the caller's thread.
      * <p>
@@ -164,6 +163,26 @@ public class LockTestUtils {
                 return CompletableFuture.completedFuture(result.get());
             }
         };
+    }
+
+    private static final String DEFAULT_LOCK_TARGET_VALIDATION_MODE = Config.lock_target_validation_mode;
+
+    /**
+     * Opt a test out of the lock-target check.
+     * <p>
+     * Only for tests of the locking primitives themselves, which lock synthetic rids (1L, 2L, ...)
+     * that stand for no catalog object at all. A test that exercises real metadata must not use
+     * this: the check exists to catch exactly the kind of lock such a test would be hiding.
+     * <p>
+     * Pair with {@link #restoreLockTargetValidation()} in teardown -- {@link Config} is static and
+     * surefire may run other classes in the same JVM.
+     */
+    public static void disableLockTargetValidation() {
+        Config.lock_target_validation_mode = "off";
+    }
+
+    public static void restoreLockTargetValidation() {
+        Config.lock_target_validation_mode = DEFAULT_LOCK_TARGET_VALIDATION_MODE;
     }
 
     public static void assertLockSuccess(Future<LockResult> lockTaskResultFuture) {

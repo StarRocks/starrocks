@@ -104,7 +104,7 @@ public class AIPrivilegeSchemaTest {
         ObjectType type = objectType("AI FUNCTION");
         Assertions.assertEquals(15, type.getId());
         Set<String> families = GlobalStateMgr.getCurrentState().getBuiltinFunctions().stream()
-                .filter(Function::isAi).filter(Function::isUserVisible)
+                .filter(Function::isAI).filter(Function::isUserVisible)
                 .map(Function::functionName).collect(Collectors.toSet());
         Assertions.assertFalse(families.isEmpty());
         for (String family : families) {
@@ -350,7 +350,7 @@ public class AIPrivilegeSchemaTest {
                 .filter(row -> ROLE.equals(row.getGrantee()) && "AI FUNCTION".equals(row.getObject_type()))
                 .collect(Collectors.toList());
         Set<String> families = GlobalStateMgr.getCurrentState().getBuiltinFunctions().stream()
-                .filter(Function::isAi).filter(Function::isUserVisible)
+                .filter(Function::isAI).filter(Function::isUserVisible)
                 .map(Function::functionName).collect(Collectors.toSet());
         Assertions.assertEquals(families, rows.stream().map(TGetGrantsToRolesOrUserItem::getObject_name)
                 .collect(Collectors.toSet()));

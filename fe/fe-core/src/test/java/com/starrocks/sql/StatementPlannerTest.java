@@ -84,7 +84,7 @@ class StatementPlannerTest extends PlanTestBase {
         try (MockedStatic<Authorizer> authorizer = mockStatic(Authorizer.class)) {
             authorizer.when(() -> Authorizer.check(Mockito.any(), Mockito.same(connectContext))).thenThrow(denied);
             StatementBase statement = UtFrameUtils.parseStmtWithNewParser(
-                    "select ai_custom_query('missing_authorization_order_provider', 'prompt')", connectContext);
+                    "select ai_complete('missing_authorization_order_provider', 'explicit-model', 'prompt')", connectContext);
 
             Assertions.assertSame(denied,
                     Assertions.assertThrows(RuntimeException.class,
@@ -546,6 +546,20 @@ class StatementPlannerTest extends PlanTestBase {
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(oldValue);
     }
 
+    /**
+     * collectOriginalOlapTables is for a caller that still holds the locker, as StatementPlanner does when it hands
+     * the snapshot to createQueryPlanWithReTry; copying without it trips snapshot_copy_without_lock.
+     */
+    private static Set<OlapTable> collectOriginalOlapTablesUnderLock(QueryStatement queryStmt,
+                                                                     PlannerMetaLocker plannerMetaLocker) {
+        StatementPlanner.lock(plannerMetaLocker);
+        try {
+            return StatementPlanner.collectOriginalOlapTables(connectContext, queryStmt, plannerMetaLocker);
+        } finally {
+            StatementPlanner.unLock(plannerMetaLocker);
+        }
+    }
+
     @Test
     public void testPlanExceptionWithoutSchemaChange() throws Exception {
         // Exception occurs in plan builder, schema is valid, exception should be re-thrown
@@ -555,6 +569,7 @@ class StatementPlannerTest extends PlanTestBase {
         QueryStatement queryStmt = (QueryStatement) stmt;
         Analyzer.analyze(queryStmt, connectContext);
         PlannerMetaLocker plannerMetaLocker = new PlannerMetaLocker(connectContext, queryStmt);
+        Set<OlapTable> originalOlapTables = collectOriginalOlapTablesUnderLock(queryStmt, plannerMetaLocker);
         try (MockedStatic<PlanFragmentBuilder> mockedPlanFragmentBuilder = mockStatic(PlanFragmentBuilder.class);
                 MockedStatic<OptimisticVersion> mockedOptimisticVersion =
                         mockStatic(OptimisticVersion.class)) {
@@ -573,15 +588,14 @@ class StatementPlannerTest extends PlanTestBase {
             RuntimeException thrownException = assertThrows(RuntimeException.class, () ->
                     StatementPlanner.createQueryPlanWithReTry(
                             queryStmt, connectContext, TResultSinkType.MYSQL_PROTOCAL,
-                            plannerMetaLocker, planStartTime));
+                            plannerMetaLocker, planStartTime, originalOlapTables));
 
             assertEquals("Test exception during ExecPlanBuild", thrownException.getMessage());
 
             // Verify that OptimisticVersion.validateTableUpdate was called in the catch block
-            Set<OlapTable> olapTables = StatementPlanner.collectOriginalOlapTables(connectContext, queryStmt, plannerMetaLocker);
-            if (!olapTables.isEmpty()) {
+            if (!originalOlapTables.isEmpty()) {
                 mockedOptimisticVersion.verify(() -> OptimisticVersion.validateTableUpdate(
-                        any(OlapTable.class), eq(planStartTime)), times(olapTables.size()));
+                        any(OlapTable.class), eq(planStartTime)), times(originalOlapTables.size()));
             }
         }
     }
@@ -597,7 +611,7 @@ class StatementPlannerTest extends PlanTestBase {
         PlannerMetaLocker plannerMetaLocker = new PlannerMetaLocker(connectContext, queryStmt);
 
         // Collect olap tables before mocking
-        Set<OlapTable> olapTables = StatementPlanner.collectOriginalOlapTables(connectContext, queryStmt, plannerMetaLocker);
+        Set<OlapTable> olapTables = collectOriginalOlapTablesUnderLock(queryStmt, plannerMetaLocker);
         int tableCount = olapTables.size();
         try (MockedStatic<PlanFragmentBuilder> mockedPlanFragmentBuilder = mockStatic(PlanFragmentBuilder.class);
                 MockedStatic<com.starrocks.sql.OptimisticVersion> mockedOptimisticVersion =
@@ -636,7 +650,7 @@ class StatementPlannerTest extends PlanTestBase {
             long planStartTime = OptimisticVersion.generate();
             ExecPlan result = StatementPlanner.createQueryPlanWithReTry(
                     queryStmt, connectContext, TResultSinkType.MYSQL_PROTOCAL,
-                    plannerMetaLocker, planStartTime);
+                    plannerMetaLocker, planStartTime, olapTables);
 
             // Verify that a plan was returned (retry succeeded)
             assertNotNull(result);

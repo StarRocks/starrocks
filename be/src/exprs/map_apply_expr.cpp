@@ -16,6 +16,8 @@
 
 #include <fmt/format.h>
 
+#include <algorithm>
+
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/const_column.h"
@@ -28,7 +30,7 @@
 #include "exprs/lambda_function.h"
 #include "exprs/map_expr.h"
 #include "glog/logging.h"
-#include "runtime/chunk_accumulator.h"
+#include "runtime/current_thread.h"
 
 namespace starrocks {
 
@@ -72,12 +74,18 @@ StatusOr<ColumnPtr> MapApplyExpr::evaluate_checked(ExprContext* context, Chunk* 
             auto nullable = down_cast<const NullableColumn*>(child_col.get());
             DCHECK(nullable != nullptr);
             data_column = nullable->data_column();
-            // empty null map with non-empty elements
-            auto data_mut = data_column->clone();
-            data_mut->empty_null_in_complex_column(
-                    nullable->null_column()->immutable_data(),
-                    down_cast<MapColumn*>(data_mut.get())->offsets_column()->immutable_data());
-            data_column = std::move(data_mut);
+            // empty null map with non-empty elements. Ask whether there is anything to empty before
+            // cloning: the clone is a full deep copy of the map, and it is paid once per call - a
+            // CASE whose branches all filter the same map pays it once per branch. On the common
+            // shape (no null rows, or null rows that already span an empty range) it is pure waste.
+            const auto& null_data = nullable->null_column()->immutable_data();
+            const auto& src_offsets = down_cast<const MapColumn*>(data_column.get())->offsets().immutable_data();
+            if (has_payload_under_null_rows(null_data.data(), src_offsets.data(), data_column->size())) {
+                auto data_mut = data_column->clone();
+                data_mut->empty_null_in_complex_column(
+                        null_data, down_cast<MapColumn*>(data_mut.get())->offsets_column()->immutable_data());
+                data_column = std::move(data_mut);
+            }
             if (input_null_map) {
                 input_null_map = FunctionHelper::union_null_column(nullable->null_column(),
                                                                    std::move(input_null_map)); // merge null
@@ -133,12 +141,19 @@ StatusOr<ColumnPtr> MapApplyExpr::evaluate_checked(ExprContext* context, Chunk* 
             column = ColumnHelper::align_return_type(std::move(*tmp_column).mutate(), type(), cur_chunk->num_rows(),
                                                      false);
         } else { // split large chunks into small ones to avoid too large or various batch_size
-            ChunkAccumulator accumulator(DEFAULT_CHUNK_SIZE);
-            RETURN_IF_ERROR(accumulator.push(std::move(cur_chunk)));
-            accumulator.finalize();
-            while (auto tmp_chunk = accumulator.pull()) {
-                ASSIGN_OR_RETURN(auto tmp_col, context->evaluate(_children[0], tmp_chunk.get()));
-                tmp_col = ColumnHelper::align_return_type(std::move(tmp_col), type(), tmp_chunk->num_rows(), false);
+            // One bounded slice at a time. The slicing used to go through ChunkAccumulator, which
+            // cuts a chunk that is already fully built into pieces and holds *all* of them until they
+            // are pulled - a second copy of the entire entry-level chunk (every lambda argument plus
+            // every replicated capture column, at sum(map sizes) rows) alive at the same time as the
+            // original. Cutting the pieces here keeps one of them alive instead.
+            const size_t entry_rows = cur_chunk->num_rows();
+            for (size_t start = 0; start < entry_rows; start += DEFAULT_CHUNK_SIZE) {
+                const size_t count = std::min<size_t>(DEFAULT_CHUNK_SIZE, entry_rows - start);
+                auto slice_chunk = cur_chunk->clone_empty(count);
+                TRY_CATCH_BAD_ALLOC(slice_chunk->append(*cur_chunk, start, count));
+                RETURN_IF_ERROR(slice_chunk->capacity_limit_reached());
+                ASSIGN_OR_RETURN(auto tmp_col, context->evaluate(_children[0], slice_chunk.get()));
+                tmp_col = ColumnHelper::align_return_type(std::move(tmp_col), type(), count, false);
                 if (column == nullptr) {
                     column = std::move(*tmp_col).mutate();
                 } else {

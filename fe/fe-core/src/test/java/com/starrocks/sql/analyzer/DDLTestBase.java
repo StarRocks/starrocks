@@ -18,13 +18,21 @@ package com.starrocks.sql.analyzer;
 import com.starrocks.catalog.GlobalStateMgrTestUtil;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.lock.LockTestUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 
 public class DDLTestBase {
+
+    // Same G3 check as StarRocksTestBase, which this base does not extend.
+    @AfterEach
+    public void assertNoLockInvariantViolations() {
+        LockTestUtils.assertNoLockInvariantViolations();
+    }
 
     protected static ConnectContext ctx;
     protected static StarRocksAssert starRocksAssert;

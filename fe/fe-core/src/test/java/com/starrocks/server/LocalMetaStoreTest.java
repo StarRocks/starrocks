@@ -30,6 +30,7 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.catalog.VacuumState;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.catalog.system.sys.SysDb;
@@ -44,14 +45,17 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.DropInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.OperationType;
+import com.starrocks.persist.PartitionVacuumStateInfo;
 import com.starrocks.persist.PhysicalPartitionPersistInfoV2;
 import com.starrocks.persist.TruncateTableInfo;
 import com.starrocks.persist.WALApplier;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.qe.ConnectContext;
@@ -601,7 +605,11 @@ public class LocalMetaStoreTest {
 
         Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbFullName);
         OlapTable table = (OlapTable) database.getTable(tableName);
-        OlapTable followerTable  = AnalyzerUtils.getShadowCopyTable(table);
+        OlapTable followerTable;
+        // Under the read lock, as the planner copies a published table.
+        try (AutoCloseableLock ignored = new AutoCloseableLock(database.getId(), table.getId(), LockType.READ)) {
+            followerTable = AnalyzerUtils.getShadowCopyTable(table);
+        }
         long oldPartitionId = table.getPartition(tableName).getId();
 
         // 3. Execute truncateTable
@@ -1110,5 +1118,37 @@ public class LocalMetaStoreTest {
         Assertions.assertEquals(groupSchema.getBucketsNum(), p2.getDistributionInfo().getBucketNum());
 
         starRocksAssert.dropTable("test.colocate_auto_add");
+    }
+
+    @Test
+    public void testReplayModifyPartitionVacuumState() {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table =
+                (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t1");
+        PhysicalPartition partition = table.getPartitions().stream().findFirst().get().getDefaultPhysicalPartition();
+        partition.setMetadataSwitchVersion(40L);
+        partition.setLastSuccVacuumVersion(10L);
+
+        VacuumState state = new VacuumState();
+        state.setMinRetainedVersion(50L);
+        PartitionVacuumStateInfo info =
+                new PartitionVacuumStateInfo(db.getId(), table.getId(), partition.getId(), state);
+
+        // Round-trip through GSON exactly as the journal does (logJsonObject / EditLogDeserializer), so the
+        // payload's fields and the nested VacuumState survive serialization.
+        PartitionVacuumStateInfo replayed =
+                GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(info), PartitionVacuumStateInfo.class);
+        Assertions.assertEquals(db.getId(), replayed.getDbId());
+        Assertions.assertEquals(table.getId(), replayed.getTableId());
+        Assertions.assertEquals(partition.getId(), replayed.getPhysicalPartitionId());
+        Assertions.assertEquals(50L, replayed.getVacuumState().getMinRetainedVersion());
+
+        GlobalStateMgr.getCurrentState().getLocalMetastore().replayModifyPartitionVacuumState(replayed);
+
+        // Replay installs the state, restores the image-excluded watermark from the retain floor (10 -> 50),
+        // and clears a metadataSwitchVersion the floor has now reached (40 <= 50).
+        Assertions.assertEquals(50L, partition.getVacuumState().getMinRetainedVersion());
+        Assertions.assertEquals(50L, partition.getLastSuccVacuumVersion());
+        Assertions.assertEquals(0L, partition.getMetadataSwitchVersion());
     }
 }
