@@ -2642,6 +2642,7 @@ public class Config extends ConfigBase {
      * e.g. "uid=${USER},ou=People,dc=example,dc=com"
      * Multiple patterns can be separated by semicolon, e.g. "uid=${USER},ou=A,dc=com;uid=${USER},ou=B,dc=com"
      * When set, the system will skip the search step and directly bind with the constructed DN.
+     * In fe.conf write the placeholder as $${USER}: a plain ${USER} is replaced from the environment at start up.
      */
     @ConfField(mutable = true, comment = "DN pattern for direct bind authentication; " +
             "use ${USER} as username placeholder, multiple patterns separated by semicolon")
