@@ -1028,6 +1028,13 @@ public class ExpressionStatisticCalculator {
                     break;
                 case FunctionSet.DATE_TRUNC:
                     return calculateDateTruncStats(callOperator, right);
+                case FunctionSet.STR_TO_DATE:
+                case FunctionSet.STR2DATE:
+                    minValue = Double.NEGATIVE_INFINITY;
+                    maxValue = Double.POSITIVE_INFINITY;
+                    distinctValues = Math.min(rowCount * (1 - nullsFraction),
+                            left.getDistinctValuesCount() * right.getDistinctValuesCount());
+                    break;
                 case FunctionSet.LTRIM:
                     minValue = Double.NEGATIVE_INFINITY;
                     maxValue = Double.POSITIVE_INFINITY;
