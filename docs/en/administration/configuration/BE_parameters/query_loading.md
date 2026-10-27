@@ -768,6 +768,15 @@ This topic introduces the following types of BE configurations:
 - Description: The wait time before BufferControlBlock releases data.
 - Introduced in: -
 
+### runtime_filter_worker_thread_num
+
+- Default: 4
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: The number of threads on each BE that merge and deliver global runtime filters. All events of one runtime filter are handled by the same thread, and different runtime filters are spread over the threads. A value less than or equal to `1` uses a single thread.
+- Introduced in: -
+
 ### scan_context_gc_interval_min
 
 - Default: 5
