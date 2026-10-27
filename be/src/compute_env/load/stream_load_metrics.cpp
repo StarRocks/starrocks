@@ -41,6 +41,8 @@ void StreamLoadMetrics::install(MetricRegistry* registry) {
     registry->register_metric("stream_load", MetricLabels().add("type", "load_rows"), &stream_load_rows_total);
     registry->register_metric("load_rows", &load_rows_total);
     registry->register_metric("load_bytes", &load_bytes_total);
+    registry->register_metric("routine_load", MetricLabels().add("type", "skipped_malformed_messages"),
+                              &routine_load_skipped_malformed_messages_total);
 
     registry->register_metric("streaming_load_requests_total", &streaming_load_requests_total);
     registry->register_metric("streaming_load_bytes", &streaming_load_bytes);

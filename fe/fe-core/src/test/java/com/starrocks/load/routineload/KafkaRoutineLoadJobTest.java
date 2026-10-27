@@ -49,6 +49,7 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.load.RoutineLoadDesc;
+import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.metric.RoutineLoadLagTimeMetricMgr;
 import com.starrocks.persist.OriginStatementInfo;
 import com.starrocks.persist.gson.GsonUtils;
@@ -999,6 +1000,19 @@ public class KafkaRoutineLoadJobTest {
             Deencapsulation.setField(createRoutineLoadStmt, "pauseOnFatalParseError", true);
             KafkaRoutineLoadJob kafkaRoutineLoadJob = KafkaRoutineLoadJob.fromCreateStmt(createRoutineLoadStmt);
             Assertions.assertTrue(kafkaRoutineLoadJob.isPauseOnFatalParseError());
+        }
+        // The sibling property travels the same way and, once on the job, reaches the
+        // plan-side StreamLoadInfo the BE is driven from.
+        {
+            KafkaRoutineLoadJob kafkaRoutineLoadJob = KafkaRoutineLoadJob.fromCreateStmt(createRoutineLoadStmt);
+            Assertions.assertFalse(kafkaRoutineLoadJob.isSkipOnFatalParseError());
+            Assertions.assertFalse(StreamLoadInfo.fromRoutineLoadJob(kafkaRoutineLoadJob).isSkipOnFatalParseError());
+        }
+        {
+            Deencapsulation.setField(createRoutineLoadStmt, "skipOnFatalParseError", true);
+            KafkaRoutineLoadJob kafkaRoutineLoadJob = KafkaRoutineLoadJob.fromCreateStmt(createRoutineLoadStmt);
+            Assertions.assertTrue(kafkaRoutineLoadJob.isSkipOnFatalParseError());
+            Assertions.assertTrue(StreamLoadInfo.fromRoutineLoadJob(kafkaRoutineLoadJob).isSkipOnFatalParseError());
         }
     }
 
