@@ -1738,6 +1738,7 @@ TEST_F(geographyFunctionsTest, nativeGeoContainmentPredicates) {
 }
 
 TEST_F(geographyFunctionsTest, nativeGeographyDirectContainmentMatchesPrepared) {
+    gflags::FlagSaver restore_flags;
     FLAGS_s2debug = false;
     struct Case {
         const char* polygon;
