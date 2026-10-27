@@ -22,6 +22,18 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Count
 - Description: Cumulative number of instances serving as Exchange receivers in BE.
 
+## `datacache_corruption_removed_files`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Cumulative number of external table files whose corrupted data cache blocks are removed after a scan fails to decode the content read from the data cache. Controlled by `external_table_clear_corrupted_cache_data`.
+
+## `datacache_corruption_retried_files`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Cumulative number of external table files read again bypassing the data cache to verify whether their cached copy is corrupted. Only Parquet files are read again.
+
 ## `datacache_disk_quota_bytes`
 
 - Unit: Bytes

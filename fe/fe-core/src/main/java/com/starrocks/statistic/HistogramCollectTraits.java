@@ -104,7 +104,7 @@ abstract class HistogramCollectTraits {
      * {@link StatisticsCollectJob#awaitBackendMemory}. False for the native flavour, which fails
      * immediately as it always has.
      */
-    boolean waitsOutProcessMemoryPressure() {
+    boolean waitsOutSharedMemoryPressure() {
         return false;
     }
 

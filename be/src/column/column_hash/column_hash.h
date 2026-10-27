@@ -20,6 +20,11 @@ namespace starrocks {
 
 // FNV Hash
 void fnv_hash_column(const Column& column, uint32_t* hashes, uint32_t from, uint32_t to);
+// Same as fnv_hash_column(), except the hash of row i lands in hashes[i - from] instead of
+// hashes[i], so `hashes` only has to cover [from, to). A caller hashing a sub-range with
+// fnv_hash_column() would otherwise need a buffer spanning the rows before `from`, or a base
+// pointer computed outside its own allocation.
+void fnv_hash_column_rebased(const Column& column, uint32_t* hashes, uint32_t from, uint32_t to);
 void fnv_hash_column_with_selection(const Column& column, uint32_t* hashes, uint8_t* selection, uint16_t from,
                                     uint16_t to);
 void fnv_hash_column_selective(const Column& column, uint32_t* hashes, uint16_t* sel, uint16_t sel_size);

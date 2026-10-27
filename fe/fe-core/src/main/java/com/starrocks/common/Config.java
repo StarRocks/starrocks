@@ -4141,6 +4141,13 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "partitions which can be vacuumed immediately, test only, format:'id1;id2'")
     public static String lake_vacuum_immediately_partition_ids = "";
 
+    @ConfField(mutable = true, comment = "partitions whose incremental vacuum state should be force-reset, a "
+            + "recovery escape hatch for a wedged propose/commit that never advances, format:'id1;id2'. Only "
+            + "the serving leader honors it: ADMIN SET FRONTEND CONFIG broadcasts the value to every FE, and "
+            + "a node discards whatever it inherited when it becomes leader, so a request must be re-issued "
+            + "after a failover")
+    public static String lake_vacuum_reset_partition_ids = "";
+
     @ConfField(mutable = true, comment = "the max number of threads for publishing version",
             aliases = {"lake_publish_version_max_threads"})
     public static int publish_version_max_threads = 512;
@@ -5631,23 +5638,6 @@ public class Config extends ConfigBase {
             "timeout.")
     public static int failpoint_pause_timeout_second = 300;
 
-    @ConfField(mutable = true, comment = "Complete HTTPS POST URL for SYSTEM ai_complete calls")
-    public static String ai_default_chat_endpoint = "";
-
-    @ConfField(mutable = true, comment = "Default model for SYSTEM ai_complete calls without an explicit model")
-    public static String ai_default_chat_model = "";
-
-    @ConfField(mutable = true, comment = "Provider for SYSTEM ai_complete calls; openai_compatible or qwen_compatible")
-    public static String ai_default_chat_provider = "";
-    @ConfField(mutable = true, comment = "Complete HTTPS POST URL for SYSTEM ai_embed calls")
-    public static String ai_default_embedding_endpoint = "";
-
-    @ConfField(mutable = true, comment = "Default model for SYSTEM ai_embed calls without an explicit model")
-    public static String ai_default_embedding_model = "";
-
-    @ConfField(mutable = true, comment = "Provider for SYSTEM ai_embed calls; openai_compatible or dashscope_multimodal")
-    public static String ai_default_embedding_provider = "";
-
     /**
      * How the FE reacts when a metadata lock is requested on an object the internal catalog does
      * not own -- a database from an external catalog, or a placeholder table id such as the
@@ -5683,6 +5673,19 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static String lock_blocking_call_validation_mode = "warn";
+
+    /**
+     * How the FE reacts when a published native table or materialized view is copied for planning
+     * ({@code OlapTable#copyOnlyForQuery}) by a thread that holds neither that table's READ/WRITE lock
+     * nor its database's. The copy walks the live partition and index maps, so a concurrent DDL, an
+     * INSERT OVERWRITE swapping partitions or a follower's replayer can change them under it: the
+     * statement fails with a ConcurrentModificationException, or plans off half-applied metadata.
+     *
+     * {@code off} skips the check, {@code warn} logs the violation with the copier's stack and lets
+     * the copy proceed, {@code error} refuses it. Mutable. Unrecognized values behave as {@code warn}.
+     */
+    @ConfField(mutable = true)
+    public static String lock_snapshot_copy_validation_mode = "warn";
 
     /**
      * Minimum interval in milliseconds between lock-invariant violation log lines <b>from the same

@@ -125,7 +125,8 @@ Output:
 | existing_rows_count       | The total number of rows in all data files with status `EXISTING` in the manifest file. |
 | deleted_data_files_count  | The number of data files with status `DELETED` in the manifest file. |
 | deleted_rows_count        | The total number of rows in all data files with status `DELETED` in the manifest file. |
-| partition_summaries       | Partition range metadata.                                    |
+| partitions                | Partition range metadata.                                    |
+| content                   | The content type of the manifest file. Valid values: `DATA(0)`, `DELETES(1)`. For a delete manifest, the `*_data_files_count` and `*_rows_count` fields count its delete files and deleted rows. |
 
 ## `partitions` table
 
@@ -178,6 +179,10 @@ Output:
 | sort_id            | The ID representing sort order for this file.                |
 | equality_ids       | The set of field IDs used for equality comparison in equality delete files. |
 | key_metadata       | The metadata about the encryption key that is used to encrypt this file, if applicable. |
+| first_row_id       | The ID of the first row in a data file of a format version 3 table. `NULL` for delete files. |
+| referenced_data_file | The location of the data file that a deletion vector or a file-scoped position delete file applies to. `NULL` for data files. |
+| content_offset     | The offset of a deletion vector in its Puffin file. `NULL` for other files. |
+| content_size_in_bytes | The size of a deletion vector in its Puffin file. `NULL` for other files. |
 
 ## `refs` table
 

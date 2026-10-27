@@ -42,10 +42,17 @@ CacheInputStream::CacheInputStream(const std::shared_ptr<SharedBufferedInputStre
           _size(size) {
     _cache = BlockCache::instance();
     _block_size = _cache->block_size();
+    _cache_key = calc_cache_key(filename, size, modification_time);
+    // default _buffer size is 4MB = (16 * 256KB)
+    _buffer_size = 16 * _block_size;
+    _buffer.reserve(_buffer_size);
+}
 
-    _cache_key.resize(12);
+std::string CacheInputStream::calc_cache_key(const std::string& filename, size_t size, int64_t modification_time) {
+    std::string cache_key;
+    cache_key.resize(12);
 
-    char* data = _cache_key.data();
+    char* data = cache_key.data();
     // MurmurHash3 explicitly, NOT HashUtil::hash64(): this key is persisted in the local disk cache
     // and is sent to peer BEs, so it must stay identical across releases and architectures, while
     // hash64() picks its implementation from a hardware dispatch table that is free to change.
@@ -61,12 +68,28 @@ CacheInputStream::CacheInputStream(const std::shared_ptr<SharedBufferedInputStre
         uint32_t mtime_s = (modification_time >> 9) & 0x00000000FFFFFFFF;
         memcpy(data + 8, &mtime_s, sizeof(mtime_s));
     } else {
-        uint32_t file_size = _size;
+        uint32_t file_size = size;
         memcpy(data + 8, &file_size, sizeof(file_size));
     }
-    // default _buffer size is 4MB = (16 * 256KB)
-    _buffer_size = 16 * _block_size;
-    _buffer.reserve(_buffer_size);
+    return cache_key;
+}
+
+size_t CacheInputStream::remove_cached_blocks() {
+    size_t removed = 0;
+    for (int64_t block_id : _cache_read_blocks) {
+        int64_t offset = block_id * _block_size;
+        Status st = _cache->remove(_cache_key, offset, std::min(_block_size, _size - offset));
+        if (st.ok()) {
+            ++removed;
+        } else if (!st.is_not_found()) {
+            LOG(WARNING) << "fail to remove datacache block of file: " << _filename << ", offset: " << offset
+                         << ", error: " << st;
+        }
+    }
+    _cache_read_blocks.clear();
+    // Also drop the blocks buffered by this stream.
+    _block_map.clear();
+    return removed;
 }
 
 CacheInputStream::~CacheInputStream() = default;
@@ -168,6 +191,7 @@ Status CacheInputStream::_read_from_cache(const int64_t offset, const int64_t si
     }
 
     if (res.ok()) {
+        _cache_read_blocks.emplace(block_id);
         // Peer reads always fill block.buffer, even when local reads write directly to out.
         if (_enable_block_buffer || try_peer_cache) {
             block.buffer.copy_to(out, size, shift);

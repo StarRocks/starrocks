@@ -381,7 +381,7 @@ GeoPolygon::~GeoPolygon() = default;
 
 constexpr double kBoundaryToleranceRadians = 1e-15;
 
-static bool is_valid_s2loop_points(const std::vector<S2Point>& points, bool direct) {
+static bool has_valid_loop_vertices(const std::vector<S2Point>& points) {
     // Match S2Loop::FindValidationErrorNoIndex before using its robust crossing
     // validator. The original loop construction normalizes only after validity
     // succeeds; this predicate does not construct or normalize a polygon.
@@ -392,12 +392,10 @@ static bool is_valid_s2loop_points(const std::vector<S2Point>& points, bool dire
         const auto& next = points[(i + 1) % points.size()];
         if (points[i] == next || points[i] == -next) return false;
     }
-    if (!direct) {
-        MutableS2ShapeIndex index;
-        index.Add(std::make_unique<S2LaxLoopShape>(points));
-        S2Error error;
-        return !s2shapeutil::FindSelfIntersection(index, &error);
-    }
+    return true;
+}
+
+static bool has_no_crossings_direct(const std::vector<S2Point>& points) {
     const size_t n = points.size();
     // FindCrossingError for one chain rejects interior crossings and repeated end vertices.
     // Adjacent edges share an endpoint, so their CrossingSign is zero; their ends differ.
@@ -414,14 +412,20 @@ static bool is_valid_s2loop_points(const std::vector<S2Point>& points, bool dire
 
 bool GeoPolygon::is_valid_ring(const GeoCoordinateList& coordinates) {
     std::vector<S2Point> points;
-    return to_s2loop_points(coordinates, &points) == GEO_PARSE_OK && is_valid_s2loop_points(points, false);
+    if (to_s2loop_points(coordinates, &points) != GEO_PARSE_OK || !has_valid_loop_vertices(points)) return false;
+    MutableS2ShapeIndex index;
+    index.Add(std::make_unique<S2LaxLoopShape>(points));
+    S2Error error;
+    return !s2shapeutil::FindSelfIntersection(index, &error);
 }
 
 bool GeoPolygon::is_valid_ring_direct(const GeoCoordinateList& coordinates) {
     // A paired sweep over 4..512 vertices favored direct checks at every tested size.
+    // Raw size bounds the converted size; retain the old path without converting twice.
     if (coordinates.list.size() > kMaxDirectVertices + 1) return is_valid_ring(coordinates);
     std::vector<S2Point> points;
-    return to_s2loop_points(coordinates, &points) == GEO_PARSE_OK && is_valid_s2loop_points(points, true);
+    return to_s2loop_points(coordinates, &points) == GEO_PARSE_OK && has_valid_loop_vertices(points) &&
+           has_no_crossings_direct(points);
 }
 
 bool GeoPolygon::point_relation_direct(const GeoCoordinateList& coordinates, const GeoPoint& point,
@@ -434,7 +438,7 @@ bool GeoPolygon::point_relation_direct(const GeoCoordinateList& coordinates, con
     for (const auto& vertex : points) {
         if (points[0].DotProd(vertex) < 0.5) return false;
     }
-    if (!is_valid_s2loop_points(points, true)) return false;
+    if (!(has_valid_loop_vertices(points) && has_no_crossings_direct(points))) return false;
     S1ChordAngle distance = S1ChordAngle::Infinity();
     const auto& p = *point.point();
     for (size_t i = 0; i < points.size(); ++i) {

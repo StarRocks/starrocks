@@ -168,7 +168,7 @@ int64_t AIRuntimeConfigSource::qps(AICapability capability) const noexcept {
     switch (capability) {
     case AICapability::CHAT:
         return _load_snapshot()->rate_limit_qps_chat;
-    case AICapability::TEXT_EMBEDDING:
+    case AICapability::EMBEDDING:
         return _load_snapshot()->rate_limit_qps_embedding;
     }
     return 0;

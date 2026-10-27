@@ -116,6 +116,88 @@ class PaimonReaderSelectorTest {
     }
 
     @Test
+    void nativeErrorsDescribeDefaultAggregateFunction() {
+        var selector = selector(schema(1, DataTypes.INT(), true,
+                Map.of("merge-engine", "aggregation", "fields.default-aggregate-function", "product")), "v");
+        var data = split("parquet", false, 1, false);
+        assertAuto(selector, data, JNI, MERGE_FUNCTION);
+        var error = assertThrows(StarRocksConnectorException.class,
+                () -> selector.select(data, PaimonReaderMode.NATIVE));
+        assertTrue(error.getMessage().contains("MERGE_FUNCTION"));
+        assertTrue(error.getMessage().contains("merge-engine=aggregation"));
+        assertTrue(error.getMessage().contains("fields.default-aggregate-function=product"));
+    }
+
+    @Test
+    void nativeErrorsPreserveReasonWhenDiagnosticsFail() {
+        var selector = selector(schema(1, DataTypes.INT(), false, Map.of("file.format", "json")), "v");
+        var data = org.mockito.Mockito.spy(split("json", false, 1, false));
+        org.mockito.Mockito.doThrow(new IllegalStateException("diagnostic failure")).when(data).dataFiles();
+        assertAuto(selector, data, JNI, FILE_FORMAT);
+        var error = assertThrows(StarRocksConnectorException.class,
+                () -> selector.select(data, PaimonReaderMode.NATIVE));
+        assertEquals("Paimon native reader cannot read this split: FILE_FORMAT; additional diagnostics unavailable",
+                error.getMessage());
+    }
+
+    @Test
+    void nativeErrorsDescribeFormatsWithoutLoadingAdditionalSchemas() {
+        var selector = selector(schema(1, DataTypes.INT(), false,
+                Map.of("file.format", "avro", "file.format.per.level", "0:avro,1:json")), "v");
+        var data = split("avro", false, 99, false);
+        assertAuto(selector, data, JNI, FILE_FORMAT);
+        var error = assertThrows(StarRocksConnectorException.class,
+                () -> selector.select(data, PaimonReaderMode.NATIVE));
+        assertTrue(error.getMessage().contains("FILE_FORMAT"));
+        assertTrue(error.getMessage().contains("file.format.per.level=0:avro,1:json"));
+        assertTrue(error.getMessage().contains("file formats=[avro]"));
+        // Schema 99 is intentionally unavailable: error formatting must use cached metadata only.
+        assertTrue(error.getMessage().contains("file schemas=[99]"));
+    }
+
+    @Test
+    void nativeErrorsDescribeCurrentAndHistoricalColumnTypes() {
+        var old = schema(0, DataTypes.INT(), false, Map.of());
+        var current = schema(1, DataTypes.STRING(), false, Map.of());
+        AtomicInteger loads = new AtomicInteger();
+        var selector = new PaimonReaderSelector(current, List.of("v"), id -> {
+            loads.incrementAndGet();
+            assertEquals(0, id);
+            return old;
+        });
+        var data = split("parquet", false, 0, false);
+        assertAuto(selector, data, JNI, SCHEMA_EVOLUTION);
+        var error = assertThrows(StarRocksConnectorException.class,
+                () -> selector.select(data, PaimonReaderMode.NATIVE));
+        assertTrue(error.getMessage().contains("SCHEMA_EVOLUTION"));
+        assertTrue(error.getMessage().contains("current {schema=1"));
+        assertTrue(error.getMessage().contains("historical {schema=0"));
+        assertTrue(error.getMessage().contains("v#1=STRING"));
+        assertTrue(error.getMessage().contains("v#1=INT"));
+        assertEquals(1, loads.get());
+    }
+
+    @Test
+    void nativeErrorsDescribeFallbackFormats() {
+        var main = org.mockito.Mockito.mock(FileStoreTable.class);
+        var branch = org.mockito.Mockito.mock(FileStoreTable.class);
+        org.mockito.Mockito.when(main.schema()).thenReturn(schema(1, DataTypes.INT(), false,
+                Map.of("scan.fallback-branch", "archive", "file.format", "avro")));
+        org.mockito.Mockito.when(branch.schema()).thenReturn(schema(2, DataTypes.INT(), false,
+                Map.of("file.format", "json")));
+        org.mockito.Mockito.when(main.switchToBranch("archive")).thenReturn(branch);
+        var selector = new PaimonReaderSelector(main, List.of("v"));
+        var data = FallbackReadFileStoreTable.toFallbackSplit(split("avro", false, 1, false), false);
+        assertAuto(selector, data, JNI, FILE_FORMAT);
+        var error = assertThrows(StarRocksConnectorException.class,
+                () -> selector.select(data, PaimonReaderMode.NATIVE));
+        assertTrue(error.getMessage().contains("fallback branch=archive"));
+        assertTrue(error.getMessage().contains("fallback {schema=2"));
+        assertTrue(error.getMessage().contains("file.format=json"));
+        org.mockito.Mockito.verify(main, org.mockito.Mockito.times(1)).switchToBranch("archive");
+    }
+
+    @Test
     void unsupportedFormatsUseJniAndExplicitNativeReportsReason() {
         for (String format : List.of("json", "csv", "text")) {
             var selector = selector(schema(1, DataTypes.INT(), false, Map.of("file.format", format)), "v");

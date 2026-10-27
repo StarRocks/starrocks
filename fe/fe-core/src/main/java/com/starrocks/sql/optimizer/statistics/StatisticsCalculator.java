@@ -1414,31 +1414,40 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                     context.getOptExpression());
         }
 
-        Statistics crossJoinStats = crossBuilder.build();
+        Statistics rawCrossJoinStats = crossBuilder.build();
+        // Selectivity stays uncertain when any key had unknown statistics, even if the known side lent its own.
+        boolean hasUncertainSelectivity = hasUnknownColumnStatistics(rawCrossJoinStats, eqOnPredicates);
+        Statistics crossJoinStats = joinType.isAntiJoin() ? rawCrossJoinStats :
+                borrowKnownSideStatistics(rawCrossJoinStats, eqOnPredicates,
+                        optimizerContext == null ? Map.of() : optimizerContext.getJoinKeyNdvBounds());
         double innerRowCount = -1;
         // For unknown column Statistics
-        boolean hasUnknownColumnStatistics =
-                eqOnPredicates.stream().map(PredicateOperator::getChildren).flatMap(Collection::stream)
-                        .filter(ScalarOperator::isColumnRef)
-                        .map(column -> crossJoinStats.getColumnStatistic((ColumnRefOperator) column))
-                        .anyMatch(ColumnStatistic::isUnknown);
-        if (hasUnknownColumnStatistics) {
+        boolean hasUnknownColumnStatistics = hasUnknownColumnStatistics(crossJoinStats, eqOnPredicates);
+        // The row count used when a key has unknown statistics. When the known side lent its statistics, it is
+        // kept as a floor: the unknown side's own row count may already be a guess (e.g. a default selectivity on
+        // another unknown column), so borrowing may only raise this join's estimate, never lower it. The borrowed
+        // statistics flow on to the joins above, which then see the column as known and get no floor of their own.
+        double unknownStatsRowCount = -1;
+        if (hasUncertainSelectivity) {
             // To avoid anti-join estimation of 0 rows, the rows of inner join
             // need to take a table with a small number of rows
             if (joinType.isAntiJoin()) {
-                innerRowCount = Math.max(0, Math.min(leftRowCount, rightRowCount));
+                unknownStatsRowCount = Math.max(0, Math.min(leftRowCount, rightRowCount));
             } else {
                 // if the large table is ten million times larger than the small table, we'd better multiply
                 // a filter coefficient.
                 double scaleFactor = Math.max(leftRowCount, rightRowCount) / Math.min(leftRowCount, rightRowCount);
                 if (scaleFactor >= Math.pow(10, 7)) {
-                    innerRowCount = Math.max(1, Math.max(leftRowCount, rightRowCount)
+                    unknownStatsRowCount = Math.max(1, Math.max(leftRowCount, rightRowCount)
                             * pow(PREDICATE_UNKNOWN_FILTER_COEFFICIENT, eqOnPredicates.size()));
                 } else {
-                    innerRowCount = Math.max(1, Math.max(leftRowCount, rightRowCount));
+                    unknownStatsRowCount = Math.max(1, Math.max(leftRowCount, rightRowCount));
                 }
 
             }
+        }
+        if (hasUnknownColumnStatistics) {
+            innerRowCount = unknownStatsRowCount;
         }
 
         Statistics innerJoinStats;
@@ -1451,11 +1460,15 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             if (optExpression != null && sessionVariable.isEnableUKFKOpt()) {
                 UKFKConstraintsCollector.collectColumnConstraints(optExpression);
                 UKFKConstraints constraints = optExpression.getConstraints();
+                // Built from crossJoinStats, so the key statistics borrowed above also reach the joins above.
                 Statistics ukfkJoinStat = buildStatisticsForUKFKJoin(joinType, constraints,
-                        leftRowCount, rightRowCount, crossBuilder);
+                        leftRowCount, rightRowCount, Statistics.buildFrom(crossJoinStats));
                 if (ukfkJoinStat.getOutputRowCount() < innerJoinStats.getOutputRowCount()) {
                     innerJoinStats = ukfkJoinStat;
                 }
+            }
+            if (innerJoinStats.getOutputRowCount() < unknownStatsRowCount) {
+                innerJoinStats = innerJoinStats.withOutputRowCount(unknownStatsRowCount);
             }
             innerRowCount = innerJoinStats.getOutputRowCount();
         } else {
@@ -1481,13 +1494,13 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                 outputRowCount = max(innerRowCount, leftRowCount);
                 joinStatsBuilder.setOutputRowCount(outputRowCount);
                 computeNullFractionForOuterJoin(leftRowCount, innerRowCount, outputRowCount,
-                        leftStatistics, rightStatistics, eqOnPredicates, hasUnknownColumnStatistics, joinStatsBuilder);
+                        leftStatistics, rightStatistics, eqOnPredicates, hasUncertainSelectivity, joinStatsBuilder);
                 break;
             case ASOF_LEFT_OUTER_JOIN:
                 joinStatsBuilder = Statistics.buildFrom(innerJoinStats);
                 joinStatsBuilder.setOutputRowCount(leftRowCount);
                 computeNullFractionForOuterJoin(leftRowCount, innerRowCount, leftRowCount, leftStatistics, rightStatistics,
-                        eqOnPredicates, hasUnknownColumnStatistics, joinStatsBuilder);
+                        eqOnPredicates, hasUncertainSelectivity, joinStatsBuilder);
                 break;
             case LEFT_SEMI_JOIN:
                 joinStatsBuilder = Statistics.buildFrom(StatisticsEstimateUtils.adjustStatisticsByRowCount(
@@ -1509,7 +1522,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                 outputRowCount = max(innerRowCount, rightRowCount);
                 joinStatsBuilder.setOutputRowCount(outputRowCount);
                 computeNullFractionForOuterJoin(rightRowCount, innerRowCount, outputRowCount,
-                        rightStatistics, leftStatistics, eqOnPredicates, hasUnknownColumnStatistics, joinStatsBuilder);
+                        rightStatistics, leftStatistics, eqOnPredicates, hasUncertainSelectivity, joinStatsBuilder);
                 break;
             case RIGHT_ANTI_JOIN:
                 joinStatsBuilder = Statistics.buildFrom(innerJoinStats);
@@ -1525,15 +1538,25 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                         max(leftRowCount, max(rightRowCount, max(innerRowCount, leftRowCount + rightRowCount - innerRowCount)));
                 joinStatsBuilder.setOutputRowCount(outputRowCount);
                 computeNullFractionForOuterJoin(leftRowCount, innerRowCount, outputRowCount,
-                        leftStatistics, rightStatistics, eqOnPredicates, hasUnknownColumnStatistics, joinStatsBuilder);
+                        leftStatistics, rightStatistics, eqOnPredicates, hasUncertainSelectivity, joinStatsBuilder);
                 computeNullFractionForOuterJoin(rightRowCount, innerRowCount, outputRowCount,
-                        rightStatistics, leftStatistics, eqOnPredicates, hasUnknownColumnStatistics, joinStatsBuilder);
+                        rightStatistics, leftStatistics, eqOnPredicates, hasUncertainSelectivity, joinStatsBuilder);
                 break;
             default:
                 throw new StarRocksPlannerException("Not support join type : " + joinType,
                         ErrorType.INTERNAL_ERROR);
         }
         Statistics joinStats = joinStatsBuilder.build();
+        if (joinType.isOuterJoin()) {
+            ColumnRefSet preservedColumns = new ColumnRefSet();
+            if (!joinType.isRightOuterJoin()) {
+                preservedColumns.union(leftStatistics.getUsedColumns());
+            }
+            if (joinType.isRightOuterJoin() || joinType.isFullOuterJoin()) {
+                preservedColumns.union(rightStatistics.getUsedColumns());
+            }
+            joinStats = restoreUnknownPreservedKeys(joinStats, rawCrossJoinStats, eqOnPredicates, preservedColumns);
+        }
 
         allJoinPredicate.removeAll(eqOnPredicates);
         Statistics estimateStatistics = estimateStatistics(allJoinPredicate, joinStats);
@@ -1949,6 +1972,99 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
         context.setStatistics(builder.build());
         return visitOperator(context.getOp(), context);
+    }
+
+    private static boolean hasUnknownColumnStatistics(Statistics statistics,
+                                                      List<BinaryPredicateOperator> eqOnPredicates) {
+        return eqOnPredicates.stream().map(PredicateOperator::getChildren).flatMap(Collection::stream)
+                .filter(ScalarOperator::isColumnRef)
+                .map(column -> statistics.getColumnStatistic((ColumnRefOperator) column))
+                .anyMatch(ColumnStatistic::isUnknown);
+    }
+
+    // Statistics borrowed for an unknown key only price this join. Rows of an outer join's preserved side that find
+    // no match keep their own key values, which need not lie in the lender's domain, so a preserved-side key goes
+    // back to its unknown statistics in the join output.
+    private static Statistics restoreUnknownPreservedKeys(Statistics joinStats, Statistics rawCrossJoinStats,
+                                                          List<BinaryPredicateOperator> eqOnPredicates,
+                                                          ColumnRefSet preservedColumns) {
+        Statistics.Builder builder = null;
+        for (BinaryPredicateOperator predicate : eqOnPredicates) {
+            for (ScalarOperator child : predicate.getChildren()) {
+                if (!(child instanceof ColumnRefOperator column) || !preservedColumns.contains(column)) {
+                    continue;
+                }
+                ColumnStatistic raw = rawCrossJoinStats.getColumnStatistic(column);
+                if (!raw.isUnknown() || joinStats.getColumnStatistic(column).isUnknown()) {
+                    continue;
+                }
+                if (builder == null) {
+                    builder = Statistics.buildFrom(joinStats);
+                }
+                builder.addColumnStatistic(column, raw);
+            }
+        }
+        return builder == null ? joinStats : builder.build();
+    }
+
+    // For an equi-join key whose statistics are unknown on one side only, assume its values are contained in the
+    // known side's domain and borrow the known side's statistics. The estimate L * R / ndv(known) is then never
+    // below the one full statistics would give (L * R / max(ndvL, ndvR)), so a missing statistic cannot make a
+    // many-to-many join look cheap. Keys unknown on both sides are left as they are. When one unknown column is
+    // equated to several known columns, it borrows from the one with the fewest distinct values (the largest
+    // estimate), the lowest column id among equals, so the result does not depend on the predicate order.
+    // A key unknown on both sides gets the containment bound of its equated columns (JoinKeyContainmentBound) as its
+    // number of distinct values, when there is one.
+    private static Statistics borrowKnownSideStatistics(Statistics statistics,
+                                                        List<BinaryPredicateOperator> eqOnPredicates,
+                                                        Map<Integer, Double> ndvBounds) {
+        Map<ColumnRefOperator, ColumnRefOperator> lenders = new HashMap<>();
+        Map<ColumnRefOperator, Double> bounded = new HashMap<>();
+        for (BinaryPredicateOperator predicate : eqOnPredicates) {
+            if (!predicate.getChild(0).isColumnRef() || !predicate.getChild(1).isColumnRef()) {
+                continue;
+            }
+            ColumnRefOperator left = (ColumnRefOperator) predicate.getChild(0);
+            ColumnRefOperator right = (ColumnRefOperator) predicate.getChild(1);
+            ColumnStatistic leftStat = statistics.getColumnStatistic(left);
+            ColumnStatistic rightStat = statistics.getColumnStatistic(right);
+            if (leftStat.isUnknown() && rightStat.isUnknown()) {
+                Double leftBound = ndvBounds.get(left.getId());
+                Double rightBound = ndvBounds.get(right.getId());
+                if (leftBound != null && rightBound != null) {
+                    double bound = Math.min(leftBound, rightBound);
+                    bounded.merge(left, bound, Math::min);
+                    bounded.merge(right, bound, Math::min);
+                }
+                continue;
+            }
+            if (!leftStat.isUnknown() && !rightStat.isUnknown()) {
+                continue;
+            }
+            ColumnRefOperator unknownRef = leftStat.isUnknown() ? left : right;
+            ColumnRefOperator knownRef = leftStat.isUnknown() ? right : left;
+            lenders.merge(unknownRef, knownRef, (a, b) -> {
+                int byNdv = Double.compare(statistics.getColumnStatistic(a).getDistinctValuesCount(),
+                        statistics.getColumnStatistic(b).getDistinctValuesCount());
+                return byNdv < 0 || (byNdv == 0 && a.getId() < b.getId()) ? a : b;
+            });
+        }
+        if (lenders.isEmpty() && bounded.isEmpty()) {
+            return statistics;
+        }
+        Statistics.Builder builder = Statistics.buildFrom(statistics);
+        bounded.forEach((column, bound) -> builder.addColumnStatistic(column,
+                ColumnStatistic.buildFrom(statistics.getColumnStatistic(column))
+                        .setDistinctValuesCount(bound)
+                        .setType(ColumnStatistic.StatisticType.ESTIMATE)
+                        .build()));
+        lenders.forEach((unknownRef, knownRef) -> builder.addColumnStatistic(unknownRef,
+                ColumnStatistic.buildFrom(statistics.getColumnStatistic(knownRef))
+                        .setNullsFraction(0)
+                        .setHistogram(null)
+                        .setType(ColumnStatistic.StatisticType.ESTIMATE)
+                        .build()));
+        return builder.build();
     }
 
     public Statistics estimateInnerJoinStatistics(Statistics statistics, List<BinaryPredicateOperator> eqOnPredicates) {
