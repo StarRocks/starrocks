@@ -25,6 +25,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.ComputeNode;
 import mockit.Mock;
 import mockit.MockUp;
+import org.apache.iceberg.exceptions.CommitFailedException;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -75,6 +76,76 @@ public class LakeTableTxnStateListenerTest extends LakeTableTestHelper {
 
         txnState.setTransactionStatus(TransactionStatus.COMMITTED);
         Assertions.assertEquals("", txnState.getReason());
+    }
+
+    @Test
+    public void testCommitRejectedByPhysicalPartitionScoreAboveUpperBound() throws TransactionException {
+        new MockUp<LakeTableTxnStateListener>() {
+            @Mock
+            boolean enableIngestSlowdown() {
+                return true;
+            }
+        };
+
+        LakeTable table = buildLakeTable();
+        Assertions.assertNotEquals(partitionId, physicalPartitionId);
+        DatabaseTransactionMgr databaseTransactionMgr = addDatabaseTransactionMgr();
+        CompactionMgr compactionMgr = GlobalStateMgr.getCurrentState().getCompactionMgr();
+        compactionMgr.clearPartitions();
+        try {
+            setCompactionScore(physicalPartitionId, Config.lake_compaction_score_upper_bound + 10.0);
+            LakeTableTxnStateListener listener = new LakeTableTxnStateListener(databaseTransactionMgr, table);
+            TransactionState txnState = prepareTransactionState(listener);
+            // past the slowdown delay, so only the upper bound decides
+            txnState.setAllowCommitTimeMs(System.currentTimeMillis() - 1);
+
+            LakeTableTxnStateListener commitListener = new LakeTableTxnStateListener(databaseTransactionMgr, table);
+            CommitFailedException e = Assertions.assertThrows(CommitFailedException.class,
+                    () -> commitListener.preCommit(txnState));
+            Assertions.assertTrue(e.getMessage().contains("partition " + physicalPartitionId), e.getMessage());
+        } finally {
+            compactionMgr.clearPartitions();
+        }
+    }
+
+    @Test
+    public void testCommitThrottledByEachPhysicalPartitionOfLogicalPartition() throws TransactionException {
+        new MockUp<LakeTableTxnStateListener>() {
+            @Mock
+            boolean enableIngestSlowdown() {
+                return true;
+            }
+        };
+
+        LakeTable table = buildLakeTable();
+        long subPartitionId = physicalPartitionId + 100;
+        long subTabletId = physicalPartitionId + 101;
+        MaterializedIndex subIndex = new MaterializedIndex(indexId);
+        TabletMeta subTabletMeta = new TabletMeta(dbId, tableId, subPartitionId, 0, TStorageMedium.HDD, true);
+        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().addTablet(subTabletId, subTabletMeta);
+        subIndex.addTablet(new LakeTablet(subTabletId), subTabletMeta);
+        table.getPartition(partitionId).addSubPartition(new PhysicalPartition(subPartitionId, partitionId, subIndex));
+        table.addPhysicalPartition(table.getPartition(partitionId).getSubPartition(subPartitionId));
+
+        DatabaseTransactionMgr databaseTransactionMgr = addDatabaseTransactionMgr();
+        CompactionMgr compactionMgr = GlobalStateMgr.getCurrentState().getCompactionMgr();
+        compactionMgr.clearPartitions();
+        try {
+            // A high score on the logical partition id or on the sibling physical partition does not throttle
+            // a load into the sub partition.
+            double highScore = Config.lake_ingest_slowdown_threshold + 10.0;
+            setCompactionScore(partitionId, highScore);
+            setCompactionScore(physicalPartitionId, highScore);
+            LakeTableTxnStateListener commitListener = new LakeTableTxnStateListener(databaseTransactionMgr, table);
+            commitListener.preCommit(prepareSubPartitionTransactionState(databaseTransactionMgr, table, subTabletId));
+
+            setCompactionScore(subPartitionId, highScore);
+            TransactionState txnState = prepareSubPartitionTransactionState(databaseTransactionMgr, table, subTabletId);
+            Assertions.assertThrows(CommitRateExceededException.class, () -> commitListener.preCommit(txnState));
+            Assertions.assertTrue(txnState.getAllowCommitTimeMs() > txnState.getWriteEndTimeMs());
+        } finally {
+            compactionMgr.clearPartitions();
+        }
     }
 
     @Test
@@ -135,6 +206,26 @@ public class LakeTableTxnStateListenerTest extends LakeTableTestHelper {
         CompactionMgr compactionMgr = GlobalStateMgr.getCurrentState().getCompactionMgr();
         compactionMgr.handleLoadingFinished(new PartitionIdentifier(dbId, tableId, physicalPartitionId), 3, currentTimeMs,
                 Quantiles.compute(Lists.newArrayList(Config.lake_ingest_slowdown_threshold + 10.0)));
+    }
+
+    private void setCompactionScore(long partitionId, double score) {
+        GlobalStateMgr.getCurrentState().getCompactionMgr().handleLoadingFinished(
+                new PartitionIdentifier(dbId, tableId, partitionId), 3, System.currentTimeMillis(),
+                Quantiles.compute(Lists.newArrayList(score)));
+    }
+
+    private TransactionState prepareSubPartitionTransactionState(DatabaseTransactionMgr databaseTransactionMgr,
+                                                                 LakeTable table, long subTabletId)
+            throws TransactionException {
+        LakeTableTxnStateListener listener = new LakeTableTxnStateListener(databaseTransactionMgr, table);
+        TransactionState txnState = newTransactionState();
+        listener.prePrepared(txnState, Lists.newArrayList(new TabletCommitInfo(subTabletId, 1)),
+                Collections.emptyList());
+        txnState.setTransactionStatus(TransactionStatus.PREPARED);
+        txnState.setPreparedTimeAndTimeout(
+                System.currentTimeMillis(), TransactionState.DEFAULT_PREPARED_TIMEOUT_MS);
+        listener.preWriteCommitLog(txnState);
+        return txnState;
     }
 
     private TransactionState prepareTransactionState(LakeTableTxnStateListener listener) throws TransactionException {
