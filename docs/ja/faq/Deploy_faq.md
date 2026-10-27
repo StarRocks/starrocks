@@ -145,7 +145,7 @@ root ユーザーは権限が過剰であるため、使用することは推奨
 
 ## BE ノード上の tablet の数に制限はありますか？たとえば、64 GB RAM と 16 コアのサーバーの場合、tablet 数の合理的な範囲はどのくらいですか？
 
-tablet 数に厳密な制限はありません。ただし、tablet サイズについては、各 tablet を約 1 GB に保つことをお勧めします。適切なパーティショニングとバケッティング戦略がクエリパフォーマンスを向上させます。tablet サイズの計画は重要です。
+tablet 数に厳密な制限はありません。ただし、tablet サイズについては、各 tablet を約 1 GB に保つことをお勧めします。大容量タブレットをサポートする v4.1 以降の共有データクラスタでは、各 tablet を 10 GB から 50 GB に保ち、100 GB を超えないようにすることをお勧めします。適切なパーティショニングとバケッティング戦略がクエリパフォーマンスを向上させます。tablet サイズの計画は重要です。
 
 ## BE を起動すると「error while loading shared libraries: libjvm.so: cannot open shared object file: No such file or directory」というエラーが表示され、手動で `lib/starrocks_be` ディレクトリを作成すると、許可が拒否されるエラーが発生します。どうすればよいですか？
 

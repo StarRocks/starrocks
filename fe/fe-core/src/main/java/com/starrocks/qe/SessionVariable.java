@@ -624,6 +624,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_PUSH_DOWN_AGGREGATE = "cbo_push_down_aggregate";
     public static final String CBO_PUSH_DOWN_GROUPINGSET = "cbo_push_down_groupingset";
     public static final String CBO_PUSH_DOWN_GROUPINGSET_RESHUFFLE = "cbo_push_down_groupingset_reshuffle";
+    public static final String CBO_PUSH_DOWN_GROUPINGSET_CASCADE_LEVEL =
+            "cbo_push_down_groupingset_cascade_level";
     public static final String CBO_DEBUG_ALIVE_BACKEND_NUMBER = "cbo_debug_alive_backend_number";
     public static final String CBO_PRUNE_SUBFIELD = "cbo_prune_subfield";
     public static final String CBO_PRUNE_JSON_SUBFIELD = "cbo_prune_json_subfield";
@@ -2312,6 +2314,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = CBO_PUSH_DOWN_GROUPINGSET_RESHUFFLE, flag = VariableMgr.INVISIBLE)
     private boolean cboPushDownGroupingSetReshuffle = true;
 
+    // How many levels of the rollup cascade PushDownAggregateGroupingSetsRule may build: each level
+    // re-aggregates from the previous one instead of expanding every level from the finest grouping
+    // set. 1 means the historical single split, and <= 0 is treated as 1 so it doubles as the rollback
+    // switch. The bound also caps the extra CTEs / fragments the rewrite introduces.
+    @VarAttr(name = CBO_PUSH_DOWN_GROUPINGSET_CASCADE_LEVEL, flag = VariableMgr.INVISIBLE)
+    private int cboPushDownGroupingSetCascadeLevel = 5;
+
     @VarAttr(name = CBO_PUSH_DOWN_AGG_WITH_MULTI_COLUMN_STATS)
     private boolean cboPushDownAggWithMultiColumnStats = true;
 
@@ -2414,7 +2423,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private long cboPushDownTopNLimit = 1000;
 
     @VarAttr(name = ENABLE_AI_TOPN_PUSHDOWN, flag = VariableMgr.INVISIBLE)
-    private boolean enableAiTopnPushdown = true;
+    private boolean enableAITopnPushdown = true;
 
     // Larger limits use per-instance candidates; zero selects the local path for all eligible limits.
     @VarAttr(name = AI_TOPN_PUSHDOWN_MAX_GLOBAL_LIMIT)
@@ -2758,15 +2767,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return cboPushDownTopNLimit;
     }
 
-    public boolean isEnableAiTopnPushdown() {
-        return enableAiTopnPushdown;
+    public boolean isEnableAITopnPushdown() {
+        return enableAITopnPushdown;
     }
 
-    public void setEnableAiTopnPushdown(boolean enableAiTopnPushdown) {
-        this.enableAiTopnPushdown = enableAiTopnPushdown;
+    public void setEnableAITopnPushdown(boolean enableAITopnPushdown) {
+        this.enableAITopnPushdown = enableAITopnPushdown;
     }
 
-    public long getAiTopnPushdownMaxGlobalLimit() {
+    public long getAITopnPushdownMaxGlobalLimit() {
         return aiTopnPushdownMaxGlobalLimit;
     }
 
@@ -5589,6 +5598,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setCboPushDownGroupingSetReshuffle(boolean cboPushDownGroupingSetReshuffle) {
         this.cboPushDownGroupingSetReshuffle = cboPushDownGroupingSetReshuffle;
+    }
+
+    public int getCboPushDownGroupingSetCascadeLevel() {
+        return cboPushDownGroupingSetCascadeLevel;
+    }
+
+    public void setCboPushDownGroupingSetCascadeLevel(int cboPushDownGroupingSetCascadeLevel) {
+        this.cboPushDownGroupingSetCascadeLevel = cboPushDownGroupingSetCascadeLevel;
     }
 
     public boolean isCboPushDownAggWithMultiColumnStats() {

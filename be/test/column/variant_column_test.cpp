@@ -410,6 +410,194 @@ PARALLEL_TEST(VariantColumnTest, test_create_variant_column) {
     EXPECT_GE(memory_usage, 0);
 }
 
+// The members below are the rest of the ObjectColumn family that a VariantColumn's shredded storage
+// invalidates: rows live in the metadata/remain base payload and the typed columns, never in the
+// inherited `_pool`. Each test pins the takeover by checking that the pool stays empty while the
+// real storage carries the effect - against the inherited bodies they index an empty pool or write
+// rows no reader can reach.
+
+PARALLEL_TEST(VariantColumnTest, test_get_refuses_rather_than_handing_out_a_pool_pointer) {
+    auto column = VariantColumn::create();
+    column->append(create_variant_row_from_json_text(R"({"a":1})"));
+    ASSERT_EQ(1, column->size());
+    // ObjectColumn::get() returns Datum(&_pool[n]); the pool holds no rows at all, so the Datum
+    // carries a wild pointer that its only consumer, append_datum(), then dereferences.
+    ASSERT_TRUE(column->get_pool().empty());
+    EXPECT_THROW((void)column->get(0), std::runtime_error);
+}
+
+PARALLEL_TEST(VariantColumnTest, test_append_strings_lands_in_the_base_payload) {
+    auto column = VariantColumn::create();
+    const std::vector<std::string> jsons = {R"({"a":1})", R"({"b":2})"};
+
+    std::vector<std::string> buffers;
+    for (const auto& json : jsons) {
+        VariantRowValue row = create_variant_row_from_json_text(json);
+        buffers.emplace_back(row.serialize_size(), '\0');
+        row.serialize(reinterpret_cast<uint8_t*>(buffers.back().data()));
+    }
+    std::vector<Slice> slices;
+    slices.reserve(buffers.size());
+    for (auto& buffer : buffers) {
+        slices.emplace_back(buffer.data(), buffer.size());
+    }
+
+    ASSERT_TRUE(column->append_strings(slices.data(), slices.size()));
+
+    // ObjectColumn::append_strings() emplaces into `_pool`, which size() does not count: the rows
+    // would land somewhere no reader ever looks.
+    ASSERT_TRUE(column->get_pool().empty());
+    ASSERT_EQ(2, column->size());
+    for (size_t i = 0; i < jsons.size(); ++i) {
+        assert_variant_row_json(column.get(), i, jsons[i]);
+    }
+    ASSERT_TRUE(column->capacity_limit_reached().ok());
+}
+
+PARALLEL_TEST(VariantColumnTest, test_update_rows_replaces_rows_in_the_real_storage) {
+    auto column = VariantColumn::create();
+    column->append(create_variant_row_from_json_text(R"({"a":1})"));
+    column->append(create_variant_row_from_json_text(R"({"b":2})"));
+    column->append(create_variant_row_from_json_text(R"({"c":3})"));
+
+    auto replacement = VariantColumn::create();
+    replacement->append(create_variant_row_from_json_text(R"({"z":9})"));
+    const uint32_t indexes[] = {1};
+    column->update_rows(*replacement, indexes);
+
+    ASSERT_EQ(3, column->size());
+    ASSERT_TRUE(column->get_pool().empty());
+    assert_variant_row_json(column.get(), 0, R"({"a":1})");
+    assert_variant_row_json(column.get(), 1, R"({"z":9})");
+    assert_variant_row_json(column.get(), 2, R"({"c":3})");
+}
+
+PARALLEL_TEST(VariantColumnTest, test_update_rows_replaces_the_first_and_last_row) {
+    auto column = VariantColumn::create();
+    column->append(create_variant_row_from_json_text(R"({"a":1})"));
+    column->append(create_variant_row_from_json_text(R"({"b":2})"));
+    column->append(create_variant_row_from_json_text(R"({"c":3})"));
+
+    auto replacement = VariantColumn::create();
+    replacement->append(create_variant_row_from_json_text(R"({"y":8})"));
+    replacement->append(create_variant_row_from_json_text(R"({"z":9})"));
+    const uint32_t indexes[] = {0, 2};
+    column->update_rows(*replacement, indexes);
+
+    ASSERT_EQ(3, column->size());
+    assert_variant_row_json(column.get(), 0, R"({"y":8})");
+    assert_variant_row_json(column.get(), 1, R"({"b":2})");
+    assert_variant_row_json(column.get(), 2, R"({"z":9})");
+}
+
+PARALLEL_TEST(VariantColumnTest, test_fill_default_defaults_only_the_selected_rows) {
+    auto column = VariantColumn::create();
+    column->append(create_variant_row_from_json_text(R"({"a":1})"));
+    column->append(create_variant_row_from_json_text(R"({"b":2})"));
+    column->append(create_variant_row_from_json_text(R"({"c":3})"));
+
+    // ObjectColumn::fill_default() assigns `_pool[i] = {}` - an out-of-bounds write on an empty pool.
+    Filter filter{0, 1, 0};
+    column->fill_default(filter);
+
+    ASSERT_EQ(3, column->size());
+    ASSERT_TRUE(column->get_pool().empty());
+    assert_variant_row_json(column.get(), 0, R"({"a":1})");
+    assert_null_base_payload(column.get(), 1);
+    assert_variant_row_json(column.get(), 2, R"({"c":3})");
+}
+
+PARALLEL_TEST(VariantColumnTest, test_memory_usage_does_not_double_count_the_base_payload) {
+    auto column = VariantColumn::create();
+    for (int i = 0; i < 8; ++i) {
+        column->append(create_variant_row_from_json_text(R"({"a":1})"));
+    }
+    ASSERT_EQ(8, column->size());
+    ASSERT_GT(column->byte_size(0, column->size()), 0);
+
+    // The base payload is BinaryColumn, whose every byte lives in its own container, so it has no
+    // referenced memory of its own. Inheriting ObjectColumn's `reference_memory_usage() =
+    // byte_size()` would add those bytes a second time on top of container_memory_usage() and
+    // report a variant chunk at roughly twice its real size.
+    EXPECT_EQ(0, column->reference_memory_usage());
+    EXPECT_EQ(0, column->reference_memory_usage(0, column->size()));
+
+    const size_t children = column->metadata_column()->memory_usage() + column->remain_value_column()->memory_usage();
+    EXPECT_EQ(children, column->memory_usage());
+    EXPECT_EQ(column->container_memory_usage(), column->memory_usage());
+}
+
+PARALLEL_TEST(VariantColumnTest, test_container_memory_usage_follows_the_real_storage) {
+    auto column = VariantColumn::create();
+    const size_t before = column->container_memory_usage();
+
+    for (int i = 0; i < 64; ++i) {
+        column->append(create_variant_row_from_json_text(R"({"a":1})"));
+    }
+
+    // ObjectColumn reports `_pool.capacity() * type_size()`, which stays 0 whatever the column does
+    // - so the rows appended into the base payload would be invisible to the tracker.
+    const size_t after = column->container_memory_usage();
+    EXPECT_GT(after, before);
+    EXPECT_EQ(column->metadata_column()->container_memory_usage() +
+                      column->remain_value_column()->container_memory_usage(),
+              after);
+    EXPECT_TRUE(column->get_pool().empty());
+}
+
+// ObjectColumn::reserve pre-sizes the inherited VariantRowValue pool, which a VariantColumn never
+// writes to. The override has to reach the columns that actually receive the rows, otherwise a
+// caller sizing a variant result up front pays for a vector that stays empty while the base payload
+// it meant to size still grows geometrically.
+PARALLEL_TEST(VariantColumnTest, test_reserve_sizes_base_payload_not_object_pool) {
+    auto column = VariantColumn::create();
+    constexpr size_t kRows = 4096;
+
+    column->reserve(kRows);
+
+    EXPECT_EQ(0, column->get_pool().capacity());
+    EXPECT_GE(column->metadata_column()->capacity(), kRows);
+    EXPECT_GE(column->remain_value_column()->capacity(), kRows);
+    EXPECT_EQ(0, column->size());
+    EXPECT_TRUE(column->empty());
+
+    // A reservation must not disturb what a later append reads back.
+    column->append(create_variant_row_from_json_text(R"({"a":1})"));
+    ASSERT_EQ(1, column->size());
+    VariantRowValue row_buffer;
+    const VariantRowValue* row = column->get_row_value(0, &row_buffer);
+    ASSERT_NE(nullptr, row);
+    auto json = row->to_json();
+    ASSERT_TRUE(json.ok()) << json.status().to_string();
+    EXPECT_EQ(R"({"a":1})", json.value());
+    EXPECT_EQ(0, column->get_pool().capacity());
+}
+
+PARALLEL_TEST(VariantColumnTest, test_reserve_skips_shredded_typed_columns) {
+    auto column = VariantColumn::create();
+    auto metadata = BinaryColumn::create();
+    auto remain = BinaryColumn::create();
+    append_json_variant_row(metadata.get(), remain.get(), R"({})");
+    MutableColumns typed;
+    typed.emplace_back(build_nullable_int_array_column({DatumArray{Datum(int64_t(1)), Datum(int64_t(2))}}, {0}));
+    column->set_shredded_columns({"a"}, {TypeDescriptor::create_array_type(TypeDescriptor(TYPE_BIGINT))},
+                                 std::move(typed), std::move(metadata), std::move(remain));
+    const size_t typed_capacity_before = column->typed_columns()[0]->capacity();
+
+    constexpr size_t kRows = 2048;
+    column->reserve(kRows);
+
+    EXPECT_EQ(0, column->get_pool().capacity());
+    EXPECT_GE(column->metadata_column()->capacity(), kRows);
+    EXPECT_GE(column->remain_value_column()->capacity(), kRows);
+    // The shredded schema is data-dependent in both width and element type, so the reservation
+    // stops at the base payload. This typed field is an ARRAY: forwarding would have reserved
+    // kRows inner elements on top of the kRows offsets, for arrays the rows may not contain.
+    ASSERT_EQ(1, column->typed_columns().size());
+    EXPECT_EQ(typed_capacity_before, column->typed_columns()[0]->capacity());
+    EXPECT_EQ(1, column->size());
+}
+
 PARALLEL_TEST(VariantColumnTest, test_clone_shredded_schema_integrity) {
     auto src = VariantColumn::create();
     auto metadata = BinaryColumn::create();
