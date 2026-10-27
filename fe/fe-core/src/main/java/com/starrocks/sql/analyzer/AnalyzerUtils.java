@@ -44,6 +44,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.SqlFunction;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.system.SystemTable;
@@ -130,6 +131,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.statistic.StatsConstants;
+import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.DateType;
@@ -2211,12 +2213,45 @@ public class AnalyzerUtils {
     }
 
     public static void checkNondeterministicFunction(ParseNode node) {
+        findFunctionCall(node, FunctionCallExpr::isNondeterministicBuiltinFnName).ifPresent(expr -> {
+            throw new SemanticException("Materialized view query statement select item " +
+                    ExprToSql.toSql(expr) + " not supported nondeterministic function", expr.getPos());
+        });
+    }
+
+    public static Optional<FunctionCallExpr> findCurrentTimeFunction(ParseNode node) {
+        return findFunctionCall(node, AnalyzerUtils::readsCurrentTime);
+    }
+
+    private static boolean readsCurrentTime(FunctionCallExpr expr) {
+        Function fn = expr.getFn();
+        if (fn instanceof SqlFunction sqlFunction) {
+            return sqlFunction.getAnalyzeExpr() != null
+                    && findCurrentTimeFunction(sqlFunction.getAnalyzeExpr()).isPresent();
+        }
+        // A UDF may share a time function's name with another signature.
+        if (fn != null && fn.getBinaryType() != TFunctionBinaryType.BUILTIN) {
+            return false;
+        }
+        String functionName = expr.getFunctionName();
+        if (!FunctionSet.nonDeterministicTimeFunctions.contains(functionName)) {
+            return false;
+        }
+        // unix_timestamp(x) converts its argument; only the no-argument form reads the clock.
+        return !FunctionSet.UNIX_TIMESTAMP.equals(functionName) || expr.getChildren().isEmpty();
+    }
+
+    private static Optional<FunctionCallExpr> findFunctionCall(ParseNode node, Predicate<FunctionCallExpr> predicate) {
+        List<FunctionCallExpr> matches = new ArrayList<>();
         new AstTraverser<Void, Void>() {
             @Override
             public Void visitFunctionCall(FunctionCallExpr expr, Void context) {
-                if (expr.isNondeterministicBuiltinFnName()) {
-                    throw new SemanticException("Materialized view query statement select item " +
-                            ExprToSql.toSql(expr) + " not supported nondeterministic function", expr.getPos());
+                if (!matches.isEmpty()) {
+                    return null;
+                }
+                if (predicate.apply(expr)) {
+                    matches.add(expr);
+                    return null;
                 }
                 return super.visitFunctionCall(expr, context);
             }
@@ -2242,6 +2277,7 @@ public class AnalyzerUtils {
                 return null;
             }
         }.visit(node);
+        return matches.stream().findFirst();
     }
 
     static class NonDeterministicAnalyzeVisitor extends AstTraverser<Void, Void> {

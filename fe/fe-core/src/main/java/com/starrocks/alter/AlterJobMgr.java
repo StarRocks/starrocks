@@ -435,7 +435,7 @@ public class AlterJobMgr {
         if (materializedView.getDefaultDistributionInfo() instanceof RangeDistributionInfo) {
             createStmt.setDistributionDesc(new RangeDistributionDesc());
         }
-        Analyzer.analyze(createStmt, context);
+        MaterializedViewAnalyzer.reanalyzeExistingMv(() -> Analyzer.analyze(createStmt, context));
 
         // validate the schema
         List<Column> newColumns = createStmt.getMvColumnItems().stream()
