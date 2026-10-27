@@ -841,15 +841,34 @@ build_brpc() {
     check_if_source_exist $BRPC_SOURCE
 
     cd $TP_SOURCE_DIR/$BRPC_SOURCE
-    CMAKE_GENERATOR="Unix Makefiles"
-    BUILD_SYSTEM='make'
-    PATH=$PATH:$TP_INSTALL_DIR/bin/ ./config_brpc.sh --headers="$TP_INSTALL_DIR/include" --libs="$TP_INSTALL_DIR/bin $TP_INSTALL_DIR/lib" --with-glog --with-thrift
-    make -j$PARALLEL
-    cp -rf output/* ${TP_INSTALL_DIR}/
-    if [ -f $TP_INSTALL_DIR/lib/libbrpc.a ]; then
-        mkdir -p $TP_INSTALL_DIR/lib64
-        cp $TP_SOURCE_DIR/$BRPC_SOURCE/output/lib/libbrpc.a $TP_INSTALL_DIR/lib64/
-    fi
+    # Match Starlet's CMake build and keep C++17 for glog 0.7.1 compatibility.
+    rm -rf build
+    PATH="$TP_INSTALL_DIR/bin:$PATH" $CMAKE_CMD -S . -B build -G "${CMAKE_GENERATOR}" \
+        -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+        -DCMAKE_INSTALL_PREFIX="$TP_INSTALL_DIR" \
+        -DCMAKE_INSTALL_LIBDIR=lib \
+        -DCMAKE_PREFIX_PATH="$TP_INSTALL_DIR" \
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+        -DCMAKE_CXX_STANDARD=17 \
+        -DBUILD_SHARED_LIBS=OFF \
+        -DBUILD_BRPC_TOOLS=OFF \
+        -DDOWNLOAD_GTEST=OFF \
+        -DOPENSSL_ROOT_DIR="$TP_INSTALL_DIR" \
+        -DOPENSSL_USE_STATIC_LIBS=TRUE \
+        -DProtobuf_USE_STATIC_LIBS=ON \
+        -DProtobuf_INCLUDE_DIR="$TP_INSTALL_DIR/include" \
+        -DProtobuf_LIBRARY="$TP_INSTALL_DIR/lib/libprotobuf.a" \
+        -DProtobuf_PROTOC_EXECUTABLE="$TP_INSTALL_DIR/bin/protoc" \
+        -DProtobuf_PROTOC_LIBRARY="$TP_INSTALL_DIR/lib/libprotoc.a" \
+        -DGFLAGS_INCLUDE_PATH="$TP_INSTALL_DIR/include" \
+        -DGFLAGS_LIBRARY="$TP_INSTALL_DIR/lib/libgflags.a" \
+        -DGLOG_LIB="$TP_INSTALL_DIR/lib/libglog.a" \
+        -DWITH_GLOG=ON \
+        -DWITH_THRIFT=ON
+    $CMAKE_CMD --build build -j "$PARALLEL"
+    $CMAKE_CMD --install build
+    mkdir -p "$TP_INSTALL_DIR/lib64"
+    cp "$TP_INSTALL_DIR/lib/libbrpc.a" "$TP_INSTALL_DIR/lib64/"
 }
 
 # rocksdb

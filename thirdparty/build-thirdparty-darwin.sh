@@ -801,12 +801,6 @@ build_brpc() {
 
     check_if_source_exist "${BRPC_SOURCE}"
     cd "${TP_SOURCE_DIR}/${BRPC_SOURCE}"
-    if ! grep -q "Force C++17 for glog 0.7.1 compatibility on macOS" CMakeLists.txt; then
-        perl -0pi -e 's/set\(CMAKE_CXX_STANDARD_REQUIRED ON\)/set(CMAKE_CXX_STANDARD_REQUIRED ON)\n\n# Force C++17 for glog 0.7.1 compatibility on macOS\nset(CMAKE_CXX_STANDARD 17)\nset(CMAKE_CXX_STANDARD_REQUIRED ON)/' CMakeLists.txt
-    fi
-    if ! grep -q "Respect caller-provided OpenSSL root on macOS" CMakeLists.txt; then
-        perl -0pi -e 's/if\(CMAKE_SYSTEM_NAME STREQUAL "Darwin"\)\n        set\(OPENSSL_ROOT_DIR\n            "\/usr\/local\/opt\/openssl" # Homebrew installed OpenSSL\n        \)\n    endif\(\)/if(CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND NOT OPENSSL_ROOT_DIR)\n        # Respect caller-provided OpenSSL root on macOS.\n        set(OPENSSL_ROOT_DIR\n            "\/usr\/local\/opt\/openssl" # Homebrew installed OpenSSL\n        )\n    endif()/' CMakeLists.txt
-    fi
 
     local old_path="${PATH}"
     local old_pkg_config_path="${PKG_CONFIG_PATH:-}"
@@ -830,12 +824,15 @@ build_brpc() {
     brpc_c_flags="$(append_flags "${brpc_c_flags}" "${CFLAGS}")"
     brpc_linker_flags="$(append_flags "${brpc_linker_flags}" "${LDFLAGS:-}")"
 
+    # With protobuf 3.x brpc defaults to C++14. Build it as C++17 like the Linux build, for
+    # glog 0.7.1 and because butil::optional is std::optional only under C++17.
     "${CMAKE_CMD}" .. \
         -G "${CMAKE_GENERATOR}" \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX="${TP_INSTALL_DIR}" \
         -DCMAKE_INSTALL_LIBDIR=lib \
         -DCMAKE_PREFIX_PATH="${TP_INSTALL_DIR}" \
+        -DCMAKE_CXX_STANDARD=17 \
         -DCMAKE_CXX_FLAGS="${brpc_cxx_flags}" \
         -DCMAKE_C_FLAGS="${brpc_c_flags}" \
         -DCMAKE_EXE_LINKER_FLAGS="${brpc_linker_flags}" \
