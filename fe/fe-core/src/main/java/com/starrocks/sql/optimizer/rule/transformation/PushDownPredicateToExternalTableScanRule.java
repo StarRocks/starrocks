@@ -49,6 +49,7 @@ public class PushDownPredicateToExternalTableScanRule extends TransformationRule
                 Pattern.create(OperatorType.LOGICAL_FILTER)
                         .addChildren(MultiOpPattern.of(OperatorType.LOGICAL_MYSQL_SCAN,
                                 OperatorType.LOGICAL_JDBC_SCAN,
+                                OperatorType.LOGICAL_ADBC_SCAN,
                                 OperatorType.LOGICAL_ODPS_SCAN)));
     }
 

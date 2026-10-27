@@ -784,6 +784,8 @@ public class StmtExecutor {
                 return "deltalake";
             case JDBC:
                 return "jdbc";
+            case ADBC:
+                return "adbc";
             case PAIMON:
             case PAIMON_VIEW:
                 return "paimon";

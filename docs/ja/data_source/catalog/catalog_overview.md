@@ -29,6 +29,7 @@ StarRocks は v2.3 以降、 catalog 機能をサポートしています。 cat
   - [Hudi catalog](./hudi_catalog.md): Hudi からデータをクエリするために使用されます。
   - [Delta Lake catalog](./deltalake_catalog.md): Delta Lake からデータをクエリするために使用されます。
   - [JDBC catalog](./jdbc_catalog.md): JDBC 互換のデータソースからデータをクエリするために使用されます。
+  - [ADBC catalog](./adbc_catalog.md): ネイティブ ADBC ドライバーを通じて Arrow Flight SQL サービスをクエリするために使用されます。
   - [Benchmark catalog](./benchmark_catalog.md): TPC-H、TPC-DS、および SSB スキーマ用に生成されたインフライトデータセットをクエリするために使用されます。
   - [Elasticsearch catalog](./elasticsearch_catalog.md): Elasticsearch からデータをクエリするために使用されます。 Elasticsearch catalog は v3.1 以降でサポートされています。
   - [Paimon catalog](./paimon_catalog.md): Paimon からデータをクエリするために使用されます。 Paimon catalog は v3.1 以降でサポートされています。

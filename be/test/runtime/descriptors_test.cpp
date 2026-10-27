@@ -27,6 +27,37 @@
 
 namespace starrocks {
 
+TEST(ADBCTableDescriptorTest, DeserializesDriverOptionsAndTupleReference) {
+    TADBCTable adbc_table;
+    adbc_table.__set_driver("adbc_driver_flightsql");
+    adbc_table.__set_adbc_options({{"uri", "grpc://localhost:31337"}, {"password", "test-secret"}});
+    TTableDescriptor table;
+    table.__set_id(42);
+    table.__set_tableType(TTableType::ADBC_TABLE);
+    table.__set_numCols(1);
+    table.__set_numClusteringCols(0);
+    table.__set_tableName("nation");
+    table.__set_dbName("main");
+    table.__set_adbcTable(adbc_table);
+    TTupleDescriptor tuple;
+    tuple.__set_id(0);
+    tuple.__set_tableId(42);
+    TDescriptorTable thrift_table;
+    thrift_table.__set_tableDescriptors({table});
+    thrift_table.__set_tupleDescriptors({tuple});
+
+    ObjectPool pool;
+    DescriptorTbl* descriptors = nullptr;
+    ASSERT_OK(DescriptorTbl::create(nullptr, &pool, thrift_table, &descriptors, 1024));
+    auto* descriptor = dynamic_cast<ADBCTableDescriptor*>(descriptors->get_table_descriptor(42));
+    ASSERT_NE(nullptr, descriptor);
+    EXPECT_EQ(adbc_table.driver, descriptor->adbc_driver());
+    EXPECT_EQ(adbc_table.adbc_options, descriptor->adbc_options());
+    ASSERT_NE(nullptr, descriptors->get_tuple_descriptor(0));
+    EXPECT_EQ(descriptor, descriptors->get_tuple_descriptor(0)->table_desc());
+    EXPECT_EQ(std::string::npos, descriptor->debug_string().find("test-secret"));
+}
+
 class HiveTableDescriptorAddPartitionTest : public ::testing::Test {
 public:
     void SetUp() override {
