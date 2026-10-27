@@ -49,6 +49,18 @@ public:
     }
 };
 
+DescriptorTbl* grouped_queue_descriptor(ObjectPool* pool, TPlanNode* plan) {
+    TTupleDescriptor tuple;
+    tuple.__set_id(0);
+    tuple.__set_byteSize(0);
+    TDescriptorTable thrift;
+    thrift.__set_tupleDescriptors({tuple});
+    DescriptorTbl* desc = nullptr;
+    CHECK_OK(DescriptorTbl::create(nullptr, pool, thrift, &desc, 1));
+    plan->__set_row_tuples({0});
+    return desc;
+}
+
 TScanRangeParams grouped_queue_task(int group, int tablet = 77) {
     TScanRangeParams result;
     TInternalScanRange internal;
@@ -67,10 +79,10 @@ TScanRangeParams grouped_queue_task(int group, int tablet = 77) {
 
 TEST(GroupedScanQueueTest, grouped_queues_preserve_internal_parallel_policy_and_padding) {
     ObjectPool pool;
-    DescriptorTbl desc;
     TPlanNode plan;
     plan.__set_node_type(TPlanNodeType::LAKE_GROUPED_SCAN_NODE);
-    GroupedQueueScanNode node(&pool, plan, desc);
+    auto* desc = grouped_queue_descriptor(&pool, &plan);
+    GroupedQueueScanNode node(&pool, plan, *desc);
     TScanRangeParams padding;
     padding.__set_empty(true);
     std::map<int32_t, std::vector<TScanRangeParams>> ranges{{0, {grouped_queue_task(0), grouped_queue_task(0, 78)}},
@@ -123,10 +135,10 @@ TEST(GroupedScanQueueTest, DisabledRandomRoutingIsQueryableWithoutLocalShuffle) 
 
 TEST(GroupedScanQueueTest, grouped_requests_reject_global_unowned_or_cross_driver_groups) {
     ObjectPool pool;
-    DescriptorTbl desc;
     TPlanNode plan;
     plan.__set_node_type(TPlanNodeType::LAKE_GROUPED_SCAN_NODE);
-    GroupedQueueScanNode node(&pool, plan, desc);
+    auto* desc = grouped_queue_descriptor(&pool, &plan);
+    GroupedQueueScanNode node(&pool, plan, *desc);
     auto check = [&](const std::vector<TScanRangeParams>& global,
                      const std::map<int32_t, std::vector<TScanRangeParams>>& drivers, bool colocate = true) {
         auto result = node.convert_scan_range_to_morsel_queue_factory(global, drivers, 1, 2, colocate, false,
@@ -230,13 +242,13 @@ TEST(MorselPrimitiveTest, GroupedPaddingHasNoSyntheticTabletAndTerminates) {
 TEST(GroupedScanQueueTest, RecognizesGroupedNodeAndRejectsUnknownNode) {
     RuntimeState state{TQueryGlobals{}};
     ObjectPool pool;
-    DescriptorTbl desc;
     TPlanNode plan;
     plan.__set_node_type(TPlanNodeType::LAKE_GROUPED_SCAN_NODE);
+    auto* desc = grouped_queue_descriptor(&pool, &plan);
     plan.__set_limit(-1);
     plan.__set_lake_scan_node(TLakeScanNode{});
     ExecNode* node = nullptr;
-    ASSERT_OK(ExecNode::create_vectorized_node(&state, &pool, plan, desc, &node));
+    ASSERT_OK(ExecNode::create_vectorized_node(&state, &pool, plan, *desc, &node));
     ASSERT_NE(nullptr, dynamic_cast<ConnectorScanNode*>(node));
     EXPECT_EQ(TPlanNodeType::LAKE_GROUPED_SCAN_NODE, node->type());
     std::vector<ExecNode*> scans;
@@ -244,7 +256,7 @@ TEST(GroupedScanQueueTest, RecognizesGroupedNodeAndRejectsUnknownNode) {
     ASSERT_EQ(1, scans.size());
     EXPECT_EQ(node, scans[0]);
     plan.__set_node_type(static_cast<TPlanNodeType::type>(999));
-    EXPECT_TRUE(ExecNode::create_vectorized_node(&state, &pool, plan, desc, &node).is_internal_error());
+    EXPECT_TRUE(ExecNode::create_vectorized_node(&state, &pool, plan, *desc, &node).is_internal_error());
 }
 // Only the group scheduler/lifecycle is concrete here. This source models a driver-owned
 // task queue; lake-reader + blocking aggregate execution requires SQL integration tests.
