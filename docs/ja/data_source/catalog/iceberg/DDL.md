@@ -264,6 +264,35 @@ ALTER TABLE sales_data
 REPLACE PARTITION COLUMN day(sale_date) WITH month(sale_date);
 ```
 
+## ネストされたフィールドを追加または削除するための ALTER TABLE
+
+STRUCT 列、またはその中にネストされた STRUCT にフィールドを追加、または削除します。
+
+```SQL
+ALTER TABLE [catalog.][database.]table_name MODIFY COLUMN column_name
+ADD FIELD field_path field_type [FIRST | AFTER field_name];
+
+ALTER TABLE [catalog.][database.]table_name MODIFY COLUMN column_name
+DROP FIELD field_path;
+```
+
+`field_path` は列内のフィールドへのパスです (例: `c2.v3`)。ARRAY の要素には `[*]` を使用します (例: `c2.[*].v3`)。
+
+:::note
+Hive metastore を使用する Catalog では、metastore が互換性のない列タイプの変更を許可しないように設定されている場合 (`hive.metastore.disallow.incompatible.col.type.changes`)、変更は metastore によって拒否されます。
+:::
+
+**例:**
+
+列 `fx` が `STRUCT<c1 INT, c2 ARRAY<STRUCT<v1 INT>>>` であるとします。
+
+```SQL
+-- ARRAY c2 内の STRUCT にフィールド v2 を追加します
+ALTER TABLE t MODIFY COLUMN fx ADD FIELD c2.[*].v2 STRING AFTER v1;
+-- フィールド c1 を削除します
+ALTER TABLE t MODIFY COLUMN fx DROP FIELD c1;
+```
+
 ## DROP TABLE
 
 Iceberg テーブルを削除します。この機能は v3.1 以降でサポートされています。

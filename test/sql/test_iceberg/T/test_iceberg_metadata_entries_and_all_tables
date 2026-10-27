@@ -1,0 +1,55 @@
+-- name: test_iceberg_metadata_entries_and_all_tables
+-- The partition column of $files, $entries (including the DELETED entries of an overwrite) and the tables over all
+-- snapshots: $all_data_files, $all_delete_files, $all_manifests and $all_entries.
+
+create external catalog iceberg_meta_${uuid0} PROPERTIES ("type"="iceberg",
+    "iceberg.catalog.type"="hive",
+    "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+);
+
+create database iceberg_meta_${uuid0}.db_${uuid0};
+set catalog iceberg_meta_${uuid0};
+use db_${uuid0};
+
+create table part_t(
+    id int,
+    p int,
+    d date
+) partition by(p, d) properties ("location" = "oss://${oss_bucket}/meta_${uuid0}/part_t");
+
+-- snapshot 1: two data files
+insert into part_t values (1, 1, '2024-01-01'), (2, 2, '2024-01-02'), (4, 2, '2024-01-02');
+-- snapshot 2: a position delete file for the p=2 file
+delete from part_t where id = 2;
+-- snapshot 3: replaces the data file of p=1
+insert overwrite part_t partition(p=1, d='2024-01-01') values (3);
+
+-- the partition values are a struct
+select content, `partition`, record_count from part_t$files order by content, `partition`.p;
+select `partition`.p, `partition`.d from part_t$files where `partition`.p = 1;
+
+-- the overwrite left a DELETED (2) entry for the old p=1 file and an ADDED (1) one for the new file
+select status, data_file.content, data_file.`partition`, data_file.record_count from part_t$entries
+order by status, data_file.content, data_file.`partition`.p;
+-- every entry is in the snapshot that added or removed it, and the sequence numbers are set
+select count(*) from part_t$entries e join part_t$snapshots s on e.snapshot_id = s.snapshot_id
+where e.sequence_number is not null and e.file_sequence_number is not null;
+
+-- three data files over all snapshots; of them only the old p=1 file is no longer in $files
+select count(distinct file_path) from part_t$all_data_files;
+select distinct content, `partition`.p from part_t$all_delete_files;
+select distinct a.`partition`.p from part_t$all_data_files a left join part_t$files f on a.file_path = f.file_path
+where f.file_path is null;
+-- each snapshot lists its manifests
+select count(distinct reference_snapshot_id) = (select count(*) from part_t$snapshots) from part_t$all_manifests;
+select count(distinct data_file.file_path) from part_t$all_entries;
+
+-- the tables over all snapshots do not take a time travel clause
+select count(*) from part_t$all_entries for version as of 1;
+
+drop table part_t force;
+drop database db_${uuid0};
+drop catalog iceberg_meta_${uuid0};

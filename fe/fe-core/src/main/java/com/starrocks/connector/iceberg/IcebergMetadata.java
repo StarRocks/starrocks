@@ -118,6 +118,7 @@ import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.HistoryEntry;
 import org.apache.iceberg.IncrementalAppendScan;
 import org.apache.iceberg.IsolationLevel;
+import org.apache.iceberg.ManifestContent;
 import org.apache.iceberg.ManifestFile;
 import org.apache.iceberg.ManifestFiles;
 import org.apache.iceberg.ManifestReader;
@@ -181,6 +182,7 @@ import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -1210,10 +1212,17 @@ public class IcebergMetadata implements ConnectorMetadata {
         List<RemoteMetaSplit> remoteMetaSplits = new ArrayList<>();
         IcebergTable icebergTable = (IcebergTable) getTable(new ConnectContext(), dbName, tableName);
         org.apache.iceberg.Table nativeTable = icebergTable.getNativeTable();
+        // The tables over all snapshots list a branch written while main has no snapshot yet
+        boolean allSnapshots = metadataTableType == MetadataTableType.ALL_DATA_FILES
+                || metadataTableType == MetadataTableType.ALL_DELETE_FILES
+                || metadataTableType == MetadataTableType.ALL_MANIFESTS
+                || metadataTableType == MetadataTableType.ALL_ENTRIES;
         if (snapshotId == -1) {
             Snapshot currentSnapshot = nativeTable.currentSnapshot();
             if (currentSnapshot == null) {
-                return IcebergMetaSpec.EMPTY;
+                if (!allSnapshots) {
+                    return IcebergMetaSpec.EMPTY;
+                }
             } else {
                 snapshotId = nativeTable.currentSnapshot().snapshotId();
             }
@@ -1234,6 +1243,34 @@ public class IcebergMetadata implements ConnectorMetadata {
 
         if (IcebergMetaSplit.onlyNeedSingleSplit(metadataTableType)) {
             return new IcebergMetaSpec(serializedTable, List.of(IcebergMetaSplit.placeholderSplit()), false);
+        }
+
+        if (metadataTableType == MetadataTableType.ENTRIES) {
+            // a manifest without live files still has the entries of the files it removed
+            for (ManifestFile manifest : snapshot.allManifests(nativeTable.io())) {
+                remoteMetaSplits.add(IcebergMetaSplit.from(manifest));
+            }
+            return new IcebergMetaSpec(serializedTable, remoteMetaSplits, false);
+        }
+
+        if (allSnapshots) {
+            // every manifest reachable from any snapshot, once
+            Map<String, ManifestFile> manifests = new LinkedHashMap<>();
+            for (Snapshot reachable : nativeTable.snapshots()) {
+                for (ManifestFile manifest : reachable.allManifests(nativeTable.io())) {
+                    manifests.putIfAbsent(manifest.path(), manifest);
+                }
+            }
+            for (ManifestFile manifest : manifests.values()) {
+                boolean live = manifest.hasAddedFiles() || manifest.hasExistingFiles();
+                boolean data = manifest.content() == ManifestContent.DATA;
+                // the files tables list only live files
+                if (metadataTableType == MetadataTableType.ALL_ENTRIES
+                        || (live && data == (metadataTableType == MetadataTableType.ALL_DATA_FILES))) {
+                    remoteMetaSplits.add(IcebergMetaSplit.from(manifest));
+                }
+            }
+            return new IcebergMetaSpec(serializedTable, remoteMetaSplits, false);
         }
 
         List<ManifestFile> dataManifests = snapshot.dataManifests(nativeTable.io());

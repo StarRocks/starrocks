@@ -16,9 +16,11 @@ package com.starrocks.connector.share.iceberg;
 
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.Table;
+import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
 
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -26,6 +28,14 @@ import java.util.stream.Collectors;
 
 
 public class IcebergPartitionUtils {
+    // Partition value types the partition struct of the metadata tables can carry to BE. A TIME, FIXED or
+    // nanosecond timestamp field is left out, or every query of the table would fail.
+    private static final Set<Type.TypeID> METADATA_PARTITION_VALUE_TYPES = EnumSet.of(
+            Type.TypeID.BOOLEAN, Type.TypeID.INTEGER, Type.TypeID.LONG, Type.TypeID.FLOAT, Type.TypeID.DOUBLE,
+            Type.TypeID.DATE, Type.TypeID.TIMESTAMP, Type.TypeID.STRING, Type.TypeID.UUID, Type.TypeID.BINARY,
+            Type.TypeID.DECIMAL);
+
+    // The partition fields of all specs, as the partition struct of the metadata tables shows them
     public static List<PartitionField> getAllPartitionFields(Table icebergTable) {
         Set<Integer> existingColumnsIds = icebergTable.schema()
                 .columns().stream()
@@ -36,6 +46,8 @@ public class IcebergPartitionUtils {
                 .values().stream()
                 .flatMap(partitionSpec -> partitionSpec.fields().stream())
                 .filter(partitionField -> existingColumnsIds.contains(partitionField.sourceId()))
+                .filter(partitionField -> METADATA_PARTITION_VALUE_TYPES.contains(partitionField.transform()
+                        .getResultType(icebergTable.schema().findType(partitionField.sourceId())).typeId()))
                 .collect(Collectors.toList());
 
         return filterDuplicates(visiblePartitionFields);

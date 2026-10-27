@@ -261,6 +261,35 @@ ALTER TABLE sales_data
 REPLACE PARTITION COLUMN day(sale_date) WITH month(sale_date);
 ```
 
+## ALTER TABLE to add or drop a nested field
+
+Adds a field to, or drops a field from, a STRUCT column or a STRUCT nested in it.
+
+```SQL
+ALTER TABLE [catalog.][database.]table_name MODIFY COLUMN column_name
+ADD FIELD field_path field_type [FIRST | AFTER field_name];
+
+ALTER TABLE [catalog.][database.]table_name MODIFY COLUMN column_name
+DROP FIELD field_path;
+```
+
+`field_path` is the path to the field in the column, such as `c2.v3`. Use `[*]` for the elements of an ARRAY, such as `c2.[*].v3`.
+
+:::note
+In a catalog backed by a Hive metastore, the metastore rejects the change if it is configured to disallow incompatible column type changes (`hive.metastore.disallow.incompatible.col.type.changes`).
+:::
+
+**Examples:**
+
+Suppose the column `fx` is `STRUCT<c1 INT, c2 ARRAY<STRUCT<v1 INT>>>`.
+
+```SQL
+-- Add the field v2 to the STRUCT in the ARRAY c2
+ALTER TABLE t MODIFY COLUMN fx ADD FIELD c2.[*].v2 STRING AFTER v1;
+-- Drop the field c1
+ALTER TABLE t MODIFY COLUMN fx DROP FIELD c1;
+```
+
 ## DROP TABLE
 
 Drops an Iceberg table. This feature is supported from v3.1 onwards.
