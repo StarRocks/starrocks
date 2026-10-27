@@ -14,12 +14,20 @@
 
 #include "orchestration/runtime_filter_worker.h"
 
+<<<<<<< HEAD
+=======
+#include <google/protobuf/field_mask.pb.h>
+#include <google/protobuf/util/field_mask_util.h>
+
+#include <algorithm>
+>>>>>>> 2dcd5cf77cf... [Enhancement][RB-563] Degrade a global runtime filter to pass-all instead of losing it  (#66902)
 #include <utility>
 
 #include "common/config_exec_flow_fwd.h"
 #include "common/config_network_fwd.h"
 #include "common/config_runtime_fwd.h"
 #include "common/thread/thread.h"
+#include "exec/runtime_filter_compat/runtime_filter_serde.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/service_contexts.h"
@@ -55,10 +63,8 @@ void RuntimeFilterWorker::close() {
 void RuntimeFilterWorker::open_query(const TUniqueId& query_id, const TQueryOptions& query_options,
                                      const TRuntimeFilterParams& params, bool is_pipeline) {
     VLOG_FILE << "RuntimeFilterWorker::open_query. query_id = " << query_id << ", params = " << params;
-    if (_reach_queue_limit()) {
-        LOG(WARNING) << "runtime filter worker queue drop open query_id = " << query_id;
-        return;
-    }
+    // OPEN_QUERY is never dropped by the queue limit: without the merger, none of the query's partial filters can be
+    // merged, so every global runtime filter of the query would be lost instead of just the ones over the limit.
     RuntimeFilterWorkerEvent ev;
     ev.type = OPEN_QUERY;
     ev.query_id = query_id;
@@ -76,6 +82,36 @@ void RuntimeFilterWorker::close_query(const TUniqueId& query_id) {
     ev.query_id = query_id;
     _metrics->update_event_nums(ev.type, 1);
     _queue.put(std::move(ev));
+}
+
+// Over the queue limit, a partial runtime filter is replaced with a smaller one that passes every row, instead of being
+// dropped: a dropped partial filter leaves its merged filter incomplete forever. The queued bytes still shrink. Return false if there is no smaller one, and the caller drops it as before.
+static bool shrink_over_queue_limit(PTransmitRuntimeFilterParams* params, const char* what) {
+    const size_t size = params->data().size();
+    if (!RuntimeFilterSerde::shrink_to_pass_all(params->mutable_data())) {
+        LOG(WARNING) << "runtime filter worker queue drop " << what << ", query_id=" << params->query_id()
+                     << ", filter_id=" << params->filter_id();
+        return false;
+    }
+    LOG(WARNING) << "runtime filter worker queue replaces " << what
+                 << " with a filter that passes every row, query_id=" << params->query_id()
+                 << ", filter_id=" << params->filter_id() << ", size=" << size << "->" << params->data().size();
+    return true;
+}
+
+// Copy every field of `src` but its filter, which may be big.
+static void copy_without_filter(const PTransmitRuntimeFilterParams& src, PTransmitRuntimeFilterParams* dst) {
+    static const google::protobuf::FieldMask mask = [] {
+        google::protobuf::FieldMask mask;
+        const auto* descriptor = PTransmitRuntimeFilterParams::descriptor();
+        for (int i = 0; i < descriptor->field_count(); i++) {
+            if (descriptor->field(i)->number() != PTransmitRuntimeFilterParams::kDataFieldNumber) {
+                mask.add_paths(descriptor->field(i)->name());
+            }
+        }
+        return mask;
+    }();
+    google::protobuf::util::FieldMaskUtil::MergeMessageTo(src, mask, {}, dst);
 }
 
 bool RuntimeFilterWorker::_reach_queue_limit() {
@@ -101,9 +137,11 @@ void RuntimeFilterWorker::send_part_runtime_filter(PTransmitRuntimeFilterParams&
                                                    const std::vector<TNetworkAddress>& addrs, int timeout_ms,
                                                    int64_t rpc_http_min_size, EventType type) {
     if (_reach_queue_limit()) {
-        LOG(WARNING) << "runtime filter worker queue drop part runtime filter, query_id=" << params.query_id()
-                     << ", filter_id=" << params.filter_id();
-        return;
+        // only a partial filter, see shrink_over_queue_limit. The skew broadcast material is not a runtime filter, and
+        // another sender also sends it.
+        if (type != SEND_PART_RF || !shrink_over_queue_limit(&params, "part runtime filter")) {
+            return;
+        }
     }
     _runtime_services->runtime_filter_cache->add_rf_event(
             {params.query_id(), params.filter_id(), "", EventTypeToString(type)});
@@ -145,7 +183,12 @@ void RuntimeFilterWorker::receive_runtime_filter(const PTransmitRuntimeFilterPar
               << ", filter_id=" << params.filter_id() << ", probe_size=" << params.probe_finst_ids_size()
               << ", is_pipeline=" << params.is_pipeline();
 
-    if (_reach_queue_limit()) {
+    const bool reach_queue_limit = _reach_queue_limit();
+    // Only a partial filter is replaced over the queue limit: each build instance sends one, so nothing valid can
+    // come after it. A total filter may have another valid copy (a broadcast filter has up to three senders) that a
+    // pass-all filter, which can not be replaced once installed, could win over. The skew broadcast material is not a
+    // runtime filter.
+    if (reach_queue_limit && (params.is_skew_broadcast_join() || !params.is_partial())) {
         LOG(WARNING) << "runtime filter worker queue drop receive runtime filter, query_id=" << params.query_id()
                      << ", filter_id=" << params.filter_id();
         return;
@@ -176,10 +219,35 @@ void RuntimeFilterWorker::receive_runtime_filter(const PTransmitRuntimeFilterPar
     }
     ev.query_id.hi = params.query_id().hi();
     ev.query_id.lo = params.query_id().lo();
+<<<<<<< HEAD
     ev.transmit_rf_request = params;
     _metrics->update_event_nums(ev.type, 1);
     _metrics->update_rf_bytes(ev.type, ev.transmit_rf_request.data().size());
     _queue.put(std::move(ev));
+=======
+    if (!reach_queue_limit) {
+        ev.transmit_rf_request = params;
+    } else {
+        // shrink before copying the request, whose filter may be big.
+        std::string pass_all_data;
+        if (!RuntimeFilterSerde::to_pass_all(params.data(), &pass_all_data) ||
+            pass_all_data.size() > params.data().size()) {
+            LOG(WARNING) << "runtime filter worker queue drop receive runtime filter, query_id=" << params.query_id()
+                         << ", filter_id=" << params.filter_id();
+            return;
+        }
+        copy_without_filter(params, &ev.transmit_rf_request);
+        ev.transmit_rf_request.set_data(std::move(pass_all_data));
+        LOG(WARNING) << "runtime filter worker queue replaces receive runtime filter with a filter that passes every "
+                        "row, query_id="
+                     << params.query_id() << ", filter_id=" << params.filter_id() << ", size=" << params.data().size()
+                     << "->" << ev.transmit_rf_request.data().size();
+    }
+    // A skew join's broadcast rf is merged into the shuffle join's rf, so it goes with the shuffle join's filter.
+    const int32_t filter_id =
+            ev.type == RECEIVE_SKEW_JOIN_BROADCAST_RF ? params.skew_shuffle_filter_id() : params.filter_id();
+    _put(std::move(ev), filter_id);
+>>>>>>> 2dcd5cf77cf... [Enhancement][RB-563] Degrade a global runtime filter to pass-all instead of losing it  (#66902)
 }
 
 void RuntimeFilterWorker::execute() {

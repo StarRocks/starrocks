@@ -75,10 +75,11 @@ public:
         _num_active_builders++;
     }
 
-    // mark runtime_filter as always true.
-    StatusOr<bool> set_always_true() {
+    // mark runtime_filter as always true. `bloom_filter_descriptors` are kept without runtime filters, so that the
+    // global ones can still be published as filters that pass every row.
+    StatusOr<bool> set_always_true(RuntimeMembershipFilters&& bloom_filter_descriptors) {
         _always_true = true;
-        return _try_do_merge({});
+        return _try_do_merge(std::move(bloom_filter_descriptors));
     }
 
     RuntimeInFilterList get_total_in_filters() {

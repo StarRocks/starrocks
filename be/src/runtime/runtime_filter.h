@@ -295,6 +295,11 @@ public:
                               uint16_t sel_size, uint16_t* dst_sel) const = 0;
 
     bool always_true() const { return _always_true; }
+    void set_always_true() { _always_true = true; }
+
+    // Whether the filter passes every row by its content, see RuntimeFilterFactory::create_pass_all_filter. Unlike
+    // always_true(), it survives serialization.
+    virtual bool is_pass_all() const { return false; }
 
     bool has_null() const { return _has_null; }
 
@@ -772,6 +777,33 @@ public:
         _update_version();
     }
 
+    // Widen the bounds to every value of the type and admit null, so that the filter passes every row, also after it
+    // is serialized and merged with other filters. Unlike _always_true, this survives serialization.
+    // Return false if the type has no such bounds (floating types, JSON/VARIANT).
+    bool set_pass_all() {
+        MinMaxLock lk(_slice_mutex);
+        if (!_pass_all_bounds(&_min, &_max)) {
+            return false;
+        }
+        _has_min_max = true;
+        _left_close_interval = true;
+        _right_close_interval = true;
+        _has_null = true;
+        _update_version();
+        return true;
+    }
+
+    // Whether the filter is one that set_pass_all() made.
+    bool is_pass_all() const override {
+        CppType min;
+        CppType max;
+        if (!_pass_all_bounds(&min, &max)) {
+            return false;
+        }
+        MinMaxLock lk(_slice_mutex);
+        return _has_min_max && _has_null && _left_close_interval && _right_close_interval && _min == min && _max == max;
+    }
+
     void update_to_empty_and_not_null() {
         MinMaxLock lk(_slice_mutex);
         if (!_is_empty_range() || _has_null) {
@@ -1122,6 +1154,35 @@ private:
             _max = RunTimeTypeLimits<Type>::max_value();
         }
     }
+    static bool _pass_all_bounds(CppType* min, CppType* max) {
+        if constexpr (IsSlice<CppType>) {
+            *min = Slice::min_value();
+            *max = Slice::max_value();
+        } else if constexpr (std::is_floating_point_v<CppType>) {
+            // No bounds hold NaN, so no min/max passes every row; and a filter degraded from real keys may have the
+            // very bounds +-infinity, while it still filters NaN out.
+            return false;
+        } else if constexpr (std::is_integral_v<CppType>) {
+            *min = std::numeric_limits<CppType>::lowest();
+            *max = std::numeric_limits<CppType>::max();
+        } else if constexpr (IsDate<CppType>) {
+            *min = DateValue::MIN_DATE_VALUE;
+            *max = DateValue::MAX_DATE_VALUE;
+        } else if constexpr (IsTimestamp<CppType>) {
+            *min = TimestampValue::MIN_TIMESTAMP_VALUE;
+            *max = TimestampValue::MAX_TIMESTAMP_VALUE;
+        } else if constexpr (IsDecimal<CppType>) {
+            *min = DecimalV2Value::get_min_decimal();
+            *max = DecimalV2Value::get_max_decimal();
+        } else if constexpr (!lt_is_semi_structured<Type>) {
+            *min = RunTimeTypeLimits<Type>::min_value();
+            *max = RunTimeTypeLimits<Type>::max_value();
+        } else {
+            return false;
+        }
+        return true;
+    }
+
     void _init_full_range() {
         if constexpr (IsSlice<CppType>) {
             _max = Slice::max_value();
@@ -1875,6 +1936,11 @@ public:
 
     const RuntimeFilter* get_min_max_filter() const override { return &_min_max_filter; }
     MembershipFilter* get_membership_filter() override { return &_membership_filter; }
+
+    bool is_pass_all() const override {
+        return _membership_filter.type() == RuntimeFilterSerializeType::EMPTY_FILTER && _membership_filter.has_null() &&
+               _min_max_filter.is_pass_all();
+    }
 
     ComposedRuntimeFilter* create_empty(ObjectPool* pool) override {
         auto* p = pool->add(new ComposedRuntimeFilter());

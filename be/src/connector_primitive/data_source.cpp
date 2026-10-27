@@ -39,6 +39,9 @@ Status DataSource::parse_runtime_filters(RuntimeState* state) {
         DCHECK(runtime_membership_filter_eval_context.driver_sequence != -1);
         const RuntimeFilter* filter = probe->runtime_filter(runtime_membership_filter_eval_context.driver_sequence);
         if (filter == nullptr) continue;
+        // a join filter that passes every row filters nothing. always_true() alone does not tell it: a top-n filter
+        // is always true but has bounds.
+        if (filter->always_true() && filter->is_pass_all()) continue;
         SlotId slot_id;
         if (!probe->is_probe_slot_ref(&slot_id)) continue;
         LogicalType slot_type = probe->probe_expr_type();
