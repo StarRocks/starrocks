@@ -21,6 +21,10 @@ import com.google.common.base.Strings;
 import com.google.common.base.Throwables;
 import com.google.common.collect.Lists;
 import com.google.common.util.concurrent.Uninterruptibles;
+<<<<<<< HEAD
+=======
+import com.starrocks.alter.AlterMVJobExecutor;
+>>>>>>> 06b694cc699... [Enhancement][RB-454] Recover an incremental MV with ALTER ACTIVE, and let REFRESH ... FORCE only refresh (#65472)
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
@@ -93,6 +97,11 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
     // runtime profile
     @VisibleForTesting
     private RuntimeProfile runtimeProfile;
+<<<<<<< HEAD
+=======
+    // The status epoch this run last saw, or took itself; its failure is handled only while that is still current.
+    private OptionalLong observedStatusEpoch = OptionalLong.empty();
+>>>>>>> 06b694cc699... [Enhancement][RB-454] Recover an incremental MV with ALTER ACTIVE, and let REFRESH ... FORCE only refresh (#65472)
 
     public MVTaskRunProcessor() {
     }
@@ -136,6 +145,11 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
         if (!mv.isActive()) {
             MVActiveChecker.tryToActivate(mv);
             logger.info("Activated the MV before refreshing: {}", mv.getName());
+<<<<<<< HEAD
+=======
+            // An activation attempt may change the epoch even when it fails; that change is this run's own.
+            observedStatusEpoch = OptionalLong.of(mv.getStatusSnapshot().epoch());
+>>>>>>> 06b694cc699... [Enhancement][RB-454] Recover an incremental MV with ALTER ACTIVE, and let REFRESH ... FORCE only refresh (#65472)
         }
 
         // metrics entity
@@ -143,6 +157,12 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
         if (!mv.isActive()) {
             String errorMsg = String.format("Materialized view: %s/%d is not active due to %s.",
                     mv.getName(), mvId, mv.getInactiveReason());
+<<<<<<< HEAD
+=======
+            if (MaterializedViewExceptions.invalidatesBaseline(mv.getInactiveReason())) {
+                errorMsg += " " + MaterializedViewExceptions.recoverByActivateHint(db.getFullName(), mv.getName());
+            }
+>>>>>>> 06b694cc699... [Enhancement][RB-454] Recover an incremental MV with ALTER ACTIVE, and let REFRESH ... FORCE only refresh (#65472)
             logger.warn(errorMsg);
             mvMetricsEntity.increaseRefreshJobStatus(Constants.TaskRunState.FAILED);
             MaterializedViewMetricsRegistry.increaseGlobalRefreshJobStatus(
@@ -176,6 +196,74 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
         return mvTaskRunContext;
     }
 
+<<<<<<< HEAD
+=======
+    @Override
+    public Exception onFailure(Task task, Exception e) {
+        if (mv == null || observedStatusEpoch.isEmpty()) {
+            MaterializedView view = TaskBuilder.getMvFromTask(task);
+            if (view == null) {
+                return onConsecutiveFailures(task, null, e);
+            }
+            try (AutoCloseableLock ignored = new AutoCloseableLock(view.getDbId(), view.getId(), LockType.WRITE)) {
+                return isStillInCatalog(view) ? onConsecutiveFailures(task, view, e) : e;
+            }
+        }
+        try (AutoCloseableLock ignored = new AutoCloseableLock(mv.getDbId(), mv.getId(), LockType.WRITE)) {
+            // A drop leaves the epoch as it is, and anything journaled for the view now would follow the drop.
+            if (!isStillInCatalog(mv)) {
+                LOG.warn("mv {} was dropped while this refresh ran, skipping the failure handling of this run",
+                        mv.getName());
+                return e;
+            }
+            MaterializedView.StatusSnapshot status = mv.getStatusSnapshot();
+            if (status.epoch() != observedStatusEpoch.getAsLong()) {
+                LOG.warn("status of mv {} changed since this refresh observed it, skipping the failure handling of "
+                        + "this run", mv.getName());
+                return e;
+            }
+            // Permanent breakage: inactivate for its own reason, not through the consecutive-failure path.
+            Optional<RefreshFailureKind> kind = MaterializedViewExceptions.kindOf(e);
+            if (status.active() && kind.isPresent() && kind.get().isBreaking()) {
+                AlterMVJobExecutor.inactiveMvAndSuspendTaskUnlessAutoRecoversLocked(mv, kind.get());
+                return e;
+            }
+            return onConsecutiveFailures(task, mv, e);
+        }
+    }
+
+    private static boolean isStillInCatalog(MaterializedView view) {
+        return GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(view.getDbId(), view.getId()) == view;
+    }
+
+    /** The caller holds the write lock of {@code view} when it is not null. */
+    private Exception onConsecutiveFailures(Task task, MaterializedView view, Exception e) {
+        if (Config.max_task_consecutive_fail_count <= 0
+                || task.getConsecutiveFailCount() < Config.max_task_consecutive_fail_count) {
+            return e;
+        }
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        // A task dropped with its view: no replay could apply a pause journaled for it.
+        if (taskManager.getTask(task.getName()) == null) {
+            return e;
+        }
+        LOG.warn("Task {} has failed {} times continuously, so we disable it",
+                task.getName(), task.getConsecutiveFailCount());
+        taskManager.suspendTask(task, false);
+        String mvName = "";
+        if (view != null) {
+            // An inactive view keeps the reason it has: that one may still recover on its own.
+            if (view.isActive()) {
+                AlterMVJobExecutor.inactiveForConsecutiveFailures(view);
+            }
+            mvName = view.getName();
+        }
+        return new StarRocksException(String.format("Task %s has continuously failed %d times " +
+                        "and has been suspended. If you want active it again, try `ALTER MATERIALIZED VIEW %s ACTIVE`.",
+                task.getName(), task.getConsecutiveFailCount(), mvName), e);
+    }
+
+>>>>>>> 06b694cc699... [Enhancement][RB-454] Recover an incremental MV with ALTER ACTIVE, and let REFRESH ... FORCE only refresh (#65472)
     /**
      * Build the refresh plan for the materialized view, keeping the skip reason so the caller can tell why
      * there is no plan.

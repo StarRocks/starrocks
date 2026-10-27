@@ -1,0 +1,248 @@
+-- ALTER MATERIALIZED VIEW ... ACTIVE recovers an incremental view whose baseline its next refresh would break on: the
+-- next refresh recomputes with PCT the partitions that changed and records a new baseline, and the refreshes after it
+-- are incremental again. REFRESH ... FORCE only refreshes, so it fails on an inactive view as a plain refresh does.
+
+-- name: test_ivm_alter_active_recovers_after_dup_delete @cloud
+-- The view refreshes on a schedule, so activating it also queues the refresh that recovers it.
+CREATE TABLE ar_del_base (dt date, k int, v bigint)
+DUPLICATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');
+INSERT INTO ar_del_base VALUES ('2026-10-01',1,10),('2026-10-01',1,10),('2026-10-02',2,20),('2026-10-03',3,30);
+CREATE MATERIALIZED VIEW mv_ar_del
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED ASYNC EVERY(INTERVAL 1 DAY)
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'incremental', 'partition_refresh_number' = '-1')
+AS SELECT dt, k, SUM(v) AS v, COUNT(*) AS c FROM ar_del_base GROUP BY dt, k;
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_ar_del';
+REFRESH MATERIALIZED VIEW mv_ar_del WITH SYNC MODE;
+DELETE FROM ar_del_base WHERE dt = '2026-10-02' AND k = 2;
+[UC]REFRESH MATERIALIZED VIEW mv_ar_del WITH SYNC MODE;
+SELECT IS_ACTIVE, INACTIVE_REASON LIKE 'incremental refresh broken by non-append-only base change:%' FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_ar_del';
+[UC]REFRESH MATERIALIZED VIEW mv_ar_del WITH SYNC MODE;
+[UC]REFRESH MATERIALIZED VIEW mv_ar_del FORCE WITH SYNC MODE;
+SELECT IS_ACTIVE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_ar_del';
+SELECT COUNT(*) FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' AND ERROR_MESSAGE LIKE '%is not active due to incremental refresh broken%`.`mv_ar_del` ACTIVE to recover.%';
+ALTER MATERIALIZED VIEW mv_ar_del ACTIVE;
+LOOP {
+  PROPERTY: {"timeout": 60, "interval": 2, "desc": "the refresh the activation queued has finished"}
+  result=SELECT COUNT(*) FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' AND STATE IN ('SUCCESS', 'SKIPPED', 'FAILED');
+  CHECK: int(${result}[0][0]) >= 5
+} END LOOP
+SELECT IS_ACTIVE, LAST_EXECUTED_REFRESH_MODE, LAST_REFRESH_MODE_REASON FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_ar_del';
+SELECT get_json_string(EXTRA_MESSAGE, '$.mvPartitionsToRefresh') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY get_json_double(EXTRA_MESSAGE, '$.processStartTime') DESC LIMIT 1;
+INSERT INTO ar_del_base VALUES ('2026-10-01',1,10),('2026-10-04',4,40);
+REFRESH MATERIALIZED VIEW mv_ar_del WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY get_json_double(EXTRA_MESSAGE, '$.processStartTime') DESC LIMIT 1;
+set enable_materialized_view_rewrite = false;
+SELECT dt, k, v, c FROM mv_ar_del ORDER BY dt, k;
+SELECT dt, k, SUM(v), COUNT(*) FROM ar_del_base GROUP BY dt, k ORDER BY dt, k;
+
+-- name: test_ivm_alter_active_recovers_after_drop_partition @cloud
+-- The frontend detects this break, and its error already names ALTER ... ACTIVE.
+CREATE TABLE ar_dp_base (dt date, k int, v bigint)
+DUPLICATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');
+INSERT INTO ar_dp_base VALUES ('2026-10-01',1,10),('2026-10-02',2,20),('2026-10-02',2,20),('2026-10-03',3,30);
+CREATE MATERIALIZED VIEW mv_ar_dp
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'incremental', 'partition_refresh_number' = '-1')
+AS SELECT dt, k, v FROM ar_dp_base;
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_ar_dp';
+REFRESH MATERIALIZED VIEW mv_ar_dp WITH SYNC MODE;
+ALTER TABLE ar_dp_base DROP PARTITION p20261002;
+[UC]REFRESH MATERIALIZED VIEW mv_ar_dp WITH SYNC MODE;
+SELECT COUNT(*) FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' AND ERROR_MESSAGE LIKE '%do not support non-append-only base changes%`.`mv_ar_dp` ACTIVE to recover.%';
+SELECT IS_ACTIVE, INACTIVE_REASON LIKE 'incremental refresh broken by non-append-only base change:%' FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_ar_dp';
+ALTER MATERIALIZED VIEW mv_ar_dp ACTIVE;
+REFRESH MATERIALIZED VIEW mv_ar_dp WITH SYNC MODE;
+SELECT IS_ACTIVE, LAST_EXECUTED_REFRESH_MODE, LAST_REFRESH_MODE_REASON FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_ar_dp';
+INSERT INTO ar_dp_base VALUES ('2026-10-01',1,10),('2026-10-04',4,40);
+REFRESH MATERIALIZED VIEW mv_ar_dp WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY get_json_double(EXTRA_MESSAGE, '$.processStartTime') DESC LIMIT 1;
+set enable_materialized_view_rewrite = false;
+SELECT dt, k, v FROM mv_ar_dp ORDER BY dt, k, v;
+SELECT dt, k, v FROM ar_dp_base ORDER BY dt, k, v;
+
+-- name: test_ivm_alter_active_recovers_after_baseline_released @cloud @sequential
+-- Releasing the view's only reference to its baseline bookmark deletes the bookmark, as retention would.
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+CREATE TABLE ar_bu_base (dt date, k int, v bigint)
+DUPLICATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');
+INSERT INTO ar_bu_base VALUES ('2026-10-01',1,10),('2026-10-02',2,20),('2026-10-02',2,20);
+CREATE MATERIALIZED VIEW mv_ar_bu
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'incremental', 'partition_refresh_number' = '-1')
+AS SELECT dt, k, SUM(v) AS v, COUNT(*) AS c FROM ar_bu_base GROUP BY dt, k;
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_ar_bu';
+REFRESH MATERIALIZED VIEW mv_ar_bu WITH SYNC MODE;
+[UC]BASE_ID=SELECT TABLE_ID FROM information_schema.tables_config WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'ar_bu_base';
+SELECT COUNT(*) FROM information_schema.table_bookmark_references WHERE TABLE_ID = ${BASE_ID} AND HOLDER_ID LIKE 'mv:%';
+[UC]BOOKMARK_ID=SELECT BOOKMARK_ID FROM information_schema.table_bookmark_references WHERE TABLE_ID = ${BASE_ID} AND HOLDER_ID LIKE 'mv:%';
+[UC]HOLDER_ID=SELECT HOLDER_ID FROM information_schema.table_bookmark_references WHERE TABLE_ID = ${BASE_ID} AND HOLDER_ID LIKE 'mv:%';
+SELECT bookmark_release("${db[0]}", "ar_bu_base", "${BOOKMARK_ID}", "${HOLDER_ID}");
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "false");
+INSERT INTO ar_bu_base VALUES ('2026-10-03',3,30);
+[UC]REFRESH MATERIALIZED VIEW mv_ar_bu WITH SYNC MODE;
+SELECT IS_ACTIVE, INACTIVE_REASON LIKE 'incremental refresh broken: the base table state this view refreshes from is no longer available:%' FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_ar_bu';
+[UC]REFRESH MATERIALIZED VIEW mv_ar_bu WITH SYNC MODE;
+SELECT COUNT(*) FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' AND ERROR_MESSAGE LIKE '%is not active due to incremental refresh broken: the base table state%`.`mv_ar_bu` ACTIVE to recover.%';
+ALTER MATERIALIZED VIEW mv_ar_bu ACTIVE;
+REFRESH MATERIALIZED VIEW mv_ar_bu WITH SYNC MODE;
+SELECT IS_ACTIVE, LAST_EXECUTED_REFRESH_MODE, LAST_REFRESH_MODE_REASON FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_ar_bu';
+SELECT get_json_string(EXTRA_MESSAGE, '$.mvPartitionsToRefresh') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY get_json_double(EXTRA_MESSAGE, '$.processStartTime') DESC LIMIT 1;
+INSERT INTO ar_bu_base VALUES ('2026-10-01',1,10),('2026-10-03',3,30);
+REFRESH MATERIALIZED VIEW mv_ar_bu WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY get_json_double(EXTRA_MESSAGE, '$.processStartTime') DESC LIMIT 1;
+set enable_materialized_view_rewrite = false;
+SELECT dt, k, v, c FROM mv_ar_bu ORDER BY dt, k;
+SELECT dt, k, SUM(v), COUNT(*) FROM ar_bu_base GROUP BY dt, k ORDER BY dt, k;
+CLEANUP {
+    ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "false");
+} END CLEANUP
+
+-- name: test_ivm_alter_active_recovers_after_optimize @cloud
+-- An optimization inactivates the view when its job starts but rewrites the base table when the job finishes, so the
+-- view is activated after the job finishes. FORCE does not activate it.
+CREATE TABLE ar_opt_base (k INT NOT NULL, k2 INT NOT NULL, v BIGINT) PRIMARY KEY(k, k2)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
+INSERT INTO ar_opt_base VALUES (1,1,10),(2,2,20);
+CREATE MATERIALIZED VIEW mv_ar_opt
+REFRESH DEFERRED MANUAL
+PROPERTIES ('refresh_mode' = 'incremental')
+AS SELECT k, k2, v FROM ar_opt_base;
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_ar_opt';
+REFRESH MATERIALIZED VIEW mv_ar_opt WITH SYNC MODE;
+ALTER TABLE ar_opt_base DISTRIBUTED BY HASH(k, k2) BUCKETS 2;
+SELECT IS_ACTIVE, INACTIVE_REASON LIKE 'base-table optimized:%' FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_ar_opt';
+function: wait_optimize_table_finish()
+INSERT INTO ar_opt_base VALUES (3,3,30);
+[UC]REFRESH MATERIALIZED VIEW mv_ar_opt FORCE WITH SYNC MODE;
+SELECT IS_ACTIVE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_ar_opt';
+SELECT COUNT(*) FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' AND ERROR_MESSAGE LIKE '%is not active due to base-table optimized:%`.`mv_ar_opt` ACTIVE to recover.%';
+ALTER MATERIALIZED VIEW mv_ar_opt ACTIVE;
+REFRESH MATERIALIZED VIEW mv_ar_opt WITH SYNC MODE;
+SELECT IS_ACTIVE, LAST_EXECUTED_REFRESH_MODE, LAST_REFRESH_MODE_REASON FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_ar_opt';
+UPDATE ar_opt_base SET v = 11 WHERE k = 1;
+INSERT INTO ar_opt_base VALUES (4,4,40);
+REFRESH MATERIALIZED VIEW mv_ar_opt WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY get_json_double(EXTRA_MESSAGE, '$.processStartTime') DESC LIMIT 1;
+set enable_materialized_view_rewrite = false;
+SELECT k, k2, v FROM mv_ar_opt ORDER BY k;
+SELECT k, k2, v FROM ar_opt_base ORDER BY k;
+
+-- name: test_ivm_alter_active_recovers_after_sort_key_change @cloud
+-- A sort-key change inactivates the view as well, but for a reason the next refresh activates on its own, so the view
+-- recovers once the change finishes without ALTER ... ACTIVE.
+CREATE TABLE ar_sk_base (k INT NOT NULL, v BIGINT) PRIMARY KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
+INSERT INTO ar_sk_base VALUES (1,10),(2,20);
+CREATE MATERIALIZED VIEW mv_ar_sk
+REFRESH DEFERRED MANUAL
+PROPERTIES ('refresh_mode' = 'incremental')
+AS SELECT k, v FROM ar_sk_base;
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_ar_sk';
+REFRESH MATERIALIZED VIEW mv_ar_sk WITH SYNC MODE;
+ALTER TABLE ar_sk_base ORDER BY (v);
+SELECT IS_ACTIVE, INACTIVE_REASON LIKE 'base-table reordered columns:%' FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_ar_sk';
+function: wait_alter_table_finish()
+INSERT INTO ar_sk_base VALUES (3,30);
+REFRESH MATERIALIZED VIEW mv_ar_sk WITH SYNC MODE;
+SELECT IS_ACTIVE, LAST_EXECUTED_REFRESH_MODE, LAST_REFRESH_MODE_REASON FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_ar_sk';
+UPDATE ar_sk_base SET v = 11 WHERE k = 1;
+INSERT INTO ar_sk_base VALUES (4,40);
+REFRESH MATERIALIZED VIEW mv_ar_sk WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY get_json_double(EXTRA_MESSAGE, '$.processStartTime') DESC LIMIT 1;
+set enable_materialized_view_rewrite = false;
+SELECT k, v FROM mv_ar_sk ORDER BY k;
+SELECT k, v FROM ar_sk_base ORDER BY k;
+
+-- name: test_ivm_alter_active_keeps_the_baseline_of_a_manually_inactive_view @cloud
+-- The analyzer rejects any refresh of a view inactivated by hand, FORCE included, so no task run is submitted. Its
+-- baseline is still valid, so the refresh after ALTER ... ACTIVE is incremental.
+CREATE TABLE ar_man_base (k int, v bigint) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');
+INSERT INTO ar_man_base VALUES (1,10),(2,20);
+CREATE MATERIALIZED VIEW mv_ar_man
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'incremental')
+AS SELECT k, v FROM ar_man_base;
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_ar_man';
+REFRESH MATERIALIZED VIEW mv_ar_man WITH SYNC MODE;
+ALTER MATERIALIZED VIEW mv_ar_man INACTIVE;
+[UC]REFRESH MATERIALIZED VIEW mv_ar_man FORCE WITH SYNC MODE;
+SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_ar_man';
+SELECT COUNT(*) FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}';
+ALTER MATERIALIZED VIEW mv_ar_man ACTIVE;
+INSERT INTO ar_man_base VALUES (3,30);
+REFRESH MATERIALIZED VIEW mv_ar_man WITH SYNC MODE;
+SELECT IS_ACTIVE, LAST_EXECUTED_REFRESH_MODE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_ar_man';
+set enable_materialized_view_rewrite = false;
+SELECT k, v FROM mv_ar_man ORDER BY k;
+
+-- name: test_ivm_force_does_not_fix_a_column_type_change @cloud
+-- A column type change on the base table is a problem with the definition, which no new baseline fixes: FORCE fails as
+-- a plain refresh does, without pointing at ALTER ... ACTIVE.
+CREATE TABLE ar_mod_base (k INT, v INT) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO ar_mod_base VALUES (1,10),(2,20);
+CREATE MATERIALIZED VIEW mv_ar_mod
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ('refresh_mode' = 'incremental')
+AS SELECT k, v FROM ar_mod_base;
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_ar_mod';
+REFRESH MATERIALIZED VIEW mv_ar_mod WITH SYNC MODE;
+ALTER TABLE ar_mod_base MODIFY COLUMN v BIGINT;
+INSERT INTO ar_mod_base VALUES (3,30);
+[UC]REFRESH MATERIALIZED VIEW mv_ar_mod FORCE WITH SYNC MODE;
+SELECT IS_ACTIVE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_ar_mod';
+SELECT COUNT(*), SUM(IF(ERROR_MESSAGE LIKE '%ACTIVE to recover%', 1, 0)) FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' AND ERROR_MESSAGE LIKE '%is not active due to column schema not compatible%';
+SELECT k, v FROM mv_ar_mod ORDER BY k;
+
+-- name: test_ivm_force_after_consecutive_failures @cloud
+-- Ten failed refreshes in a row suspend the view's task and inactivate the view, and a FORCE then does not even run.
+-- ALTER ... ACTIVE resumes the task, and a FORCE after that rebuilds the view.
+CREATE TABLE ar_cf_base (dt date, k int, v bigint)
+DUPLICATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');
+INSERT INTO ar_cf_base VALUES ('2026-10-01',1,10),('2026-10-02',2,20);
+CREATE MATERIALIZED VIEW mv_ar_cf
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'incremental', 'partition_refresh_number' = '-1')
+AS SELECT dt, k, SUM(v) AS v, COUNT(*) AS c FROM ar_cf_base GROUP BY dt, k;
+REFRESH MATERIALIZED VIEW mv_ar_cf WITH SYNC MODE;
+ALTER MATERIALIZED VIEW mv_ar_cf SET ("session.query_mem_limit" = "1");
+INSERT INTO ar_cf_base VALUES ('2026-10-01',1,10);
+[UC]REFRESH MATERIALIZED VIEW mv_ar_cf WITH SYNC MODE;
+[UC]REFRESH MATERIALIZED VIEW mv_ar_cf WITH SYNC MODE;
+[UC]REFRESH MATERIALIZED VIEW mv_ar_cf WITH SYNC MODE;
+[UC]REFRESH MATERIALIZED VIEW mv_ar_cf WITH SYNC MODE;
+[UC]REFRESH MATERIALIZED VIEW mv_ar_cf WITH SYNC MODE;
+[UC]REFRESH MATERIALIZED VIEW mv_ar_cf WITH SYNC MODE;
+[UC]REFRESH MATERIALIZED VIEW mv_ar_cf WITH SYNC MODE;
+[UC]REFRESH MATERIALIZED VIEW mv_ar_cf WITH SYNC MODE;
+[UC]REFRESH MATERIALIZED VIEW mv_ar_cf WITH SYNC MODE;
+[UC]REFRESH MATERIALIZED VIEW mv_ar_cf WITH SYNC MODE;
+SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_ar_cf';
+[UC]REFRESH MATERIALIZED VIEW mv_ar_cf FORCE WITH SYNC MODE;
+SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_ar_cf';
+ALTER MATERIALIZED VIEW mv_ar_cf ACTIVE;
+ALTER MATERIALIZED VIEW mv_ar_cf SET ("session.query_mem_limit" = "0");
+REFRESH MATERIALIZED VIEW mv_ar_cf FORCE WITH SYNC MODE;
+SELECT IS_ACTIVE, LAST_EXECUTED_REFRESH_MODE, LAST_REFRESH_MODE_REASON FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_ar_cf';
+set enable_materialized_view_rewrite = false;
+SELECT dt, k, v, c FROM mv_ar_cf ORDER BY dt, k;
+SELECT dt, k, SUM(v), COUNT(*) FROM ar_cf_base GROUP BY dt, k ORDER BY dt, k;

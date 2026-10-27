@@ -14,6 +14,12 @@
 
 package com.starrocks.common;
 
+<<<<<<< HEAD
+=======
+import com.starrocks.alter.AlterJobMgr;
+import com.starrocks.scheduler.MVActiveChecker;
+import com.starrocks.sql.analyzer.SemanticException;
+>>>>>>> 06b694cc699... [Enhancement][RB-454] Recover an incremental MV with ALTER ACTIVE, and let REFRESH ... FORCE only refresh (#65472)
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.MVInactiveException;
 import org.junit.jupiter.api.Test;
@@ -26,6 +32,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 public class MaterializedViewExceptionsTest {
 
     @Test
+<<<<<<< HEAD
     public void testIsIncrementalBreakingFailure() {
         // FE-detected non-append-only breakage; built from the shared marker so the test can't drift from detection.
         assertTrue(MaterializedViewExceptions.isIncrementalBreakingFailure(new RuntimeException(
@@ -44,6 +51,30 @@ public class MaterializedViewExceptionsTest {
                 new RuntimeException("No checkpoint found for base table: db.t during IVM planning")));
         assertFalse(MaterializedViewExceptions.isIncrementalBreakingFailure(new RuntimeException()));
         assertFalse(MaterializedViewExceptions.isIncrementalBreakingFailure(null));
+=======
+    public void testOnlyABrokenUnreachableOrRewrittenBaselineIsUnusable() {
+        assertTrue(MaterializedViewExceptions.invalidatesBaseline(
+                MaterializedViewExceptions.inactiveReasonForIncrementalBreaking("mv1")));
+        assertTrue(MaterializedViewExceptions.invalidatesBaseline(
+                MaterializedViewExceptions.INACTIVE_REASON_FOR_BASELINE_UNREACHABLE + "mv1"));
+        assertTrue(MaterializedViewExceptions.invalidatesBaseline(
+                MaterializedViewExceptions.inactiveReasonForBaseTableOptimized("t1")));
+        assertTrue(MaterializedViewExceptions.invalidatesBaseline(
+                MaterializedViewExceptions.inactiveReasonForBaseTableReorderColumns("t1")));
+        assertFalse(MaterializedViewExceptions.invalidatesBaseline(
+                MaterializedViewExceptions.INACTIVE_REASON_FOR_MV_SCHEMA_MISMATCH + "mv1"));
+        assertFalse(MaterializedViewExceptions.invalidatesBaseline(AlterJobMgr.MANUAL_INACTIVE_MV_REASON));
+        assertFalse(MaterializedViewExceptions.invalidatesBaseline(
+                MaterializedViewExceptions.inactiveReasonForConsecutiveFailures("mv1")));
+        assertFalse(MaterializedViewExceptions.invalidatesBaseline(MVActiveChecker.MV_BACKUP_INACTIVE_REASON));
+        assertFalse(MaterializedViewExceptions.invalidatesBaseline(null));
+    }
+
+    @Test
+    public void testRecoverByActivateHintNamesAlterActive() {
+        assertEquals("Run ALTER MATERIALIZED VIEW `db1`.`mv1` ACTIVE to recover.",
+                MaterializedViewExceptions.recoverByActivateHint("db1", "mv1"));
+>>>>>>> 06b694cc699... [Enhancement][RB-454] Recover an incremental MV with ALTER ACTIVE, and let REFRESH ... FORCE only refresh (#65472)
     }
 
     /**
@@ -54,6 +85,7 @@ public class MaterializedViewExceptionsTest {
      * the hybrid fallback-to-PCT path surface the same message.
      */
     @Test
+<<<<<<< HEAD
     public void testSchemaMismatchIsBreaking() {
         assertTrue(MaterializedViewExceptions.isIncrementalBreakingFailure(new RuntimeException(
                 "Getting analyzing error. Detail message: "
@@ -66,6 +98,27 @@ public class MaterializedViewExceptionsTest {
                 new RuntimeException("Refresh mv s1_mv failed after 1 times",
                         new IllegalStateException(MaterializedViewExceptions.inactiveReasonForColumnChanged(
                                 Collections.singleton("column count 6 vs 7"))))));
+=======
+    public void testPersistedReasonsAreStillRecognized() {
+        assertTrue(MaterializedViewExceptions.invalidatesBaseline(
+                "incremental refresh broken by non-append-only base change: mv1"));
+        assertTrue(MaterializedViewExceptions.invalidatesBaseline(
+                "incremental refresh broken: the base table state this view refreshes from is no longer available: mv1"));
+        assertTrue(MaterializedViewExceptions.invalidatesBaseline("base-table optimized: t1"));
+        assertTrue(MaterializedViewExceptions.invalidatesBaseline("base-table reordered columns: t1"));
+        assertFalse(MaterializedViewExceptions.invalidatesBaseline(
+                "incremental refresh broken: materialized view schema no longer matches its definition: mv1"));
+        assertFalse(MaterializedViewExceptions.invalidatesBaseline("mv consecutive failures: mv1"));
+        assertFalse(MaterializedViewExceptions.invalidatesBaseline(null));
+        for (String reason : List.of(
+                "incremental refresh broken by non-append-only base change: mv1",
+                "incremental refresh broken: the base table state this view refreshes from is no longer available: mv1",
+                "incremental refresh broken: materialized view schema no longer matches its definition: mv1",
+                "mv consecutive failures: mv1")) {
+            assertTrue(MVActiveChecker.isNonAutoActivatableReason(reason), reason);
+        }
+        assertFalse(MVActiveChecker.isNonAutoActivatableReason("base table schema changed for columns: v"));
+>>>>>>> 06b694cc699... [Enhancement][RB-454] Recover an incremental MV with ALTER ACTIVE, and let REFRESH ... FORCE only refresh (#65472)
     }
 
     @Test
@@ -79,6 +132,7 @@ public class MaterializedViewExceptionsTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testBreakingFailureReasonFollowsTheMatchedCause() {
         assertTrue(MaterializedViewExceptions.inactiveReasonForBreakingFailure(
                         new RuntimeException(MaterializedViewExceptions.inactiveReasonForColumnChanged(
@@ -88,5 +142,19 @@ public class MaterializedViewExceptionsTest {
         assertTrue(MaterializedViewExceptions.inactiveReasonForBreakingFailure(
                         new RuntimeException("x " + MaterializedViewExceptions.FE_NON_APPEND_ONLY_MARKER + " y"), "mv1")
                 .startsWith(MaterializedViewExceptions.INACTIVE_REASON_FOR_INCREMENTAL_BREAKING));
+=======
+    public void testOnlyBreakingKindsHaveAnInactiveReason() {
+        assertFalse(RefreshFailureKind.VIEW_INACTIVE.isBreaking());
+        assertThrows(IllegalStateException.class, () -> RefreshFailureKind.VIEW_INACTIVE.inactiveReason("mv1"));
+        assertEquals("incremental refresh broken by non-append-only base change: mv1",
+                RefreshFailureKind.INCREMENTAL_BROKEN.inactiveReason("mv1"));
+        assertEquals("incremental refresh broken: the base table state this view refreshes from is no longer "
+                + "available: mv1", RefreshFailureKind.BASELINE_UNREACHABLE.inactiveReason("mv1"));
+        assertEquals("incremental refresh broken: materialized view schema no longer matches its definition: mv1",
+                RefreshFailureKind.SCHEMA_MISMATCH.inactiveReason("mv1"));
+        assertTrue(RefreshFailureKind.INCREMENTAL_BROKEN.invalidatesBaseline());
+        assertTrue(RefreshFailureKind.BASELINE_UNREACHABLE.invalidatesBaseline());
+        assertFalse(RefreshFailureKind.SCHEMA_MISMATCH.invalidatesBaseline());
+>>>>>>> 06b694cc699... [Enhancement][RB-454] Recover an incremental MV with ALTER ACTIVE, and let REFRESH ... FORCE only refresh (#65472)
     }
 }

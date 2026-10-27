@@ -80,6 +80,7 @@ public class MaterializedViewExceptions {
     }
 
     /**
+<<<<<<< HEAD
      * Which reason to inactivate with, for a failure {@link #isIncrementalBreakingFailure} accepted.
      * A base-table column change and a column ALTER on the MV itself raise the same two schema
      * markers, so that branch states the condition without attributing a cause it cannot tell apart.
@@ -97,6 +98,27 @@ public class MaterializedViewExceptions {
 
     // Canonical marker for a permanently-breaking (non-append-only) base change. MVIVMRefreshProcessor builds
     // its message from this constant and isIncrementalBreakingFailure matches it, so wording and detection can't drift.
+=======
+     * Whether a view inactive for this reason keeps an incremental baseline its next refresh would break on again: the
+     * chain broke or became unreachable, or the base table was rewritten in place.
+     */
+    public static boolean invalidatesBaseline(String inactiveReason) {
+        if (inactiveReason == null) {
+            return false;
+        }
+        return inactiveReason.startsWith(INACTIVE_REASON_FOR_BASE_TABLE_OPTIMIZED)
+                || inactiveReason.startsWith(INACTIVE_REASON_FOR_BASE_TABLE_REORDER_COLUMNS)
+                || Arrays.stream(RefreshFailureKind.values()).anyMatch(
+                        kind -> kind.invalidatesBaseline() && inactiveReason.startsWith(kind.inactiveReasonPrefix()));
+    }
+
+    public static String recoverByActivateHint(String dbName, String mvName) {
+        return String.format("Run ALTER MATERIALIZED VIEW %s.%s ACTIVE to recover.",
+                ParseUtil.backquote(dbName), ParseUtil.backquote(mvName));
+    }
+
+    // Wording of the breakages the frontend detects; the failure's kind, not this text, decides what happens next.
+>>>>>>> 06b694cc699... [Enhancement][RB-454] Recover an incremental MV with ALTER ACTIVE, and let REFRESH ... FORCE only refresh (#65472)
     public static final String FE_NON_APPEND_ONLY_MARKER = "do not support non-append-only base changes";
 
     // Both classifiers of a stored schema that no longer matches the maintenance query --

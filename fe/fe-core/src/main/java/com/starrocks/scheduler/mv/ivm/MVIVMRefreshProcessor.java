@@ -347,9 +347,16 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
         return String.format(
                 "Cannot incrementally refresh materialized view %s: %s. "
                         + "INCREMENTAL materialized views %s "
+<<<<<<< HEAD
                         + "(DELETE / OVERWRITE / DROP PARTITION / snapshot expiration / table replacement). "
                         + "Drop and recreate the materialized view to recover.",
                 mv.getName(), reasonFragment, MaterializedViewExceptions.FE_NON_APPEND_ONLY_MARKER);
+=======
+                        + "(DELETE / OVERWRITE / DROP PARTITION / snapshot expiration / table replacement). %s",
+                mv.getName(), reasonFragment, MaterializedViewExceptions.FE_NON_APPEND_ONLY_MARKER,
+                MaterializedViewExceptions.recoverByActivateHint(db.getFullName(), mv.getName()));
+        return cause == null ? new IvmBrokenException(kind, message) : new IvmBrokenException(kind, message, cause);
+>>>>>>> 06b694cc699... [Enhancement][RB-454] Recover an incremental MV with ALTER ACTIVE, and let REFRESH ... FORCE only refresh (#65472)
     }
 
     public TvrTableDelta getBaseTableMaxChangedDelta(BaseTableSnapshotInfo snapshotInfo,

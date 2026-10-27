@@ -1764,8 +1764,32 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
         String chain = collectMessages(thrown);
         Assertions.assertTrue(chain.contains("no tvr delta traits"),
                 "expected 'no tvr delta traits' in chain, got: " + chain);
+<<<<<<< HEAD
         Assertions.assertTrue(chain.contains("Drop and recreate"),
                 "expected drop-and-recreate guidance in chain, got: " + chain);
+=======
+        Assertions.assertTrue(chain.contains("ACTIVE to recover"),
+                "expected the ALTER ACTIVE hint in chain, got: " + chain);
+        Assertions.assertEquals(Optional.of(RefreshFailureKind.INCREMENTAL_BROKEN),
+                MaterializedViewExceptions.kindOf(thrown));
+    }
+
+    @Test
+    public void testIncrementalRefreshSurfacesLineageInconsistency() throws Exception {
+        String query = "SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0` as a;";
+        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "incremental");
+        seedTvrBaselineAtVersionZero(mv);
+        advanceTableVersionTo(1);
+        mockListTableDeltaTraits(ImmutableList.of(
+                TvrTableDeltaTrait.ofMonotonic(TvrTableDelta.of(0L, 2L), TvrDeltaStats.EMPTY)));
+
+        Throwable thrown = Assertions.assertThrows(Throwable.class, () -> getIVMRefreshedExecPlan(mv));
+        String chain = collectMessages(thrown);
+        Assertions.assertTrue(chain.contains("tvr delta lineage inconsistent"),
+                "expected 'tvr delta lineage inconsistent' in chain, got: " + chain);
+        Assertions.assertEquals(Optional.of(RefreshFailureKind.INCREMENTAL_BROKEN),
+                MaterializedViewExceptions.kindOf(thrown));
+>>>>>>> 06b694cc699... [Enhancement][RB-454] Recover an incremental MV with ALTER ACTIVE, and let REFRESH ... FORCE only refresh (#65472)
     }
 
     @Test
@@ -1779,11 +1803,21 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
 
         Throwable thrown = Assertions.assertThrows(Throwable.class, () -> getIVMRefreshedExecPlan(mv));
         String chain = collectMessages(thrown);
+<<<<<<< HEAD
         Assertions.assertTrue(chain.contains("snapshot ancestry broken"),
                 "expected 'snapshot ancestry broken' in chain, got: " + chain);
         Assertions.assertTrue(chain.contains("Drop and recreate"),
                 "expected drop-and-recreate guidance in chain, got: " + chain);
         Assertions.assertTrue(chain.contains("is not a parent ancestor"),
+=======
+        Assertions.assertTrue(chain.contains(MaterializedViewExceptions.SNAPSHOT_ANCESTRY_BROKEN_MARKER),
+                "expected baseline-unreachable framing in chain, got: " + chain);
+        Assertions.assertTrue(chain.contains("ACTIVE to recover"),
+                "expected the ALTER ACTIVE hint in chain, got: " + chain);
+        Assertions.assertTrue(chain.contains(MaterializedViewExceptions.FE_NON_APPEND_ONLY_MARKER),
+                "expected incremental-breaking marker in chain, got: " + chain);
+        Assertions.assertTrue(chain.contains(connectorMessage),
+>>>>>>> 06b694cc699... [Enhancement][RB-454] Recover an incremental MV with ALTER ACTIVE, and let REFRESH ... FORCE only refresh (#65472)
                 "expected original connector reason preserved in chain, got: " + chain);
     }
 
@@ -1814,8 +1848,18 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
         String chain = collectMessages(thrown);
         Assertions.assertTrue(chain.contains("non-append-only"),
                 "expected 'non-append-only' in chain, got: " + chain);
+<<<<<<< HEAD
         Assertions.assertTrue(chain.contains("Drop and recreate"),
                 "expected drop-and-recreate guidance in chain, got: " + chain);
+=======
+        Assertions.assertTrue(chain.contains("ACTIVE to recover"),
+                "expected the ALTER ACTIVE hint in chain, got: " + chain);
+        String dbName = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mv.getDbId()).getFullName();
+        Assertions.assertTrue(chain.contains("ALTER MATERIALIZED VIEW `" + dbName + "`.`" + mv.getName() + "` ACTIVE"),
+                "expected the hint to name the view with its database, got: " + chain);
+        Assertions.assertEquals(Optional.of(RefreshFailureKind.INCREMENTAL_BROKEN),
+                MaterializedViewExceptions.kindOf(thrown));
+>>>>>>> 06b694cc699... [Enhancement][RB-454] Recover an incremental MV with ALTER ACTIVE, and let REFRESH ... FORCE only refresh (#65472)
     }
 
     @Test
@@ -1831,8 +1875,8 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
         String chain = collectMessages(thrown);
         Assertions.assertTrue(chain.contains(unrelatedConnectorMessage),
                 "expected original connector message preserved in chain, got: " + chain);
-        Assertions.assertFalse(chain.contains("Drop and recreate"),
-                "drop-and-recreate hint must not apply to non-ancestry connector failures, got: " + chain);
+        Assertions.assertFalse(chain.contains("ACTIVE to recover"),
+                "the ALTER ACTIVE hint must not apply to non-ancestry connector failures, got: " + chain);
         Assertions.assertFalse(chain.contains("snapshot ancestry broken"),
                 "ancestry-broken framing must not apply to non-ancestry connector failures, got: " + chain);
         Assertions.assertFalse(chain.contains(MaterializedViewExceptions.FE_NON_APPEND_ONLY_MARKER),
