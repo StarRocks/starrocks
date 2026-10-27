@@ -27,6 +27,7 @@ add_executable(orchestration_test
     orchestration_metrics_test.cpp
     query_orchestrator_test.cpp
     runtime_filter_delivery_test.cpp
+    runtime_filter_worker_test.cpp
     stream_load_orchestrator_test.cpp
 )
 target_link_libraries(orchestration_test Orchestration ${TEST_LINK_LIBS})

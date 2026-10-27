@@ -1545,6 +1545,9 @@ CONF_Int64(send_runtime_filter_via_http_rpc_min_size, "67108864");
 
 // -1: unlimited, 0: limit by memory use, >0: limit by queue_size
 CONF_mInt64(runtime_filter_queue_limit, "-1");
+// number of threads that merge and deliver global runtime filters on a BE. All events of one runtime filter are
+// handled by the same thread. <= 1 means a single thread.
+CONF_Int32(runtime_filter_worker_thread_num, "4");
 
 CONF_Int64(rpc_connect_timeout_ms, "30000");
 
@@ -2605,7 +2608,9 @@ CONF_mInt32(put_combined_txn_log_thread_pool_num_max, "64");
 // When all threads are busy, further closes wait in the pool's queue, which is unbounded: no close is dropped.
 // Must be positive. Runtime changes resize the existing pool without interrupting running closes.
 CONF_mInt32(load_sink_close_thread_pool_num_max, "64");
-CONF_mBool(enable_put_combinded_txn_log_parallel, "false");
+// Shared-data only. Write the combined txn logs of a load's partitions to object storage in parallel, on
+// put_combined_txn_log_thread_pool, instead of one partition after another.
+CONF_mBool(enable_put_combinded_txn_log_parallel, "true");
 // Shared-data only. Seconds a node keeps the shard info of a tablet it does not own, so that touching
 // the tablet again within this time does not ask starmgr for it (GetShard RPC). It keeps what it had
 // to ask starmgr for, and what the tablet's owners hand over to the load coordinator along with the

@@ -33,17 +33,24 @@
 namespace starrocks::orchestration {
 
 RuntimeFilterWorker::RuntimeFilterWorker(const RuntimeServices* runtime_services, const RpcServices* rpc_services,
-                                         MemTracker* query_pool_mem_tracker, FragmentMgr* fragment_mgr)
+                                         MemTracker* query_pool_mem_tracker, FragmentMgr* fragment_mgr,
+                                         int32_t num_threads)
         : _runtime_services(runtime_services),
           _rpc_services(rpc_services),
           _query_pool_mem_tracker(query_pool_mem_tracker),
-          _delivery(runtime_services, rpc_services, fragment_mgr),
-          _thread([this] { execute(); }) {
+          _delivery(runtime_services, rpc_services, fragment_mgr) {
     DCHECK(_runtime_services != nullptr);
     DCHECK(_rpc_services != nullptr);
     DCHECK(fragment_mgr != nullptr);
-    Thread::set_thread_name(_thread, "runtime_filter");
     _metrics = new RuntimeFilterWorkerMetrics();
+    const size_t num_shards = std::max<int32_t>(num_threads, 1);
+    for (size_t i = 0; i < num_shards; ++i) {
+        _shards.emplace_back(std::make_unique<Shard>());
+    }
+    for (auto& shard : _shards) {
+        shard->thread = std::thread([this, s = shard.get()] { _execute(s); });
+        Thread::set_thread_name(shard->thread, "runtime_filter");
+    }
 }
 
 RuntimeFilterWorker::~RuntimeFilterWorker() {
@@ -53,8 +60,41 @@ RuntimeFilterWorker::~RuntimeFilterWorker() {
 }
 
 void RuntimeFilterWorker::close() {
-    _queue.shutdown();
-    _thread.join();
+    for (auto& shard : _shards) {
+        shard->queue.shutdown();
+    }
+    for (auto& shard : _shards) {
+        if (shard->thread.joinable()) {
+            shard->thread.join();
+        }
+    }
+}
+
+size_t RuntimeFilterWorker::shard_index(const TUniqueId& query_id, int32_t filter_id, size_t num_shards) {
+    if (num_shards <= 1) {
+        return 0;
+    }
+    // Filter ids of a query are small consecutive numbers, so adding them spreads one query's filters
+    // over the threads round-robin.
+    const uint64_t query_hash = static_cast<uint64_t>(query_id.hi) ^ static_cast<uint64_t>(query_id.lo);
+    return (query_hash + static_cast<uint32_t>(filter_id)) % num_shards;
+}
+
+void RuntimeFilterWorker::_put(RuntimeFilterWorkerEvent&& ev, int32_t filter_id) {
+    _metrics->update_event_nums(ev.type, 1);
+    _metrics->update_rf_bytes(ev.type, ev.transmit_rf_request.data().size());
+    _shards[shard_index(ev.query_id, filter_id, _shards.size())]->queue.put(std::move(ev));
+}
+
+// Every thread keeps its own merger of the query, so the query's lifecycle events go to all threads. Once
+// open_query returns, every thread has the OPEN_QUERY ahead of any rf event of the query put afterwards.
+void RuntimeFilterWorker::_put_to_all_shards(RuntimeFilterWorkerEvent&& ev) {
+    for (size_t i = 0; i + 1 < _shards.size(); ++i) {
+        _metrics->update_event_nums(ev.type, 1);
+        _shards[i]->queue.put(ev);
+    }
+    _metrics->update_event_nums(ev.type, 1);
+    _shards.back()->queue.put(std::move(ev));
 }
 
 void RuntimeFilterWorker::open_query(const TUniqueId& query_id, const TQueryOptions& query_options,
@@ -68,8 +108,7 @@ void RuntimeFilterWorker::open_query(const TUniqueId& query_id, const TQueryOpti
     ev.query_options = query_options;
     ev.create_rf_merger_request = params;
     ev.is_opened_by_pipeline = is_pipeline;
-    _metrics->update_event_nums(ev.type, 1);
-    _queue.put(std::move(ev));
+    _put_to_all_shards(std::move(ev));
 }
 
 void RuntimeFilterWorker::close_query(const TUniqueId& query_id) {
@@ -77,8 +116,7 @@ void RuntimeFilterWorker::close_query(const TUniqueId& query_id) {
     RuntimeFilterWorkerEvent ev;
     ev.type = CLOSE_QUERY;
     ev.query_id = query_id;
-    _metrics->update_event_nums(ev.type, 1);
-    _queue.put(std::move(ev));
+    _put_to_all_shards(std::move(ev));
 }
 
 // Over the queue limit, a partial runtime filter is replaced with a smaller one that passes every row, instead of being
@@ -113,8 +151,9 @@ static void copy_without_filter(const PTransmitRuntimeFilterParams& src, PTransm
 
 bool RuntimeFilterWorker::_reach_queue_limit() {
     if (config::runtime_filter_queue_limit > 0) {
-        if (_queue.get_size() > config::runtime_filter_queue_limit) {
-            LOG(WARNING) << "runtime filter worker queue size is too large(" << _queue.get_size()
+        const size_t size = queue_size();
+        if (size > config::runtime_filter_queue_limit) {
+            LOG(WARNING) << "runtime filter worker queue size is too large(" << size
                          << "), queue limit = " << config::runtime_filter_queue_limit;
             return true;
         }
@@ -148,9 +187,10 @@ void RuntimeFilterWorker::send_part_runtime_filter(PTransmitRuntimeFilterParams&
     ev.transmit_via_http_min_size = rpc_http_min_size;
     ev.transmit_addrs = addrs;
     ev.transmit_rf_request = std::move(params);
-    _metrics->update_event_nums(ev.type, 1);
-    _metrics->update_rf_bytes(ev.type, ev.transmit_rf_request.data().size());
-    _queue.put(std::move(ev));
+    ev.query_id.hi = ev.transmit_rf_request.query_id().hi();
+    ev.query_id.lo = ev.transmit_rf_request.query_id().lo();
+    const int32_t filter_id = ev.transmit_rf_request.filter_id();
+    _put(std::move(ev), filter_id);
 }
 
 void RuntimeFilterWorker::send_broadcast_runtime_filter(PTransmitRuntimeFilterParams&& params,
@@ -169,9 +209,10 @@ void RuntimeFilterWorker::send_broadcast_runtime_filter(PTransmitRuntimeFilterPa
     ev.transmit_via_http_min_size = rpc_http_min_size;
     ev.destinations = destinations;
     ev.transmit_rf_request = std::move(params);
-    _metrics->update_event_nums(ev.type, 1);
-    _metrics->update_rf_bytes(ev.type, ev.transmit_rf_request.data().size());
-    _queue.put(std::move(ev));
+    ev.query_id.hi = ev.transmit_rf_request.query_id().hi();
+    ev.query_id.lo = ev.transmit_rf_request.query_id().lo();
+    const int32_t filter_id = ev.transmit_rf_request.filter_id();
+    _put(std::move(ev), filter_id);
 }
 
 void RuntimeFilterWorker::receive_runtime_filter(const PTransmitRuntimeFilterParams& params) {
@@ -234,16 +275,18 @@ void RuntimeFilterWorker::receive_runtime_filter(const PTransmitRuntimeFilterPar
                      << params.query_id() << ", filter_id=" << params.filter_id() << ", size=" << params.data().size()
                      << "->" << ev.transmit_rf_request.data().size();
     }
-    _metrics->update_event_nums(ev.type, 1);
-    _metrics->update_rf_bytes(ev.type, ev.transmit_rf_request.data().size());
-    _queue.put(std::move(ev));
+    // A skew join's broadcast rf is merged into the shuffle join's rf, so it goes with the shuffle join's filter.
+    const int32_t filter_id =
+            ev.type == RECEIVE_SKEW_JOIN_BROADCAST_RF ? params.skew_shuffle_filter_id() : params.filter_id();
+    _put(std::move(ev), filter_id);
 }
 
-void RuntimeFilterWorker::execute() {
+void RuntimeFilterWorker::_execute(Shard* shard) {
     LOG(INFO) << "RuntimeFilterWorker start working.";
+    auto& mergers = shard->mergers;
     for (;;) {
         RuntimeFilterWorkerEvent ev;
-        if (!_queue.blocking_get(&ev)) {
+        if (!shard->queue.blocking_get(&ev)) {
             break;
         }
         DUMP_TRACE_IF_TIMEOUT(config::pipeline_rf_worker_timeout_guard_ms);
@@ -258,16 +301,16 @@ void RuntimeFilterWorker::execute() {
         }
 
         case CLOSE_QUERY: {
-            auto it = _mergers.find(ev.query_id);
-            if (it != _mergers.end()) {
-                _mergers.erase(it);
+            auto it = mergers.find(ev.query_id);
+            if (it != mergers.end()) {
+                mergers.erase(it);
             }
             break;
         }
 
         case OPEN_QUERY: {
-            auto it = _mergers.find(ev.query_id);
-            if (it != _mergers.end()) {
+            auto it = mergers.find(ev.query_id);
+            if (it != mergers.end()) {
                 VLOG_QUERY << "open query: rf merger already existed. query_id = " << ev.query_id;
                 break;
             }
@@ -278,14 +321,14 @@ void RuntimeFilterWorker::execute() {
                 VLOG_QUERY << "open query: rf merger initialization failed. error = " << st.message();
                 break;
             }
-            _mergers.insert(std::make_pair(ev.query_id, std::move(merger)));
+            mergers.insert(std::make_pair(ev.query_id, std::move(merger)));
             break;
         }
 
         case RECEIVE_PART_RF: {
             _metrics->update_rf_bytes(ev.type, -ev.transmit_rf_request.data().size());
-            auto it = _mergers.find(ev.query_id);
-            if (it == _mergers.end()) {
+            auto it = mergers.find(ev.query_id);
+            if (it == mergers.end()) {
                 VLOG_QUERY << "receive part rf: rf merger not existed. query_id = " << ev.query_id;
                 break;
             }
@@ -298,8 +341,8 @@ void RuntimeFilterWorker::execute() {
 
         case RECEIVE_SKEW_JOIN_BROADCAST_RF: {
             _metrics->update_rf_bytes(ev.type, -ev.transmit_rf_request.data().size());
-            auto it = _mergers.find(ev.query_id);
-            if (it == _mergers.end()) {
+            auto it = mergers.find(ev.query_id);
+            if (it == mergers.end()) {
                 VLOG_QUERY << "receive skew join broadcast rf: rf merger not existed. query_id = " << ev.query_id;
                 break;
             }
@@ -340,7 +383,11 @@ void RuntimeFilterWorker::execute() {
 }
 
 size_t RuntimeFilterWorker::queue_size() const {
-    return _queue.get_size();
+    size_t size = 0;
+    for (const auto& shard : _shards) {
+        size += shard->queue.get_size();
+    }
+    return size;
 }
 
 } // namespace starrocks::orchestration
