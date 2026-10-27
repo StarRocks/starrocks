@@ -200,6 +200,8 @@ public class IcebergMetadataScanner extends AbstractIcebergMetadataScanner {
                 return getIcebergMetrics(file);
             case "key_metadata":
                 return file.keyMetadata() == null ? null : toByteArray(file.keyMetadata());
+            case "first_row_id":
+                return file.firstRowId();
             default:
                 throw new IllegalArgumentException("Unrecognized column name " + columnName);
         }

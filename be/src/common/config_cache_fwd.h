@@ -40,6 +40,9 @@ CONF_mInt64(disk_safe_level, "80");
 // currently only supports data cache.
 CONF_mInt64(disk_low_level, "60");
 
+// clear corrupted datacache for external tables, as lake_clear_corrupted_cache_data does for lake tables
+CONF_mBool(external_table_clear_corrupted_cache_data, "true");
+
 // Configuration items for datacache
 CONF_Bool(datacache_enable, "true");
 

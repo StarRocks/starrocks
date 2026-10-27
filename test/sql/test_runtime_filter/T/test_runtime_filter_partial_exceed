@@ -68,3 +68,6 @@ select count(1) from t1 left semi join [shuffle] t1 t2 on t1.c1 = t2.c1 and t2.c
 select count(1) from t1 left semi join [shuffle] t1 t2 on t1.c1 = t2.c1 and t2.c2 < 10;
 select count(1) from t1 left semi join [shuffle] t1 t2 on t1.c1 = t2.c1 and t2.c2 < 10;
 
+-- 0 means no size limit: the merged global runtime filter must keep its bloom filter.
+set global_runtime_filter_build_max_size = 0;
+select count(1) from t1 left semi join [shuffle] t1 t2 on t1.c1 = t2.c1 and t2.c2 < 10;

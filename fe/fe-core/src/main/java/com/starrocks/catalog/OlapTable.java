@@ -79,6 +79,7 @@ import com.starrocks.common.util.RangeUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.WriteQuorum;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
+import com.starrocks.common.util.concurrent.lock.SnapshotCopyValidator;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.StorageInfo;
@@ -314,6 +315,10 @@ public class OlapTable extends Table {
     // It's not persisted but resolved in QueryAnalyzer, so only exists if it's in the context of query
     public volatile Long dbId;
 
+    // Not persisted. True on the private object copyOnlyForQuery fills, so copying it again is known not to
+    // read a published table -- see SnapshotCopyValidator for why this is a mark and not a metastore lookup.
+    private boolean planningSnapshot = false;
+
     public OlapTable() {
         this(TableType.OLAP);
     }
@@ -394,6 +399,8 @@ public class OlapTable extends Table {
     // Only Copy necessary metadata for query.
     // We don't do deep copy, because which is very expensive;
     public void copyOnlyForQuery(OlapTable olapTable) {
+        SnapshotCopyValidator.validateCopySource(this);
+        olapTable.planningSnapshot = true;
         olapTable.id = this.id;
         olapTable.name = this.name;
         olapTable.type = this.type;
@@ -471,6 +478,11 @@ public class OlapTable extends Table {
         }
         olapTable.dbId = this.dbId;
         olapTable.maxColUniqueId = new AtomicInteger(this.maxColUniqueId.get());
+    }
+
+    /** Whether this object is a private planning copy made by {@link #copyOnlyForQuery}, not a published table. */
+    public boolean isPlanningSnapshot() {
+        return planningSnapshot;
     }
 
     public void addDoubleWritePartition(long sourcePartitionId, long tempPartitionId) {
@@ -1306,12 +1318,17 @@ public class OlapTable extends Table {
      * - For random distribution, if mutable bucket num is not set, we will set it with a deduced value.
      */
     public void inferDistribution(DistributionInfo info) throws DdlException {
+        inferDistribution(info, getDefaultReplicationNum());
+    }
+
+    public void inferDistribution(DistributionInfo info, short replicationNum) throws DdlException {
         if (info.getType() == DistributionInfo.DistributionInfoType.HASH) {
             // infer bucket num
             if (info.getBucketNum() == 0) {
                 int numBucket = CatalogUtils.calAvgBucketNumOfRecentPartitions(this,
                         FeConstants.DEFAULT_INFER_BUCKET_NUM_RECENT_PARTITION_NUM,
-                        Config.enable_auto_tablet_distribution);
+                        Config.enable_auto_tablet_distribution,
+                        replicationNum);
                 info.setBucketNum(numBucket);
             }
         } else if (info.getType() == DistributionInfo.DistributionInfoType.RANDOM) {
@@ -1320,7 +1337,7 @@ public class OlapTable extends Table {
             if (numBucket > 0) {
                 info.setBucketNum((int) numBucket);
             } else if (info.getBucketNum() == 0) {
-                numBucket = CatalogUtils.calPhysicalPartitionBucketNum(isLightWeightTabletCreation());
+                numBucket = CatalogUtils.calPhysicalPartitionBucketNum(this, replicationNum);
                 info.setBucketNum((int) numBucket);
             }
         } else if (info.getType() == DistributionInfo.DistributionInfoType.RANGE) {

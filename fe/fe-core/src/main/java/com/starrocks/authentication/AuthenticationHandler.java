@@ -120,9 +120,8 @@ public class AuthenticationHandler {
 
         // The context outlives one authentication (COM_CHANGE_USER authenticates again on the same
         // one), and only a provider that resolves groups by itself writes this field. Every
-        // authentication starts from an empty set, so a provider that reports authenticator groups
-        // but resolves none for this login - LDAP skipping memberOf for a legacy `AS '<dn>'` user -
-        // cannot hand the previous user's groups to the new one.
+        // authentication starts from an empty set, so whatever this login resolves - or does not -
+        // the previous user's authenticator groups are never carried over to the new one.
         authContext.setAuthenticatorGroups(Set.of());
 
         // Input validation, not dispatch: anything but a token has to name the user it is for.

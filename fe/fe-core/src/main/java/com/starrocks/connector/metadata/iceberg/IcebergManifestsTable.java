@@ -65,6 +65,9 @@ public class IcebergManifestsTable extends MetadataTable {
                                         new StructField("contains_nan", VarcharType.VARCHAR),
                                         new StructField("lower_bound", VarcharType.VARCHAR),
                                         new StructField("upper_bound", VarcharType.VARCHAR)))))
+                        // 0 = data manifest, 1 = delete manifest; the *_data_files_count columns of a delete
+                        // manifest count its delete files
+                        .column("content", INT)
                         .build(),
                 originDb,
                 originTable,

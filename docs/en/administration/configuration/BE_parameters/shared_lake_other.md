@@ -642,6 +642,15 @@ This topic introduces the following types of BE configurations:
 - Description: Whether to use a unified Data Cache instance to manage data caching for both internal catalog and external catalog in a shared-data cluster.
 - Introduced in: v3.4.0
 
+### external_table_clear_corrupted_cache_data
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to allow the system to clear the corrupted data cache of external table files (for example, Hive and Iceberg tables). When a scan fails to decode a file whose content was read from the data cache, the system drops the cached blocks it read, so that the next read of the file recovers from the remote storage. For Parquet files, if no row has been returned yet, the system first reads the file again bypassing the data cache, and drops the cached blocks only if this read succeeds. This item does not affect the internal tables of shared-data clusters, which are controlled by `lake_clear_corrupted_cache_data`.
+- Introduced in: -
+
 ### jdbc_connection_idle_timeout_ms
 
 - Default: 600000

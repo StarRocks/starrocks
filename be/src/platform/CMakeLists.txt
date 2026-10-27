@@ -50,9 +50,6 @@ set(PLATFORM_FILES
   llm/ai_task_dispatcher.cpp
   llm/openai_compatible_provider.cpp
   llm/dashscope_multimodal_provider.cpp
-  llm/llm_cache.cpp
-  llm/llm_query_service.cpp
-  llm/model_config.cpp
   platform_env.cpp
   platform_metrics.cpp
   path_rw.cpp

@@ -633,6 +633,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: 共有データクラスタで、internal catalog と external catalog のデータキャッシュを統一された Data Cache インスタンスで管理するかどうか。
 - 導入バージョン: v3.4.0
 
+### external_table_clear_corrupted_cache_data
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: 外部テーブルのファイル（例: Hive テーブル、Iceberg テーブル）の破損したデータキャッシュをシステムがクリアすることを許可するかどうか。データキャッシュから読み取った内容のデコードに失敗した場合、システムは読み取ったキャッシュブロックを削除し、次回の読み取りではリモートストレージから読み直します。Parquet ファイルでまだ行が返されていない場合、システムはまずデータキャッシュをバイパスしてファイルを再読み取りし、それが成功した場合にのみキャッシュブロックを削除します。この項目は共有データクラスタの内部テーブルには影響しません。内部テーブルは `lake_clear_corrupted_cache_data` で制御されます。
+- 導入バージョン: -
+
 ### jdbc_connection_idle_timeout_ms
 
 - デフォルト: 600000

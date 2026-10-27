@@ -66,6 +66,7 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.StringUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -429,7 +430,11 @@ public class DatabaseTransactionMgrTest {
         OlapTable table = hasDeleteTable();
         long planStart = OptimisticVersion.generate();
         OlapTable snapshot = new OlapTable();
-        table.copyOnlyForQuery(snapshot);
+        // Under the read lock, as the planner copies a published table.
+        try (AutoCloseableLock ignored = new AutoCloseableLock(GlobalStateMgrTestUtil.testDbId1, table.getId(),
+                LockType.READ)) {
+            table.copyOnlyForQuery(snapshot);
+        }
         table.setHasDelete();
         Assertions.assertFalse(snapshot.hasDelete());
         assertTrue(table.hasDelete());

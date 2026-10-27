@@ -21,6 +21,9 @@ import com.starrocks.sql.parser.NodePosition;
 import java.util.List;
 
 public class MergeIntoStmt extends DmlStmt {
+    // the Iceberg branch to read and write, or null for the main branch
+    private final String targetBranch;
+
     private TableRef tableRef;
     private final String targetAlias;
     private final Relation sourceRelation;
@@ -43,7 +46,15 @@ public class MergeIntoStmt extends DmlStmt {
                          Relation sourceRelation, String sourceAlias,
                          Expr mergeCondition, List<MergeWhenClause> whenClauses,
                          NodePosition pos) {
+        this(tableRef, null, targetAlias, sourceRelation, sourceAlias, mergeCondition, whenClauses, pos);
+    }
+
+    public MergeIntoStmt(TableRef tableRef, String targetBranch, String targetAlias,
+                         Relation sourceRelation, String sourceAlias,
+                         Expr mergeCondition, List<MergeWhenClause> whenClauses,
+                         NodePosition pos) {
         super(pos);
+        this.targetBranch = targetBranch;
         this.tableRef = tableRef;
         this.targetAlias = targetAlias;
         this.sourceRelation = sourceRelation;
@@ -116,5 +127,9 @@ public class MergeIntoStmt extends DmlStmt {
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return ((AstVisitorExtendInterface<R, C>) visitor).visitMergeIntoStatement(this, context);
+    }
+
+    public String getTargetBranch() {
+        return targetBranch;
     }
 }

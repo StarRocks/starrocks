@@ -16,6 +16,8 @@ package com.starrocks.connector.paimon;
 
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.SessionVariable.PaimonReaderMode;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.apache.paimon.CoreOptions;
 import org.apache.paimon.schema.TableSchema;
 import org.apache.paimon.table.FallbackReadFileStoreTable.FallbackDataSplit;
@@ -43,6 +45,8 @@ import java.util.function.Predicate;
 
 /** Reader selection with ordered compatibility checks for the packaged paimon-cpp 0.3.0 reader. */
 public final class PaimonReaderSelector {
+    private static final Logger LOG = LogManager.getLogger(PaimonReaderSelector.class);
+
     public enum Reader { STARROCKS, NATIVE, JNI }
 
     public enum Reason {
@@ -114,8 +118,15 @@ public final class PaimonReaderSelector {
         }
         Decision decision = selectMode(split);
         if (mode == PaimonReaderMode.NATIVE && decision.reader() != Reader.NATIVE) {
+            String details = "additional diagnostics unavailable";
+            try {
+                details = nativeFailureDetails(split, decision.reason());
+            } catch (Exception e) {
+                LOG.warn("Failed to collect Paimon native reader diagnostics for reason {}", decision.reason(), e);
+            }
             throw new StarRocksConnectorException(
-                    "Paimon native reader cannot read this split: %s", decision.reason());
+                    "Paimon native reader cannot read this split: %s; %s", decision.reason(),
+                    details);
         }
         if (decision.reader() == Reader.JNI) {
             checkJniSupported(decision.reason());
@@ -515,6 +526,66 @@ public final class PaimonReaderSelector {
                 }
             }
         }
+    }
+
+    // ==================== Error diagnostics ====================
+
+    // Called only when throwing an explicit NATIVE error. Never load metadata for diagnostics.
+    private String nativeFailureDetails(Split split, Reason reason) {
+        DataSplit data = PaimonSplitUtils.getDataSplit(split).orElse(null);
+        if (data == null) {
+            return "split=" + split.getClass().getSimpleName();
+        }
+        PaimonReaderSelector source = data instanceof FallbackDataSplit && ((FallbackDataSplit) data).isFallback()
+                ? fallbackSelector : this;
+        if (source == null || source.schema == null) {
+            return "split=" + split.getClass().getSimpleName() + ", schema unavailable";
+        }
+        Set<String> required = source.requiredFields(source.requiresMerge(data));
+        Set<Integer> fieldIds = new HashSet<>();
+        source.schema.fields().stream().filter(field -> required.contains(field.name()))
+                .forEach(field -> fieldIds.add(field.id()));
+        var fileFormats = data.dataFiles().stream().map(file -> file.fileFormat()).distinct().sorted().limit(8).toList();
+        var fileSchemas = data.dataFiles().stream().map(file -> file.schemaId()).distinct().sorted().limit(8).toList();
+        StringBuilder details = new StringBuilder("split=").append(split.getClass().getSimpleName())
+                .append(", file formats=").append(fileFormats).append(", file schemas=").append(fileSchemas)
+                .append(", current {").append(schemaDetails(schema, required, fieldIds, reason)).append('}');
+        if (fallbackSelector != null) {
+            details.append(", fallback branch=").append(schema.options().get("scan.fallback-branch"))
+                    .append(", fallback {")
+                    .append(schemaDetails(fallbackSelector.schema, required, fieldIds, reason)).append('}');
+        }
+        for (long id : fileSchemas) {
+            TableSchema historical = source.schemas.get(id);
+            if (historical != null && id != source.schema.id()) {
+                details.append(", historical {").append(schemaDetails(historical, required, fieldIds, reason)).append('}');
+            }
+        }
+        return details.toString();
+    }
+
+    private static String schemaDetails(TableSchema schema, Set<String> required, Set<Integer> fieldIds, Reason reason) {
+        if (schema == null) {
+            return "schema unavailable";
+        }
+        // Bound error size on wide tables; include field ids to correlate renamed historical fields.
+        var columns = schema.fields().stream()
+                .filter(field -> reason == Reason.TABLE_SCHEMA || reason == Reason.SCHEMA_EVOLUTION ||
+                        required.contains(field.name()) || fieldIds.contains(field.id()))
+                .limit(16).map(field -> field.name() + "#" + field.id() + "=" + field.type().asSQLString()).toList();
+        String details = "schema=" + schema.id() + ", columns(first 16)=" + columns +
+                ", file.format=" + schema.options().getOrDefault("file.format", "parquet") +
+                ", file.format.per.level=" + schema.options().getOrDefault("file.format.per.level", "");
+        if (reason == Reason.MERGE_FUNCTION) {
+            var aggregates = schema.options().entrySet().stream()
+                    .filter(entry -> entry.getKey().startsWith("fields.") && entry.getKey().endsWith(".aggregate-function"))
+                    .sorted(Map.Entry.comparingByKey()).limit(16).toList();
+            details += ", merge-engine=" + schema.options().getOrDefault("merge-engine", "deduplicate") +
+                    ", fields.default-aggregate-function=" +
+                    schema.options().getOrDefault("fields.default-aggregate-function", "") +
+                    ", aggregate-functions(first 16)=" + aggregates;
+        }
+        return details;
     }
 
     // ==================== Shared schema and type helpers ====================

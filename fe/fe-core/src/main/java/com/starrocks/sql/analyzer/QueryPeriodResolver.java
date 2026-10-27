@@ -124,8 +124,8 @@ public class QueryPeriodResolver {
         return boundTable;
     }
 
-    // A branch is read with the table's current schema (Iceberg SnapshotUtil.schemaFor); only a tag,
-    // a snapshot id or a timestamp reads with the schema of the snapshot it points to.
+    // A branch is read and written with the table's current schema and partition spec (Iceberg
+    // SnapshotUtil.schemaFor); only a tag, a snapshot id or a timestamp reads with the metadata of its snapshot.
     private static boolean isBranchRef(org.apache.iceberg.Table nativeTable, Optional<ConnectorTableVersion> version) {
         if (version.isEmpty() || version.get().getPointerType() != PointerType.VERSION) {
             return false;
@@ -147,8 +147,12 @@ public class QueryPeriodResolver {
             return icebergTable;
         }
         org.apache.iceberg.Table nativeTable = icebergTable.getNativeTable();
-        Schema snapshotSchema = branch ? nativeTable.schema()
-                : IcebergMetadata.getSnapshotSchema(nativeTable, snapshotId.get());
+        if (branch) {
+            // No snapshot specs: the read spec stays the current one, so DML on the branch scans and writes
+            // with the same table descriptor, as on main after partition evolution.
+            return icebergTable.withReadMetadata(nativeTable.schema(), null);
+        }
+        Schema snapshotSchema = IcebergMetadata.getSnapshotSchema(nativeTable, snapshotId.get());
         if (snapshotSchema == null) {
             // Legacy metadata without a per-snapshot schema id: keep the current table state.
             return icebergTable;

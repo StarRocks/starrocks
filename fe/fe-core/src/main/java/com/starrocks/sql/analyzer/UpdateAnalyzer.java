@@ -165,6 +165,7 @@ public class UpdateAnalyzer {
 
         // Create table relation with WHERE predicate
         TableRelation tableRelation = new TableRelation(tableName);
+        AnalyzerUtils.setIcebergWriteBranch(tableRelation, icebergTable, updateStmt.getTargetBranch());
         SelectRelation selectRelation = new SelectRelation(
                 selectList,
                 tableRelation,
@@ -228,6 +229,9 @@ public class UpdateAnalyzer {
 
         if (!table.supportsUpdate()) {
             throw unsupportedException("table " + table.getName() + " does not support update");
+        }
+        if (updateStmt.getTargetBranch() != null) {
+            throw new SemanticException("Only an Iceberg table can be written on a branch");
         }
 
         List<ColumnAssignment> assignmentList = updateStmt.getAssignments();

@@ -436,6 +436,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 存算分离集群中保留历史数据版本的时间范围。在此时间范围内的历史数据版本不会在 Compactions 后通过 AutoVacuum 自动清理。您需要将此值设置得大于最大查询时间，以避免正在运行的查询访问的数据在查询完成之前被删除。从 v3.3.0、v3.2.5 和 v3.1.10 开始，默认值已从 `5` 更改为 `30`。
 - 引入版本: v3.1.0
 
+### `lake_autovacuum_max_versions_per_round`
+
+- 默认值: 500
+- 类型: Long
+- 单位: -
+- 是否可变: Yes
+- 描述: 存算分离集群中增量（分批、可续传）AutoVacuum 的每轮工作量上限：单轮 AutoVacuum 针对一个分区最多可提交并提议的元数据版本数。增量协议恒为开启、无法关闭——legacy 单次遍历路径无法在其之后安全续删（会停在分批轮次留下的链空洞处，漏掉其下的垃圾），因此没有回退。该值仅限制每轮的工作量，从而让积压的大量历史版本在多轮中逐步清理，而不是反复在单次 RPC 中超时。小于 `100` 的取值会被上调为 `100`（每轮预算过小会导致清理积压需要过多轮次）。该参数不改变 tablet 到节点的路由。
+- 引入版本: v4.1.0
+
 ### `lake_autovacuum_parallel_partitions`
 
 - 默认值: 8
@@ -462,6 +471,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: Yes
 - 描述: 如果分区在此时间范围内没有更新（加载、DELETE 或 Compactions），系统将不会对此分区执行 AutoVacuum。
 - 引入版本: v3.1.0
+
+### `lake_vacuum_reset_partition_ids`
+
+- 默认值: （空）
+- 类型: String
+- 单位: -
+- 是否可变: Yes
+- 描述: 存算分离集群中增量 AutoVacuum 卡死时的恢复手段：以分号分隔的物理分区 ID 列表（格式 `id1;id2`），列出的分区其增量 vacuum 状态将被强制重置。AutoVacuum 守护线程下次处理到列表中的分区时，会丢弃其进行中的 proposal、续跑游标和 tablet 代次（但保留已回收的 retain floor，使新一轮不会重新读取已删除的版本），跳过当前轮，并在下一轮开始一次干净的 pass。每个 ID 只消费一次——守护线程在重置后立即将其从列表中移除——因此卡死的 pass 只被推动一次，而非每轮都重置。该项仅在当前服务的 Leader FE 上生效：`ADMIN SET FRONTEND CONFIG` 会将取值广播到所有 FE，而每个 FE 在成为 Leader 的那一刻会丢弃继承到的取值，因此在 failover 前不久下发的请求会丢失，需要对新 Leader 重新下发。正常运行时请保持为空。
+- 引入版本: v26.2.0
 
 ### `lake_compaction_allow_partial_success`
 

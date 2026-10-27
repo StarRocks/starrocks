@@ -16,6 +16,7 @@ package com.starrocks.planner;
 
 import com.google.common.io.CharStreams;
 import com.starrocks.common.Pair;
+import com.starrocks.common.lock.LockTestUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.utframe.StarRocksAssert;
@@ -23,6 +24,7 @@ import com.starrocks.utframe.UtFrameUtils;
 import joptsimple.internal.Strings;
 import kotlin.text.Charsets;
 import org.apache.commons.io.IOUtils;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 
 import java.io.File;
@@ -44,6 +46,12 @@ import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 public class TablePruningTestBase {
+
+    // Same G3 check as StarRocksTestBase, which this base does not extend.
+    @AfterEach
+    public void assertNoLockInvariantViolations() {
+        LockTestUtils.assertNoLockInvariantViolations();
+    }
     protected static ConnectContext ctx;
     protected static StarRocksAssert starRocksAssert;
 

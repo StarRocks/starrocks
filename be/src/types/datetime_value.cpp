@@ -2388,6 +2388,28 @@ bool DateTimeValue::from_unixtime(int64_t timestamp, int64_t microsecond, const 
     return true;
 }
 
+void DateTimeValue::from_unixtime_with_offset(int64_t second, int64_t microsecond, int64_t offset) {
+    // Near or outside years 1..9999 (time zone offsets stay within a day), keep cctz's calendar as from_unixtime does.
+    if (UNLIKELY(second < timestamp::MIN_CIVIL_UNIX_SECOND + 2 * SECS_PER_DAY ||
+                 second > timestamp::MAX_CIVIL_UNIX_SECOND - 2 * SECS_PER_DAY)) {
+        from_unixtime(second, microsecond, cctz::fixed_time_zone(cctz::seconds(offset)));
+        return;
+    }
+    int64_t local = second + offset + timestamp::UNIX_EPOCH_SECONDS;
+    int year, month, day;
+    date::to_date_with_cache(local / SECS_PER_DAY, &year, &month, &day);
+    int64_t seconds_of_day = local % SECS_PER_DAY;
+    _neg = 0;
+    _type = TIME_DATETIME;
+    _year = year;
+    _month = month;
+    _day = day;
+    _hour = seconds_of_day / SECS_PER_HOUR;
+    _minute = seconds_of_day / SECS_PER_MINUTE % 60;
+    _second = seconds_of_day % SECS_PER_MINUTE;
+    _microsecond = microsecond;
+}
+
 const char* DateTimeValue::month_name() const {
     if (_month < 1 || _month > 12) {
         return nullptr;

@@ -1190,6 +1190,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: ストレージとコンピュートの分離テーブル（shared-data table）tablet メタデータ取得操作（`get_tablet_stats`、`get_tablet_metadatas` など）のスレッド数。
 - 導入バージョン: v3.5.16, v4.0.9
 
+### tablet_writer_add_segment_lock_timeout_ms
+
+- デフォルト: 0
+- タイプ: Int
+- 単位: ミリ秒
+- 変更可能: はい
+- 説明: shared-nothing クラスターのセカンダリ BE が segment 複製リクエストを受信する際の、ロック待機時間の合計上限です。`0` 以下の値は `be_exit_after_disk_write_hang_second` をミリ秒に換算した値を使用し、正の値はその上限を上書きします。LoadChannel のミューテックスと LocalTabletsChannel の共有ロックは、BRPC リクエストハンドラーの開始時に一度だけ計算した同じ期限を使用します。いずれかのロック待機がタイムアウトすると、segment の書き込みを投入する前に RPC がタイムアウトエラーを返します。RPC タイムアウトとは独立しており、その後の segment flush や commit の処理時間は制限しません。segment 複製の受信経路にのみ適用されます。writer のハングによる終了判定とは計測開始時点が異なるため、BE 終了前のロックタイムアウトを保証するものではありません。
+- 導入バージョン: -
+
 ### transaction_apply_worker_count
 
 - デフォルト: 0

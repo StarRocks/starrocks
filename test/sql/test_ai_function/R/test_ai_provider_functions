@@ -18,12 +18,12 @@ SHOW AI PROVIDERS LIKE 'ai_chat_${uuid0}';
 [REGEX]^ai_chat_[0-9a-f]{32}\tchat\topenai\tfalse\thttps://models\.example\.test/v1/chat/completions\tchat-model\t\t\t2500\t\*{6}\tintegration provider$
 -- !result
 
-EXPLAIN SELECT ai_custom_query('ai_chat_${uuid0}', 'prompt');
+EXPLAIN SELECT ai_complete(prompt => 'prompt', provider => 'ai_chat_${uuid0}', model => 'explicit-model');
 -- result:
 [REGEX](?s)^(?!.*fixture-not-a-real-key).*[0-9]+:AIProject
 -- !result
 
-EXPLAIN SELECT ai_custom_query('ai_chat_${uuid0}', 'prompt', map{'temperature': 0.0});
+EXPLAIN SELECT ai_complete(prompt => 'prompt', provider => 'ai_chat_${uuid0}', model => 'explicit-model', options => json_object('temperature', 0.0));
 -- result:
 [REGEX](?s)^(?!.*fixture-not-a-real-key).*[0-9]+:AIProject
 -- !result
@@ -43,17 +43,17 @@ PROPERTIES ('endpoint' = 'http://models.example.test/v1/embeddings',
 -- result:
 -- !result
 
-EXPLAIN SELECT ai_custom_embedding('ai_embedding_${uuid0}', 'text');
+EXPLAIN SELECT ai_embed(input => 'text', provider => 'ai_embedding_${uuid0}', model => 'explicit-model');
 -- result:
 [REGEX][0-9]+:AIProject
 -- !result
 
-EXPLAIN SELECT ai_custom_embedding('ai_embedding_${uuid0}', 'text', map{'dimensions': 128});
+EXPLAIN SELECT ai_embed(input => 'text', provider => 'ai_embedding_${uuid0}', model => 'explicit-model', options => json_object('dimensions', 128));
 -- result:
 [REGEX][0-9]+:AIProject
 -- !result
 
-EXPLAIN SELECT ai_custom_embedding('ai_embedding_${uuid0}', 'text', CAST(NULL AS MAP<VARCHAR, JSON>));
+EXPLAIN SELECT ai_embed(input => 'text', provider => 'ai_embedding_${uuid0}', model => 'explicit-model', options => json_object());
 -- result:
 [REGEX][0-9]+:AIProject
 -- !result
@@ -67,16 +67,16 @@ ALTER AI PROVIDER ai_chat_${uuid0} SET ('protocol' = 'anthropic');
 -- result:
 -- !result
 
-EXPLAIN SELECT ai_custom_query('ai_chat_${uuid0}', 'prompt');
+EXPLAIN SELECT ai_complete(prompt => 'prompt', provider => 'ai_chat_${uuid0}', model => 'explicit-model');
 -- result:
-E: (1064, "Getting analyzing error. Detail message: AI functions require an OPENAI provider protocol, not ANTHROPIC.")
+E: (1064, "Getting analyzing error. Detail message: AI functions only support an OPENAI provider protocol now, not ANTHROPIC.")
 -- !result
 
 ALTER AI PROVIDER ai_chat_${uuid0} SET ('protocol' = 'openai');
 -- result:
 -- !result
 
-EXPLAIN SELECT ai_custom_query('ai_chat_${uuid0}', 'prompt');
+EXPLAIN SELECT ai_complete(prompt => 'prompt', provider => 'ai_chat_${uuid0}', model => 'explicit-model');
 -- result:
 [REGEX](?s)^(?!.*fixture-not-a-real-key).*[0-9]+:AIProject
 -- !result
@@ -85,16 +85,16 @@ ALTER AI PROVIDER ai_embedding_${uuid0} SET ('protocol' = 'cohere');
 -- result:
 -- !result
 
-EXPLAIN SELECT ai_custom_embedding('ai_embedding_${uuid0}', 'text');
+EXPLAIN SELECT ai_embed(input => 'text', provider => 'ai_embedding_${uuid0}', model => 'explicit-model');
 -- result:
-E: (1064, "Getting analyzing error. Detail message: AI functions require an OPENAI provider protocol, not COHERE.")
+E: (1064, "Getting analyzing error. Detail message: AI functions only support an OPENAI provider protocol now, not COHERE.")
 -- !result
 
 ALTER AI PROVIDER ai_embedding_${uuid0} SET ('protocol' = 'openai');
 -- result:
 -- !result
 
-EXPLAIN SELECT ai_custom_embedding('ai_embedding_${uuid0}', 'text');
+EXPLAIN SELECT ai_embed(input => 'text', provider => 'ai_embedding_${uuid0}', model => 'explicit-model');
 -- result:
 [REGEX][0-9]+:AIProject
 -- !result
