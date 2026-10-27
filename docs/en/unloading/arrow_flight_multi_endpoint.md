@@ -362,6 +362,23 @@ external clients. The gateway is the distributed consumer, so it also scales pas
 a single client's deserialization ceiling, while external clients never need CN
 addresses or CN-side credentials.
 
+**Network / ports:** a direct client needs reachability to two Flight ports -
+the FE's `arrow_flight_port` (metadata and login) and each CN's
+`arrow_flight_port` (direct shard reads), the same port number on every CN. That
+is why the consumer typically runs on the cluster network: an in-cluster gateway,
+or Spark / Python (PyArrow, ADBC) jobs colocated with the cluster. External
+clients that cannot reach the CN ports should use the gateway pattern above.
+
+**Fit for bulk / AI-ML extraction:** the strongest use case is pulling large
+columnar datasets into Arrow-native consumers - PyArrow / ADBC / Spark jobs
+loading feature sets, embeddings, or training data. Those results are large,
+columnar, and order-independent, and Arrow Flight hands batches straight to
+PyArrow (and on to pandas / numpy / tensors) without row-by-row transcoding.
+Multi-endpoint streams the shards in parallel, and a distributed consumer
+(Spark / Ray / multiple workers, each taking a subset of partitions via
+`execute_partitions`) scales past a single process's deserialization ceiling -
+cutting extraction time several-fold.
+
 ## Compatibility and rollout
 
 - Opt-in and off by default. Existing single-endpoint clients are unaffected.
