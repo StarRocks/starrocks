@@ -24,6 +24,7 @@ import com.starrocks.qe.scheduler.dag.ExecutionFragment;
 import com.starrocks.rpc.ConfigurableSerDesFactory;
 import com.starrocks.rpc.PExecPlanFragmentRequest;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.plan.ExecPlan;
@@ -44,6 +45,7 @@ import org.apache.thrift.TSerializer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.ArrayList;
@@ -257,9 +259,14 @@ public class SerializeOnceTPlanFragmentTest extends SchedulerTestBase {
     }
 
     private record GroupedFixture(com.starrocks.qe.QueryGroupBackendSelectorTest.Fixture source,
-                                  ExecutionFragment fragment, TFragmentInstanceFactory factory) { }
+                                  ExecutionFragment fragment, TFragmentInstanceFactory factory,
+                                  com.starrocks.qe.scheduler.dag.JobSpec job) { }
 
     private static GroupedFixture groupedFixture(int groups, int workers) throws Exception {
+        return groupedFixture(groups, workers, true);
+    }
+
+    private static GroupedFixture groupedFixture(int groups, int workers, boolean internalParallel) throws Exception {
         var f = com.starrocks.qe.QueryGroupBackendSelectorTest.fixture(groups, workers, 8);
         f.context().setExecutionId(new TUniqueId(99, 101));
         f.context().setQualifiedUser("root");
@@ -267,6 +274,12 @@ public class SerializeOnceTPlanFragmentTest extends SchedulerTestBase {
         var sharedScan = SessionVariable.class.getDeclaredField("enableSharedScan");
         sharedScan.setAccessible(true);
         sharedScan.setBoolean(f.context().getSessionVariable(), true);
+        var parallel = SessionVariable.class.getDeclaredField("enableTabletInternalParallel");
+        parallel.setAccessible(true);
+        parallel.setBoolean(f.context().getSessionVariable(), RunMode.isSharedDataMode() ? !internalParallel : internalParallel);
+        var lakeParallel = SessionVariable.class.getDeclaredField("enableLakeTabletInternalParallel");
+        lakeParallel.setAccessible(true);
+        lakeParallel.setBoolean(f.context().getSessionVariable(), internalParallel);
         f.fragment().getPlanFragment().setSink(new com.starrocks.planner.ResultSink(
                 new com.starrocks.planner.PlanNodeId(1), com.starrocks.thrift.TResultSinkType.MYSQL_PROTOCAL));
         var job = com.starrocks.qe.scheduler.dag.JobSpec.Factory.fromQuerySpec(f.context(),
@@ -279,14 +292,32 @@ public class SerializeOnceTPlanFragmentTest extends SchedulerTestBase {
                 true, false, false).assignFragmentToWorker(fragment);
         dag.finalizeDAG();
         return new GroupedFixture(f, fragment, new TFragmentInstanceFactory(f.context(), job, dag,
-                new TNetworkAddress("127.0.0.1", 9020)));
+                new TNetworkAddress("127.0.0.1", 9020)), job);
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"binary", "compact"})
-    public void groupedRequestsSerializeIndividualCompleteQueuesAndFinalizedConsumer(String protocol) throws Exception {
+    @CsvSource({"binary, true", "binary, false", "compact, true", "compact, false"})
+    public void groupedRequestsPreserveCapturedParallelOptionAndCompleteQueues(String protocol,
+                                                                              boolean internalParallel) throws Exception {
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
         for (int workers : List.of(1, 2)) {
-            var f = groupedFixture(9, workers);
+            var f = groupedFixture(9, workers, internalParallel);
+            var capturedOptions = f.job().getQueryOptions().deepCopy();
+            assertEquals(internalParallel, capturedOptions.isEnable_tablet_internal_parallel());
+            // A later session change must not replace the option already captured by the job.
+            var parallel = SessionVariable.class.getDeclaredField("enableTabletInternalParallel");
+            parallel.setAccessible(true);
+            parallel.setBoolean(f.source().context().getSessionVariable(), internalParallel);
+            var lakeParallel = SessionVariable.class.getDeclaredField("enableLakeTabletInternalParallel");
+            lakeParallel.setAccessible(true);
+            lakeParallel.setBoolean(f.source().context().getSessionVariable(), !internalParallel);
+            var sessionOptions = f.source().context().getSessionVariable().toThrift();
+            assertEquals(!internalParallel, sessionOptions.isEnable_tablet_internal_parallel());
             var serializer = ConfigurableSerDesFactory.getTSerializer(protocol);
             var deserializer = ConfigurableSerDesFactory.getTDeserializer(protocol);
             TPlanFragment shared = f.factory().createSharedFragment(f.fragment());
@@ -297,9 +328,11 @@ public class SerializeOnceTPlanFragmentTest extends SchedulerTestBase {
                 var request = f.factory().create(instance, shared,
                         new com.starrocks.thrift.TDescriptorTable().setTupleDescriptors(List.of()), 0, 0);
                 assertFalse(request.isEnable_shared_scan());
-                assertFalse(request.getQuery_options().isEnable_tablet_internal_parallel());
+                assertEquals(internalParallel, request.getQuery_options().isEnable_tablet_internal_parallel());
                 TExecPlanFragmentParams decoded = new TExecPlanFragmentParams();
                 deserializer.deserialize(decoded, serializer.serialize(request));
+                assertFalse(decoded.isEnable_shared_scan());
+                assertEquals(internalParallel, decoded.getQuery_options().isEnable_tablet_internal_parallel());
                 assertEquals(instance.getPipelineDop(), decoded.getPipeline_dop());
                 assertEquals(instance.getGroupExecutionScanDop(), decoded.getGroup_execution_scan_dop());
                 assertTrue(decoded.getParams().getPer_node_scan_ranges().isEmpty());
@@ -323,6 +356,8 @@ public class SerializeOnceTPlanFragmentTest extends SchedulerTestBase {
                 }
                 f.fragment().getQueryGroupAssignment().validatePlan(decoded.getFragment());
             }
+            assertEquals(capturedOptions, f.job().getQueryOptions());
+            assertEquals(sessionOptions, f.source().context().getSessionVariable().toThrift());
             assertEquals(18, totalTasks);
             assertEquals(f.fragment().getQueryGroupAssignment().getGroupToWorker(), owners);
             // 4.1's getter always disables shared scan; verify the stored session value stays untouched.

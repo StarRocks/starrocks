@@ -377,6 +377,65 @@ set pipeline_dop = 4;
 10	20	35000	3
 -- !result
 
+-- Query-scoped internal parallelism keeps the same complete-C UV oracle.
+-- These small fixtures prove correctness parity; large-source child creation is validated separately.
+
+[ORDER]select /*+ SET_VAR(enable_lake_tablet_internal_parallel = false) */ exp_id, grp_id, bucket_id, count(distinct u) as uv from t group by exp_id, grp_id, bucket_id order by exp_id, grp_id, bucket_id;
+-- result:
+-9223372036854775808	-9223372036854775808	-9223372036854775808	2
+10	20	1	3
+10	20	15000	2
+10	20	25000	0
+10	20	35000	3
+9223372036854775807	9223372036854775807	9223372036854775807	2
+-- !result
+
+[ORDER]select /*+ SET_VAR(enable_lake_tablet_internal_parallel = true) */ exp_id, grp_id, bucket_id, count(distinct u) as uv from t group by exp_id, grp_id, bucket_id order by exp_id, grp_id, bucket_id;
+-- result:
+-9223372036854775808	-9223372036854775808	-9223372036854775808	2
+10	20	1	3
+10	20	15000	2
+10	20	25000	0
+10	20	35000	3
+9223372036854775807	9223372036854775807	9223372036854775807	2
+-- !result
+
+[ORDER]select /*+ SET_VAR(enable_lake_tablet_internal_parallel = false) */ exp_id, grp_id, bucket_id, count(distinct u) as uv from t where exp_id = 10 and (bucket_id < 15000 or bucket_id >= 35000) group by exp_id, grp_id, bucket_id order by exp_id, grp_id, bucket_id;
+-- result:
+10	20	1	3
+10	20	35000	3
+-- !result
+
+[ORDER]select /*+ SET_VAR(enable_lake_tablet_internal_parallel = true) */ exp_id, grp_id, bucket_id, count(distinct u) as uv from t where exp_id = 10 and (bucket_id < 15000 or bucket_id >= 35000) group by exp_id, grp_id, bucket_id order by exp_id, grp_id, bucket_id;
+-- result:
+10	20	1	3
+10	20	35000	3
+-- !result
+
+[ORDER]select /*+ SET_VAR(enable_lake_tablet_internal_parallel = false) */ exp_id, grp_id, bucket_id, count(distinct u) as uv from t where u is null group by exp_id, grp_id, bucket_id order by exp_id, grp_id, bucket_id;
+-- result:
+-9223372036854775808	-9223372036854775808	-9223372036854775808	0
+10	20	1	0
+10	20	15000	0
+10	20	25000	0
+-- !result
+
+[ORDER]select /*+ SET_VAR(enable_lake_tablet_internal_parallel = true) */ exp_id, grp_id, bucket_id, count(distinct u) as uv from t where u is null group by exp_id, grp_id, bucket_id order by exp_id, grp_id, bucket_id;
+-- result:
+-9223372036854775808	-9223372036854775808	-9223372036854775808	0
+10	20	1	0
+10	20	15000	0
+10	20	25000	0
+-- !result
+
+[ORDER]select /*+ SET_VAR(enable_lake_tablet_internal_parallel = false) */ exp_id, grp_id, bucket_id, count(distinct u) as uv from t where marker = 'missing' group by exp_id, grp_id, bucket_id order by exp_id, grp_id, bucket_id;
+-- result:
+-- !result
+
+[ORDER]select /*+ SET_VAR(enable_lake_tablet_internal_parallel = true) */ exp_id, grp_id, bucket_id, count(distinct u) as uv from t where marker = 'missing' group by exp_id, grp_id, bucket_id order by exp_id, grp_id, bucket_id;
+-- result:
+-- !result
+
 -- Every rejection is checked for the public mode plus its specific unsupported boundary.
 
 function: assert_query_error_contains("select exp_id, grp_id, bucket_id, count(distinct u) as uv from t where dt = '2026-01-01' group by exp_id, grp_id, bucket_id", "range_scan_execution_mode=grouped", "fewer than two selected physical partitions")

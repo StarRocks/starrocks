@@ -143,7 +143,6 @@ public class TFragmentInstanceFactory {
         assignment.validatePlan(fragment.getPlanFragment().toThrift());
         assignment.validatePlan(result.getFragment());
         result.setEnable_shared_scan(false);
-        result.getQuery_options().setEnable_tablet_internal_parallel(false);
     }
 
     public TExecPlanFragmentParams createIncrementalScanRanges(FragmentInstance instance) {
