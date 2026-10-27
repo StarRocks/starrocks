@@ -3949,7 +3949,10 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int starmgr_grpc_timeout_seconds = 5;
 
-    @ConfField(mutable = true, comment = "Number of threads for handling gRPC server I/O")
+    @ConfField(mutable = true, comment = "Maximum number of threads that run the starmgr gRPC server handlers. "
+            + "The pool keeps one thread per CPU core and starts more only while all of its threads are busy; "
+            + "the extra threads exit after 60 seconds idle. Calls wait in a queue once this many threads are busy. "
+            + "Valid values: 1 or more; fe.conf and ADMIN SET FRONTEND CONFIG reject a value of 0 or less.")
     public static int starmgr_grpc_server_max_worker_threads = 1024;
 
     @ConfField(mutable = true)

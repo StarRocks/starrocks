@@ -316,6 +316,14 @@ public class ConfigBase {
                             "milliseconds, current value: " + confVal);
                 }
                 break;
+            case "starmgr_grpc_server_max_worker_threads":
+                // The starmgr gRPC executor needs at least one thread: in fe.conf a smaller value would stop FE
+                // from starting, and a running pool ignores it, so ADMIN SET FRONTEND CONFIG must not accept it.
+                if (Integer.parseInt(confVal) < 1) {
+                    throw new InvalidConfException("'starmgr_grpc_server_max_worker_threads' must be at least 1, " +
+                            "current value: " + confVal);
+                }
+                break;
             case "db_used_data_quota_update_interval_secs":
                 int intVal = Integer.parseInt(confVal);
                 if (intVal < 30) {
