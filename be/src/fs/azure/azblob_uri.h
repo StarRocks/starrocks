@@ -27,7 +27,10 @@ public:
     //  1. Host-style: http[s]://${account_name}.blob.core.windows.net/${container_name}/${blob_name}
     //  2. Path-style: http[s]://blob.core.windows.net/${account_name}/${container_name}/${blob_name}
     //  3. HDFS-style: wasb[s]://${container_name}@${account_name}.blob.core.windows.net/${blob_name}
+    //  4. ADLS Gen2: abfs[s]://${container}@${account}.dfs.core.windows.net/${blob_name}
     bool parse(std::string_view uri);
+
+    bool is_adls2() const { return _scheme == "abfs" || _scheme == "abfss"; }
 
     bool is_path_style() const { return _is_path_style; }
 
