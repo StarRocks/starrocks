@@ -56,6 +56,33 @@ Flight SQL client it is `execute` (to get the `FlightInfo`) followed by one
 endpoint and streams that shard. Reading all endpoints yields the complete,
 unordered result set.
 
+### How results distribute across nodes
+
+The fan-out width - how many endpoints you get - equals the number of
+result-producing fragment instances, which is determined by StarRocks' existing
+distribution planning, not by this feature. The chain is files/tablets ->
+splits -> instances -> endpoints:
+
+- **Iceberg (and other file-based external tables):** after partition and
+  predicate pruning, each data file becomes one or more **splits** (Parquet/ORC
+  are splittable, so a large file is cut into multiple splits by a target split
+  size). Splits are assigned across the compute nodes - balanced in shared-data /
+  object storage since there is no HDFS-style locality, optionally biased toward a
+  node that already has the file in its local data cache. The number of scan
+  instances is roughly `min(#splits, parallelism cap)`, where the cap is bounded
+  by the CN count and per-node pipeline DOP. More (or more splittable) files ->
+  wider fan-out, up to the CN count.
+- **Native OLAP tables:** scan parallelism follows the table's **bucket/tablet
+  count**, not file splits. A table with N buckets yields up to N scan instances,
+  so a low bucket count fans out to fewer nodes regardless of cluster size - size
+  the bucket count at least to the CN count for full fan-out.
+- **Aggregations:** a `GROUP BY` adds a hash shuffle on the group key, so the
+  final-aggregation stage is itself distributed across instances; each holds a
+  slice of the grouped result and becomes an endpoint.
+
+This is why, in the benchmark below, a large Iceberg scan engaged all 15 CNs
+while a native table built with ~7 buckets fanned out only 7 ways.
+
 ## FE changes
 
 | Area | Change |
@@ -313,6 +340,27 @@ on its own thread, and reports rows / bytes / wall-clock / throughput. It is the
 runnable form of the Java example above and is a good starting point for a
 multi-endpoint consumer (for example, a gateway that fans out `DoGet` across
 workers). Source: `examples/AfBench.java`.
+
+## Deployment: direct vs proxy, and gateways
+
+Multi-endpoint requires **direct** reads: the client connects to each CN's Flight
+port and pulls that CN's shard. This needs the client to reach the CN addresses,
+and it gives the full per-node fan-out.
+
+With the Arrow Flight **proxy** enabled (`arrow_flight_proxy_enabled = true`) the
+client talks only to the FE, which relays each shard from the CN. That simplifies
+the client (one address, no CN reachability) but funnels result egress back
+through the FE tier: if the endpoints resolve to a single FE, the single-node
+bottleneck simply moves to that FE, and the data makes an extra CN -> FE -> client
+hop. So proxy mode trades away most of the multi-endpoint benefit for client
+simplicity.
+
+The recommended pattern for serving external clients is a **gateway**: an
+in-cluster service that performs the direct multi-endpoint read (full fan-out,
+since it can reach the CNs) and exposes whatever simple interface you want to
+external clients. The gateway is the distributed consumer, so it also scales past
+a single client's deserialization ceiling, while external clients never need CN
+addresses or CN-side credentials.
 
 ## Compatibility and rollout
 
