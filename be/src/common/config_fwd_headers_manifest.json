@@ -995,7 +995,8 @@
         "deliver_broadcast_rf_passthrough_inflight_num",
         "send_rpc_runtime_filter_timeout_ms",
         "send_runtime_filter_via_http_rpc_min_size",
-        "runtime_filter_queue_limit"
+        "runtime_filter_queue_limit",
+        "runtime_filter_worker_thread_num"
       ]
     },
     {

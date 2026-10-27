@@ -751,6 +751,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: BufferControlBlockがデータを解放するまでの待機時間。
 - 導入バージョン: -
 
+### runtime_filter_worker_thread_num
+
+- デフォルト: 4
+- タイプ: Int
+- 単位: -
+- 変更可能: いいえ
+- 説明: 各 BE でグローバル Runtime Filter のマージと配信を行うスレッドの数。1 つの Runtime Filter のすべてのイベントは同じスレッドで処理され、異なる Runtime Filter は複数のスレッドに分散されます。`1` 以下の値を指定すると、単一のスレッドを使用します。
+- 導入バージョン: -
+
 ### scan_context_gc_interval_min
 
 - デフォルト: 5

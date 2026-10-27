@@ -756,6 +756,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：BufferControlBlock 释放数据的等待时间。
 - 引入版本：-
 
+### runtime_filter_worker_thread_num
+
+- 默认值：4
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：每个 BE 上用于合并和投递 Global Runtime Filter 的线程数。同一个 Runtime Filter 的所有事件由同一个线程处理，不同的 Runtime Filter 分散到各个线程。取值小于或等于 `1` 时只使用一个线程。
+- 引入版本：-
+
 ### scan_context_gc_interval_min
 
 - 默认值：5

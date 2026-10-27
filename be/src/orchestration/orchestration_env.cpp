@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "common/config_exec_env_fwd.h"
+#include "common/config_runtime_fwd.h"
 #include "common/logging.h"
 #include "common/process_exit.h"
 #include "common/system/master_info.h"
@@ -65,9 +66,9 @@ Status OrchestrationEnv::init(ExecEnv* exec_env, MetricRegistry* metrics, Stream
             };
     RETURN_IF_ERROR(exec_env->compute_env()->init_profile_report_worker(std::move(profile_report_worker_options)));
 
-    _runtime_filter_worker =
-            std::make_unique<RuntimeFilterWorker>(&exec_env->runtime_services(), &exec_env->rpc_services(),
-                                                  exec_env->query_pool_mem_tracker(), _fragment_mgr.get());
+    _runtime_filter_worker = std::make_unique<RuntimeFilterWorker>(
+            &exec_env->runtime_services(), &exec_env->rpc_services(), exec_env->query_pool_mem_tracker(),
+            _fragment_mgr.get(), config::runtime_filter_worker_thread_num);
     _runtime_filter_worker_started = true;
     exec_env->set_runtime_filter_services(_runtime_filter_worker.get(), _runtime_filter_worker.get());
 
