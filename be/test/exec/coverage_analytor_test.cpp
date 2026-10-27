@@ -358,11 +358,11 @@ TEST(CoverageAnalytorTest, SpillSettingDoesNotChangeWindowResults) {
     }
 }
 TEST(CoverageAnalytorTest, LateInvalidPartitionCannotPublishItsRows) {
-    // Partition 2 holds duplicate polygons and fails in finish_process. Only rows of the valid partition 1 that were
-    // published before the failure may reach the buffer, including when both partitions share an output chunk.
+    // Partition 2 has three owners for the same edge and fails the internal graph bound in finish_process.
+    // Only already-published rows of partition 1 may reach the buffer, even with a shared output chunk.
     for (size_t rows : {size_t(1), size_t(2), size_t(3)}) {
         std::vector<std::pair<int32_t, std::string>> output;
-        auto status = drive_coverage_analytor(rows, {1, 2, 2}, {left, left, left}, false, &output);
+        auto status = drive_coverage_analytor(rows, {1, 2, 2, 2}, {left, left, left, left}, false, &output);
         EXPECT_FALSE(status.ok());
         for (const auto& row : output) EXPECT_EQ(row.first, 0) << "chunk rows " << rows;
     }
