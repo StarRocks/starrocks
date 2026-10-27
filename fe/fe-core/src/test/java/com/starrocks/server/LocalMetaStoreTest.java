@@ -45,6 +45,7 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.DropInfo;
@@ -604,7 +605,11 @@ public class LocalMetaStoreTest {
 
         Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbFullName);
         OlapTable table = (OlapTable) database.getTable(tableName);
-        OlapTable followerTable  = AnalyzerUtils.getShadowCopyTable(table);
+        OlapTable followerTable;
+        // Under the read lock, as the planner copies a published table.
+        try (AutoCloseableLock ignored = new AutoCloseableLock(database.getId(), table.getId(), LockType.READ)) {
+            followerTable = AnalyzerUtils.getShadowCopyTable(table);
+        }
         long oldPartitionId = table.getPartition(tableName).getId();
 
         // 3. Execute truncateTable

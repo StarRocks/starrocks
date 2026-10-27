@@ -5668,6 +5668,19 @@ public class Config extends ConfigBase {
     public static String lock_blocking_call_validation_mode = "warn";
 
     /**
+     * How the FE reacts when a published native table or materialized view is copied for planning
+     * ({@code OlapTable#copyOnlyForQuery}) by a thread that holds neither that table's READ/WRITE lock
+     * nor its database's. The copy walks the live partition and index maps, so a concurrent DDL, an
+     * INSERT OVERWRITE swapping partitions or a follower's replayer can change them under it: the
+     * statement fails with a ConcurrentModificationException, or plans off half-applied metadata.
+     *
+     * {@code off} skips the check, {@code warn} logs the violation with the copier's stack and lets
+     * the copy proceed, {@code error} refuses it. Mutable. Unrecognized values behave as {@code warn}.
+     */
+    @ConfField(mutable = true)
+    public static String lock_snapshot_copy_validation_mode = "warn";
+
+    /**
      * Minimum interval in milliseconds between lock-invariant violation log lines <b>from the same
      * call site</b>. Throttling per site rather than globally keeps a busy violating site from
      * crowding out every other one, and a site that has not been seen before always logs its first

@@ -19,6 +19,7 @@ import com.starrocks.common.Config;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
@@ -102,6 +103,14 @@ public class LockInvariantViolations {
             Boolean.getBoolean("starrocks.lock.blocking.strict.in.test");
 
     /**
+     * The same escalation for the snapshot-copy rule ({@link SnapshotCopyValidator}), on its own
+     * property for the same reason. {@code fe-core/pom.xml} sets it from {@code lock.snapshot.strict}
+     * (default {@code true}).
+     */
+    private static final boolean SNAPSHOT_STRICT_IN_TEST =
+            Boolean.getBoolean("starrocks.lock.snapshot.strict.in.test");
+
+    /**
      * Upper bound on distinct call sites tracked. Beyond it every further site shares one bucket:
      * the throttling budget degrades, memory does not.
      */
@@ -140,6 +149,7 @@ public class LockInvariantViolations {
      */
     private static final ModeGate LOCK_TARGET_GATE = new ModeGate(STRICT_IN_TEST);
     private static final ModeGate BLOCKING_CALL_GATE = new ModeGate(BLOCKING_STRICT_IN_TEST);
+    private static final ModeGate SNAPSHOT_COPY_GATE = new ModeGate(SNAPSHOT_STRICT_IN_TEST);
 
     private static final class Site {
         private final AtomicLong count = new AtomicLong();
@@ -233,6 +243,28 @@ public class LockInvariantViolations {
     @VisibleForTesting
     public static void restoreBlockingCallTestEscalation() {
         BLOCKING_CALL_GATE.strictInTest = BLOCKING_CALL_GATE.armedByProperty;
+    }
+
+    /**
+     * The mode the snapshot-copy check ({@link SnapshotCopyValidator}) runs in right now.
+     */
+    public static Mode currentSnapshotCopyMode() {
+        return effectiveSnapshotCopyMode(Config.lock_snapshot_copy_validation_mode);
+    }
+
+    public static Mode effectiveSnapshotCopyMode(String configured) {
+        return SNAPSHOT_COPY_GATE.resolve(configured);
+    }
+
+    /** As {@link #suspendBlockingCallTestEscalation()}, for the snapshot-copy rule. */
+    @VisibleForTesting
+    public static void suspendSnapshotCopyTestEscalation() {
+        SNAPSHOT_COPY_GATE.strictInTest = false;
+    }
+
+    @VisibleForTesting
+    public static void restoreSnapshotCopyTestEscalation() {
+        SNAPSHOT_COPY_GATE.strictInTest = SNAPSHOT_COPY_GATE.armedByProperty;
     }
 
     /**
@@ -353,5 +385,24 @@ public class LockInvariantViolations {
 
     public static void clearViolations() {
         SITES.clear();
+    }
+
+    /**
+     * Take the per-site counts recorded so far and zero them, one site at a time. Unlike reading
+     * {@link #violationsBySite()} and then calling {@link #clearViolations()}, a violation another
+     * thread records in between is never lost: its increment lands either before the swap, and is
+     * returned here, or after it, and is left for the next drain. Only sites with a non-zero count
+     * are returned.
+     */
+    @VisibleForTesting
+    public static Map<String, Long> drainViolations() {
+        Map<String, Long> drained = new HashMap<>();
+        for (Map.Entry<String, Site> entry : SITES.entrySet()) {
+            long count = entry.getValue().count.getAndSet(0);
+            if (count > 0) {
+                drained.put(entry.getKey(), count);
+            }
+        }
+        return drained;
     }
 }
