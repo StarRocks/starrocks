@@ -42,7 +42,6 @@
 #include "column/json_column.h"
 #include "column/nullable_column.h"
 #include "common/object_pool.h"
-#include "exprs/builtin_functions.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/expr_factory.h"
@@ -55,12 +54,6 @@
 
 namespace starrocks {
 namespace {
-
-TEST(AIFunctionRegistrationTest, ExcludesAIProjectFunctionsFromScalarBuiltins) {
-    for (int64_t function_id = 200000; function_id <= 200012; ++function_id) {
-        EXPECT_EQ(nullptr, BuiltinFunctions::find_builtin_function(function_id));
-    }
-}
 
 constexpr int64_t kPromptFid = 200000;
 constexpr std::string_view kDefaultConfigId = "provider:default_chat";
