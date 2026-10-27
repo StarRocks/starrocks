@@ -17,6 +17,7 @@
 #include <fmt/core.h>
 
 #include <algorithm>
+#include <cstdlib>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -38,6 +39,7 @@
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/rowset/segment_writer.h"
+#include "storage/rowset/short_key_range_option.h"
 #include "storage/runtime_filter_predicate.h"
 #include "storage/tablet_schema_helper.h"
 #include "testutil/assert.h"
@@ -1267,7 +1269,7 @@ TEST_F(SegmentIteratorTest, GroupedTaskReadsClippedPagesInsteadOfRepeatedFullSeg
     EXPECT_LT(fs->bytes, full_bytes * 2) << "Allow boundary/index overhead, reject four full reads";
 }
 
-TEST_F(SegmentIteratorTest, GroupedTaskRejectsSplitAndHonorsCancellation) {
+TEST_F(SegmentIteratorTest, GroupedTaskAllowsRowidRejectsLogicalAndHonorsCancellation) {
     auto schema =
             std::shared_ptr<TabletSchema>(test::TabletSchemaBuilder().create(0, false, TYPE_BIGINT, true).build());
     auto read_schema = ChunkHelper::convert_schema(schema);
@@ -1279,17 +1281,148 @@ TEST_F(SegmentIteratorTest, GroupedTaskRejectsSplitAndHonorsCancellation) {
     opts.fs = _fs;
     opts.stats = &stats;
     opts.task_range = grouped_test_range(read_schema, 1, 5);
-    opts.rowid_range_option = std::make_shared<SparseRange<>>(Range<>(0, 10));
+    opts.rowid_range_option = std::make_shared<SparseRange<>>(Range<>(0, 3));
     ASSIGN_OR_ABORT(auto split, segment->new_iterator(read_schema, opts));
-    chunk->reset();
-    EXPECT_TRUE(split->get_next(chunk.get()).is_not_supported());
-    split->close();
+    EXPECT_EQ((std::vector<int64_t>{1, 2}), grouped_read_keys(split));
+    opts.short_key_ranges.emplace_back(std::make_shared<ShortKeyRangeOption>(std::make_unique<ShortKeyOption>(),
+                                                                             std::make_unique<ShortKeyOption>()));
+    ASSIGN_OR_ABORT(auto logical, segment->new_iterator(read_schema, opts));
+    EXPECT_TRUE(logical->get_next(chunk.get()).is_not_supported());
+    logical->close();
+    opts.short_key_ranges.clear();
     opts.rowid_range_option.reset();
     std::atomic<bool> cancelled{true};
     opts.is_cancelled = &cancelled;
     ASSIGN_OR_ABORT(auto iter, segment->new_iterator(read_schema, opts));
     EXPECT_TRUE(iter->get_next(chunk.get()).is_cancelled());
     iter->close();
+}
+
+// A grouped physical child must not read global boundary pages outside its rowid window.
+TEST_F(SegmentIteratorTest, GroupedRowidChildrenAvoidDisjointBoundaryPageReads) {
+    auto fs = std::make_shared<GroupedCountingFileSystem>();
+    ASSERT_OK(fs->create_dir(kSegmentDir));
+    const auto saved_page_size = config::data_page_size;
+    config::data_page_size = 1024;
+    DeferOp restore([&] { config::data_page_size = saved_page_size; });
+    auto schema =
+            std::shared_ptr<TabletSchema>(test::TabletSchemaBuilder().create(0, false, TYPE_BIGINT, true).build());
+    auto read_schema = ChunkHelper::convert_schema(schema);
+    constexpr int64_t n = 8192;
+    auto chunk = ChunkHelper::new_chunk(read_schema, n);
+    for (int64_t i = 0; i < n; ++i) chunk->get_column_by_index(0)->as_mutable_ptr()->append_datum(Datum(i));
+    auto segment = test::write_and_open_segment(fs, kSegmentDir + "/grouped_rowid_io", schema, *chunk, 32);
+    ASSERT_OK(segment->load_index());
+    for (const auto& window : {Range<>(512, 640), Range<>(6400, 6528)}) {
+        OlapReaderStatistics stats;
+        SegmentReadOptions opts;
+        opts.fs = fs;
+        opts.stats = &stats;
+        opts.use_page_cache = false;
+        opts.rowid_range_option = std::make_shared<SparseRange<>>(window);
+        // Prime reusable column/index state only at the child's own page, not at either clip boundary.
+        ASSIGN_OR_ABORT(auto prime, segment->new_iterator(read_schema, opts));
+        ASSERT_EQ(128, grouped_read_keys(prime).size());
+        opts.tablet_range = grouped_test_range(read_schema, 2048, 4096);
+        opts.task_range = grouped_test_range(read_schema, 2200, 3800);
+        fs->bytes = 0;
+        ASSIGN_OR_ABORT(auto child, segment->new_iterator(read_schema, opts));
+        EXPECT_TRUE(grouped_read_keys(child).empty());
+        EXPECT_EQ(0, fs->bytes) << "Short-key bounds already prove that this child is outside both clips";
+    }
+}
+
+TEST_F(SegmentIteratorTest, GroupedRowidChildrenPreserveSparseQueryAndOwnershipIntersection) {
+    auto schema = std::shared_ptr<TabletSchema>(
+            test::TabletSchemaBuilder().create(0, false, TYPE_BIGINT, true).create(1, false, TYPE_BIGINT).build());
+    auto read_schema = ChunkHelper::convert_schema(schema);
+    auto chunk = ChunkHelper::new_chunk(read_schema, 128);
+    for (int64_t row = 0; row < 128; ++row) {
+        chunk->get_column_by_index(0)->as_mutable_ptr()->append_datum(Datum(row / 4));
+        chunk->get_column_by_index(1)->as_mutable_ptr()->append_datum(Datum(row));
+    }
+    auto segment = test::write_and_open_segment(_fs, kSegmentDir + "/grouped_rowid_sparse", schema, *chunk, 4);
+    OlapReaderStatistics stats;
+    SegmentReadOptions opts;
+    opts.fs = _fs;
+    opts.stats = &stats;
+    opts.use_page_cache = false;
+    opts.rowid_range_option =
+            std::make_shared<SparseRange<>>(std::initializer_list<Range<>>{{16, 48}, {60, 78}, {82, 96}});
+    opts.ranges = {grouped_test_range(read_schema, 18, 32), grouped_test_range(read_schema, 0, 10)};
+    opts.tablet_range = grouped_test_range(read_schema, 8, 21);
+    opts.task_range = grouped_test_range(read_schema, 9, 22);
+    auto read_rows = [&] {
+        ASSIGN_OR_ABORT(auto iterator, segment->new_iterator(read_schema, opts));
+        auto out = ChunkHelper::new_chunk(iterator->schema(), 128);
+        std::vector<int64_t> rows;
+        while (true) {
+            out->reset();
+            auto status = iterator->get_next(out.get());
+            if (status.is_end_of_file()) break;
+            CHECK_OK(status);
+            for (size_t i = 0; i < out->num_rows(); ++i) rows.push_back(out->get(i)[1].get_int64());
+        }
+        iterator->close();
+        std::sort(rows.begin(), rows.end());
+        return rows;
+    };
+    EXPECT_EQ((std::vector<int64_t>{36, 37, 38, 39, 72, 73, 74, 75, 76, 77, 82, 83}), read_rows());
+    // Exercise the conservative seek envelope before batch decoding, whose ranges must be ascending.
+    opts.rowid_range_option->split_and_reverse(opts.rowid_range_option->size(), 128);
+    OlapReaderStatistics reverse_stats;
+    opts.stats = &reverse_stats;
+    const auto original_chunk_size = opts.chunk_size;
+    opts.chunk_size = 1;
+    ASSIGN_OR_ABORT(auto reversed, segment->new_iterator(read_schema, opts));
+    // The older iterator initializes on its first read. One row avoids unsupported backwards batches.
+    auto first = ChunkHelper::new_chunk(reversed->schema(), 1);
+    ASSERT_OK(reversed->get_next(first.get()));
+    ASSERT_EQ(1, first->num_rows());
+    EXPECT_EQ(44, reverse_stats.rows_after_key_range);
+    reversed->close();
+    opts.chunk_size = original_chunk_size;
+    opts.stats = &stats;
+
+    opts.ranges.clear();
+    opts.rowid_range_option = std::make_shared<SparseRange<>>(Range<>(19, 25));
+    opts.tablet_range = grouped_test_range(read_schema, 0, 32);
+    opts.task_range = grouped_test_range(read_schema, 5, 6);
+    opts.task_range->set_inclusive_lower(false);
+    opts.task_range->set_inclusive_upper(true);
+    EXPECT_EQ((std::vector<int64_t>{24}), read_rows());
+    opts.task_range = grouped_test_range(read_schema, 4, 5);
+    opts.task_range->set_inclusive_upper(true);
+    EXPECT_EQ((std::vector<int64_t>{19, 20, 21, 22, 23}), read_rows());
+
+    opts.task_range = SeekRange(SeekTuple(), grouped_test_range(read_schema, 0, 5).upper());
+    EXPECT_EQ((std::vector<int64_t>{19}), read_rows());
+    opts.task_range = SeekRange(grouped_test_range(read_schema, 6, 7).lower(), SeekTuple());
+    opts.task_range->set_inclusive_lower(true);
+    EXPECT_EQ((std::vector<int64_t>{24}), read_rows());
+    opts.rowid_range_option = std::make_shared<SparseRange<>>();
+    EXPECT_TRUE(read_rows().empty());
+}
+
+TEST_F(SegmentIteratorTest, PublicSeekHelperRemainsUnboundedBeforeInitialization) {
+    char pattern[] = "/tmp/starrocks-grouped-global-seek-XXXXXX";
+    ASSERT_NE(nullptr, ::mkdtemp(pattern));
+    const std::string directory(pattern);
+    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(directory));
+    DeferOp cleanup([&] { (void)fs->delete_dir_recursive(directory); });
+    auto schema =
+            std::shared_ptr<TabletSchema>(test::TabletSchemaBuilder().create(0, false, TYPE_BIGINT, true).build());
+    auto read_schema = ChunkHelper::convert_schema(schema);
+    auto chunk = ChunkHelper::new_chunk(read_schema, 100);
+    for (int64_t row = 0; row < 100; ++row) {
+        chunk->get_column_by_index(0)->as_mutable_ptr()->append_datum(Datum(row));
+    }
+    auto segment = test::write_and_open_segment(fs, directory + "/segment", schema, *chunk, 10);
+    auto range = grouped_test_range(read_schema, 10, 50);
+    LakeIOOptions io;
+    ASSIGN_OR_ABORT(auto actual, segment_seek_range_to_rowid_range(segment, range, io));
+    ASSERT_TRUE(actual.has_value());
+    EXPECT_EQ(Range<>(10, 50), *actual);
 }
 
 } // namespace starrocks

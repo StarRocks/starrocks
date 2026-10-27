@@ -279,8 +279,8 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
     seg_options.stats = options.stats;
     seg_options.ranges = options.ranges;
     if (options.grouped_range_task != nullptr) {
-        if (options.rowid_range_option != nullptr || options.short_key_ranges_option != nullptr) {
-            return Status::NotSupported("grouped range task does not support split rowset readers");
+        if (options.short_key_ranges_option != nullptr) {
+            return Status::NotSupported("grouped range task does not support logical split rowset readers");
         }
         // Validate the archived UID order before decoding positional seek tuples.
         ASSIGN_OR_RETURN(seg_options.task_range, decode_range_group_seek(*options.grouped_range_task, _tablet_schema));

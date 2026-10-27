@@ -120,9 +120,9 @@ Status TabletReader::prepare() {
 
 Status TabletReader::open(const TabletReaderParams& read_params) {
     if (read_params.grouped_range_task != nullptr) {
-        if (_need_split || read_params.rowid_range_option != nullptr ||
+        if ((_need_split && (!_could_split_physically || read_params.rowid_range_option != nullptr)) ||
             read_params.short_key_ranges_option != nullptr) {
-            return Status::NotSupported("grouped range task does not support split readers");
+            return Status::NotSupported("grouped range task does not support logical split readers");
         }
         RETURN_IF_ERROR(validate_range_group_schema(*read_params.grouped_range_task, *_tablet_schema));
     }
@@ -139,6 +139,19 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
     }
 
     if (_need_split) {
+        if (read_params.grouped_range_task != nullptr) {
+            // Validate captured sources before index pruning can discard them without a child reader.
+            for (const auto& rowset : _rowsets) {
+                RETURN_IF_ERROR(validate_range_group_schema(*read_params.grouped_range_task, *rowset->tablet_schema()));
+                ASSIGN_OR_RETURN(auto segments, rowset->get_segments_checked());
+                for (const auto& segment : segments) {
+                    if (segment != nullptr) {
+                        RETURN_IF_ERROR(
+                                validate_range_group_schema(*read_params.grouped_range_task, segment->tablet_schema()));
+                    }
+                }
+            }
+        }
         std::vector<BaseTabletSharedPtr> tablets;
         auto tablet_shared_ptr = std::make_shared<Tablet>(_tablet_mgr, _tablet_metadata->id());
         // to avoid list tablet metadata by set version_hint
