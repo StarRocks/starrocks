@@ -182,6 +182,9 @@ public:
                                 std::vector<int64_t>* latest_offsets, int timeout);
 
 private:
+    // Tests read the effective librdkafka configuration back from _k_consumer.
+    friend class KafkaDataConsumerTest;
+
     std::string _brokers;
     std::string _topic;
     std::string _group_id;

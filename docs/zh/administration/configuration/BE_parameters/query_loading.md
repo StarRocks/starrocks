@@ -1537,3 +1537,12 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 是否动态：否
 - 描述：Routine Load Kafka 操作的默认超时时长（未显式指定时使用）。
 - 引入版本：-
+
+### routine_load_kafka_client_rack
+
+- 默认值：空字符串
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：该 BE 或 CN 上运行的所有 Routine Load 消费者向 Kafka 通告的 `client.rack`（KIP-392，"从最近的副本读取"）。当 Kafka Broker 配置了 `broker.rack` 以及机架感知的 `replica.selector.class`（例如 `org.apache.kafka.common.replica.RackAwareReplicaSelector`）时，通告了匹配机架的消费者会从同一机架（例如同一云可用区）的副本而不是分区 Leader 读取数据，从而消除消费数据的跨可用区传输。请在每个节点上将其设置为该节点所在机架或可用区的标识；`be.conf` 支持 `${ENV_VAR}` 替换，因此可以从环境变量注入该值。`CREATE ROUTINE LOAD` 中作业级别的 `"property.client.rack"` 会覆盖该作业的此值。不支持机架感知副本选择的 Broker 会忽略该设置。默认为空，表示不设置 `client.rack`，消费者继续从分区 Leader 读取。
+- 引入版本：v4.2.0
