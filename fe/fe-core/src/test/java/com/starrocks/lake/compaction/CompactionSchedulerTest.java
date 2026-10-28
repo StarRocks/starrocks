@@ -16,6 +16,10 @@ package com.starrocks.lake.compaction;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.starrocks.alter.reshard.ReshardingPhysicalPartition;
+import com.starrocks.alter.reshard.SplitTabletJob;
+import com.starrocks.alter.reshard.TabletReshardJob;
+import com.starrocks.alter.reshard.TabletReshardJobMgr;
 import com.starrocks.alter.reshard.TabletReshardUtils;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
@@ -1487,14 +1491,26 @@ public class CompactionSchedulerTest {
                 return table;
             }
         };
+        Map<Long, PhysicalPartition> physicalPartitions = Map.of(
+                3L, new PhysicalPartition(3, 3, new MaterializedIndex(1, MaterializedIndex.IndexState.NORMAL)),
+                4L, new PhysicalPartition(4, 4, new MaterializedIndex(1, MaterializedIndex.IndexState.NORMAL)));
         new MockUp<OlapTable>() {
             @Mock
             public PhysicalPartition getPhysicalPartition(long physicalPartitionId) {
-                return new PhysicalPartition(123, 123, new MaterializedIndex());
+                return physicalPartitions.get(physicalPartitionId);
             }
         };
         CompactionWarehouseInfo info = new CompactionWarehouseInfo("aaa", WarehouseManager.DEFAULT_RESOURCE, 0, 0);
         table.setState(OlapTable.OlapTableState.TABLET_RESHARD);
+        TabletReshardJobMgr manager = new TabletReshardJobMgr();
+        Map<Long, TabletReshardJob> jobs = manager.getTabletReshardJobs();
+        jobs.put(1L, new SplitTabletJob(1L, 100L, table.getId(),
+                Map.of(3L, new ReshardingPhysicalPartition(3L, Map.of()))));
+        new Expectations() {{
+                globalStateMgr.getTabletReshardJobMgr();
+                result = manager;
+            }};
+
 
         // The deferral is observable as a pushed-out nextCompactionTime, and enableCompactionAfter uses
         // computeIfPresent -- so the partition has to be registered with the manager for either outcome
@@ -1516,5 +1532,27 @@ public class CompactionSchedulerTest {
         Assertions.assertFalse(reachedTabletCollection[0], "the pause must stop before tablet collection");
         Assertions.assertTrue(compactionManager.getStatistics(partition).getNextCompactionTime() > beforePause,
                 "the pause must re-arm the partition rather than drop it");
+
+        reachedTabletCollection[0] = false;
+        PartitionStatistics free = new PartitionStatistics(new PartitionIdentifier(1, 2, 4));
+        free.setCompactionScore(new Quantiles(1, 2, 3));
+        compactionScheduler.startCompaction(new PartitionStatisticsSnapshot(free), info);
+        Assertions.assertTrue(reachedTabletCollection[0],
+                "the UNSHARE shape must keep ordinary compaction on a free physical partition");
+
+        // A stale pin does not make an unoccupied target a valid UNSHARE request.
+        table.setTableProperty(new TableProperty(new HashMap<>()));
+        table.setFileBundling(true);
+        physicalPartitions.get(3L).pinQueryableIndex(1L, 1L);
+        physicalPartitions.get(4L).pinQueryableIndex(1L, 1L);
+        Assertions.assertTrue(table.isFileBundling());
+        Assertions.assertTrue(physicalPartitions.get(3L).isUnsharing());
+        reachedTabletCollection[0] = false;
+        free.setPriority(PartitionStatistics.CompactionPriority.UNSHARE);
+        compactionScheduler.startCompaction(new PartitionStatisticsSnapshot(free), info);
+        Assertions.assertFalse(reachedTabletCollection[0], "UNSHARE requires an occupied physical target");
+        statistics.setPriority(PartitionStatistics.CompactionPriority.UNSHARE);
+        compactionScheduler.startCompaction(new PartitionStatisticsSnapshot(statistics), info);
+        Assertions.assertTrue(reachedTabletCollection[0], "the occupied partition must retain its valid UNSHARE path");
     }
 }
