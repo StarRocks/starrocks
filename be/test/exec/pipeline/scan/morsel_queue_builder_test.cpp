@@ -367,8 +367,8 @@ TEST_F(MorselQueueBuilderTest, GroupedChildrenAppendOnlyToOwningQueue) {
     EXPECT_FALSE(factory->could_local_shuffle());
     const auto old_death_style = ::testing::FLAGS_gtest_death_test_style;
     ::testing::FLAGS_gtest_death_test_style = "threadsafe";
-    EXPECT_EXIT(
-            { std::_Exit(factory->enable_random_append_split_morsel() ? 1 : 0); }, ::testing::ExitedWithCode(0), "");
+    EXPECT_EXIT({ std::_Exit(factory->enable_random_append_split_morsel() ? 1 : 0); }, ::testing::ExitedWithCode(0),
+                "");
     ::testing::FLAGS_gtest_death_test_style = old_death_style;
     for (int driver = 0; driver < 2; ++driver) {
         auto* queue = factory->create(driver);
