@@ -313,6 +313,23 @@ TEST_F(UpdateConfigActionTest, test_update_lake_metadata_fetch_thread_count) {
     ASSERT_EQ(1, thread_pool->max_threads());
 }
 
+TEST_F(UpdateConfigActionTest, test_update_put_combined_txn_log_thread_pool_num_max) {
+    auto* thread_pool = ExecEnv::GetInstance()->put_combined_txn_log_thread_pool();
+    ASSERT_NE(nullptr, thread_pool);
+    SCOPED_UPDATE(int32_t, config::put_combined_txn_log_thread_pool_num_max,
+                  config::put_combined_txn_log_thread_pool_num_max);
+    const int saved_max_threads = thread_pool->max_threads();
+    DeferOp restore_pool([&]() { CHECK_OK(thread_pool->update_max_threads(saved_max_threads)); });
+    UpdateConfigAction action(ExecEnv::GetInstance());
+
+    ASSERT_OK(action.update_config("put_combined_txn_log_thread_pool_num_max", "8"));
+    EXPECT_EQ(8, thread_pool->max_threads());
+
+    // Non-positive values are clamped to 1 so the pool keeps at least one worker.
+    ASSERT_OK(action.update_config("put_combined_txn_log_thread_pool_num_max", "0"));
+    EXPECT_EQ(1, thread_pool->max_threads());
+}
+
 #ifdef USE_STAROS
 
 namespace {
