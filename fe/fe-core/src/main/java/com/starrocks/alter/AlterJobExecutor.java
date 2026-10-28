@@ -190,11 +190,19 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
                     && (state == OlapTable.OlapTableState.UPDATING_META
                         || (state == OlapTable.OlapTableState.SCHEMA_CHANGE
                             && AlterJobMgr.unfinishedAlterJobsAllowConcurrentPartitionCreation(olapTable.getId())));
-            if (!tolerable) {
+            boolean reshardOnly = state == OlapTable.OlapTableState.TABLET_RESHARD
+                    && olapTable.isCloudNativeTableOrMaterializedView()
+                    && olapTable.isRangeDistribution()
+                    && !statement.getAlterClauseList().isEmpty()
+                    && statement.getAlterClauseList().stream()
+                            .allMatch(c -> c instanceof SplitTabletClause || c instanceof MergeTabletClause);
+            if (!tolerable && !reshardOnly) {
                 throw new AlterJobException("", InvalidOlapTableStateException.of(state, olapTable.getName()));
             }
-            LOG.info("allow ADD PARTITION on table {} concurrent with alter, state={}",
-                    olapTable.getName(), state);
+            if (tolerable) {
+                LOG.info("allow ADD PARTITION on table {} concurrent with alter, state={}",
+                        olapTable.getName(), state);
+            }
         }
 
         this.db = db;
