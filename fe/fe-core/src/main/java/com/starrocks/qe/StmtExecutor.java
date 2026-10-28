@@ -1694,8 +1694,10 @@ public class StmtExecutor {
             String explainPlan;
             try {
                 sv.setEnableDesensitizeExplain(forceDesensitize);
+                context.setExplainForProfile(true);
                 explainPlan = plan.getExplainString(TExplainLevel.COSTS);
             } finally {
+                context.setExplainForProfile(false);
                 sv.setEnableDesensitizeExplain(prevDesensitize);
             }
             // Defense in depth: also strip credential-bearing literals (e.g. FILES("...")
