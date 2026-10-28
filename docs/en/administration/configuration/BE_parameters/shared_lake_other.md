@@ -149,6 +149,15 @@ This topic introduces the following types of BE configurations:
 - Description: Whether to write tablet metadata and transaction log files of a shared-data cluster with an Adler-32 checksum, so that corruption of these files can be detected when they are read. Regardless of this item, readers always detect and verify the checksum automatically when it is present; this item only controls the write format. Set it to `false` only while the cluster may still be downgraded to a version that predates the checksummed format. During a rolling upgrade or a downgrade, an earlier BE or CN uses the legacy reader and cannot parse files written in the new format.
 - Introduced in: v4.2
 
+### lake_enable_publish_partial_meta
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether a publish of a shared-data table with file bundling keeps the result of each tablet that the aggregator may not have received. A tablet whose publish finishes more than the publish RPC timeout plus 3 seconds after the request arrived, or whose retried publish had to be applied again, keeps its result in the local Data Cache of the node, never in object storage. A later retry on that node reads it back instead of applying the transactions again, so tablets that already finished are not redone on every retry of a slow partition. The entries are evicted like any other Data Cache entry. Takes effect only when Data Cache is enabled. Set the same value on all BE and CN nodes.
+- Introduced in: v26.2
+
 ### lake_pk_compaction_max_input_rowsets
 
 - Default: 500

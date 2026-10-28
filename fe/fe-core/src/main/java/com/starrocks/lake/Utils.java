@@ -684,9 +684,11 @@ public class Utils {
         }
 
         LakeService lakeService = BrpcProxy.getLakeService(aggregatorNode.getHost(), aggregatorNode.getBrpcPort());
-        // Same per-call override as the non-aggregate path, see publishVersionBatch. The aggregator waits
-        // for every sub-request, each of which carries this same timeout, so FE must not wait for less.
-        TalkTimeoutController.setTalkTimeout(Config.lake_publish_version_timeout_ms);
+        // Same per-call override as the non-aggregate path, see publishVersionBatch. Each sub-request carries
+        // lake_publish_version_timeout_ms, so the aggregator has every node's outcome by about that time and
+        // then still writes the bundle, or lets the nodes keep what they finished, before it replies. Waiting
+        // twice as long makes FE start its retry only after that, never while this aggregator is still writing.
+        TalkTimeoutController.setTalkTimeout(2L * Config.lake_publish_version_timeout_ms);
         Future<PublishVersionResponse> future = lakeService.aggregatePublishVersion(request);
 
         try {
