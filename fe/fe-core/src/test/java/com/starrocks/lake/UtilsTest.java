@@ -28,12 +28,9 @@ import com.starrocks.common.NoAliveBackendException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.DnsCache;
 import com.starrocks.proto.AggregatePublishVersionRequest;
-<<<<<<< HEAD
-=======
 import com.starrocks.proto.PublishVersionRequest;
 import com.starrocks.proto.PublishVersionResponse;
 import com.starrocks.proto.StatusPB;
->>>>>>> 68752e6 ([Enhancement] Make the shared-data publish version timeout configurable (#79332))
 import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
@@ -313,7 +310,7 @@ public class UtilsTest {
         Config.lake_publish_version_timeout_ms = 12345;
         try {
             Utils.publishVersionBatch(Lists.newArrayList(), Lists.newArrayList(new TxnInfoPB()), 1L, 2L,
-                    null, null, WarehouseManager.DEFAULT_RESOURCE, null, null);
+                    null, null, WarehouseManager.DEFAULT_RESOURCE, null);
         } finally {
             Config.lake_publish_version_timeout_ms = savedTimeoutMs;
         }
@@ -357,7 +354,7 @@ public class UtilsTest {
         Config.lake_publish_version_timeout_ms = 23456;
         try {
             Utils.aggregatePublishVersion(Lists.newArrayList(), Lists.newArrayList(new TxnInfoPB()), 1L, 2L,
-                    null, null, null, WarehouseManager.DEFAULT_RESOURCE, null, null);
+                    null, null, null, WarehouseManager.DEFAULT_RESOURCE, null);
         } finally {
             Config.lake_publish_version_timeout_ms = savedTimeoutMs;
         }
@@ -380,6 +377,11 @@ public class UtilsTest {
             @Mock
             public WarehouseManager getWarehouseMgr() {
                 return new WarehouseManager();
+            }
+
+            @Mock
+            public NodeMgr getNodeMgr() {
+                return nodeMgr;
             }
         };
 

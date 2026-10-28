@@ -14,11 +14,7 @@
 
 package com.starrocks.lake;
 
-<<<<<<< HEAD
-=======
 import com.baidu.jprotobuf.pbrpc.utils.TalkTimeoutController;
-import com.google.common.annotations.VisibleForTesting;
->>>>>>> 68752e6 ([Enhancement] Make the shared-data publish version timeout configurable (#79332))
 import com.google.common.collect.Lists;
 import com.staros.proto.ShardInfo;
 import com.starrocks.alter.reshard.PublishTabletsInfo;
