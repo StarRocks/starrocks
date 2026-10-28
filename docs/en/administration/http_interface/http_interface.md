@@ -64,7 +64,7 @@ To facilitate the maintenance of StarRocks clusters, StarRocks provides various 
 | HEAD/GET            | `/api/_download_load`                                           | |
 | HEAD/GET            | `/api/_tablet/_download`                                        | |
 | HEAD/GET            | `/api/_load_error_log`                                          | |
-| GET                 | `/api/health`                                                   | |
+| GET                 | `/api/health`                                                   | Returns the health state of the BE process. Returns HTTP 200 while the process is healthy, and HTTP 503 once the fatal-signal handler has marked the process as crashing, so orchestrator health checks (for example, Kubernetes liveness probes) can restart a node whose crash handler hangs. |
 | GET                 | `/api/_stop_be`                                                 | |
 | GET                 | `/pprof/heap`                                                   | |
 | GET                 | `/pprof/growth`                                                 | |
@@ -95,7 +95,7 @@ To facilitate the maintenance of StarRocks clusters, StarRocks provides various 
 
 | Request Method      | Request Path                                                    | Description                                                                                                          |
 |---------------------|-----------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------|
-| GET                 | `/api/health`                                                   | |
+| GET                 | `/api/health`                                                   | Returns the health state of the CN process. Returns HTTP 200 while the process is healthy, and HTTP 503 once the fatal-signal handler has marked the process as crashing, so orchestrator health checks (for example, Kubernetes liveness probes) can restart a node whose crash handler hangs. |
 | GET                 | `/pprof/heap`                                                   | |
 | GET                 | `/pprof/growth`                                                 | |
 | GET                 | `/pprof/profile`                                                | |
