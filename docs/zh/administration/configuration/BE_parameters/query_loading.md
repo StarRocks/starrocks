@@ -224,6 +224,24 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：控制是否为 Flat Json 数据进行 Compaction。
 - 引入版本：v3.3.3
 
+### enable_compaction_flat_json_mixed_inputs
+
+- 默认值：True
+- 类型：Bool
+- 单位：
+- 是否动态：是
+- 描述：当参与 Compaction 的 segment 中，JSON 列一部分以 Flat JSON 存储、一部分以完整 JSON 存储时，是否把完整 JSON 的 segment 按其他 segment 的 Flat JSON 布局读出，且所有子列都使用 JSON 类型。这样输出可以边读边写，不必把整个 segment 缓存在内存中。JSON 类型的子列会记录其值的类型和范围，之后的 Compaction 可以据此改用能精确保存所有值的类型。仅在 `enable_compaction_flat_json` 为 `true` 且表开启了 Flat JSON 时生效。
+- 引入版本：-
+
+### enable_compaction_flat_json_partial_paths
+
+- 默认值：True
+- 类型：Bool
+- 单位：
+- 是否动态：是
+- 描述：Flat JSON 的 Compaction 中，某个子列只在部分输入 segment 中存在时，如果包含它的行数足够多（`json_flat_sparsity_factor`），是否在输出中保留这个子列。不含该子列的 segment 从其剩余 JSON 中提供对应的值；若这样的 segment 可能在剩余 JSON 中存有该值，该子列使用 JSON 类型。关闭时，Compaction 只保留所有输入 segment 都有的子列，任一输入 segment 未拍平的 key 都存入剩余 JSON。仅在 `enable_compaction_flat_json` 为 `true` 时生效。
+- 引入版本：-
+
 ### enable_default_value_column_zonemap_filter
 
 - 默认值：true

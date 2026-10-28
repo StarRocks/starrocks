@@ -38,6 +38,10 @@ private:
     // buffering the whole output segment to re-derive one at finish(). See _start_streaming().
     Status _start_streaming();
     Status _stream_write(const Column& column, const JsonColumn& json_col);
+    // A segment whose buffered input outgrows streaming_threshold_bytes() without one flat layout is written as
+    // whole JSON from then on, as it arrives, rather than buffered whole to derive a layout.
+    Status _start_plain_streaming();
+    Status _write_plain(const Column& column);
 
     Status _compact_columns(MutableColumns& json_datas);
 
@@ -45,7 +49,10 @@ private:
 
     Status _flatten_columns(MutableColumns& json_datas);
 
+    // Memory held by the buffered chunks, which decides when to stop buffering.
+    size_t _buffered_memory = 0;
     bool _streaming = false;
+    bool _plain_streaming = false;
     // Every chunk buffered so far is flat with the first chunk's layout.
     bool _uniform_flat_layout = true;
 };
