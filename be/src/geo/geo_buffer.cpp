@@ -237,10 +237,8 @@ StatusOr<std::unique_ptr<PreparedGeoBuffer>> PreparedGeoBuffer::prepare(Slice wk
     }
 }
 
-StatusOr<WkbGeometry> PreparedGeoBuffer::buffer(double distance, const std::function<Status()>& checkpoint) const {
+StatusOr<WkbGeometry> PreparedGeoBuffer::buffer(double distance) const {
     try {
-        auto check = [&]() { return checkpoint ? checkpoint() : Status::OK(); };
-        RETURN_IF_ERROR(check());
         if (!std::isfinite(distance)) return Status::InvalidArgument("ST_Buffer requires a finite distance");
         const bool empty = std::visit([](const auto& model) { return model.empty(); }, _impl->model);
         const bool unchanged = !empty && _impl->polygonal && distance == 0;
@@ -264,7 +262,6 @@ StatusOr<WkbGeometry> PreparedGeoBuffer::buffer(double distance, const std::func
                 return Status::InvalidArgument("ST_Buffer lost a non-empty input at working precision");
             }
         }
-        RETURN_IF_ERROR(check());
         if (bg::num_points(output) > kGeoBufferMaxOutputCoordinates) {
             return Status::InvalidArgument("ST_Buffer result exceeds coordinate limit");
         }
@@ -273,7 +270,6 @@ StatusOr<WkbGeometry> PreparedGeoBuffer::buffer(double distance, const std::func
         }
         ASSIGN_OR_RETURN(auto result, to_geometry(output, _impl->origin,
                                                   unchanged ? &std::get<MultiPolygon>(_impl->model) : nullptr));
-        RETURN_IF_ERROR(check());
         return result;
     } catch (const std::bad_alloc&) {
         return Status::MemoryLimitExceeded("ST_Buffer allocation failed");
