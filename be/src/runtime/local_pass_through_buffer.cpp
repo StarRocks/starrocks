@@ -68,7 +68,7 @@ public:
         std::unique_lock lock(_mutex);
         if (_physical_bytes > 0) {
             CurrentThread::current().mem_consume(_physical_bytes);
-            RuntimeEnv::GetInstance()->passthrough_mem_tracker()->release(_physical_bytes);
+            GlobalEnv::GetInstance()->passthrough_mem_tracker()->release(_physical_bytes);
             _total_bytes -= _physical_bytes;
             _physical_bytes = 0;
         }
