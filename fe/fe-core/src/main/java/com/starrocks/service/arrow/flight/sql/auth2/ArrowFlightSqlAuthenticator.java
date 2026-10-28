@@ -14,6 +14,7 @@
 
 package com.starrocks.service.arrow.flight.sql.auth2;
 
+import com.starrocks.qe.GlobalVariable;
 import com.starrocks.service.arrow.flight.sql.session.ArrowFlightSqlSessionManager;
 import org.apache.arrow.flight.CallHeaders;
 import org.apache.arrow.flight.CallStatus;
@@ -62,16 +63,39 @@ public class ArrowFlightSqlAuthenticator implements CallHeaderAuthenticator {
         try {
             sessionManager.validateToken(token);
         } catch (IllegalArgumentException e) {
-            // The token is not present in this FE's local session cache. Note that even with
-            // proxy mode enabled, the "FE_HOST|UUID" prefix embedded in the token is caller-supplied
-            // and unauthenticated — it must never be trusted as proof that the token is valid on the
-            // named host. Accepting it here would let anyone forge a token for any known FE hostname
-            // and be authenticated as an arbitrary session. Cross-FE token forwarding must be verified
-            // against the owning FE's session store before being accepted, which is not implemented here.
+            // Token not found in this FE's local session cache. If proxy mode is enabled and the
+            // "FE_HOST|UUID" prefix names a different, known FE, let the call through so it can be
+            // forwarded there (see ArrowFlightSqlServiceImpl's forward*ToRemoteFE methods). The
+            // forwarded call reuses this exact token as its own bearer credential, so the FE named
+            // in the prefix runs this same check against its own cache. A caller can claim any
+            // hostname prefix it likes, but it can never forge a cache hit on the FE that prefix
+            // names — so isForwardableToAnotherFe() below must return false whenever the prefix
+            // names *this* FE, otherwise a token forged with our own host would be wrongly trusted.
+            if (isProxyEnabled() && isForwardableToAnotherFe(token)) {
+                return createAuthResult(token);
+            }
             throw CallStatus.UNAUTHENTICATED.withCause(e).withDescription(e.getMessage()).toRuntimeException();
         }
 
         return createAuthResult(token);
+    }
+
+    private boolean isProxyEnabled() {
+        return GlobalVariable.isArrowFlightProxyEnabled();
+    }
+
+    /**
+     * True only if the token's "FE_HOST|UUID" prefix names a different, known FE in the cluster.
+     * A token claiming to belong to this FE must never take this path: since it missed the local
+     * cache lookup above, that would mean trusting an unverified, caller-supplied claim as proof
+     * of validity on the one FE actually authoritative for it.
+     */
+    private boolean isForwardableToAnotherFe(String token) {
+        if (sessionManager.isLocalToken(token)) {
+            return false;
+        }
+        String feHost = ArrowFlightSqlSessionManager.extractFeHost(token);
+        return ArrowFlightSqlSessionManager.isValidFeHost(feHost);
     }
 
     private AuthResult createAuthResult(String token) {
