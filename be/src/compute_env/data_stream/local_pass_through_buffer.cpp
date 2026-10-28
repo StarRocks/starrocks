@@ -26,27 +26,21 @@ namespace starrocks {
 // the channel it belongs to neither instance, so it is parked on the query tracker, the common ancestor
 // of both instances: the query, resource group, query pool and process trackers keep counting it, and
 // only the instance trackers change. The global passthrough tracker is not part of the tracker tree; it
-// mirrors the parked bytes for diagnosis. Without a query tracker, fall back to parking the bytes on the
-// passthrough tracker alone.
+// mirrors the parked bytes for diagnosis. Without a query tracker, fall back to the process tracker, the
+// common ancestor of every tracker, so the process tracker still counts the bytes.
+static MemTracker* parking_tracker(MemTracker* query_mem_tracker) {
+    return query_mem_tracker != nullptr ? query_mem_tracker : RuntimeEnv::GetInstance()->process_mem_tracker();
+}
+
 static void park_buffered_bytes(MemTracker* query_mem_tracker, int64_t bytes) {
-    MemTracker* passthrough = RuntimeEnv::GetInstance()->passthrough_mem_tracker();
-    if (query_mem_tracker != nullptr) {
-        CurrentThread::current().mem_transfer_to(query_mem_tracker, bytes);
-        passthrough->consume(bytes);
-    } else {
-        CurrentThread::current().mem_transfer_to(passthrough, bytes);
-    }
+    CurrentThread::current().mem_transfer_to(parking_tracker(query_mem_tracker), bytes);
+    RuntimeEnv::GetInstance()->passthrough_mem_tracker()->consume(bytes);
 }
 
 // Hand parked bytes to the current thread's tracker, which then frees them or keeps them as its own.
 static void unpark_buffered_bytes(MemTracker* query_mem_tracker, int64_t bytes) {
-    MemTracker* passthrough = RuntimeEnv::GetInstance()->passthrough_mem_tracker();
-    if (query_mem_tracker != nullptr) {
-        CurrentThread::current().mem_transfer_from(query_mem_tracker, bytes);
-        passthrough->release(bytes);
-    } else {
-        CurrentThread::current().mem_transfer_from(passthrough, bytes);
-    }
+    CurrentThread::current().mem_transfer_from(parking_tracker(query_mem_tracker), bytes);
+    RuntimeEnv::GetInstance()->passthrough_mem_tracker()->release(bytes);
 }
 
 // channel per [sender_id]

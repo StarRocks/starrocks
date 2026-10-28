@@ -463,10 +463,10 @@ TEST_F(LocalPassThroughMemoryTest, buffered_memory_triggers_query_limit_checks) 
     EXPECT_EQ(_query_before_buffering, _query->consumption());
 }
 
-// Without a query tracker (e.g. a context initialized without one), the bytes are parked on the
-// passthrough tracker alone, as before: the instance trackers stay balanced, and the parked bytes are
-// mirrored but not part of the process tree.
-TEST(LocalPassThroughBufferTest, falls_back_to_passthrough_tracker_without_query_tracker) {
+// Without a query tracker (e.g. a context initialized without one), the bytes are parked on the process
+// tracker: the instance trackers stay balanced, the process tracker keeps counting the parked bytes, and
+// the passthrough tracker mirrors them.
+TEST(LocalPassThroughBufferTest, falls_back_to_process_tracker_without_query_tracker) {
     MemTracker* process = RuntimeEnv::GetInstance()->process_mem_tracker();
     MemTracker* passthrough = RuntimeEnv::GetInstance()->passthrough_mem_tracker();
     TrackedColumnAllocator allocator;
@@ -490,16 +490,19 @@ TEST(LocalPassThroughBufferTest, falls_back_to_passthrough_tracker_without_query
         input->append_column(std::move(column), 0);
         CurrentThread::current().mem_tracker_ctx_shift();
         const int64_t sender_before = sender->consumption();
+        const int64_t process_before = process->consumption();
 
         sink.append_chunk(0, input.get(), input->memory_usage(), 0);
         CurrentThread::current().mem_tracker_ctx_shift();
         const int64_t buffered_bytes = sink.total_bytes();
         ASSERT_GT(buffered_bytes, 0);
+        EXPECT_EQ(process_before + buffered_bytes, process->consumption());
         EXPECT_EQ(passthrough_before + buffered_bytes, passthrough->consumption());
         EXPECT_EQ(sender_before, sender->consumption());
 
         source.set_cancelled();
         CurrentThread::current().mem_tracker_ctx_shift();
+        EXPECT_EQ(process_before, process->consumption());
         EXPECT_EQ(passthrough_before, passthrough->consumption());
         EXPECT_EQ(sender_before, sender->consumption());
         mgr.close_fragment_instance(query_id);
