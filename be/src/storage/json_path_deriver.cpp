@@ -27,6 +27,7 @@
 #include <vector>
 
 #include "base/string/string_parser.hpp"
+#include "column/column_helper.h"
 #include "column/flat_json/flat_json_internal.h"
 #include "column/json_column.h"
 #include "column/nullable_column.h"
@@ -54,11 +55,29 @@ static constexpr int kMinColumnBudget = 100;
 static constexpr size_t kNodesPerFlatColumn = 64;
 
 // Hits of an already-flattened path that the complex-type check may count as base-typed values
-// (JsonFlatPath::flat_base_type_hits). Values only reach a non-JSON sub-column after being flattened
-// as a base type; a JSON sub-column holds complex values, so it stays subject to
-// enable_json_flat_complex_type exactly as when deriving from data.
+// (JsonFlatPath::flat_base_type_hits), as far as segment metadata tells. Values only reach a non-JSON
+// sub-column after being flattened as a base type; a JSON sub-column may hold complex values, so it
+// stays subject to enable_json_flat_complex_type exactly as when deriving from data.
 static uint64_t base_type_hits(LogicalType sub_column_type, uint64_t hits) {
     return sub_column_type == LogicalType::TYPE_JSON ? 0 : hits;
+}
+
+// flat_base_type_hits of a JSON sub-column of a flat chunk. A path is given a JSON sub-column not only for
+// complex values but also when its scalars have no exact common type -- a string and a number, or an
+// integer past 2^53 and a double (dfs_keep_numbers_exact) -- and those are base-typed values just as they
+// were before being flattened. Segment metadata cannot tell the two apart, but a chunk has the values at
+// hand, so count the complex ones instead of taking the whole column for complex: compaction reads such a
+// path as a JSON sub-column, and with enable_json_flat_complex_type off it would otherwise drop the path.
+static uint64_t json_sub_column_base_type_hits(const Column& json_data, const Column& sub_column, uint64_t hits) {
+    const auto* values = down_cast<const JsonColumn*>(ColumnHelper::get_data_column(&sub_column));
+    uint64_t complex_values = 0;
+    for (size_t row = 0; row < sub_column.size(); ++row) {
+        if (json_data.is_null(row) || sub_column.is_null(row)) {
+            continue;
+        }
+        complex_values += flat_json::JSON_BASE_TYPE.count(values->get_object(row)->to_vslice().type()) == 0;
+    }
+    return hits - complex_values;
 }
 
 // Value range of a BIGINT sub-column; nullopt when unknown.
@@ -102,13 +121,15 @@ static BigintRange bigint_range_of(const Column& sub) {
     return std::nullopt;
 }
 
-// Accounts an already-flattened sub-column of type `type` holding `hits` values to `leaf`.
+// Accounts an already-flattened sub-column of type `type` holding `hits` values, `base_hits` of them
+// base-typed, to `leaf`.
 //
 // The layout derived from sub-columns is read by casting each source sub-column to the derived type, so the
 // derived type must hold every source value exactly; dfs_keep_numbers_exact() checks that from the value range
 // of the path. A LARGEINT sub-column only exists for values past INT64_MAX; a BIGINT sub-column contributes its
 // value range, or the whole BIGINT range when it is unknown.
-static void add_flat_sub_column(JsonFlatPath* leaf, LogicalType type, uint64_t hits, const BigintRange& range) {
+static void add_flat_sub_column(JsonFlatPath* leaf, LogicalType type, uint64_t hits, uint64_t base_hits,
+                                const BigintRange& range) {
     leaf->json_type &= flat_json::LOGICAL_TYPE_TO_JSON_BITS.at(type);
     if (type == LogicalType::TYPE_LARGEINT) {
         leaf->max_uint = std::numeric_limits<uint64_t>::max();
@@ -121,7 +142,7 @@ static void add_flat_sub_column(JsonFlatPath* leaf, LogicalType type, uint64_t h
         }
     }
     leaf->hits += hits;
-    leaf->flat_base_type_hits += base_type_hits(type, hits);
+    leaf->flat_base_type_hits += base_hits;
 }
 
 double estimate_filter_fpp(uint64_t element_nums) {
@@ -270,6 +291,7 @@ void JsonPathDeriver::derived(const std::vector<const ColumnReader*>& json_reade
             auto leaf = _normalize_exists_path(sub->name(), _path_root.get(), 0);
             add_flat_sub_column(
                     leaf, sub->column_type(), reader->num_rows(),
+                    base_type_hits(sub->column_type(), reader->num_rows()),
                     sub->column_type() == LogicalType::TYPE_BIGINT ? bigint_range_of(sub.get()) : std::nullopt);
         }
     }
@@ -302,9 +324,11 @@ void JsonPathDeriver::_derived_on_flat_json(const std::vector<const Column*>& js
 
         for (size_t i = 0; i < paths.size(); i++) {
             auto leaf = _normalize_exists_path(paths[i], _path_root.get(), hits);
-            add_flat_sub_column(leaf, types[i], hits,
-                                types[i] == LogicalType::TYPE_BIGINT ? bigint_range_of(*json_col->get_flat_field(i))
-                                                                     : std::nullopt);
+            const auto& sub_column = *json_col->get_flat_field(i);
+            uint64_t base_hits =
+                    types[i] == LogicalType::TYPE_JSON ? json_sub_column_base_type_hits(*col, sub_column, hits) : hits;
+            add_flat_sub_column(leaf, types[i], hits, base_hits,
+                                types[i] == LogicalType::TYPE_BIGINT ? bigint_range_of(sub_column) : std::nullopt);
         }
     }
 }

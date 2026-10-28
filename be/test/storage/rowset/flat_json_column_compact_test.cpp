@@ -1479,6 +1479,41 @@ TEST_F(FlatJsonColumnCompactTest, testCompactPathKeepsScalarSubColumnsWithoutCom
               JsonFlatPath::debug_flat_json(deriver.flat_paths(), deriver.flat_types(), deriver.has_remain_json()));
 }
 
+// A path whose scalars have no exact common type -- a string and a number, or an integer past 2^53 and a
+// double -- is flattened as JSON. Compaction then reads that path as a JSON sub-column; its values are still
+// scalars and must keep the path flat with complex types left out of flattening, rather than drop it and, if it
+// was the only path, send every row through a merge back into whole JSON.
+TEST_F(FlatJsonColumnCompactTest, testDeriveKeepsJsonSubColumnOfScalars) {
+    const std::vector<std::vector<std::string>> cases = {
+            {R"({"v": "a"})", R"({"v": 7})", R"({"v": "b"})"},
+            {R"({"v": 1.5})", R"({"v": 9007199254740993})", R"({"v": 2})"},
+    };
+    for (const auto& rows : cases) {
+        config::enable_json_flat_complex_type = true;
+        MutableColumnPtr scalars = more_flat_json(rows, true);
+        ASSERT_EQ(std::vector<LogicalType>{TYPE_JSON}, get_json_column(scalars)->flat_column_types()) << rows[0];
+
+        config::enable_json_flat_complex_type = false;
+        JsonPathDeriver deriver;
+        deriver.derived({scalars.get()});
+        EXPECT_EQ(R"([v(JSON)})",
+                  JsonFlatPath::debug_flat_json(deriver.flat_paths(), deriver.flat_types(), deriver.has_remain_json()))
+                << rows[0];
+    }
+}
+
+// A JSON sub-column that holds complex values stays out of flattening when complex types are.
+TEST_F(FlatJsonColumnCompactTest, testDeriveDropsJsonSubColumnOfArrays) {
+    MutableColumnPtr arrays = more_flat_json({R"({"v": [1]})", R"({"v": [2, 3]})", R"({"v": []})"}, true);
+    ASSERT_EQ(std::vector<LogicalType>{TYPE_JSON}, get_json_column(arrays)->flat_column_types());
+
+    config::enable_json_flat_complex_type = false;
+    JsonPathDeriver deriver;
+    deriver.derived({arrays.get()});
+    EXPECT_TRUE(deriver.flat_paths().empty())
+            << JsonFlatPath::debug_flat_json(deriver.flat_paths(), deriver.flat_types(), deriver.has_remain_json());
+}
+
 TEST_F(FlatJsonColumnCompactTest, testHyperJsonCompactToFlatJsonRemain) {
     config::json_flat_sparsity_factor = 0.6;
     // clang-format off
