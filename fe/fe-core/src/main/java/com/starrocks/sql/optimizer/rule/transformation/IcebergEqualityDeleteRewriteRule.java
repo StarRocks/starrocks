@@ -470,10 +470,6 @@ public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
         if (!context.getSessionVariable().isEnableIcebergEqDeleteRuntimeFilterPruning()) {
             return Set.of();
         }
-<<<<<<< HEAD
-        Map<String, Column> scanColumns = scan.getColRefToColumnMetaMap().values().stream()
-                .collect(Collectors.toMap(Column::getName, column -> column, (a, b) -> a));
-=======
         // only the delete scan always takes these columns from partition metadata; with the switch off the data-file
         // scan reads them from the file, which may not store them (e.g. migrated Hive files), and a NULL never matches,
         // so match by $partition_key instead, unless a real column of that name leaves no partition match at all
@@ -481,10 +477,8 @@ public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
                 icebergTable.getNativeTable().schema().caseInsensitiveFindField(PARTITION_KEY) == null) {
             return Set.of();
         }
-        Set<String> scanColumnNames = scan.getColRefToColumnMetaMap().values().stream()
-                .map(Column::getName)
-                .collect(Collectors.toSet());
->>>>>>> 3f0733cee49... [BugFix][RB-225] Keep Iceberg equality deletes applied when identity column optimize is off (#67272)
+        Map<String, Column> scanColumns = scan.getColRefToColumnMetaMap().values().stream()
+                .collect(Collectors.toMap(Column::getName, column -> column, (a, b) -> a));
         // DELETE, UPDATE and MERGE read row locators; keep every delete for them
         if (scanColumns.containsKey(IcebergTable.FILE_PATH) || scanColumns.containsKey(IcebergTable.ROW_POSITION)) {
             return Set.of();
