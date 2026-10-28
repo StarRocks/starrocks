@@ -177,6 +177,20 @@ public class FoldConstantsRuleTest {
     }
 
     @Test
+    public void applyCastToDecimalArrayPastPrecision() {
+        Type decimal3 = TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL32, 3, 0);
+        ArrayOperator input = new ArrayOperator(new ArrayType(IntegerType.INT), false,
+                Lists.newArrayList(ConstantOperator.createInt(9999), ConstantOperator.createInt(999)));
+        // An explicit cast checks each element against the precision, as the BE does
+        ScalarOperator explicit = rule.apply(new CastOperator(new ArrayType(decimal3), input), null);
+        assertEquals(ConstantOperator.createNull(decimal3), explicit.getChild(0));
+        assertEquals(ConstantOperator.createDecimal(new BigDecimal("999"), decimal3), explicit.getChild(1));
+        // An implicit cast keeps the values, for the sink to check
+        ScalarOperator implicit = rule.apply(new CastOperator(new ArrayType(decimal3), input, true), null);
+        assertEquals(ConstantOperator.createDecimal(new BigDecimal("9999"), decimal3), implicit.getChild(0));
+    }
+
+    @Test
     public void applyCast() {
         CastOperator cast1 = new CastOperator(BooleanType.BOOLEAN, ConstantOperator.createNull(NullType.NULL));
         assertEquals(OB_NULL, rule.apply(cast1, null));
