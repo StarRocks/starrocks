@@ -152,7 +152,7 @@ public final class QueryGroupManifest {
         result.getInternal_scan_range().setBucket_sequence(canonical.groupId());
         TGroupedRangeTask grouped = new TGroupedRangeTask();
         grouped.setGroup_id(canonical.groupId());
-        grouped.setKey_range(new TabletRange(canonical.clip()).toThrift());
+        grouped.setKey_range(new TabletRange(canonical.clip).toThrift());
         grouped.setSort_key_unique_ids(new ArrayList<>(keys.orderedCUniqueIds()));
         result.setGrouped_range_task(grouped);
         return result;
