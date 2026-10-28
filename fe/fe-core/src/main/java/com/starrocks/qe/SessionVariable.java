@@ -1430,7 +1430,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean skipBlackList = false;
 
     @VariableMgr.VarAttr(name = BLACKLIST_BACKUP_ROUTING)
-    private String blacklistBackupRouting = BlacklistBackupRoutingPolicy.CIRCULAR.name();
+    private String blacklistBackupRouting = BlacklistBackupRoutingPolicy.getDefault().name();
 
     @VariableMgr.VarAttr(name = DEFAULT_VIEW_SQL_SECURITY)
     private String defaultViewSqlSecurity = DefaultViewSqlSecurity.getDefault().name();
