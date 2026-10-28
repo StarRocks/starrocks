@@ -15,6 +15,8 @@
 package com.starrocks.sql.optimizer.rewrite;
 
 import com.google.common.collect.Lists;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.ErrorReportException;
@@ -372,6 +374,64 @@ public class MetaFunctionsTest extends MVTestBase {
         Assertions.assertTrue(result.getVarchar().contains("mvToRefreshPartitions"));
         Assertions.assertTrue(result.getVarchar().contains("tableToUpdatePartitions"));
         starRocksAssert.dropMaterializedView("mv1");
+    }
+
+    @Test
+    public void inspectMVRefreshInfoKeysSameNamedBaseTablesByFullName() throws Exception {
+        starRocksAssert.withDatabase("same_name_db1").withDatabase("same_name_db2");
+        String createTable = "create table %s.tj(k1 int, v1 int) distributed by hash(k1) buckets 1 " +
+                "properties('replication_num'='1')";
+        starRocksAssert.withTable(String.format(createTable, "same_name_db1"));
+        starRocksAssert.withTable(String.format(createTable, "same_name_db2"));
+        try {
+            starRocksAssert.withRefreshedMaterializedView("create materialized view test.mv_same_name " +
+                    "distributed by random as select a.k1, b.v1 from same_name_db1.tj a " +
+                    "join same_name_db2.tj b on a.k1 = b.k1 join test.tbl1 c on a.k1 = c.k2");
+            ConstantOperator result =
+                    MetaFunctions.inspectMVRefreshInfo(ConstantOperator.createVarchar("test.mv_same_name"));
+
+            JsonObject json = JsonParser.parseString(result.getVarchar()).getAsJsonObject();
+            Set<String> expectedKeys = Set.of("default_catalog.same_name_db1.tj", "default_catalog.same_name_db2.tj",
+                    "tbl1");
+            Assertions.assertEquals(expectedKeys, json.getAsJsonObject("tablePartitionInfos").keySet());
+            Assertions.assertEquals(expectedKeys, json.getAsJsonObject("baseOlapTableVisibleVersionMap").keySet());
+        } finally {
+            starRocksAssert.dropMaterializedView("test.mv_same_name");
+            starRocksAssert.dropDatabase("same_name_db1");
+            starRocksAssert.dropDatabase("same_name_db2");
+            starRocksAssert.useDatabase("test");
+        }
+    }
+
+    @Test
+    public void inspectMVRefreshInfoKeysATableNamedLikeAnotherTablesFullName() throws Exception {
+        starRocksAssert.withDatabase("dotted_db1").withDatabase("dotted_db2").withDatabase("dotted_db3");
+        String createTable = "create table %s.`%s`(k1 int, v1 int) distributed by hash(k1) buckets 1 " +
+                "properties('replication_num'='1')";
+        starRocksAssert.withTable(String.format(createTable, "dotted_db1", "tj"));
+        starRocksAssert.withTable(String.format(createTable, "dotted_db2", "tj"));
+        starRocksAssert.withTable(String.format(createTable, "dotted_db3", "default_catalog.dotted_db1.tj"));
+        try {
+            starRocksAssert.withRefreshedMaterializedView("create materialized view test.mv_dotted_name " +
+                    "distributed by random as select a.k1, b.v1 from dotted_db1.tj a " +
+                    "join dotted_db2.tj b on a.k1 = b.k1 join dotted_db3.`default_catalog.dotted_db1.tj` c " +
+                    "on a.k1 = c.k1");
+            ConstantOperator result =
+                    MetaFunctions.inspectMVRefreshInfo(ConstantOperator.createVarchar("test.mv_dotted_name"));
+
+            JsonObject json = JsonParser.parseString(result.getVarchar()).getAsJsonObject();
+            long db1TableId = starRocksAssert.getTable("dotted_db1", "tj").getId();
+            Set<String> expectedKeys = Set.of("default_catalog.dotted_db1.tj#" + db1TableId,
+                    "default_catalog.dotted_db2.tj", "default_catalog.dotted_db3.default_catalog.dotted_db1.tj");
+            Assertions.assertEquals(expectedKeys, json.getAsJsonObject("tablePartitionInfos").keySet());
+            Assertions.assertEquals(expectedKeys, json.getAsJsonObject("baseOlapTableVisibleVersionMap").keySet());
+        } finally {
+            starRocksAssert.dropMaterializedView("test.mv_dotted_name");
+            starRocksAssert.dropDatabase("dotted_db1");
+            starRocksAssert.dropDatabase("dotted_db2");
+            starRocksAssert.dropDatabase("dotted_db3");
+            starRocksAssert.useDatabase("test");
+        }
     }
 
     @Test
