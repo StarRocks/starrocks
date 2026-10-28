@@ -70,6 +70,10 @@ struct IcebergDeleteSinkContext : public ConnectorSinkContext {
     // Optional tag inserted into file name prefix to distinguish writers.
     // Empty by default (standalone DELETE). Set to "delete" for RowDelta composite sinks.
     std::string writer_tag;
+
+    // Whether committed delete rows are added to the loaded-row count. RowDelta composite sinks set it
+    // to false because the composite sink counts each statement row once.
+    bool count_loaded_rows = true;
 };
 
 // IcebergDeleteSinkProvider creates IcebergDeleteSink for writing position delete files
@@ -92,7 +96,7 @@ public:
     IcebergDeleteSink(std::vector<std::string> partition_columns, std::vector<std::string> transform_exprs,
                       std::vector<std::unique_ptr<ColumnEvaluator>>&& partition_column_evaluators,
                       std::unique_ptr<PartitionChunkWriterFactory> partition_chunk_writer_factory, RuntimeState* state,
-                      std::unordered_map<std::string, TExprNode> column_slot_map);
+                      std::unordered_map<std::string, TExprNode> column_slot_map, bool count_loaded_rows = true);
     ~IcebergDeleteSink() override = default;
 
     void callback_on_commit(const CommitResult& result) override;
@@ -108,6 +112,8 @@ private:
 
     // Column name to slot reference mapping (stores slot_ref and type)
     std::unordered_map<std::string, TExprNode> _column_slot_map;
+
+    bool _count_loaded_rows;
 
     // Map: (partition, file_path) -> writer for file-level delete files
     std::map<std::pair<std::string, std::string>, PartitionChunkWriterPtr> _file_writers;
