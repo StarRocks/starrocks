@@ -52,6 +52,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.LeaderDaemon;
+import com.starrocks.lake.RecycleLakeDeletedPartitionInfo;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.persist.ImageWriter;
@@ -143,8 +144,13 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
     }
 
     private void addPhysicalPartitionIndex(RecyclePartitionInfo recyclePartitionInfo) {
-        long partitionId = recyclePartitionInfo.getPartition().getId();
-        for (PhysicalPartition physicalPartition : recyclePartitionInfo.getPartition().getSubPartitions()) {
+        long partitionId = recyclePartitionInfo.getPartitionId();
+        Partition partition = recyclePartitionInfo.getPartition();
+        if (partition == null) {
+            // Compact descriptor: physical sub-partition ids are already tracked by the caller.
+            return;
+        }
+        for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
             physicalPartitionIdToPartitionId.put(physicalPartition.getId(), partitionId);
         }
     }
@@ -153,14 +159,18 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
         if (recyclePartitionInfo == null) {
             return;
         }
-        for (PhysicalPartition physicalPartition : recyclePartitionInfo.getPartition().getSubPartitions()) {
+        Partition partition = recyclePartitionInfo.getPartition();
+        if (partition == null) {
+            return;
+        }
+        for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
             physicalPartitionIdToPartitionId.remove(physicalPartition.getId());
         }
     }
 
     private void putPartitionToRecycleBin(RecyclePartitionInfo recyclePartitionInfo) {
         RecyclePartitionInfo oldPartitionInfo =
-                idToPartition.put(recyclePartitionInfo.getPartition().getId(), recyclePartitionInfo);
+                idToPartition.put(recyclePartitionInfo.getPartitionId(), recyclePartitionInfo);
         removePhysicalPartitionIndex(oldPartitionInfo);
         addPhysicalPartitionIndex(recyclePartitionInfo);
     }
@@ -261,13 +271,17 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
     }
 
     public synchronized void recyclePartition(RecyclePartitionInfo recyclePartitionInfo) {
-        Preconditions.checkState(!idToPartition.containsKey(recyclePartitionInfo.getPartition().getId()));
+        Preconditions.checkState(!idToPartition.containsKey(recyclePartitionInfo.getPartitionId()));
+
+        // Non-recoverable lake partitions retain their identity but not the heavy object graph: they
+        // can never be recovered, and delete() only needs a flat descriptor of ids. Compact here so
+        // the graph becomes garbage immediately instead of living until the async delete succeeds.
+        recyclePartitionInfo = RecycleLakeDeletedPartitionInfo.compactIfPossible(recyclePartitionInfo);
 
         long dbId = recyclePartitionInfo.getDbId();
         long tableId = recyclePartitionInfo.getTableId();
-        Partition partition = recyclePartitionInfo.getPartition();
-        long partitionId = partition.getId();
-        String partitionName = partition.getName();
+        long partitionId = recyclePartitionInfo.getPartitionId();
+        String partitionName = recyclePartitionInfo.getPartitionName();
 
         disableRecoverPartitionWithSameName(dbId, tableId, partitionName);
 
@@ -381,7 +395,8 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
             return null;
         }
         RecyclePartitionInfo partitionInfo = idToPartition.get(partitionId);
-        return partitionInfo != null ? partitionInfo.getPartition().getSubPartition(physicalPartitionId) : null;
+        Partition partition = partitionInfo != null ? partitionInfo.getPartition() : null;
+        return partition != null ? partition.getSubPartition(physicalPartitionId) : null;
     }
 
     public synchronized short getPartitionReplicationNum(long partitionId) {
@@ -519,15 +534,15 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
     private synchronized boolean canErasePartition(RecyclePartitionInfo partitionInfo, long currentTimeMs) {
         if (RunMode.isSharedDataMode() && GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
                             .isPartitionInClusterSnapshotInfo(partitionInfo.getDbId(),
-                                    partitionInfo.getTableId(), partitionInfo.getPartition().getId())) {
+                                    partitionInfo.getTableId(), partitionInfo.getPartitionId())) {
             return false;
         }
 
-        if (!checkValidDeletionByClusterSnapshot(partitionInfo.getPartition().getId())) {
+        if (!checkValidDeletionByClusterSnapshot(partitionInfo.getPartitionId())) {
             return false;
         }
 
-        if (timeExpired(partitionInfo.getDbId(), partitionInfo.getPartition().getId(), currentTimeMs)) {
+        if (timeExpired(partitionInfo.getDbId(), partitionInfo.getPartitionId(), currentTimeMs)) {
             return true;
         }
 
@@ -778,6 +793,8 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
             recyclePartitionInfo.setRecoverable(false);
             // Mark this partition as coming from table deletion (also forces directory removal)
             recyclePartitionInfo.setFromTableDeletion(true);
+            // Compact: these partitions can never be recovered, so drop the heavy graph now.
+            recyclePartitionInfo = RecycleLakeDeletedPartitionInfo.compactIfPossible(recyclePartitionInfo);
 
             // Add via helper to keep recycle-bin indexes (physicalPartitionIdToPartitionId) consistent
             putPartitionToRecycleBin(recyclePartitionInfo);
@@ -904,7 +921,7 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
         while (iterator.hasNext()) {
             Map.Entry<Long, RecyclePartitionInfo> entry = iterator.next();
             RecyclePartitionInfo partitionInfo = entry.getValue();
-            Partition partition = partitionInfo.getPartition();
+            String partitionName = partitionInfo.getPartitionName();
 
             long partitionId = entry.getKey();
             if (!canErasePartition(partitionInfo, currentTimeMs)) {
@@ -922,8 +939,9 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
                 } catch (Exception e) {
                     finished = false;
                     LOG.warn("erase partition failed in Recycle Bin, DB id: {}, table id: {}, partition name: " +
-                             "{}, partition id: {}, error message: {}", partitionInfo.getDbId(), partitionInfo.getTableId(),
-                             partitionInfo.getPartition().getName(), partitionInfo.getPartition().getId(), e.getMessage());
+                                     "{}, partition id: {}, error message: {}", partitionInfo.getDbId(),
+                            partitionInfo.getTableId(), partitionInfo.getPartitionName(),
+                            partitionInfo.getPartitionId(), e.getMessage());
                 }
 
                 if (!finished) {
@@ -942,7 +960,7 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
                     removeRecycleMarkers(partitionId);
                     LOG.info("Removed partition '{}' related to table deletion from recycle bin."
                                     + " dbId: {} tableId: {} partitionId: {}",
-                            partition.getName(), partitionInfo.getDbId(), partitionInfo.getTableId(), partitionId);
+                            partitionName, partitionInfo.getDbId(), partitionInfo.getTableId(), partitionId);
                 } else {
                     // Normal partition deletion: log individual partition erase
                     GlobalStateMgr.getCurrentState().getEditLog().logErasePartition(partitionId, wal -> {
@@ -951,7 +969,7 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
                         removeRecycleMarkers(partitionId);
                     });
                     LOG.info("Removed partition '{}' from recycle bin. dbId: {} tableId: {} partitionId: {}",
-                            partition.getName(), partitionInfo.getDbId(), partitionInfo.getTableId(), partitionId);
+                            partitionName, partitionInfo.getDbId(), partitionInfo.getTableId(), partitionId);
                 }
 
                 currentEraseOpCnt++;
@@ -988,12 +1006,12 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
         for (Map.Entry<Long, RecyclePartitionInfo> entry : idToPartition.entrySet()) {
             RecyclePartitionInfo partitionInfo = entry.getValue();
             if (partitionInfo.getDbId() != dbId || partitionInfo.getTableId() != tableId ||
-                    !partitionInfo.getPartition().getName().equalsIgnoreCase(partitionName)) {
+                    !partitionInfo.getPartitionName().equalsIgnoreCase(partitionName)) {
                 continue;
             }
             if (partitionInfo.isRecoverable()) {
                 partitionInfo.setRecoverable(false);
-                idToRecycleTime.replace(partitionInfo.getPartition().getId(), System.currentTimeMillis());
+                idToRecycleTime.replace(partitionInfo.getPartitionId(), System.currentTimeMillis());
             }
         }
     }
@@ -1004,10 +1022,15 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
 
         Partition partition = partitionInfo.getPartition();
         if (!isCheckpointThread()) {
-            GlobalStateMgr.getCurrentState().getLocalMetastore().onErasePartition(partition);
+            if (partition != null) {
+                GlobalStateMgr.getCurrentState().getLocalMetastore().onErasePartition(partition);
+            } else if (partitionInfo instanceof com.starrocks.lake.RecycleLakeDeletedPartitionInfo) {
+                GlobalStateMgr.getCurrentState().getLocalMetastore().onErasePartition(
+                        ((com.starrocks.lake.RecycleLakeDeletedPartitionInfo) partitionInfo).collectTabletIds());
+            }
         }
 
-        LOG.info("replay erase partition[{}-{}] finished", partitionId, partition.getName());
+        LOG.info("replay erase partition[{}-{}] finished", partitionId, partitionInfo.getPartitionName());
     }
 
     public synchronized Database recoverDatabase(String dbName) throws DdlException {
@@ -1137,7 +1160,7 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
                 continue;
             }
 
-            if (!partitionInfo.getPartition().getName().equalsIgnoreCase(partitionName)) {
+            if (!partitionInfo.getPartitionName().equalsIgnoreCase(partitionName)) {
                 continue;
             }
 
@@ -1158,7 +1181,7 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
         // check recoverable
         recoverPartitionInfo.checkRecoverable(table);
 
-        long partitionId = recoverPartitionInfo.getPartition().getId();
+        long partitionId = recoverPartitionInfo.getPartitionId();
         // log
         RecoverInfo recoverInfo = new RecoverInfo(dbId, table.getId(), partitionId);
         final RecyclePartitionInfo finalRecoverPartitionInfo = recoverPartitionInfo;
@@ -1178,7 +1201,7 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
         while (iterator.hasNext()) {
             Map.Entry<Long, RecyclePartitionInfo> entry = iterator.next();
             RecyclePartitionInfo partitionInfo = entry.getValue();
-            if (partitionInfo.getPartition().getId() != partitionId) {
+            if (partitionInfo.getPartitionId() != partitionId) {
                 continue;
             }
 
@@ -1204,7 +1227,7 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
             removePartitionFromRecycleBinInternal(iterator, partitionInfo);
             idToRecycleTime.remove(partitionId);
 
-            LOG.info("replay recover partition[{}-{}] finished", partitionId, partitionInfo.getPartition().getName());
+            LOG.info("replay recover partition[{}-{}] finished", partitionId, partitionInfo.getPartitionName());
             break;
         }
     }
@@ -1258,9 +1281,8 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
             long dbId = partitionInfo.getDbId();
             long tableId = partitionInfo.getTableId();
             Partition partition = partitionInfo.getPartition();
-            long partitionId = partition.getId();
+            long partitionId = partitionInfo.getPartitionId();
 
-            // we need to get olap table to get schema hash info
             // first find it in globalStateMgr. if not found, it should be in recycle bin
             OlapTable olapTable = null;
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
@@ -1290,6 +1312,23 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
             // storage medium should be got from RecyclePartitionInfo, not from olap table. because olap table
             // does not have this partition any more
             TStorageMedium medium = partitionInfo.getDataProperty().getStorageMedium();
+            if (partition == null) {
+                // Compact descriptor: rebuild straight from the flattened ids.
+                if (partitionInfo instanceof com.starrocks.lake.RecycleLakeDeletedPartitionInfo) {
+                    com.starrocks.lake.RecycleLakeDeletedPartitionInfo deleted =
+                            (com.starrocks.lake.RecycleLakeDeletedPartitionInfo) partitionInfo;
+                    for (long[] group : deleted.getIndexTabletIds()) {
+                        long physicalPartitionId = group[0];
+                        long indexId = group[1];
+                        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, physicalPartitionId, indexId, medium,
+                                olapTable.isCloudNativeTable());
+                        for (int i = 2; i < group.length; i++) {
+                            invertedIndex.addTablet(group[i], tabletMeta);
+                        }
+                    }
+                }
+                continue;
+            }
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                 long physicalPartitionId = physicalPartition.getId();
                 for (MaterializedIndex index : physicalPartition.getAllMaterializedIndices(IndexExtState.ALL)) {
@@ -1405,8 +1444,8 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
             List<String> info = Lists.newArrayList();
             info.add("Partition");
             RecyclePartitionInfo partitionInfo = entry.getValue();
-            Partition partition = partitionInfo.getPartition();
-            info.add(partition.getName());
+            String partitionName = partitionInfo.getPartitionName();
+            info.add(partitionName);
             info.add(String.valueOf(partitionInfo.getDbId()));
             info.add(String.valueOf(partitionInfo.getTableId()));
             info.add(String.valueOf(entry.getKey()));
@@ -1746,7 +1785,7 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
 
     // for test
     protected void setPartitionInfo(long partitionId, RecyclePartitionInfo partitionInfo) {
-        Preconditions.checkState(partitionId == partitionInfo.getPartition().getId());
+        Preconditions.checkState(partitionId == partitionInfo.getPartitionId());
         putPartitionToRecycleBin(partitionInfo);
     }
 
