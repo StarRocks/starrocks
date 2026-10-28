@@ -169,8 +169,7 @@ private:
 StatusOr<std::string> lake_rows_mapper_filename(lake::TabletManager* mgr, int64_t tablet_id,
                                                 const std::string& lcrm_file);
 
-// Create a new mapper file. Always returns a remote (.lcrm) location, independent of
-// config::enable_pk_index_parallel_execution.
+// Create a new mapper file. Always returns a remote (.lcrm) location.
 StatusOr<std::string> new_lake_rows_mapper_filename(lake::TabletManager* mgr, int64_t tablet_id, int64_t txn_id);
 
 // rows mapper file's name for local table

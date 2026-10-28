@@ -132,12 +132,12 @@ public class ConnectContextTest {
 
         // Current db
         Assertions.assertEquals("", ctx.getDatabase());
-        ctx.setDatabase("testCluster:testDb");
-        Assertions.assertEquals("testCluster:testDb", ctx.getDatabase());
+        ctx.setDatabase("testDb");
+        Assertions.assertEquals("testDb", ctx.getDatabase());
 
         // User
-        ctx.setQualifiedUser("testCluster:testUser");
-        Assertions.assertEquals("testCluster:testUser", ctx.getQualifiedUser());
+        ctx.setQualifiedUser("testUser");
+        Assertions.assertEquals("testUser", ctx.getQualifiedUser());
 
         // Serializer
         Assertions.assertNotNull(ctx.getSerializer());

@@ -33,12 +33,6 @@ void to_file_meta_pb(const FileInfo& file, FileMetaPB* file_meta);
 struct SegmentFileInfo : public FileInfo {
     VariantTuple sort_key_min;
     VariantTuple sort_key_max;
-    // Equal-row-interval samples of the sort key (NON-DECREASING) collected by
-    // SegmentWriter. May be empty for small segments (num_rows <= interval) or
-    // segments where sampling was not armed. Always paired with
-    // sort_key_sample_row_interval: samples.empty() <=> sort_key_sample_row_interval == 0.
-    std::vector<VariantTuple> sort_key_samples;
-    int64_t sort_key_sample_row_interval = 0;
     int64_t num_rows = 0;
     // Set by a rewrite that dropped the rows this tablet does not own, marking |num_rows| and the
     // sort-key fields above as the rewrite's own output rather than its source's. The replace paths in

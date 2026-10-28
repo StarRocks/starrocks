@@ -213,6 +213,13 @@ public class TabletReshardJobMgr extends LeaderDaemon implements GsonPostProcess
             throw new StarRocksException("Tablet merge is disabled. " +
                     "Set tablet_reshard_enable_tablet_merge=true to enable it.");
         }
+        // The funnel for both the MERGE TABLET statement and the auto-merge scheduler. The statement is
+        // also rejected in analysis, which is where a user sees it; this catches the paths that never go
+        // through an analyzer, and the auto scheduler skips the shape before it plans anything.
+        if (TabletReshardUtils.tabletMergeUnsupported(table)) {
+            throw new StarRocksException("Tablet merge is not supported on a range-distributed primary key "
+                    + "table whose ORDER BY differs from the primary key: " + table.getName());
+        }
         TabletReshardJob job = new MergeTabletJobFactory(db, table, mergeTabletClause).createTabletReshardJob();
         addTabletReshardJob(job);
     }
@@ -377,7 +384,11 @@ public class TabletReshardJobMgr extends LeaderDaemon implements GsonPostProcess
             // fires and the latch never arms. Evaluating the latch first would therefore pay that walk
             // on every stat pass, forever, for a job that cannot run. Before this feature the same
             // path threw immediately with no walk at all.
-            if (Config.tablet_reshard_enable_tablet_merge
+            //
+            // tabletMergeUnsupported joins it for the same reason, and additionally so that a table of
+            // that shape does not log a warning from the catch below on every stat pass: unlike the empty
+            // plan, its rejection is permanent and there is nothing to latch or re-arm.
+            if (Config.tablet_reshard_enable_tablet_merge && !TabletReshardUtils.tabletMergeUnsupported(table)
                     && TabletReshardUtils.needMerge(minAdjacentTabletPairSize)) {
                 long mergeSignature = ColocateChecker.tableConvergenceSignature(db, table,
                         mergePlanSignature(minAdjacentTabletPairSize));
@@ -459,8 +470,16 @@ public class TabletReshardJobMgr extends LeaderDaemon implements GsonPostProcess
     }
 
     public void replayUpdateTabletReshardJob(TabletReshardJob tabletReshardJob) {
+        // replay() has to come first: the split job's cleaning replay reads reshardingTabletInfos as
+        // it still stands to work out which new tablets the leader's identical fallback dropped, so
+        // the refresh below must not have run yet.
         tabletReshardJob.replay();
         tabletReshardJobs.put(tabletReshardJob.getJobId(), tabletReshardJob);
+        // Every journal entry deserializes a whole new job, but only the PREPARING entry registers
+        // its ReshardingTablet objects, so the registry would keep pointing at the ones that entry
+        // left behind. Refresh from the record just installed, so a post-PREPARING leader decision
+        // -- the identical fallback shrinking a split family -- reaches the registry too.
+        tabletReshardJob.registerReshardingTabletsOnRestart();
     }
 
     public void replayRemoveTabletReshardJob(long tabletReshardJobId) {

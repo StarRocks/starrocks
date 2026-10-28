@@ -19,13 +19,13 @@ select * from t order by k;
 2023-01-10 00:00:00	4
 2023-05-05 00:00:00	5
 -- !result
-show partitions from t;
+function: print_query_columns("show partitions from t", "PartitionName")
 -- result:
-[REGEX].*p202203.*
-.*p202206.*
-.*p202209.*
-.*p202301.*
-.*p202305.*
+p202203
+p202206
+p202209
+p202301
+p202305
 -- !result
 alter table t partition by date_trunc('year', k) between '2022-01-01' and '2022-12-31';
 -- result:
@@ -34,11 +34,11 @@ function: wait_optimize_table_finish()
 -- result:
 None
 -- !result
-show partitions from t;
+function: print_query_columns("show partitions from t", "PartitionName")
 -- result:
-[REGEX].*p2022.*
-.*p202301.*
-.*p202305.*
+p2022
+p202301
+p202305
 -- !result
 insert into t values ('2022-04-01', 6),('2022-11-11', 7);
 -- result:
@@ -69,13 +69,13 @@ select * from t order by k;
 2023-05-05 00:00:00	5
 2024-01-01 00:00:00	10
 -- !result
-show partitions from t;
+function: print_query_columns("show partitions from t", "PartitionName")
 -- result:
-[REGEX].*p2022.*
-.*p202301.*
-.*p202302.*
-.*p202305.*
-.*p202401.*
+p2022
+p202301
+p202302
+p202305
+p202401
 -- !result
 drop database test_merge_insert_${uuid0};
 -- result:
@@ -109,10 +109,10 @@ function: wait_optimize_table_finish()
 -- result:
 None
 -- !result
-show partitions from t;
+function: print_query_columns("show partitions from t", "PartitionName")
 -- result:
-[REGEX].*p2022.*
-.*p202301.*
+p2022
+p202301
 -- !result
 insert into t values ('2022-04-01', 4),('2022-09-01', 5),('2023-02-01', 6),('2024-01-01', 7);
 -- result:
@@ -144,13 +144,13 @@ select * from t order by k;
 2023-06-01 00:00:00	11
 2024-01-01 00:00:00	7
 -- !result
-show partitions from t;
+function: print_query_columns("show partitions from t", "PartitionName")
 -- result:
-[REGEX].*p2022.*
-.*p202301.*
-.*p202302.*
-.*p202306.*
-.*p202401.*
+p2022
+p202301
+p202302
+p202306
+p202401
 -- !result
 admin set frontend config ("max_load_initial_open_partition_number"="64");
 -- result:
@@ -181,12 +181,12 @@ function: wait_optimize_table_finish()
 -- result:
 None
 -- !result
-show partitions from t;
+function: print_query_columns("show partitions from t", "PartitionName")
 -- result:
-[REGEX].*p2020.*
-.*p2021.*
-.*p2022.*
-.*p202305.*
+p2020
+p2021
+p2022
+p202305
 -- !result
 insert into t values ('2020-01-15',5),('2020-11-20',6),('2021-03-10',7),('2021-09-25',8),('2022-02-14',9),('2022-12-31',10),('2023-07-04',11);
 -- result:
@@ -205,13 +205,13 @@ select * from t order by k;
 2023-05-01 00:00:00	4
 2023-07-04 00:00:00	11
 -- !result
-show partitions from t;
+function: print_query_columns("show partitions from t", "PartitionName")
 -- result:
-[REGEX].*p2020.*
-.*p2021.*
-.*p2022.*
-.*p202305.*
-.*p202307.*
+p2020
+p2021
+p2022
+p202305
+p202307
 -- !result
 admin set frontend config ("max_load_initial_open_partition_number"="64");
 -- result:

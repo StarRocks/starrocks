@@ -27,4 +27,8 @@ public final class MetaTierUnavailableException extends StarRocksException {
     public MetaTierUnavailableException(String reason) {
         super(reason);
     }
+
+    public MetaTierUnavailableException(String reason, Throwable cause) {
+        super(reason, cause);
+    }
 }

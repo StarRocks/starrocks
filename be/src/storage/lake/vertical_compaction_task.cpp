@@ -33,6 +33,7 @@
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "storage/compaction_utils.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/tablet_range_helper.h"
@@ -40,7 +41,6 @@
 #include "storage/lake/tablet_write_log_manager.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/txn_log.h"
-#include "storage/lake/update_manager.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_reader_params.h"
@@ -52,6 +52,11 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker.get());
     _context->stats->compaction_type = "vertical";
     _context->publish_stats_snapshot();
+
+    // Snapshot the mutable config once for the whole task so every column-group pass agrees:
+    // holding on one pass and cache-filling off on the next would make the remaining passes reload
+    // every segment from remote storage.
+    _hold_input_segments = config::lake_compaction_hold_input_segments;
 
     int64_t input_bytes = 0;
     {
@@ -183,7 +188,7 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
         // preload primary key table's compaction state
         SCOPED_RAW_TIMER(&_context->stats->preload_compaction_state_ns);
         Tablet t(_tablet.tablet_manager(), _tablet.id());
-        _tablet.tablet_manager()->update_mgr()->preload_compaction_state(*txn_log, t, _tablet_schema);
+        _tablet.tablet_manager()->primary_key_mgr()->preload_compaction_state(*txn_log, t, _tablet_schema);
     }
 
     if (config::enable_tablet_write_log) {
@@ -203,6 +208,9 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
 
 StatusOr<int32_t> VerticalCompactionTask::calculate_chunk_size_for_column_group(
         const std::vector<uint32_t>& column_group) {
+    // Every input source opens one buffered stream per column of the group, all at once.
+    const int64_t num_streams = _total_input_segs * static_cast<int64_t>(column_group.size());
+    _stream_buffer_size = stream_buffer_size_for_pass(num_streams);
     if (_input_rowsets.size() > 0 && _input_rowsets.back()->partial_segments_compaction()) {
         // can not call `get_read_chunk_size`, for example, if `_total_input_segs` is shrinked to half,
         // read_chunk_size might be doubled, in this case, this optimization will not take effect
@@ -210,16 +218,32 @@ StatusOr<int32_t> VerticalCompactionTask::calculate_chunk_size_for_column_group(
     }
 
     int64_t total_mem_footprint = 0;
+    int64_t held_segments_bytes = 0;
     for (auto& rowset : _input_rowsets) {
         // in vertical compaction, there may be a lot of column groups, it will waste a lot of time to
         // load segments (footer and column index) every time if segments are not in the cache.
         //
         // test case: 4k columns, 150 segments, 60w rows
         // compaction task cost: 272s (fill metadata cache) vs 2400s (not fill metadata cache)
+        //
+        // With hold_segments the task keeps its input Segment objects alive on the Rowset instance,
+        // so the cross-pass reuse above no longer needs the shared metadata cache. Filling it would
+        // only push soon-to-be-deleted input segments into a node-wide cache, evicting neighbors'
+        // entries. Holding and cache-filling are the two alternative reuse mechanisms, never both:
+        // whichever is active must carry every pass, so `_hold_input_segments` is the task-wide
+        // snapshot taken at the top of execute() (chunk_size_with_held_segments may clear it, but then
+        // it clears it for the remaining passes too).
+        const bool reuse_via_shared_cache = !_hold_input_segments;
         LakeIOOptions lake_io_opts{.fill_data_cache = config::lake_enable_vertical_compaction_fill_data_cache,
-                                   .buffer_size = config::lake_compaction_stream_buffer_size_bytes,
-                                   .fill_metadata_cache = true};
+                                   .buffer_size = _stream_buffer_size,
+                                   .fill_metadata_cache = reuse_via_shared_cache,
+                                   .hold_segments = _hold_input_segments};
         ASSIGN_OR_RETURN(auto segments, rowset->segments(lake_io_opts));
+        // Ask the rowset what it actually pins rather than re-measuring the vector: a rowset that
+        // could not hold (segment-range / partial compaction) or that has given holding up reports
+        // zero, and one whose held set is still pinned by the get_segments_checked() memo after a
+        // fallback keeps reporting it -- which is exactly what the read buffers must be sized around.
+        held_segments_bytes += rowset->held_segments_bytes();
         for (auto& segment : segments) {
             // A null placeholder slot means a segment produced no reader (e.g. a lost segment dropped by
             // experimental_lake_ignore_lost_segment). This chunk-size estimate is position-agnostic, so
@@ -239,9 +263,14 @@ StatusOr<int32_t> VerticalCompactionTask::calculate_chunk_size_for_column_group(
             }
         }
     }
-    return CompactionUtils::get_read_chunk_size(config::compaction_memory_limit_per_worker,
-                                                config::lake_compaction_chunk_size, _total_num_rows,
-                                                total_mem_footprint, _total_input_segs);
+    // The held input set stays resident across every column-group pass, so it comes out of the same
+    // per-worker budget the read buffers are sized from; charging it is what keeps the chunk sizing
+    // honest. mem_usage() covers the whole segment (all columns), which is exactly what stays
+    // resident regardless of this group's width -- and it grows as later passes touch more column
+    // indexes, so this re-decides every pass: once holding would starve the budget the task stops
+    // holding, for this pass and every later one. See there.
+    return chunk_size_with_held_segments(held_segments_bytes, _total_num_rows, total_mem_footprint, _total_input_segs,
+                                         num_streams * _stream_buffer_size);
 }
 
 Status VerticalCompactionTask::compact_column_group(
@@ -283,7 +312,8 @@ Status VerticalCompactionTask::compact_column_group(
     reader_params.use_page_cache = false;
     reader_params.column_access_paths = &_column_access_paths;
     reader_params.lake_io_opts = {.fill_data_cache = config::lake_enable_vertical_compaction_fill_data_cache,
-                                  .buffer_size = config::lake_compaction_stream_buffer_size_bytes};
+                                  .buffer_size = _stream_buffer_size,
+                                  .hold_segments = _hold_input_segments};
 
     // Apply range filter to ALL column groups (key and non-key) so that segment
     // iterators produce the same row subsets. TabletReader requires start_key and
@@ -427,13 +457,13 @@ Status VerticalCompactionTask::compact_column_group(
             source_masks->clear();
         }
 
+        const auto& read_stats = reader.compaction_stats();
         if (_total_num_rows > 0 && column_group_size > 0) {
-            _context->progress.update(
-                    (100 * column_group_index + 100 * reader.stats().raw_rows_read / _total_num_rows) /
-                    column_group_size);
+            _context->progress.update((100 * column_group_index + 100 * read_stats.raw_rows_read / _total_num_rows) /
+                                      column_group_size);
         }
         CompactionTaskStats temp_stats;
-        temp_stats.collect(reader.stats());
+        temp_stats.collect(read_stats);
         CompactionTaskStats diff_stats = temp_stats - prev_stats;
         *_context->stats = *_context->stats + diff_stats;
         prev_stats = temp_stats;

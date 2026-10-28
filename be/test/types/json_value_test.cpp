@@ -173,6 +173,43 @@ TEST(JsonValueTest, CompareLargeIntegerArrays) {
     EXPECT_GT(neg_small.compare(neg_large), 0);
 }
 
+TEST(JsonValueTest, CompareUnsignedIntegersAboveInt64Max) {
+    // Numbers above INT64_MAX are stored as UInt. Comparing them used to call Slice::getInt(), which throws
+    // NumberOutOfRange, so the comparison escaped as an exception instead of returning an order. Bare scalars
+    // parse as strings, hence the arrays and objects.
+    auto v = [](const char* json) { return JsonValue::parse(json).value(); };
+    auto max_int64 = v("[9223372036854775807]");
+    auto two_pow_63 = v("[9223372036854775808]");
+    auto max_uint64 = v("[18446744073709551615]");
+    auto max_uint64_minus_1 = v("[18446744073709551614]");
+
+    // same encoding (UInt vs UInt): exact
+    EXPECT_GT(two_pow_63.compare(max_int64), 0);
+    EXPECT_LT(max_int64.compare(two_pow_63), 0);
+    EXPECT_GT(max_uint64.compare(max_uint64_minus_1), 0);
+    EXPECT_EQ(max_uint64.compare(v("[18446744073709551615]")), 0);
+    EXPECT_GT(v("[18446744073709551615]").compare(v("[1]")), 0);
+
+    // mixed encodings: negative Int vs large UInt, integer vs double
+    EXPECT_LT(v("[-1]").compare(max_uint64), 0);
+    EXPECT_LT(v("[-9223372036854775808]").compare(two_pow_63), 0);
+    EXPECT_GT(max_uint64.compare(v("[1.0e19]")), 0);
+    EXPECT_LT(two_pow_63.compare(v("[1.0e19]")), 0);
+    EXPECT_EQ(v("[10]").compare(v("[10.0]")), 0);
+
+    // nested inside objects, as produced by json_query on real documents
+    auto big_obj = v(R"({"a": 18446744073709551615})");
+    auto mid_obj = v(R"({"a": 9223372036854775808})");
+    EXPECT_GT(big_obj.compare(mid_obj), 0);
+    EXPECT_LT(mid_obj.compare(big_obj), 0);
+    EXPECT_EQ(big_obj.compare(v(R"({"a": 18446744073709551615})")), 0);
+
+    // the same values through the predicate operators
+    EXPECT_TRUE(big_obj > mid_obj);
+    EXPECT_FALSE(big_obj < mid_obj);
+    EXPECT_TRUE(big_obj == v(R"({"a": 18446744073709551615})"));
+}
+
 TEST(JsonValueTest, Hash) {
     JsonValue x = JsonValue::parse(R"({"a": 1, "b": 2})").value();
     JsonValue y = JsonValue::parse(R"({"b": 2, "a": 1})").value();

@@ -57,6 +57,7 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
+import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
 import com.starrocks.load.routineload.KafkaProgress;
 import com.starrocks.load.routineload.KafkaRoutineLoadJob;
@@ -137,6 +138,7 @@ public class GlobalTransactionMgrTest {
         fakeGlobalStateMgr = new FakeGlobalStateMgr();
         fakeTransactionIDGenerator = new FakeTransactionIDGenerator();
         masterGlobalStateMgr = GlobalStateMgrTestUtil.createTestState();
+        masterGlobalStateMgr.setFrontendNodeType(FrontendNodeType.LEADER);
         slaveGlobalStateMgr = GlobalStateMgrTestUtil.createTestState();
         masterTransMgr = masterGlobalStateMgr.getGlobalTransactionMgr();
         slaveTransMgr = slaveGlobalStateMgr.getGlobalTransactionMgr();

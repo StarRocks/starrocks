@@ -697,8 +697,20 @@ public abstract class MVRefreshProcessor {
     }
 
     /**
-     * Collect all deduplicated databases of the materialized view's base tables.
-     * @return: the deduplicated databases of the materialized view's base tables,
+     * Collect all deduplicated databases of the materialized view's base tables that are worth locking.
+     * <p>
+     * Only internal-catalog base tables enter the lock set. An external base table carries no usable lock
+     * identity: {@link BaseTableInfo#getTableId()} is left at its -1 default by the external constructor, and
+     * the database id comes from the connector (a fresh CONNECTOR_ID_GENERATOR value for Hive, constant 0 for
+     * JDBC). Locking on those either never contends or serializes every external base table in the FE behind a
+     * single (0, -1) entry, while protecting nothing: connector metadata refresh replaces cache entries and
+     * never takes the FE Locker. This also makes the code agree with collectBaseTableSnapshotInfos' javadoc,
+     * which already states the base table metadata does not change during a refresh.
+     * <p>
+     * The database existence check still runs for every base table, external ones included, so the diagnostics
+     * are unchanged.
+     *
+     * @return: the deduplicated internal databases of the materialized view's base tables,
      * throw exception if the database does not exist.
      */
     public LockParams collectDatabases() {
@@ -712,6 +724,12 @@ public abstract class MVRefreshProcessor {
                 throw new DmlException("Materialized view %s.%s refresh failed: base table database %s does not exist",
                         db.getFullName(), mv.getName(), baseTableInfo.getDbInfoStr());
             }
+            // Judged on the catalog name BaseTableInfo carries, not through Table#isMetaLockTarget: the ids
+            // about to be locked are the ones this name produced, and a resource-mapping base table both
+            // resolves its Database through the connector and never gets a real tableId (see BaseTableInfo).
+            if (!baseTableInfo.isInternalCatalog()) {
+                continue;
+            }
             Database db = dbOpt.get();
             lockParams.add(db, baseTableInfo.getTableId());
         }
@@ -719,10 +737,42 @@ public abstract class MVRefreshProcessor {
     }
 
     /**
+     * Resolve the base tables that live in an external catalog, so that {@link #collectBaseTableSnapshotInfos}
+     * does not have to do it while holding the read lock: resolving one is a connector RPC, and the lock does
+     * not protect external base tables anyway (see {@link #collectDatabases}).
+     *
+     * @return the resolved table per external base table info; internal base tables are absent, they stay
+     *         resolved under the lock because reading the local metastore is not I/O
+     */
+    private Map<BaseTableInfo, Optional<Table>> resolveExternalBaseTables(List<BaseTableInfo> baseTableInfos) {
+        final Map<BaseTableInfo, Optional<Table>> externalTables = Maps.newHashMap();
+        for (BaseTableInfo baseTableInfo : baseTableInfos) {
+            if (baseTableInfo.isInternalCatalog()) {
+                continue;
+            }
+            final Optional<Table> tableOpt = MvUtils.getTableWithIdentifier(baseTableInfo);
+            externalTables.put(baseTableInfo, tableOpt);
+            // IcebergTable#getNativeTable loads lazily through the connector and caches on the table object, so
+            // warm it here or the partition spec check below faults it in under the lock. The condition has to
+            // stay identical to that check's, otherwise this loads metadata for MVs that never needed it.
+            if (tableOpt.isPresent() && tableOpt.get() instanceof IcebergTable
+                    && !mv.getPartitionInfo().isUnPartitioned()) {
+                ((IcebergTable) tableOpt.get()).getNativeTable();
+            }
+        }
+        return externalTables;
+    }
+
+    /**
      * Collect all base table snapshot infos for the mv which the snapshot infos are kept and used in the final
      * update meta phase.
      * 1. deep copy of the base table's metadata may be time costing, we can optimize it later.
-     * 2. no needs to lock the base table's metadata since the metadata is not changed during the refresh process.
+     * 2. internal base tables are locked for READ here because copyOnlyForQuery reads their in-memory partition
+     *    and index state, which a concurrent DDL can mutate. External base tables are not locked (see
+     *    collectDatabases): their metadata is not changed by the FE during the refresh, and the FE Locker has no
+     *    identity to lock them by anyway. Because the lock does not cover them, they are resolved before it is
+     *    taken (see resolveExternalBaseTables): resolving inside would put a connector RPC in the critical
+     *    section in exchange for no protection at all.
      * @return the base table and its snapshot info map
      */
     @VisibleForTesting
@@ -730,6 +780,7 @@ public abstract class MVRefreshProcessor {
         final Stopwatch stopwatch = Stopwatch.createStarted();
         final List<BaseTableInfo> baseTableInfos = mv.getBaseTableInfos();
         final LockParams lockParams = collectDatabases();
+        final Map<BaseTableInfo, Optional<Table>> externalTables = resolveExternalBaseTables(baseTableInfos);
         final Locker locker = new Locker();
         if (!locker.tryLockTableWithIntensiveDbLock(lockParams, LockType.READ, Config.mv_refresh_try_lock_timeout_ms,
                 TimeUnit.MILLISECONDS)) {
@@ -740,7 +791,10 @@ public abstract class MVRefreshProcessor {
         final Map<Long, BaseTableSnapshotInfo> tables = Maps.newHashMap();
         try {
             for (BaseTableInfo baseTableInfo : baseTableInfos) {
-                final Optional<Table> tableOpt = MvUtils.getTableWithIdentifier(baseTableInfo);
+                // An external base table was already resolved above, outside the lock.
+                final Optional<Table> tableOpt = baseTableInfo.isInternalCatalog()
+                        ? MvUtils.getTableWithIdentifier(baseTableInfo)
+                        : externalTables.get(baseTableInfo);
                 if (tableOpt.isEmpty()) {
                     logger.warn("table {} doesn't exist", baseTableInfo.getTableInfoStr());
                     throw new DmlException("Materialized view %s.%s refresh failed: base table %s does not exist " +
@@ -868,6 +922,12 @@ public abstract class MVRefreshProcessor {
                 .map(t -> t.getId())
                 .collect(Collectors.toSet());
 
+        MVVersionManager mvVersionManager = new MVVersionManager(this.mv, mvContext);
+        // Resolve the external base tables' partition names before locking: it is the only remote metadata call
+        // the version update needs, and the mv write lock below is contended by other refresh runs and DDLs.
+        Map<PCTTableSnapshotInfo, List<String>> externalTablePartitionNames =
+                mvVersionManager.collectExternalTablePartitionNames(snapshotBaseTables, refBaseTableIds);
+
         Locker locker = new Locker();
         // update the meta if succeed
         if (!locker.tryLockTableWithIntensiveDbLock(db.getId(), mv.getId(), LockType.WRITE,
@@ -878,10 +938,18 @@ public abstract class MVRefreshProcessor {
                     db.getFullName(), this.mv.getName(), db.getFullName(), Config.mv_refresh_try_lock_timeout_ms);
         }
 
-        MVVersionManager mvVersionManager = new MVVersionManager(this.mv, mvContext);
         try {
+            // The existence check above ran before the unlocked connector call, so re-verify under the lock:
+            // a DROP that landed in that window must abort the refresh instead of persisting a refresh-scheme
+            // journal entry and an MV_REFRESHED event for a detached mv.
+            if (GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), this.mv.getId()) == null) {
+                throw new DmlException("update meta failed: materialized view %s.%s does not exist, " +
+                                "it may have been dropped during refresh",
+                        db.getFullName(), this.mv.getName());
+            }
             mvVersionManager.updateMVVersionInfo(snapshotBaseTables, mvRefreshedPartitions,
-                    refBaseTableIds, refTableAndPartitionNames, tvrDeltaToPromote, !hasNextBatchRun());
+                    refBaseTableIds, refTableAndPartitionNames, tvrDeltaToPromote, externalTablePartitionNames,
+                    !hasNextBatchRun());
         } catch (Exception e) {
             logger.warn("update final meta failed after mv refreshed:", DebugUtil.getRootStackTrace(e));
             throw e;

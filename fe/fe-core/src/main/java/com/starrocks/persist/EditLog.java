@@ -857,6 +857,11 @@ public class EditLog {
                     }
                     break;
                 }
+                case OperationType.OP_RELEASE_ALTER_JOB_HISTORY_SCHEMA: {
+                    ReleaseAlterJobHistorySchemaLog log = (ReleaseAlterJobHistorySchemaLog) journal.data();
+                    globalStateMgr.getSchemaChangeHandler().replayReleaseHistorySchema(log);
+                    break;
+                }
                 case OperationType.OP_ALTER_ROUTINE_LOAD_JOB: {
                     AlterRoutineLoadJobOperationLog log = (AlterRoutineLoadJobOperationLog) journal.data();
                     globalStateMgr.getRoutineLoadMgr().replayAlterRoutineLoadJob(log);
@@ -1359,6 +1364,12 @@ public class EditLog {
                 case OperationType.OP_DROP_GROUP_PROVIDER: {
                     GroupProviderLog groupProviderLog = (GroupProviderLog) journal.data();
                     GlobalStateMgr.getCurrentState().getAuthenticationMgr().replayDropGroupProvider(groupProviderLog.getName());
+                    break;
+                }
+                case OperationType.OP_ALTER_GROUP_PROVIDER: {
+                    GroupProviderLog groupProviderLog = (GroupProviderLog) journal.data();
+                    GlobalStateMgr.getCurrentState().getAuthenticationMgr().replayAlterGroupProvider(
+                            groupProviderLog.getName(), groupProviderLog.getPropertyMap());
                     break;
                 }
                 case OperationType.OP_CREATE_SPM_BASELINE_LOG: {
@@ -2128,6 +2139,10 @@ public class EditLog {
         logJsonObject(OperationType.OP_REMOVE_ALTER_JOB_V2, log, walApplier);
     }
 
+    public void logReleaseAlterJobHistorySchema(ReleaseAlterJobHistorySchemaLog log, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_RELEASE_ALTER_JOB_HISTORY_SCHEMA, log, walApplier);
+    }
+
     public void logAlterRoutineLoadJob(AlterRoutineLoadJobOperationLog log, WALApplier walApplier) {
         logJsonObject(OperationType.OP_ALTER_ROUTINE_LOAD_JOB, log, walApplier);
     }
@@ -2488,5 +2503,9 @@ public class EditLog {
 
     public void logDropGroupProvider(GroupProviderLog groupProviderLog, WALApplier walApplier) {
         logJsonObject(OperationType.OP_DROP_GROUP_PROVIDER, groupProviderLog, walApplier);
+    }
+
+    public void logAlterGroupProvider(GroupProviderLog groupProviderLog, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_ALTER_GROUP_PROVIDER, groupProviderLog, walApplier);
     }
 }

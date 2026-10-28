@@ -27,6 +27,10 @@ class BitmapUnionCountAggregateFunction final
 public:
     bool is_exception_safe() const override { return false; }
 
+    // bitmap_union_count is a cardinality: it returns 0 (never NULL) even over a nullable input or an empty
+    // window frame. FunctionSet.alwaysReturnNonNullableFunctions declares the same on the FE side.
+    bool is_result_non_nullable() const override { return true; }
+
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
         this->data(state).clear();
     }

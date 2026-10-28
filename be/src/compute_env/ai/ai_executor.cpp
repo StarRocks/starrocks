@@ -114,6 +114,9 @@ Status AIExecutor::_update_integer(ConfigField field, int64_t value) {
             case ConfigField::MAX_RESPONSE_BYTES:
                 candidate.max_response_bytes = value;
                 break;
+            case ConfigField::MAX_INPUT_FILE_BYTES:
+                candidate.max_input_file_bytes = value;
+                break;
             case ConfigField::WORKER_THREAD_NUM:
                 candidate.worker_thread_num = static_cast<int32_t>(value);
                 worker_changed = candidate.worker_thread_num != previous.worker_thread_num;
@@ -130,6 +133,10 @@ Status AIExecutor::_update_integer(ConfigField field, int64_t value) {
             case ConfigField::RATE_LIMIT_QPS_CHAT:
                 candidate.rate_limit_qps_chat = static_cast<int32_t>(value);
                 notify_admission = candidate.rate_limit_qps_chat != previous.rate_limit_qps_chat;
+                break;
+            case ConfigField::RATE_LIMIT_QPS_EMBEDDING:
+                candidate.rate_limit_qps_embedding = static_cast<int32_t>(value);
+                notify_admission = candidate.rate_limit_qps_embedding != previous.rate_limit_qps_embedding;
                 break;
             case ConfigField::MAX_INFLIGHT:
                 candidate.max_inflight = static_cast<int32_t>(value);
@@ -158,6 +165,10 @@ Status AIExecutor::update_connect_timeout_ms(int64_t value) {
 
 Status AIExecutor::update_max_response_bytes(int64_t value) {
     return _update_integer(ConfigField::MAX_RESPONSE_BYTES, value);
+}
+
+Status AIExecutor::update_max_input_file_bytes(int64_t value) {
+    return _update_integer(ConfigField::MAX_INPUT_FILE_BYTES, value);
 }
 
 Status AIExecutor::update_worker_thread_num(int32_t value) {
@@ -193,6 +204,10 @@ Status AIExecutor::update_on_error(std::string_view value) {
 
 Status AIExecutor::update_rate_limit_qps_chat(int32_t value) {
     return _update_integer(ConfigField::RATE_LIMIT_QPS_CHAT, value);
+}
+
+Status AIExecutor::update_rate_limit_qps_embedding(int32_t value) {
+    return _update_integer(ConfigField::RATE_LIMIT_QPS_EMBEDDING, value);
 }
 
 Status AIExecutor::update_max_inflight(int32_t value) {

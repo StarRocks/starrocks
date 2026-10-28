@@ -915,6 +915,7 @@ The following operations are not supported on tables with Range-based Distributi
 | `ALTER TABLE ... ADD ROLLUP ...` without an `ORDER BY` clause | A plain synchronous rollup assumes 1-to-1 base/rollup tablet pairing with the same row order, which range distribution semantic does not provide. Use `ALTER TABLE ... ADD ROLLUP ... ORDER BY (...)` instead: on range tables in shared-data clusters, this statement builds an independent-sort-key rollup, and you can add multiple rollups (one per `ALTER TABLE` statement). |
 | `CREATE MATERIALIZED VIEW ... AS ...` (synchronous form, no `REFRESH` and no `DISTRIBUTED BY` clause) | A synchronous materialized view is internally a plain synchronous rollup and shares the same limitation. |
 | `ALTER TABLE ... OPTIMIZE` | OPTIMIZE redistributes / rebuckets a partition, which is incompatible with range tablet boundaries. |
+| `ALTER TABLE ... MERGE TABLETS` on a Primary Key table whose `ORDER BY` differs from its primary key (automatic size-based merge is skipped for the same shape) | Such a table routes rows by a range in primary-key space while its segments are laid out in sort-key order, so a merge cannot decide which source tablet still owns a given row of a segment those sources share. SPLIT is unaffected, and a Primary Key table whose `ORDER BY` is its primary key can still be merged. |
 
 For rollup-like aggregation use cases, use an **asynchronous materialized view** with an explicit `REFRESH` clause or a `DISTRIBUTED BY` clause, for example:
 

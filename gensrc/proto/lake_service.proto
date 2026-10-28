@@ -80,6 +80,14 @@ message PublishVersionRequest {
 message TabletStatPB {
     optional int64 num_rows = 1;
     optional int64 data_size = 2;
+    // Whether this tablet, at the published version, still references a shared file of a kind that
+    // blocks a merge: a rowset segment, a rowset del file, a persistent-index sstable, a DCG, or an
+    // IDG. Delvec, compaction inputs and orphan files are excluded, because a merge does not inherit
+    // them verbatim. See has_shared_files() in be/src/storage/lake/tablet_reshard_helper.h for the
+    // full field-by-field rationale. Carried on the publish path so a compaction that clears the
+    // flags updates the FE in the same round trip. Absent means the BE predates this field; the FE
+    // then treats the tablet as if it had shared files.
+    optional bool has_shared_files = 3;
 }
 
 message PublishVersionResponse {
@@ -206,6 +214,9 @@ message CompactRequest {
     // Rewrites every complete rowset containing at least one explicitly shared
     // segment. Used once after a range-tablet split to make all child files private.
     optional bool unshare_segments = 14 [default = false];
+    // The FE evaluates the table's forbidden time ranges before dispatch.
+    // Explicit manual compaction may still request base compaction.
+    optional bool allow_base_compaction = 52 [default = true];
 }
 
 message AggregateCompactRequest {
@@ -304,6 +315,14 @@ message TabletStatResponse {
         optional int64 tablet_id = 1;
         optional int64 num_rows = 2;
         optional int64 data_size = 3;
+        // Whether this tablet, at the requested version, still references a shared file of a kind
+        // that blocks a merge: a rowset segment, a rowset del file, a persistent-index sstable, a
+        // DCG, or an IDG. Delvec, compaction inputs and orphan files are excluded, because a merge
+        // does not inherit them verbatim. See has_shared_files() in
+        // be/src/storage/lake/tablet_reshard_helper.h for the full field-by-field rationale.
+        // Consumed by the FE merge candidate filter. Absent means the BE predates this field; the
+        // FE then treats the tablet as if it had shared files.
+        optional bool has_shared_files = 4;
     }
 
     repeated TabletStat tablet_stats = 1;

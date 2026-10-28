@@ -34,7 +34,8 @@ authentication_ldap_simple_ssl_conn_trust_store_pwd =
 ```Properties
 # 添加用户的 Base DN，指定用户的检索范围。
 authentication_ldap_simple_bind_base_dn =
-# 添加在 LDAP 对象中标识用户的属性名称。默认：uid。
+# 添加承载登录名的属性名。默认：uid（OpenLDAP 的惯例）。
+# Active Directory 上请用 sAMAccountName。
 authentication_ldap_simple_user_search_attr =
 # 添加用于检索用户的 Admin DN。
 authentication_ldap_simple_bind_root_dn =
@@ -92,6 +93,45 @@ authentication_ldap_simple_bind_dn_pattern =
 1. **用户指定 DN**：如果创建用户时指定了明确的 DN（`CREATE USER ... AS 'dn'`），则直接使用该 DN。
 2. **通过 DN 模式直接绑定**：如果配置了 `authentication_ldap_simple_bind_dn_pattern`，系统将根据模式构造 DN 并尝试直接绑定。多个模式按顺序尝试。
 3. **搜索绑定**：如果以上两种均不适用，系统将使用管理员账户在 LDAP 中搜索用户，然后使用找到的 DN 进行绑定。
+
+## 从用户条目解析用户组（memberOf）
+
+自 v4.2 起，LDAP 用户的用户组可以从用户自身条目上的组成员属性读取，不再需要在配置里声明要看哪些用户组。此时目录中新建的用户组会在用户下次登录时生效，无需改动任何配置。
+
+由两个 FE 配置项控制，均可动态修改：
+
+```Properties
+# 用户组从哪里来：group_provider（默认）| memberof | both
+authentication_ldap_simple_group_source = group_provider
+# 用户条目上承载组成员关系的属性名
+authentication_ldap_simple_memberof_attr = memberOf
+```
+
+- `group_provider`（默认）与低版本行为一致：只使用 Group Provider。
+- `memberof` 只使用用户自身条目上的该属性。已配置的 Group Provider 被忽略，但配置保留。
+- `both` 返回两者的并集。
+
+`memberOf` 适用于 Active Directory 以及安装了 `memberof` overlay 的 OpenLDAP。Oracle Directory Server 与 389 Directory Server 使用 `isMemberOf`。
+
+以上是集群级默认值。Security Integration 可以用同名属性覆盖这两项，也是按 LDAP 服务分别配置的推荐方式——完整行为（包括两种认证模式各自如何读取该属性，以及哪些情况不覆盖：嵌套组、Active Directory 的 primary group、跨域用户组）见 [Security Integration](./security_integration.md)。
+
+:::note
+
+使用显式 DN 创建的用户（`CREATE USER ... IDENTIFIED WITH authentication_ldap_simple AS '<dn>'`）**不支持**该功能：那种写法是待废弃的单用户老机制，其组解析行为保持不变。请在创建用户时省略 `AS '<dn>'`，或改用 Security Integration。
+
+:::
+
+## 大小写敏感性
+
+LDAP 这一族配置没有统一答案——有的值由 FE 比较，有的由目录比较，所以下表逐项说明。
+
+| 项 | 在哪里比较 | 是否区分大小写 |
+| --- | --- | --- |
+| 属性名：`authentication_ldap_simple_user_search_attr`、`authentication_ldap_simple_memberof_attr` | 目录，以及 FE 读回结果时 | **不区分。** LDAP 属性名（attribute description）本身就是不区分大小写的，`memberof` 和 `memberOf` 是同一个属性。 |
+| `authentication_ldap_simple_group_source` | FE | **不区分**，两端空白也会忽略。取值无法识别时：`CREATE` / `ALTER SECURITY INTEGRATION` 直接报错；如果是从 FE 配置项传进来的，则回落到 `group_provider` 并打印 ERROR 日志。 |
+| DN 类取值：`authentication_ldap_simple_bind_root_dn`、`..._bind_base_dn`、`..._bind_dn_pattern` | 目录 | **由目录决定。** DN 里的属性类型（`cn=`、`ou=`、`dc=`）一律不区分大小写；属性值是否区分取决于该属性的匹配规则，常用的 `cn` / `ou` / `dc` 都是不区分的。 |
+| 登录名 | FE，在发给目录之前 | **不区分。** 拼进搜索过滤器、或代入 bind DN 模板之前会先转成小写，与 Active Directory 对账号名的处理一致。 |
+| 用户组名 | FE | **匹配时不区分，显示时保留原样。** `GRANT ... TO EXTERNAL GROUP` 与 `permitted_groups` 都按忽略大小写匹配，但组名字符串本身绝不改写：`current_group()` 和交给 Apache Ranger 的组集合保持目录返回的原始大小写。Ranger 匹配组名是区分大小写的，所以它的策略必须按目录里的写法来写。 |
 
 ## 使用 LDAP 创建用户
 

@@ -228,6 +228,7 @@ public class UpdatePlanner {
                 catalogDbTable.getDb());
         try {
             olapTableSink.init(session.getExecutionId(), updateStmt.getTxnId(), db.getId(), session.getExecTimeout());
+            olapTableSink.setEstimatedWriteBytes(DmlWriteEstimates.fromExecPlan(execPlan));
             olapTableSink.complete();
         } catch (StarRocksException e) {
             throw new SemanticException(e.getMessage());

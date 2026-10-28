@@ -93,6 +93,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -1303,14 +1304,16 @@ public class MaterializedViewHandler extends AlterHandler {
                         + "Use 'ALTER TABLE DROP ROLLUP' if you want to.");
             }
 
-            // find from new alter jobs first
-            if (cancelAlterTableStmt.getAlterJobIdList() != null) {
-                for (Long jobId : cancelAlterTableStmt.getAlterJobIdList()) {
+            // find from new alter jobs first; no job ids means all unfinished jobs of the table
+            List<Long> alterJobIdList = cancelAlterTableStmt.getAlterJobIdList();
+            if (alterJobIdList != null && !alterJobIdList.isEmpty()) {
+                // a repeated job id must be cancelled once, or the second attempt is reported as refused
+                for (Long jobId : new LinkedHashSet<>(alterJobIdList)) {
                     AlterJobV2 alterJobV2 = getUnfinishedAlterJobV2ByJobId(jobId);
                     if (alterJobV2 == null) {
                         continue;
                     }
-                    rollupJobV2List.add(getUnfinishedAlterJobV2ByJobId(jobId));
+                    rollupJobV2List.add(alterJobV2);
                 }
             } else {
                 rollupJobV2List = getUnfinishedAlterJobV2ByTableId(olapTable.getId());
@@ -1323,11 +1326,19 @@ public class MaterializedViewHandler extends AlterHandler {
         }
 
         // alter job v2's cancel must be called outside the database lock
+        List<String> notCancelledJobs = new ArrayList<>();
         for (AlterJobV2 alterJobV2 : rollupJobV2List) {
-            alterJobV2.cancel(reason);
+            // e.g. a lake rollup job in FINISHED_REWRITING refuses to be cancelled. A job the scheduler
+            // cancelled meanwhile (e.g. on timeout) also returns false, but it ended as the user asked.
+            if (!alterJobV2.cancel(reason) && alterJobV2.getJobState() != AlterJobV2.JobState.CANCELLED) {
+                notCancelledJobs.add("JobId: " + alterJobV2.getJobId() + ", State: " + alterJobV2.getJobState());
+            }
             if (alterJobV2.isDone()) {
                 onJobDone(alterJobV2);
             }
+        }
+        if (!notCancelledJobs.isEmpty()) {
+            throw new DdlException("Job can not be cancelled. " + String.join("; ", notCancelledJobs));
         }
     }
 

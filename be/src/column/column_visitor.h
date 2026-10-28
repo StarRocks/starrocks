@@ -23,6 +23,8 @@
 
 namespace starrocks {
 
+class GeoColumn;
+
 class ColumnVisitor {
 public:
     virtual ~ColumnVisitor() = default;
@@ -35,7 +37,6 @@ public:
     virtual Status visit(const MapColumn& column);
     virtual Status visit(const StructColumn& column);
     virtual Status visit(const BinaryColumn& column);
-    virtual Status visit(const LargeBinaryColumn& column);
     virtual Status visit(const Int8Column& column);
     virtual Status visit(const UInt8Column& column);
     virtual Status visit(const Int16Column& column);
@@ -59,6 +60,7 @@ public:
     virtual Status visit(const PercentileColumn& column);
     virtual Status visit(const JsonColumn& column);
     virtual Status visit(const VariantColumn& column);
+    virtual Status visit(const FileColumn& column);
     virtual Status visit(const FixedLengthColumn<int96_t>& column);
     virtual Status visit(const FixedLengthColumn<uint24_t>& column);
     virtual Status visit(const FixedLengthColumn<decimal12_t>& column);
@@ -90,6 +92,7 @@ public:
     }
 
     virtual Status visit(const ColumnView& column) { return Status::NotSupported("ColumnView is not supported"); }
+    virtual Status visit(const GeoColumn& column);
 };
 
 } // namespace starrocks

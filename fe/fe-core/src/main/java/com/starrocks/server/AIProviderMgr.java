@@ -33,8 +33,6 @@ import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -48,7 +46,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /**
  * In-memory and persisted registry of {@link AIProvider} objects of every type (embedding / rerank /
- * future text). One registry holds them all and keeps one default <b>per type</b>, so the three (and
+ * chat). One registry holds them all and keeps one default <b>per type</b>, so the three (and
  * future) provider kinds share the same DDL, persistence and credential handling instead of each
  * duplicating the machinery.
  *
@@ -59,7 +57,6 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  * mirrored back to {@code defaultProviderId} so the embedding code path can resolve it directly.
  */
 public class AIProviderMgr implements Writable, GsonPostProcessable {
-    private static final Logger LOG = LogManager.getLogger(AIProviderMgr.class);
 
     // Mirror of the EMBEDDING default id, kept so the embedding code path can resolve the default
     // without consulting defaultByType. Authoritative per-type defaults live in defaultByType.
@@ -212,14 +209,14 @@ public class AIProviderMgr implements Writable, GsonPostProcessable {
 
     public void replayCreateProvider(AIProvider provider) {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            normalizeType(provider);
+            normalizeProvider(provider);
             idToProvider.put(provider.getId(), provider);
         }
     }
 
     public void replayAlterProvider(AIProvider provider) {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            normalizeType(provider);
+            normalizeProvider(provider);
             idToProvider.put(provider.getId(), provider);
         }
     }
@@ -236,10 +233,12 @@ public class AIProviderMgr implements Writable, GsonPostProcessable {
         }
     }
 
-    private static void normalizeType(AIProvider provider) {
+    // Fill in what older records lack: a missing type tag means EMBEDDING, and a missing protocol means
+    // the type's default protocol. Both decisions are persisted on the object so the next image carries them.
+    private static void normalizeProvider(AIProvider provider) {
         if (provider != null) {
-            // getType() already maps null -> EMBEDDING; persist that decision on the object.
             provider.setType(provider.getType());
+            provider.ensureProtocolExisted();
         }
     }
 
@@ -269,9 +268,10 @@ public class AIProviderMgr implements Writable, GsonPostProcessable {
         if (defaultProviderId == null) {
             defaultProviderId = "";
         }
-        // Tag legacy (pre-unification) providers, which were all embedding providers, as EMBEDDING.
+        // Tag legacy (pre-unification) providers, which were all embedding providers, as EMBEDDING, and
+        // back-fill the protocol on records persisted before it existed.
         for (AIProvider p : idToProvider.values()) {
-            normalizeType(p);
+            normalizeProvider(p);
         }
         // Migrate the old single embedding default into the per-type map.
         if (!Strings.isNullOrEmpty(defaultProviderId)

@@ -24,6 +24,7 @@ import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
@@ -1706,6 +1707,99 @@ public class AuthorizationMgrTest {
         );
 
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("drop catalog test_catalog", ctx), ctx);
+    }
+
+    @Test
+    public void testViewExportPrivilege() throws Exception {
+        checkExportPrivilege(ObjectType.VIEW, new TableName("db", "view1"));
+    }
+
+    @Test
+    public void testMaterializedViewExportPrivilege() throws Exception {
+        checkExportPrivilege(ObjectType.MATERIALIZED_VIEW, new TableName("db3", "mv1"));
+    }
+
+    private void checkExportPrivilege(ObjectType objectType, TableName name) throws Exception {
+        String object = objectType.toString() + " " + name.getDb() + "." + name.getTbl();
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "grant select on " + object + " to test_user", ctx), ctx);
+        setCurrentUserAndRoles(ctx, testUser);
+        assertThrows(AccessDeniedException.class, () -> checkExportAction(objectType, name));
+
+        for (String privilege : List.of("EXPORT", "ALL PRIVILEGES")) {
+            setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                    "grant " + privilege + " on " + object + " to test_user", ctx), ctx);
+            setCurrentUserAndRoles(ctx, testUser);
+            checkExportAction(objectType, name);
+
+            setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                    "revoke " + privilege + " on " + object + " from test_user", ctx), ctx);
+            setCurrentUserAndRoles(ctx, testUser);
+            assertThrows(AccessDeniedException.class, () -> checkExportAction(objectType, name));
+        }
+    }
+
+    private void checkExportAction(ObjectType objectType, TableName name) throws AccessDeniedException {
+        if (objectType.equals(ObjectType.VIEW)) {
+            Authorizer.checkViewAction(ctx, name, PrivilegeType.EXPORT);
+        } else {
+            Authorizer.checkMaterializedViewAction(ctx, name, PrivilegeType.EXPORT);
+        }
+    }
+
+    @Test
+    public void testViewExportGrantOptionUpgrade() throws Exception {
+        checkExportGrantOptionUpgrade(ObjectType.VIEW, new TableName("db", "view1"), "SELECT, ALTER, DROP");
+    }
+
+    @Test
+    public void testMaterializedViewExportGrantOptionUpgrade() throws Exception {
+        checkExportGrantOptionUpgrade(ObjectType.MATERIALIZED_VIEW, new TableName("db3", "mv1"),
+                "SELECT, ALTER, DROP, REFRESH");
+    }
+
+    private void checkExportGrantOptionUpgrade(ObjectType objectType, TableName name, String oldPrivileges)
+            throws Exception {
+        String object = objectType + " " + name.getDb() + "." + name.getTbl();
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("create user export_recipient", ctx), ctx);
+        // Persisted ALL grants contain the old action set, without EXPORT.
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "grant " + oldPrivileges + " on " + object + " to test_user with grant option", ctx), ctx);
+
+        setCurrentUserAndRoles(ctx, testUser);
+        assertThrows(AccessDeniedException.class, () -> Authorizer.checkSystemAction(ctx, PrivilegeType.GRANT));
+        StatementBase oldGrant = UtFrameUtils.parseStmtWithNewParser(
+                "grant " + oldPrivileges + " on " + object + " to export_recipient", ctx);
+        Authorizer.check(oldGrant, ctx);
+        DDLStmtExecutor.execute(oldGrant, ctx);
+
+        StatementBase grantAll = UtFrameUtils.parseStmtWithNewParser(
+                "grant all privileges on " + object + " to export_recipient", ctx);
+        StatementBase revokeAll = UtFrameUtils.parseStmtWithNewParser(
+                "revoke all privileges on " + object + " from export_recipient", ctx);
+        for (StatementBase statement : List.of(grantAll, revokeAll)) {
+            ErrorReportException error = assertThrows(ErrorReportException.class, () -> Authorizer.check(statement, ctx));
+            Assertions.assertEquals(ErrorCode.ERR_ACCESS_DENIED, error.getErrorCode());
+        }
+
+        setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "grant export on " + object + " to test_user with grant option", ctx), ctx);
+
+        setCurrentUserAndRoles(ctx, testUser);
+        Authorizer.check(grantAll, ctx);
+        DDLStmtExecutor.execute(grantAll, ctx);
+        UserIdentity recipient = UserIdentity.createAnalyzedUserIdentWithIp("export_recipient", "%");
+        setCurrentUserAndRoles(ctx, recipient);
+        checkExportAction(objectType, name);
+
+        setCurrentUserAndRoles(ctx, testUser);
+        Authorizer.check(revokeAll, ctx);
+        DDLStmtExecutor.execute(revokeAll, ctx);
+        setCurrentUserAndRoles(ctx, recipient);
+        assertThrows(AccessDeniedException.class, () -> checkExportAction(objectType, name));
     }
 
     @Test

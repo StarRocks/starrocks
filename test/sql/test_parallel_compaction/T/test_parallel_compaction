@@ -1,4 +1,4 @@
--- name: test_parallel_compaction_pk_table @cloud @sequential
+-- name: test_parallel_compaction_pk_table @cloud @sequential @slow
 -- Test parallel compaction for primary key table with different parallelism settings
 create database test_parallel_compaction_pk_${uuid0};
 use test_parallel_compaction_pk_${uuid0};
@@ -29,6 +29,7 @@ INSERT INTO pk_parallel_2 VALUES (9, 9, 'i', 900), (10, 10, 'j', 1000);
 
 -- Check rowset count before compaction (should be 5 rowsets from 5 inserts)
 SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_parallel_2' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_${uuid0}';
+[UC]rowset_before=SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_parallel_2' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_${uuid0}';
 
 -- Verify data before compaction
 SELECT COUNT(*) FROM pk_parallel_2;
@@ -37,17 +38,35 @@ SELECT * FROM pk_parallel_2 ORDER BY k1, k2;
 -- Set very small compaction bytes per subtask to trigger parallel compaction
 UPDATE information_schema.be_configs SET VALUE = '1' WHERE name = 'lake_compaction_max_bytes_per_subtask';
 
+[UC]version_before=SELECT MAX_VERSION FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_parallel_2' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_${uuid0}';
+
 -- Re-enable compaction for this table
 ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "");
 
 -- Manually trigger compaction
 [UC]ALTER TABLE pk_parallel_2 COMPACT;
 
--- Wait for compaction to complete
-SELECT sleep(30);
+-- ALTER TABLE ... COMPACT is fire-and-forget; poll for the commit instead of guessing.
+function: wait_compaction_committed("pk_parallel_2", ${version_before})
+
+-- Read the count with the partition frozen again. Parallel compaction commits one round per
+-- dispatch and CompactionScheduler re-arms the partition after lake_compaction_interval_ms_on_success
+-- (10s), so an unfrozen read races the next round -- which is exactly how the expected counts in
+-- this file became half-finished snapshots (ci-tool #3809).
+ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
 
 -- Check rowset count after compaction (should be reduced, typically to 1)
-SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_parallel_2' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_${uuid0}';
+[UC]rowset_after=SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_parallel_2' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_${uuid0}';
+SELECT ${rowset_after} < ${rowset_before} as rowset_reduced;
+-- NOTE: nothing below distinguishes a parallel compaction from a serial one. Both settle at a
+-- single output rowset (each subtask writes segments and tablet_parallel_compaction_manager merges
+-- them into one, .cpp:1265-1345), and at this data size the split path is unreachable anyway:
+-- _is_large_rowset_for_split needs data_size >= 2 * lake_compaction_max_rowset_size, i.e. 8GiB by
+-- default (.cpp:1755,1770), while these tables hold a handful of rows. Measured runs come back with
+-- one rowset and one segment, so assertions on either shape pass unchanged if
+-- lake_compaction_max_parallel stops taking effect. Covering that needs a direct observation of the
+-- subtask count, or the setup test_pk_large_rowset_split uses (it lowers lake_compaction_max_rowset_size
+-- to 2MB first).
 
 -- Verify data correctness after compaction
 SELECT COUNT(*) FROM pk_parallel_2;
@@ -58,7 +77,7 @@ UPDATE information_schema.be_configs SET VALUE = '5368709120' WHERE name = 'lake
 
 DROP DATABASE test_parallel_compaction_pk_${uuid0} FORCE;
 
--- name: test_parallel_compaction_pk_high_parallel @cloud @sequential
+-- name: test_parallel_compaction_pk_high_parallel @cloud @sequential @slow
 -- Test parallel compaction for primary key table with higher parallelism
 create database test_parallel_compaction_pk_high_${uuid0};
 use test_parallel_compaction_pk_high_${uuid0};
@@ -92,6 +111,7 @@ INSERT INTO pk_parallel_5 VALUES (15, 15, 'o', 1500), (16, 16, 'p', 1600);
 
 -- Check rowset count before compaction (should be 8 rowsets from 8 inserts)
 SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_parallel_5' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_high_${uuid0}';
+[UC]rowset_before=SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_parallel_5' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_high_${uuid0}';
 
 -- Verify data before compaction
 SELECT COUNT(*) FROM pk_parallel_5;
@@ -100,17 +120,35 @@ SELECT * FROM pk_parallel_5 ORDER BY k1, k2;
 -- Set very small compaction bytes per subtask
 UPDATE information_schema.be_configs SET VALUE = '1' WHERE name = 'lake_compaction_max_bytes_per_subtask';
 
+[UC]version_before=SELECT MAX_VERSION FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_parallel_5' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_high_${uuid0}';
+
 -- Re-enable compaction for this table
 ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "");
 
 -- Manually trigger compaction
 [UC]ALTER TABLE pk_parallel_5 COMPACT;
 
--- Wait for compaction to complete
-SELECT sleep(30);
+-- ALTER TABLE ... COMPACT is fire-and-forget; poll for the commit instead of guessing.
+function: wait_compaction_committed("pk_parallel_5", ${version_before})
+
+-- Read the count with the partition frozen again. Parallel compaction commits one round per
+-- dispatch and CompactionScheduler re-arms the partition after lake_compaction_interval_ms_on_success
+-- (10s), so an unfrozen read races the next round -- which is exactly how the expected counts in
+-- this file became half-finished snapshots (ci-tool #3809).
+ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
 
 -- Check rowset count after compaction (should be reduced)
-SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_parallel_5' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_high_${uuid0}';
+[UC]rowset_after=SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_parallel_5' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_high_${uuid0}';
+SELECT ${rowset_after} < ${rowset_before} as rowset_reduced;
+-- NOTE: nothing below distinguishes a parallel compaction from a serial one. Both settle at a
+-- single output rowset (each subtask writes segments and tablet_parallel_compaction_manager merges
+-- them into one, .cpp:1265-1345), and at this data size the split path is unreachable anyway:
+-- _is_large_rowset_for_split needs data_size >= 2 * lake_compaction_max_rowset_size, i.e. 8GiB by
+-- default (.cpp:1755,1770), while these tables hold a handful of rows. Measured runs come back with
+-- one rowset and one segment, so assertions on either shape pass unchanged if
+-- lake_compaction_max_parallel stops taking effect. Covering that needs a direct observation of the
+-- subtask count, or the setup test_pk_large_rowset_split uses (it lowers lake_compaction_max_rowset_size
+-- to 2MB first).
 
 -- Verify data correctness after compaction
 SELECT COUNT(*) FROM pk_parallel_5;
@@ -121,7 +159,7 @@ UPDATE information_schema.be_configs SET VALUE = '5368709120' WHERE name = 'lake
 
 DROP DATABASE test_parallel_compaction_pk_high_${uuid0} FORCE;
 
--- name: test_parallel_compaction_dup_table @cloud @sequential
+-- name: test_parallel_compaction_dup_table @cloud @sequential @slow
 -- Test parallel compaction for duplicate key table
 create database test_parallel_compaction_dup_${uuid0};
 use test_parallel_compaction_dup_${uuid0};
@@ -152,6 +190,7 @@ INSERT INTO dup_parallel VALUES (9, 9, 'i', 900), (10, 10, 'j', 1000);
 
 -- Check rowset count before compaction
 SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'dup_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_dup_${uuid0}';
+[UC]rowset_before=SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'dup_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_dup_${uuid0}';
 
 -- Verify data before compaction
 SELECT COUNT(*) FROM dup_parallel;
@@ -160,17 +199,35 @@ SELECT * FROM dup_parallel ORDER BY k1, k2;
 -- Set very small compaction bytes per subtask
 UPDATE information_schema.be_configs SET VALUE = '1' WHERE name = 'lake_compaction_max_bytes_per_subtask';
 
+[UC]version_before=SELECT MAX_VERSION FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'dup_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_dup_${uuid0}';
+
 -- Re-enable compaction for this table
 ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "");
 
 -- Manually trigger compaction
 [UC]ALTER TABLE dup_parallel COMPACT;
 
--- Wait for compaction to complete
-SELECT sleep(30);
+-- ALTER TABLE ... COMPACT is fire-and-forget; poll for the commit instead of guessing.
+function: wait_compaction_committed("dup_parallel", ${version_before})
+
+-- Read the count with the partition frozen again. Parallel compaction commits one round per
+-- dispatch and CompactionScheduler re-arms the partition after lake_compaction_interval_ms_on_success
+-- (10s), so an unfrozen read races the next round -- which is exactly how the expected counts in
+-- this file became half-finished snapshots (ci-tool #3809).
+ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
 
 -- Check rowset count after compaction
-SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'dup_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_dup_${uuid0}';
+[UC]rowset_after=SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'dup_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_dup_${uuid0}';
+SELECT ${rowset_after} < ${rowset_before} as rowset_reduced;
+-- NOTE: nothing below distinguishes a parallel compaction from a serial one. Both settle at a
+-- single output rowset (each subtask writes segments and tablet_parallel_compaction_manager merges
+-- them into one, .cpp:1265-1345), and at this data size the split path is unreachable anyway:
+-- _is_large_rowset_for_split needs data_size >= 2 * lake_compaction_max_rowset_size, i.e. 8GiB by
+-- default (.cpp:1755,1770), while these tables hold a handful of rows. Measured runs come back with
+-- one rowset and one segment, so assertions on either shape pass unchanged if
+-- lake_compaction_max_parallel stops taking effect. Covering that needs a direct observation of the
+-- subtask count, or the setup test_pk_large_rowset_split uses (it lowers lake_compaction_max_rowset_size
+-- to 2MB first).
 
 -- Verify data correctness after compaction
 SELECT COUNT(*) FROM dup_parallel;
@@ -181,7 +238,7 @@ UPDATE information_schema.be_configs SET VALUE = '5368709120' WHERE name = 'lake
 
 DROP DATABASE test_parallel_compaction_dup_${uuid0} FORCE;
 
--- name: test_parallel_compaction_agg_table @cloud @sequential
+-- name: test_parallel_compaction_agg_table @cloud @sequential @slow
 -- Test parallel compaction for aggregate key table
 create database test_parallel_compaction_agg_${uuid0};
 use test_parallel_compaction_agg_${uuid0};
@@ -212,6 +269,7 @@ INSERT INTO agg_parallel VALUES (3, 3, 200, 400), (4, 4, 300, 500);
 
 -- Check rowset count before compaction
 SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'agg_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_agg_${uuid0}';
+[UC]rowset_before=SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'agg_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_agg_${uuid0}';
 
 -- Verify data before compaction (aggregated)
 SELECT COUNT(*) FROM agg_parallel;
@@ -220,17 +278,35 @@ SELECT * FROM agg_parallel ORDER BY k1, k2;
 -- Set very small compaction bytes per subtask
 UPDATE information_schema.be_configs SET VALUE = '1' WHERE name = 'lake_compaction_max_bytes_per_subtask';
 
+[UC]version_before=SELECT MAX_VERSION FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'agg_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_agg_${uuid0}';
+
 -- Re-enable compaction for this table
 ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "");
 
 -- Manually trigger compaction
 [UC]ALTER TABLE agg_parallel COMPACT;
 
--- Wait for compaction to complete
-SELECT sleep(30);
+-- ALTER TABLE ... COMPACT is fire-and-forget; poll for the commit instead of guessing.
+function: wait_compaction_committed("agg_parallel", ${version_before})
+
+-- Read the count with the partition frozen again. Parallel compaction commits one round per
+-- dispatch and CompactionScheduler re-arms the partition after lake_compaction_interval_ms_on_success
+-- (10s), so an unfrozen read races the next round -- which is exactly how the expected counts in
+-- this file became half-finished snapshots (ci-tool #3809).
+ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
 
 -- Check rowset count after compaction
-SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'agg_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_agg_${uuid0}';
+[UC]rowset_after=SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'agg_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_agg_${uuid0}';
+SELECT ${rowset_after} < ${rowset_before} as rowset_reduced;
+-- NOTE: nothing below distinguishes a parallel compaction from a serial one. Both settle at a
+-- single output rowset (each subtask writes segments and tablet_parallel_compaction_manager merges
+-- them into one, .cpp:1265-1345), and at this data size the split path is unreachable anyway:
+-- _is_large_rowset_for_split needs data_size >= 2 * lake_compaction_max_rowset_size, i.e. 8GiB by
+-- default (.cpp:1755,1770), while these tables hold a handful of rows. Measured runs come back with
+-- one rowset and one segment, so assertions on either shape pass unchanged if
+-- lake_compaction_max_parallel stops taking effect. Covering that needs a direct observation of the
+-- subtask count, or the setup test_pk_large_rowset_split uses (it lowers lake_compaction_max_rowset_size
+-- to 2MB first).
 
 -- Verify data correctness after compaction (aggregated results should be same)
 SELECT COUNT(*) FROM agg_parallel;
@@ -241,7 +317,7 @@ UPDATE information_schema.be_configs SET VALUE = '5368709120' WHERE name = 'lake
 
 DROP DATABASE test_parallel_compaction_agg_${uuid0} FORCE;
 
--- name: test_parallel_compaction_unique_table @cloud @sequential
+-- name: test_parallel_compaction_unique_table @cloud @sequential @slow
 -- Test parallel compaction for unique key table
 create database test_parallel_compaction_uniq_${uuid0};
 use test_parallel_compaction_uniq_${uuid0};
@@ -272,6 +348,7 @@ INSERT INTO uniq_parallel VALUES (3, 3, 'c_updated', 350), (7, 7, 'g', 700);
 
 -- Check rowset count before compaction
 SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'uniq_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_uniq_${uuid0}';
+[UC]rowset_before=SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'uniq_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_uniq_${uuid0}';
 
 -- Verify data before compaction (should show latest values for duplicate keys)
 SELECT COUNT(*) FROM uniq_parallel;
@@ -280,17 +357,35 @@ SELECT * FROM uniq_parallel ORDER BY k1, k2;
 -- Set very small compaction bytes per subtask
 UPDATE information_schema.be_configs SET VALUE = '1' WHERE name = 'lake_compaction_max_bytes_per_subtask';
 
+[UC]version_before=SELECT MAX_VERSION FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'uniq_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_uniq_${uuid0}';
+
 -- Re-enable compaction for this table
 ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "");
 
 -- Manually trigger compaction
 [UC]ALTER TABLE uniq_parallel COMPACT;
 
--- Wait for compaction to complete
-SELECT sleep(30);
+-- ALTER TABLE ... COMPACT is fire-and-forget; poll for the commit instead of guessing.
+function: wait_compaction_committed("uniq_parallel", ${version_before})
+
+-- Read the count with the partition frozen again. Parallel compaction commits one round per
+-- dispatch and CompactionScheduler re-arms the partition after lake_compaction_interval_ms_on_success
+-- (10s), so an unfrozen read races the next round -- which is exactly how the expected counts in
+-- this file became half-finished snapshots (ci-tool #3809).
+ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
 
 -- Check rowset count after compaction
-SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'uniq_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_uniq_${uuid0}';
+[UC]rowset_after=SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'uniq_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_uniq_${uuid0}';
+SELECT ${rowset_after} < ${rowset_before} as rowset_reduced;
+-- NOTE: nothing below distinguishes a parallel compaction from a serial one. Both settle at a
+-- single output rowset (each subtask writes segments and tablet_parallel_compaction_manager merges
+-- them into one, .cpp:1265-1345), and at this data size the split path is unreachable anyway:
+-- _is_large_rowset_for_split needs data_size >= 2 * lake_compaction_max_rowset_size, i.e. 8GiB by
+-- default (.cpp:1755,1770), while these tables hold a handful of rows. Measured runs come back with
+-- one rowset and one segment, so assertions on either shape pass unchanged if
+-- lake_compaction_max_parallel stops taking effect. Covering that needs a direct observation of the
+-- subtask count, or the setup test_pk_large_rowset_split uses (it lowers lake_compaction_max_rowset_size
+-- to 2MB first).
 
 -- Verify data correctness after compaction (unique results should be same)
 SELECT COUNT(*) FROM uniq_parallel;
@@ -301,7 +396,7 @@ UPDATE information_schema.be_configs SET VALUE = '5368709120' WHERE name = 'lake
 
 DROP DATABASE test_parallel_compaction_uniq_${uuid0} FORCE;
 
--- name: test_parallel_compaction_disabled @cloud @sequential
+-- name: test_parallel_compaction_disabled @cloud @sequential @slow
 -- Test when parallel compaction is disabled (max_parallel = 0)
 create database test_parallel_compaction_disabled_${uuid0};
 use test_parallel_compaction_disabled_${uuid0};
@@ -323,10 +418,15 @@ PROPERTIES (
 [UC]tid=select TABLE_ID from information_schema.tables_config where TABLE_NAME='pk_no_parallel' and TABLE_SCHEMA='test_parallel_compaction_disabled_${uuid0}';
 ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
 
--- Insert multiple batches
+-- Insert multiple batches. Five of them, like the parallel cases above: below
+-- lake_pk_compaction_min_input_segments (BE default 5) PrimaryCompactionPolicy::pick_rowset_indexes
+-- picks no rowset at all, so with three batches the compaction triggered below never runs and
+-- every assertion after it passes without exercising anything.
 INSERT INTO pk_no_parallel VALUES (1, 1, 'a', 100), (2, 2, 'b', 200);
 INSERT INTO pk_no_parallel VALUES (3, 3, 'c', 300), (4, 4, 'd', 400);
 INSERT INTO pk_no_parallel VALUES (5, 5, 'e', 500), (6, 6, 'f', 600);
+INSERT INTO pk_no_parallel VALUES (7, 7, 'g', 700), (8, 8, 'h', 800);
+INSERT INTO pk_no_parallel VALUES (9, 9, 'i', 900), (10, 10, 'j', 1000);
 
 -- Check rowset count before compaction
 SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_no_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_disabled_${uuid0}';
@@ -335,15 +435,22 @@ SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.table
 SELECT COUNT(*) FROM pk_no_parallel;
 SELECT * FROM pk_no_parallel ORDER BY k1, k2;
 
+[UC]version_before=SELECT MAX_VERSION FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_no_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_disabled_${uuid0}';
+
 -- Re-enable compaction for this table
 ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "");
 
 -- Manually trigger compaction (will use normal compaction, not parallel)
 [UC]ALTER TABLE pk_no_parallel COMPACT;
 
--- Wait for compaction to complete
-SELECT sleep(30);
+-- ALTER TABLE ... COMPACT is fire-and-forget: CompactionHandler only raises the partition's
+-- priority to MANUAL_COMPACT, CompactionScheduler dispatches it on a 1s loop, and the CN runs it
+-- asynchronously. Poll for the commit rather than guessing a duration -- a fixed sleep is what
+-- froze half-finished rowset counts into the expected results of the parallel cases in this file.
+function: wait_compaction_committed("pk_no_parallel", ${version_before})
 
+-- max_parallel = 0 attaches no parallelConfig (CompactionScheduler.java:496), so the input merges
+-- into a single output rowset, unlike the parallel cases above which leave one rowset per subtask.
 -- Check rowset count after compaction
 SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_no_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_disabled_${uuid0}';
 
@@ -353,7 +460,7 @@ SELECT * FROM pk_no_parallel ORDER BY k1, k2;
 
 DROP DATABASE test_parallel_compaction_disabled_${uuid0} FORCE;
 
--- name: test_parallel_compaction_alter_property @cloud @sequential
+-- name: test_parallel_compaction_alter_property @cloud @sequential @slow
 -- Test altering lake_compaction_max_parallel property
 create database test_parallel_compaction_alter_${uuid0};
 use test_parallel_compaction_alter_${uuid0};
@@ -394,7 +501,7 @@ SHOW CREATE TABLE pk_alter_parallel;
 
 DROP DATABASE test_parallel_compaction_alter_${uuid0} FORCE;
 
--- name: test_parallel_compaction_pk_with_updates @cloud @sequential
+-- name: test_parallel_compaction_pk_with_updates @cloud @sequential @slow
 -- Test parallel compaction for primary key table with updates
 create database test_parallel_compaction_pk_upd_${uuid0};
 use test_parallel_compaction_pk_upd_${uuid0};
@@ -435,6 +542,7 @@ UPDATE pk_with_updates SET v1 = 'd_v2', v2 = 440 WHERE k1 = 4;
 
 -- Check rowset count before compaction
 SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_with_updates' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_upd_${uuid0}';
+[UC]rowset_before=SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_with_updates' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_upd_${uuid0}';
 
 -- Verify data before compaction
 SELECT COUNT(*) FROM pk_with_updates;
@@ -443,17 +551,35 @@ SELECT * FROM pk_with_updates ORDER BY k1, k2;
 -- Set very small compaction bytes per subtask
 UPDATE information_schema.be_configs SET VALUE = '1' WHERE name = 'lake_compaction_max_bytes_per_subtask';
 
+[UC]version_before=SELECT MAX_VERSION FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_with_updates' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_upd_${uuid0}';
+
 -- Re-enable compaction for this table
 ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "");
 
 -- Manually trigger compaction
 [UC]ALTER TABLE pk_with_updates COMPACT;
 
--- Wait for compaction to complete
-SELECT sleep(30);
+-- ALTER TABLE ... COMPACT is fire-and-forget; poll for the commit instead of guessing.
+function: wait_compaction_committed("pk_with_updates", ${version_before})
+
+-- Read the count with the partition frozen again. Parallel compaction commits one round per
+-- dispatch and CompactionScheduler re-arms the partition after lake_compaction_interval_ms_on_success
+-- (10s), so an unfrozen read races the next round -- which is exactly how the expected counts in
+-- this file became half-finished snapshots (ci-tool #3809).
+ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
 
 -- Check rowset count after compaction
-SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_with_updates' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_upd_${uuid0}';
+[UC]rowset_after=SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_with_updates' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_upd_${uuid0}';
+SELECT ${rowset_after} < ${rowset_before} as rowset_reduced;
+-- NOTE: nothing below distinguishes a parallel compaction from a serial one. Both settle at a
+-- single output rowset (each subtask writes segments and tablet_parallel_compaction_manager merges
+-- them into one, .cpp:1265-1345), and at this data size the split path is unreachable anyway:
+-- _is_large_rowset_for_split needs data_size >= 2 * lake_compaction_max_rowset_size, i.e. 8GiB by
+-- default (.cpp:1755,1770), while these tables hold a handful of rows. Measured runs come back with
+-- one rowset and one segment, so assertions on either shape pass unchanged if
+-- lake_compaction_max_parallel stops taking effect. Covering that needs a direct observation of the
+-- subtask count, or the setup test_pk_large_rowset_split uses (it lowers lake_compaction_max_rowset_size
+-- to 2MB first).
 
 -- Verify data correctness after compaction
 SELECT COUNT(*) FROM pk_with_updates;
@@ -464,7 +590,7 @@ UPDATE information_schema.be_configs SET VALUE = '5368709120' WHERE name = 'lake
 
 DROP DATABASE test_parallel_compaction_pk_upd_${uuid0} FORCE;
 
--- name: test_parallel_compaction_pk_large_data @cloud @sequential
+-- name: test_parallel_compaction_pk_large_data @cloud @sequential @slow
 -- Test parallel compaction for primary key table with larger data volume
 create database test_parallel_compaction_pk_large_${uuid0};
 use test_parallel_compaction_pk_large_${uuid0};
@@ -494,6 +620,7 @@ INSERT INTO pk_large_data SELECT generate_series, REPEAT('v', 100), generate_ser
 
 -- Check rowset count before compaction
 SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_large_data' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_large_${uuid0}';
+[UC]rowset_before=SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_large_data' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_large_${uuid0}';
 
 -- Verify data count before compaction
 SELECT COUNT(*) FROM pk_large_data;
@@ -502,17 +629,35 @@ SELECT MIN(k1), MAX(k1) FROM pk_large_data;
 -- Set very small compaction bytes per subtask to trigger parallel compaction
 UPDATE information_schema.be_configs SET VALUE = '1' WHERE name = 'lake_compaction_max_bytes_per_subtask';
 
+[UC]version_before=SELECT MAX_VERSION FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_large_data' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_large_${uuid0}';
+
 -- Re-enable compaction for this table
 ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "");
 
 -- Manually trigger compaction
 [UC]ALTER TABLE pk_large_data COMPACT;
 
--- Wait for compaction to complete
-SELECT sleep(60);
+-- ALTER TABLE ... COMPACT is fire-and-forget; poll for the commit instead of guessing.
+function: wait_compaction_committed("pk_large_data", ${version_before})
+
+-- Read the count with the partition frozen again. Parallel compaction commits one round per
+-- dispatch and CompactionScheduler re-arms the partition after lake_compaction_interval_ms_on_success
+-- (10s), so an unfrozen read races the next round -- which is exactly how the expected counts in
+-- this file became half-finished snapshots (ci-tool #3809).
+ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
 
 -- Check rowset count after compaction
-SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_large_data' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_large_${uuid0}';
+[UC]rowset_after=SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_large_data' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_large_${uuid0}';
+SELECT ${rowset_after} < ${rowset_before} as rowset_reduced;
+-- NOTE: nothing below distinguishes a parallel compaction from a serial one. Both settle at a
+-- single output rowset (each subtask writes segments and tablet_parallel_compaction_manager merges
+-- them into one, .cpp:1265-1345), and at this data size the split path is unreachable anyway:
+-- _is_large_rowset_for_split needs data_size >= 2 * lake_compaction_max_rowset_size, i.e. 8GiB by
+-- default (.cpp:1755,1770), while these tables hold a handful of rows. Measured runs come back with
+-- one rowset and one segment, so assertions on either shape pass unchanged if
+-- lake_compaction_max_parallel stops taking effect. Covering that needs a direct observation of the
+-- subtask count, or the setup test_pk_large_rowset_split uses (it lowers lake_compaction_max_rowset_size
+-- to 2MB first).
 
 -- Verify data correctness after compaction
 SELECT COUNT(*) FROM pk_large_data;
@@ -523,7 +668,7 @@ UPDATE information_schema.be_configs SET VALUE = '5368709120' WHERE name = 'lake
 
 DROP DATABASE test_parallel_compaction_pk_large_${uuid0} FORCE;
 
--- name: test_parallel_compaction_multiple_buckets @cloud @sequential
+-- name: test_parallel_compaction_multiple_buckets @cloud @sequential @slow
 -- Test parallel compaction with multiple buckets
 create database test_parallel_compaction_buckets_${uuid0};
 use test_parallel_compaction_buckets_${uuid0};
@@ -554,6 +699,7 @@ INSERT INTO pk_multi_buckets VALUES (13, 13, 'm', 1300), (14, 14, 'n', 1400), (1
 
 -- Check rowset count before compaction (should have multiple rowsets per bucket)
 SELECT SUM(NUM_ROWSET) FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_multi_buckets' AND c.TABLE_SCHEMA = 'test_parallel_compaction_buckets_${uuid0}';
+[UC]rowset_before=SELECT SUM(NUM_ROWSET) FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_multi_buckets' AND c.TABLE_SCHEMA = 'test_parallel_compaction_buckets_${uuid0}';
 
 -- Verify data before compaction
 SELECT COUNT(*) FROM pk_multi_buckets;
@@ -562,17 +708,35 @@ SELECT * FROM pk_multi_buckets ORDER BY k1, k2;
 -- Set very small compaction bytes per subtask
 UPDATE information_schema.be_configs SET VALUE = '1' WHERE name = 'lake_compaction_max_bytes_per_subtask';
 
+[UC]version_before=SELECT MAX(MAX_VERSION) FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_multi_buckets' AND c.TABLE_SCHEMA = 'test_parallel_compaction_buckets_${uuid0}';
+
 -- Re-enable compaction for this table
 ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "");
 
 -- Manually trigger compaction
 [UC]ALTER TABLE pk_multi_buckets COMPACT;
 
--- Wait for compaction to complete
-SELECT sleep(30);
+-- ALTER TABLE ... COMPACT is fire-and-forget; poll for the commit instead of guessing.
+function: wait_compaction_committed("pk_multi_buckets", ${version_before})
+
+-- Read the count with the partition frozen again. Parallel compaction commits one round per
+-- dispatch and CompactionScheduler re-arms the partition after lake_compaction_interval_ms_on_success
+-- (10s), so an unfrozen read races the next round -- which is exactly how the expected counts in
+-- this file became half-finished snapshots (ci-tool #3809).
+ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
 
 -- Check rowset count after compaction (should be reduced for each bucket)
-SELECT SUM(NUM_ROWSET) FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_multi_buckets' AND c.TABLE_SCHEMA = 'test_parallel_compaction_buckets_${uuid0}';
+[UC]rowset_after=SELECT SUM(NUM_ROWSET) FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_multi_buckets' AND c.TABLE_SCHEMA = 'test_parallel_compaction_buckets_${uuid0}';
+SELECT ${rowset_after} < ${rowset_before} as rowset_reduced;
+-- NOTE: nothing below distinguishes a parallel compaction from a serial one. Both settle at a
+-- single output rowset (each subtask writes segments and tablet_parallel_compaction_manager merges
+-- them into one, .cpp:1265-1345), and at this data size the split path is unreachable anyway:
+-- _is_large_rowset_for_split needs data_size >= 2 * lake_compaction_max_rowset_size, i.e. 8GiB by
+-- default (.cpp:1755,1770), while these tables hold a handful of rows. Measured runs come back with
+-- one rowset and one segment, so assertions on either shape pass unchanged if
+-- lake_compaction_max_parallel stops taking effect. Covering that needs a direct observation of the
+-- subtask count, or the setup test_pk_large_rowset_split uses (it lowers lake_compaction_max_rowset_size
+-- to 2MB first).
 
 -- Verify data correctness after compaction
 SELECT COUNT(*) FROM pk_multi_buckets;

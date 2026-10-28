@@ -68,6 +68,7 @@ add_executable(connector_file_test
         file/scanner/json_scanner_test.cpp
         file/scanner/orc_scanner_test.cpp
         file/scanner/parquet_schema_builder_test.cpp
+        file/scanner/parquet_schema_consistency_test.cpp
         file/scanner/parquet_scanner_test.cpp
         file/scanner/stream_source_meta_test.cpp
 )

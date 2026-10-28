@@ -27,6 +27,7 @@
 #include "column/raw_data_visitor.h"
 #include "common/status.h"
 #include "formats/parquet/encoding.h"
+#include "runtime/current_thread.h"
 
 namespace starrocks::parquet {
 
@@ -613,7 +614,7 @@ public:
             down_cast<NullableColumn*>(dst)->null_column_raw_ptr()->append_default(count);
         }
         auto* binary_column = ColumnHelper::get_binary_column(dst);
-        binary_column->append_continuous_strings(slice_buffer_.data(), count);
+        TRY_CATCH_BAD_ALLOC(binary_column->append_continuous_strings(slice_buffer_.data(), count));
         return Status::OK();
     }
 
@@ -883,7 +884,7 @@ public:
             down_cast<NullableColumn*>(dst)->null_column_raw_ptr()->append_default(count);
         }
         auto* binary_column = ColumnHelper::get_binary_column(dst);
-        binary_column->append_continuous_strings(slice_buffer_.data(), count);
+        TRY_CATCH_BAD_ALLOC(binary_column->append_continuous_strings(slice_buffer_.data(), count));
         return Status::OK();
     }
 

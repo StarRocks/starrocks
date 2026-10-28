@@ -205,14 +205,6 @@ TEST_P(ColumnHashTest, test_binary_types) {
         col->append("xxx");
         this->test_hash_function(col, 0, 3);
     }
-
-    // Test LargeBinaryColumn
-    {
-        auto col = LargeBinaryColumn::create();
-        col->append("large_string_test");
-        col->append("another_large_string");
-        this->test_hash_function(col, 0, 2);
-    }
 }
 
 // Test nullable column

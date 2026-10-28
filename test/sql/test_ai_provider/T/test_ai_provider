@@ -14,6 +14,22 @@ DROP AI PROVIDER ai_provider_embedding_test;
 SHOW AI PROVIDERS LIKE 'ai_provider_embedding_test';
 DROP AI PROVIDER IF EXISTS ai_provider_embedding_test;
 DROP AI PROVIDER ai_provider_not_exist;
+CREATE AI PROVIDER ai_provider_chat_test TYPE chat COMMENT 'test chat provider' PROPERTIES ("protocol" = "anthropic", "endpoint" = "https://api.anthropic.com/v1/messages", "model" = "claude-sonnet-4-5", "api_key" = "sk-ant-test");
+SHOW AI PROVIDERS LIKE 'ai_provider_chat_test';
+DESC AI PROVIDER ai_provider_chat_test;
+ALTER AI PROVIDER ai_provider_chat_test SET ("protocol" = "openai");
+DESC AI PROVIDER ai_provider_chat_test;
+CREATE AI PROVIDER ai_provider_rerank_test TYPE rerank PROPERTIES ("endpoint" = "https://api.cohere.com/v2/rerank", "model" = "rerank-v3.5");
+SHOW AI PROVIDERS LIKE 'ai_provider_rerank_test';
+DESC AI PROVIDER ai_provider_rerank_test;
+ALTER AI PROVIDER ai_provider_rerank_test SET ("protocol" = "openai");
+DESC AI PROVIDER ai_provider_rerank_test;
+CREATE AI PROVIDER ai_provider_bad_test TYPE chat PROPERTIES ("protocol" = "gemini", "endpoint" = "https://x/v1", "model" = "m");
+CREATE AI PROVIDER ai_provider_bad_test TYPE "text" PROPERTIES ("endpoint" = "https://x/v1", "model" = "m");
+DROP AI PROVIDER ai_provider_chat_test;
+DROP AI PROVIDER ai_provider_rerank_test;
 CLEANUP {
 DROP AI PROVIDER IF EXISTS ai_provider_embedding_test;
+DROP AI PROVIDER IF EXISTS ai_provider_chat_test;
+DROP AI PROVIDER IF EXISTS ai_provider_rerank_test;
 } END CLEANUP

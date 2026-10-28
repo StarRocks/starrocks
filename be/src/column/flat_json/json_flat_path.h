@@ -70,6 +70,10 @@ public:
     uint32_t multi_times = 0;
     uint32_t base_type_count = 0; // for count the base type, e.g: int, double, string
     uint32_t object_count = 0;    // for count the object type
+    // hits taken from already-flattened scalar sub-columns (segment metadata or flat chunks). They are
+    // base-typed values too, but unlike base_type_count they do not mark the node as also seen as a
+    // primitive, which is what the object/primitive conflict check keys on.
+    uint32_t flat_base_type_hits = 0;
 
     JsonFlatPath() = default;
     JsonFlatPath(JsonFlatPath&&) = default;

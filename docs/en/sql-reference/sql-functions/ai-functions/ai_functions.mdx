@@ -1,0 +1,50 @@
+---
+displayed_sidebar: docs
+description: "Use AI functions in SQL and reduce AI input rows with TopN pushdown."
+sidebar_position: 10
+---
+
+import Experimental from '../../../_assets/commonMarkdown/_experimental.mdx'
+
+# AI functions
+
+<Experimental />
+
+AI functions call configured model services from SQL. For text generation, see [ai_complete](ai_complete.md).
+
+## Reducing AI input rows {/* #reducing-ai-input-rows */}
+
+For an `ORDER BY ... LIMIT` query with a positive `LIMIT` and no `OFFSET`, StarRocks can select candidate rows before
+evaluating an AI projection when the ordering columns pass through that projection and any intervening ordinary
+Project unchanged.
+
+[`ai_topn_pushdown_max_global_limit`](../../System_variable.md#ai_topn_pushdown_max_global_limit) selects the
+strategy for SQL `LIMIT N`:
+
+- `N` at or below the threshold (default `1000`): a global candidate TopN limits input to the rewritten AI projection
+  to at most `N` rows.
+- `N` above the threshold: a local candidate TopN limits input to that AI projection to at most `N` rows per fragment
+  instance, not per BE or pipeline driver.
+
+The global strategy can trade cross-instance AI parallelism for a global row bound. The local strategy avoids an
+additional global gather before AI execution, although local merging can reduce parallelism within an instance.
+Both retain the original TopN above the AI projection to preserve output order and limit. Use `EXPLAIN` to inspect
+the resulting plan.
+
+These bounds apply to the rewritten AI projection, not all AI work in a query: an inner nested AI call may still
+process more rows. They are not HTTP request or token limits. Pruned rows do not execute AI calls.
+
+The optimization does not move TopN below AI calls needed for ordering or filtering, cross existing limits or unsafe
+projection and predicate barriers, or apply to partitioned TopN, `RANK`, or `DENSE_RANK`.
+
+### Selecting the strategy
+
+The threshold supports `SET`, `SET GLOBAL` for future sessions, and statement-level `SET_VAR` hints without restarting.
+It does not affect queries without an AI projection. Setting it to `0` selects local-only pruning, not disabled pruning.
+
+```sql
+-- Use global pruning for LIMIT <= 1000, and local pruning for larger limits.
+SET ai_topn_pushdown_max_global_limit = 1000;
+-- Use local-only pruning.
+SET ai_topn_pushdown_max_global_limit = 0;
+```

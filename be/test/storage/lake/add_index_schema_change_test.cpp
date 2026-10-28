@@ -47,10 +47,10 @@
 #include "storage/lake/index_file_writer.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/metacache.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/schema_change.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/test_util.h"
-#include "storage/lake/update_manager.h"
 #include "storage/lake/versioned_tablet.h"
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/rowset/bloom_filter_index_writer.h"
@@ -74,8 +74,8 @@ public:
     AddIndexSchemaChangeTest() {
         _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
         _location_provider = std::make_unique<FixedLocationProvider>(kTestGroupPath);
-        _update_manager = std::make_unique<UpdateManager>(_location_provider, _mem_tracker.get());
-        _tablet_manager = std::make_unique<TabletManager>(_location_provider, _update_manager.get(), 1024 * 1024);
+        _primary_key_manager = std::make_unique<PrimaryKeyManager>(_location_provider, _mem_tracker.get());
+        _tablet_manager = std::make_unique<TabletManager>(_location_provider, _primary_key_manager.get(), 1024 * 1024);
     }
 
 protected:
@@ -322,7 +322,7 @@ protected:
 
     std::unique_ptr<MemTracker> _mem_tracker;
     std::shared_ptr<FixedLocationProvider> _location_provider;
-    std::unique_ptr<UpdateManager> _update_manager;
+    std::unique_ptr<PrimaryKeyManager> _primary_key_manager;
     std::unique_ptr<TabletManager> _tablet_manager;
     int64_t _partition_id = 1234;
 };

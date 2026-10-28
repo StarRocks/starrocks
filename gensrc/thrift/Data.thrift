@@ -99,6 +99,14 @@ struct TGlobalDict {
     4: optional i64 version
 }
 
+// Extension point for TStatisticData. DO NOT MODIFY: do not add fields here,
+// and do not rename, renumber or remove it. The field numbers inside are
+// allocated separately, so anything added here collides with them, and
+// renaming or removing it breaks whatever fills it in. New TStatisticData
+// fields belong on TStatisticData itself, whose remaining numbers are free.
+struct TStatisticDataExt {
+}
+
 // Statistic data for new planner 
 struct TStatisticData {
     1: optional string updateTime
@@ -121,6 +129,26 @@ struct TStatisticData {
     15: optional binary hll
     16: optional string partitionName
     17: optional i64 collectionSize
+    // External-table statistics are stored one row per (partition, column) and read back as one
+    // aggregate per column. These two describe that aggregate's own shape, so the read side can tell how
+    // much of the table it covers and how the column's distinct values are spread over it, without
+    // depending on separately maintained metadata agreeing with the rows.
+    //   - collectedPartitionCount: how many partitions contributed rows, i.e. the denominator the
+    //     per-partition averages are over.
+    //   - perPartitionNdvSum: the per-partition distinct counts added up, which next to the merged
+    //     distinct count says whether the column's values repeat across partitions or not.
+    18: optional i64 collectedPartitionCount
+    19: optional i64 perPartitionNdvSum
+    // Two nested subsets of those partitions, picked by a hash of the partition name - about a third
+    // and about two thirds of them: the merged distinct count over each, and how many partitions each
+    // holds. Next to countDistinct over all of them they trace how the distinct count grows as
+    // partitions are added, which is what the read side extrapolates to the partitions that were not
+    // collected.
+    20: optional i64 thirdNdv
+    21: optional i64 twoThirdsNdv
+    22: optional i64 thirdPartitionCount
+    23: optional i64 twoThirdsPartitionCount
+    24: optional TStatisticDataExt ext
 }
 
 // Result data for user variable

@@ -46,12 +46,12 @@
 #include "storage/lake/meta_file.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/options.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/table_schema_service.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/tablet_range_helper.h"
 #include "storage/lake/txn_log.h"
-#include "storage/lake/update_manager.h"
 #include "storage/lake/vacuum.h"
 #include "storage/lake/versioned_tablet.h"
 #include "storage/lake/vertical_compaction_task.h"
@@ -123,15 +123,15 @@ static std::pair<int64_t, int64_t> get_table_partition_id(const staros::starlet:
 }
 #endif
 
-TabletManager::TabletManager(std::shared_ptr<LocationProvider> location_provider, UpdateManager* update_mgr,
+TabletManager::TabletManager(std::shared_ptr<LocationProvider> location_provider, PrimaryKeyManager* primary_key_mgr,
                              int64_t cache_capacity, const StorePathRegistry* store_path_registry)
         : _location_provider(std::move(location_provider)),
           _store_path_registry(store_path_registry),
           _metacache(std::make_unique<Metacache>(cache_capacity)),
           _compaction_scheduler(std::make_unique<CompactionScheduler>(this)),
-          _update_mgr(update_mgr),
+          _primary_key_mgr(primary_key_mgr),
           _table_schema_service(std::make_unique<TableSchemaService>(this)) {
-    _update_mgr->set_tablet_mgr(this);
+    _primary_key_mgr->set_tablet_mgr(this);
 }
 
 TabletManager::TabletManager(std::shared_ptr<LocationProvider> location_provider, int64_t cache_capacity,
@@ -246,8 +246,8 @@ void TabletManager::prune_metacache() {
     _metacache->prune();
 }
 
-UpdateManager* TabletManager::update_mgr() {
-    return _update_mgr;
+PrimaryKeyManager* TabletManager::primary_key_mgr() {
+    return _primary_key_mgr;
 }
 
 // NOTE: if you add a new field here, also update construct_initial_metadata() and
@@ -583,7 +583,8 @@ DEFINE_FAIL_POINT(tablet_meta_not_found);
 // the anchor is local we avoid a cross-node get-shard-info RPC; when it is not (e.g.
 // FE picked an aggregator that does not own any tablet in the batch), the worker has
 // to fall back to remote fetch. See the FE-side LakeAggregator.chooseAggregatorNode
-// for the companion optimization.
+// for the companion optimization. The load coordinator cannot be chosen that way, so
+// the tablet owners hand it their shard info instead, see `borrow_shard_info`.
 int64_t TabletManager::pick_local_anchor_tablet_id(const std::vector<int64_t>& candidates) {
     DCHECK(!candidates.empty());
 #if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
@@ -592,8 +593,36 @@ int64_t TabletManager::pick_local_anchor_tablet_id(const std::vector<int64_t>& c
             return tablet_id;
         }
     }
+    if (auto worker = get_staros_worker(); worker != nullptr) {
+        for (int64_t tablet_id : candidates) {
+            if (worker->has_borrowed_shard_info(tablet_id)) {
+                return tablet_id;
+            }
+        }
+    }
 #endif
     return candidates.front();
+}
+
+std::string TabletManager::export_shard_info(int64_t tablet_id) {
+#if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
+    if (auto worker = get_staros_worker(); worker != nullptr) {
+        if (auto info_or = worker->export_shard_info(tablet_id); info_or.ok()) {
+            return std::move(info_or).value();
+        }
+    }
+#endif
+    return {};
+}
+
+void TabletManager::borrow_shard_info(const std::string& serialized) {
+#if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
+    if (auto worker = get_staros_worker(); worker != nullptr) {
+        if (auto st = worker->borrow_shard_info(serialized); !st.ok()) {
+            LOG(WARNING) << "failed to keep the shard info handed over by a tablet owner: " << st;
+        }
+    }
+#endif
 }
 
 // Refuse to persist a bundle that does not cover every tablet in |expected_tablet_ids|.
@@ -965,10 +994,10 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(const string& pat
 
     if (metadata_or.status().is_not_found() && wants_initial_version && !shared_initial_attempted) {
         // Last-resort: this tablet has no version-1 key of its own, so try the partition-shared
-        // object. Reached on any read that carries no hint, and on a partition whose shared layout
-        // did not come from `file_bundling` (today, one built under
-        // Config.lake_enable_tablet_creation_optimization), since FE derives the hint from the table
-        // property alone and so never sends one for those.
+        // object. Reached on any read that carries no hint, and on a partition whose shared layout FE
+        // does not hint: one built under Config.lake_enable_tablet_creation_optimization rather than
+        // `file_bundling`, or a range-distribution partition created before FE stopped giving those
+        // tables the shared layout.
         //
         // Reached only after the tablet's own key missed, which is what the ordering invariant above
         // requires, and it memoizes nothing about the layout: the object itself is cached (see
@@ -1755,10 +1784,11 @@ StatusOr<CompactionTaskPtr> TabletManager::compact(CompactionTaskContext* contex
 
     ASSIGN_OR_RETURN(auto tablet, get_tablet(context->tablet_id, context->version));
     const auto& tablet_metadata = tablet.metadata();
-    ASSIGN_OR_RETURN(
-            auto compaction_policy,
-            CompactionPolicy::create(this, tablet_metadata, context->force_base_compaction, context->is_unshare));
+    ASSIGN_OR_RETURN(auto compaction_policy,
+                     CompactionPolicy::create(this, tablet_metadata, context->force_base_compaction,
+                                              context->is_unshare, context->allow_base_compaction));
     ASSIGN_OR_RETURN(auto input_rowsets, compaction_policy->pick_rowsets());
+    context->is_base_compaction = compaction_policy->picked_base_compaction();
     return compact(context, std::move(input_rowsets));
 }
 
@@ -1784,9 +1814,9 @@ StatusOr<CompactionTaskPtr> TabletManager::compact(CompactionTaskContext* contex
 
     ASSIGN_OR_RETURN(auto tablet, get_tablet(context->tablet_id, context->version));
     auto tablet_metadata = tablet.metadata();
-    ASSIGN_OR_RETURN(
-            auto compaction_policy,
-            CompactionPolicy::create(this, tablet_metadata, context->force_base_compaction, context->is_unshare));
+    ASSIGN_OR_RETURN(auto compaction_policy,
+                     CompactionPolicy::create(this, tablet_metadata, context->force_base_compaction,
+                                              context->is_unshare, context->allow_base_compaction));
     ASSIGN_OR_RETURN(auto algorithm, compaction_policy->choose_compaction_algorithm(input_rowsets));
     std::vector<uint32_t> input_rowsets_id;
     size_t total_input_rowsets_file_size = 0;
@@ -1915,7 +1945,7 @@ StatusOr<VersionedTablet> TabletManager::get_tablet(int64_t tablet_id, int64_t v
 
 StatusOr<SegmentPtr> TabletManager::load_segment(const FileInfo& segment_info, int segment_id, size_t* footer_size_hint,
                                                  const LakeIOOptions& lake_io_opts, bool fill_meta_cache,
-                                                 TabletSchemaPtr tablet_schema) {
+                                                 TabletSchemaPtr tablet_schema, OlapReaderStatistics* stats) {
     // NOTE: if partial compaction is turned on, `segment_id` might not be the same as cached segment id
     //       for example, in tablet X, segment `a` has segment id 10, if partial compaction happens,
     //                    in tablet X+1, segment `a` might still exists, but its actual id will not be 10.
@@ -1949,23 +1979,28 @@ StatusOr<SegmentPtr> TabletManager::load_segment(const FileInfo& segment_info, i
     // segment->open will read the footer, and it is time-consuming.
     // separate it from static Segment::open is to prevent a large number of cache misses,
     // and many temporary segment objects generation when loading the same segment concurrently.
-    RETURN_IF_ERROR(segment->open(footer_size_hint, nullptr, lake_io_opts));
+    RETURN_IF_ERROR(segment->open(footer_size_hint, nullptr, lake_io_opts, stats));
     return segment;
 }
 
 StatusOr<SegmentPtr> TabletManager::load_segment(const FileInfo& segment_info, int segment_id,
                                                  const LakeIOOptions& lake_io_opts, bool fill_meta_cache,
-                                                 TabletSchemaPtr tablet_schema) {
+                                                 TabletSchemaPtr tablet_schema, OlapReaderStatistics* stats) {
     size_t footer_size_hint = 16 * 1024;
     return load_segment(segment_info, segment_id, &footer_size_hint, lake_io_opts, fill_meta_cache,
-                        std::move(tablet_schema));
+                        std::move(tablet_schema), stats);
 }
 
 #if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
 StatusOr<TabletBasicInfo> TabletManager::get_tablet_basic_info(
         int64_t tablet_id, int64_t table_id, int64_t partition_id, const std::set<int64_t>& authorized_table_ids,
         const std::unordered_map<int64_t, int64_t>& partition_versions) {
-    auto shard_info_or = get_staros_worker()->retrieve_shard_info(tablet_id);
+    auto worker = get_staros_worker();
+    if (worker == nullptr) {
+        // Shutdown already released the StarOS worker while this operation was in flight.
+        return Status::ServiceUnavailable(fmt::format("StarOS worker is not available, tablet_id: {}", tablet_id));
+    }
+    auto shard_info_or = worker->retrieve_shard_info(tablet_id);
     if (!shard_info_or.ok()) {
         return Status::InternalError(fmt::format("fail to get shard info of tablet: {}, err: {}", tablet_id,
                                                  shard_info_or.status().message()));

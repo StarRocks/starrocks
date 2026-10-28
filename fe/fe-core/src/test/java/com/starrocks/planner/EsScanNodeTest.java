@@ -19,8 +19,11 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.connector.elasticsearch.EsShardPartitions;
+import com.starrocks.connector.elasticsearch.EsMetaStateTracker;
 import com.starrocks.connector.elasticsearch.EsShardRouting;
+import com.starrocks.connector.elasticsearch.EsTablePartitions;
 import com.starrocks.connector.elasticsearch.EsTestCase;
+import com.starrocks.connector.elasticsearch.SearchContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
@@ -29,6 +32,9 @@ import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.type.IntegerType;
 import mockit.Expectations;
+import mockit.Invocation;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -85,7 +91,8 @@ public class EsScanNodeTest extends EsTestCase {
         TupleDescriptor td = new TupleDescriptor(new TupleId(0));
         td.setTable(esTable);
         PlanNodeId planNodeId = new PlanNodeId(11);
-        EsScanNode scanNode = new EsScanNode(planNodeId, td, "EsScanNode", WarehouseManager.DEFAULT_RESOURCE);
+        EsScanNode scanNode = new EsScanNode(planNodeId, td, "EsScanNode", WarehouseManager.DEFAULT_RESOURCE,
+                esTable.getMetaSnapshot());
         TPlanNode node = new TPlanNode();
         scanNode.toThrift(node);
         Assertions.assertNotNull(node.getConnector_scan_node());
@@ -105,5 +112,54 @@ public class EsScanNodeTest extends EsTestCase {
         singleShardRouting.add(new EsShardRouting("doe", 5, true, addr, "111"));
         esShardPartitions.addShardRouting(5, singleShardRouting);
         scanNode.computeShardLocations(selectedIndex);
+    }
+
+    private static void mockSyncFinding(Map<String, String> mappings) {
+        new MockUp<EsMetaStateTracker>() {
+            @Mock
+            public SearchContext run(Invocation invocation) {
+                SearchContext context = ((EsMetaStateTracker) invocation.getInvokedInstance()).searchContext();
+                context.fetchFieldsContext().putAll(mappings);
+                context.docValueFieldsContext().putAll(mappings);
+                return context;
+            }
+        };
+        new MockUp<SearchContext>() {
+            @Mock
+            public EsTablePartitions tablePartitions() {
+                return new EsTablePartitions();
+            }
+        };
+    }
+
+    /**
+     * The field mappings sent to the BEs are the ones of the sync the query was planned with, not whatever the
+     * background sync published since: they used to be read off the table at toThrift time, after the shard
+     * routing had already been taken from an earlier sync.
+     */
+    @Test
+    public void testSendsTheMappingsOfThePlannedSnapshot() throws Exception {
+        Map<String, String> props = new HashMap<>();
+        props.put(EsTable.KEY_HOSTS, "http://127.0.0.1:8200");
+        props.put(EsTable.KEY_INDEX, "doe");
+        props.put(EsTable.KEY_TYPE, "doc");
+        props.put(EsTable.KEY_VERSION, "6.5.3");
+        EsTable esTable = new EsTable(1L, "doe", List.of(new Column("k1", IntegerType.BIGINT)), props, null);
+        mockSyncFinding(Map.of("k1", "k1.keyword"));
+        esTable.syncTableMetaData(null);
+        EsTable.MetaSnapshot planned = esTable.getMetaSnapshot();
+
+        mockSyncFinding(Map.of("k1", "k1.raw"));
+        esTable.syncTableMetaData(null);
+
+        TupleDescriptor td = new TupleDescriptor(new TupleId(0));
+        td.setTable(esTable);
+        EsScanNode scanNode = new EsScanNode(new PlanNodeId(11), td, "EsScanNode", WarehouseManager.DEFAULT_RESOURCE,
+                planned);
+        scanNode.assignNodes();
+        TPlanNode node = new TPlanNode();
+        scanNode.toThrift(node);
+        Assertions.assertEquals(Map.of("k1", "k1.keyword"), node.getEs_scan_node().getFields_context());
+        Assertions.assertEquals(Map.of("k1", "k1.keyword"), node.getEs_scan_node().getDocvalue_context());
     }
 }

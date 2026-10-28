@@ -35,7 +35,7 @@ In this topic, suppose you want to load the data of a Parquet-formatted sample d
 
 ### Gather authentication details
 
-The examples in this topic use the Shared Key authentication method. To ensure that you have permission to read data from ADLS Gen2, we recommend that you read [Azure Data Lake Storage Gen2 > Shared Key (access key of storage account)](../../integrations/csp_auth/authenticate_to_azure_storage.md#service-principal-1) to understand the authentication parameters that you need to configure.
+The examples in this topic use the Shared Key authentication method. To ensure that you have permission to read data from ADLS Gen2, we recommend that you read [Azure Data Lake Storage Gen2 > Shared Key (access key of storage account)](../../integrations/csp_auth/authenticate_to_azure_storage.md#shared-key-access-key-of-storage-account-1) to understand the authentication parameters that you need to configure.
 
 In a nutshell, if you practice Shared Key authentication, you need to gather the following information:
 

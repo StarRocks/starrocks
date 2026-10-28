@@ -130,10 +130,10 @@ GTEST_SOURCE=googletest-release-1.10.0
 GTEST_MD5SUM="ecd1fa65e7de707cd5c00bdac56022cd"
 
 # snappy
-SNAPPY_DOWNLOAD="https://github.com/google/snappy/archive/1.1.8.tar.gz"
-SNAPPY_NAME=snappy-1.1.8.tar.gz
-SNAPPY_SOURCE=snappy-1.1.8
-SNAPPY_MD5SUM="70e48cba7fecf289153d009791c9977f"
+SNAPPY_DOWNLOAD="https://github.com/google/snappy/archive/1.2.1.tar.gz"
+SNAPPY_NAME=snappy-1.2.1.tar.gz
+SNAPPY_SOURCE=snappy-1.2.1
+SNAPPY_MD5SUM="dd6f9b667e69491e1dbf7419bdf68823"
 
 # gperftools
 GPERFTOOLS_DOWNLOAD="https://github.com/gperftools/gperftools/archive/gperftools-2.7.tar.gz"
@@ -261,6 +261,12 @@ S2_NAME=s2geometry-0.9.0.tar.gz
 S2_SOURCE=s2geometry-0.9.0
 S2_MD5SUM="293552c7646193b8b4a01556808fe155"
 
+# H3
+H3_DOWNLOAD="https://codeload.github.com/uber/h3/tar.gz/1b536c34225191ba24a75a840f634d4a48c3b206"
+H3_NAME=h3-4.5.0-1b536c34225191ba24a75a840f634d4a48c3b206.tar.gz
+H3_SOURCE=h3-1b536c34225191ba24a75a840f634d4a48c3b206
+H3_MD5SUM="f30096c74df021de1ee15f0e03d083fe"
+
 # BITSHUFFLE
 BITSHUFFLE_DOWNLOAD="https://github.com/kiyo-masui/bitshuffle/archive/0.5.1.tar.gz"
 BITSHUFFLE_NAME=bitshuffle-0.5.1.tar.gz
@@ -353,10 +359,10 @@ BENCHMARK_SOURCE=benchmark-1.9.5
 BENCHMARK_MD5SUM="12c6c0c228fc07106c62634222bd2541"
 
 # fast-float
-FAST_FLOAT_DOWNLOAD="https://github.com/fastfloat/fast_float/archive/refs/tags/v3.5.1.tar.gz"
-FAST_FLOAT_NAME="fast-float-3.5.1.tar.gz"
-FAST_FLOAT_SOURCE="fast-float-3.5.1"
-FAST_FLOAT_MD5SUM="adb3789b99f47e0cd971b4d90727d4d0"
+FAST_FLOAT_DOWNLOAD="https://github.com/fastfloat/fast_float/archive/refs/tags/v8.2.10.tar.gz"
+FAST_FLOAT_NAME="fast-float-8.2.10.tar.gz"
+FAST_FLOAT_SOURCE="fast-float-8.2.10"
+FAST_FLOAT_MD5SUM="ddcf64ffe15f1e1ed964a355db7a04f3"
 
 # streamvbyte
 STREAMVBYTE_DOWNLOAD="https://github.com/lemire/streamvbyte/archive/refs/tags/v0.5.1.tar.gz"
@@ -509,13 +515,35 @@ PAIMON_CPP_NAME="apache-paimon-cpp-0.3.0-src.tgz"
 PAIMON_CPP_SOURCE="paimon-cpp-0.3.0"
 PAIMON_CPP_MD5SUM="e82940588fa423926cb47b2617cf21dc"
 
+# nsjail, the sandbox a deployment can launch Python UDF workers under (see the
+# PyWorkerManager launch hook in be/src/exprs/udf/python/env.h)
+NSJAIL_DOWNLOAD="https://github.com/google/nsjail/archive/refs/tags/3.6.tar.gz"
+NSJAIL_NAME=nsjail-3.6.tar.gz
+NSJAIL_SOURCE=nsjail-3.6
+NSJAIL_MD5SUM="9abc3a5567dd3cd2fc1c79c41ea0e5eb"
+
+# kafel, the seccomp policy compiler nsjail builds into itself. nsjail keeps it as a
+# git submodule, which its release archive does not carry, so it is downloaded on its
+# own and moved into the nsjail source tree (see download-thirdparty.sh). The revision
+# is the one nsjail 3.6 pins.
+KAFEL_DOWNLOAD="https://github.com/google/kafel/archive/76d0f41bf3eb5c4008713d64b9767b461a9129a3.tar.gz"
+KAFEL_NAME=kafel-76d0f41bf3eb5c4008713d64b9767b461a9129a3.tar.gz
+KAFEL_SOURCE=kafel-76d0f41bf3eb5c4008713d64b9767b461a9129a3
+KAFEL_MD5SUM="ebc4f191e6ed09a1f1b271dc3f0679a5"
+
+# libnl, which nsjail includes unconditionally for its macvlan support
+LIBNL_DOWNLOAD="https://github.com/thom311/libnl/releases/download/libnl3_12_0/libnl-3.12.0.tar.gz"
+LIBNL_NAME=libnl-3.12.0.tar.gz
+LIBNL_SOURCE=libnl-3.12.0
+LIBNL_MD5SUM="f9112ca215807fe65eecd583d8f180cc"
+
 # all thirdparties which need to be downloaded is set in array TP_ARCHIVES
 TP_ARCHIVES="CLUCENE LIBEVENT OPENSSL THRIFT PROTOBUF GFLAGS GLOG GTEST RAPIDJSON SIMDJSON SNAPPY GPERFTOOLS ZLIB LZ4 BZIP CURL \
-            RE2 BOOST LEVELDB BRPC ROCKSDB KRB5 SASL LIBRDKAFKA PULSAR FLATBUFFERS ARROW BROTLI ZSTD S2 BITSHUFFLE CROARINGBITMAP \
+            RE2 BOOST LEVELDB BRPC ROCKSDB KRB5 SASL LIBRDKAFKA PULSAR FLATBUFFERS ARROW BROTLI ZSTD S2 H3 BITSHUFFLE CROARINGBITMAP \
             JEMALLOC CCTZ FMT RYU BREAK_PAD HADOOPSRC JDK RAGEL HYPERSCAN MARIADB JINDOSDK AWS_SDK_CPP VPACK OPENTELEMETRY \
             BENCHMARK FAST_FLOAT STARCACHE STREAMVBYTE JANSSON AVRO SERDES GCS_CONNECTOR LZO2 DATASKETCHES \
             FIU LIBDEFLATE LLVM ABSL CARES GRPC SIMDUTF TENANN POCO ICU XSIMD LIBXML2 AZURE LIBDIVIDE PPROF FLAMEGRAPH XXHASH \
-            BLAKE3 BENCHGEN PAIMON_CPP"
+            BLAKE3 BENCHGEN PAIMON_CPP LIBNL KAFEL NSJAIL"
 
 if [[ -n "${STARROCKS_TP_VARS_OVERRIDE:-}" ]]; then
     . "${STARROCKS_TP_VARS_OVERRIDE}"

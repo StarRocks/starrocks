@@ -29,6 +29,9 @@ class BitmapUnionIntAggregateFunction final
 public:
     using InputColumnType = RunTimeColumnType<LT>;
 
+    // bitmap_union_int returns a cardinality (0, never NULL), even over a nullable input or an empty window frame.
+    bool is_result_non_nullable() const override { return true; }
+
     bool is_exception_safe() const override { return false; }
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr state, size_t row_num) const override {

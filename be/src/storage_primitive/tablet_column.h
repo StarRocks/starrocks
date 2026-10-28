@@ -104,6 +104,18 @@ public:
     bool is_bf_column() const { return _check_flag(kIsBfColumnShift); }
     void set_is_bf_column(bool value) { _set_flag(kIsBfColumnShift, value); }
 
+    // compression dict column-level compression dictionary (a ZSTD dictionary).
+    bool use_zstd_compression() const { return _check_flag(kUseZstdCompressionShift); }
+    void set_use_zstd_compression(bool value) { _set_flag(kUseZstdCompressionShift, value); }
+
+    // Data page size for this column, or 0 to keep the BE default. The page is the
+    // unit of decompression, so what pays off depends on the column's row length:
+    // rows larger than a page lose all cross-row redundancy at the default 64KB and
+    // compress several times better with a large page, while a column holding
+    // hundreds of rows per page gains nothing and only pays on point lookups.
+    uint32_t zstd_compression_page_size() const { return _zstd_compression_page_size; }
+    void set_zstd_compression_page_size(uint32_t value) { _zstd_compression_page_size = value; }
+
     bool has_bitmap_index() const { return _check_flag(kHasBitmapIndexShift); }
     void set_has_bitmap_index(bool value) { _set_flag(kHasBitmapIndexShift, value); }
 
@@ -203,6 +215,9 @@ private:
     constexpr static uint8_t kHasScaleShift = 5;
     constexpr static uint8_t kHasAutoIncrementShift = 6;
     constexpr static uint8_t kIsSortKey = 7;
+    // bit 8 -- the uint8_t bitset (bits 0..7) was full, so _flags is widened
+    // to uint16_t below to make room.
+    constexpr static uint8_t kUseZstdCompressionShift = 8;
 
     ExtraFields* _get_or_alloc_extra_fields() {
         if (_extra_fields == nullptr) {
@@ -234,13 +249,15 @@ private:
     LogicalType _type = TYPE_UNKNOWN;
 
     ColumnIndexLength _index_length = 0;
+    uint32_t _zstd_compression_page_size = 0;
     ColumnPrecision _precision = 0;
     ColumnScale _scale = 0;
 
     // Extended access path column
     std::unique_ptr<ExtendedColumnInfo> _extended_info;
 
-    uint8_t _flags = 0;
+    // 16 bits: bits 0..7 are the original flags, bit 8 is kUseZstdCompressionShift (compression dict).
+    uint16_t _flags = 0;
 
     ExtraFields* _extra_fields = nullptr;
     AggStateDesc* _agg_state_desc = nullptr;

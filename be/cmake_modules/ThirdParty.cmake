@@ -485,11 +485,9 @@ get_target_property(gRPC_INCLUDE_DIR gRPC::grpc INTERFACE_INCLUDE_DIRECTORIES)
 message(STATUS "Using gRPC ${gRPC_VERSION}")
 include_directories(SYSTEM ${gRPC_INCLUDE_DIR})
 
-# Disable libdeflate on aarch64
-if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
-    add_library(libdeflate STATIC IMPORTED GLOBAL)
-    set_target_properties(libdeflate PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libdeflate.a)
-endif()
+starrocks_resolve_thirdparty_library(LIBDEFLATE_LIBRARY libdeflate.a)
+add_library(libdeflate STATIC IMPORTED GLOBAL)
+set_target_properties(libdeflate PROPERTIES IMPORTED_LOCATION ${LIBDEFLATE_LIBRARY})
 
 if (${WITH_TENANN} STREQUAL "ON")
     add_library(tenann STATIC IMPORTED GLOBAL)

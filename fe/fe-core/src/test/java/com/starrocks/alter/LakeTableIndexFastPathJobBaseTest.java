@@ -14,6 +14,7 @@
 
 package com.starrocks.alter;
 
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
@@ -32,6 +33,7 @@ import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -39,6 +41,7 @@ import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.AlterReplicaTask;
 import com.starrocks.thrift.TAlterTabletReqV2;
+import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletSchema;
 import com.starrocks.thrift.TTaskType;
 import com.starrocks.transaction.GlobalTransactionMgr;
@@ -1386,6 +1389,61 @@ public class LakeTableIndexFastPathJobBaseTest {
         verify(pp).setVisibleVersion(eq(5L), anyLong());
         verify(table).setState(OlapTable.OlapTableState.NORMAL);
         assertEquals(AlterJobV2.JobState.FINISHED, job.getJobState());
+    }
+
+    /**
+     * Regression test for the "schema for load not found which should not happen" publish wedge
+     * (StarRocksTest#12167): the bloom-filter / ADD INDEX fast path re-stamps each affected index meta
+     * with a NEW schema id in place, retiring the previous id from the catalog. A load already bound to
+     * the retired id and published after the flip must still be able to resolve its schema, so the flip
+     * has to record it as history.
+     */
+    @Test
+    public void testRunFinishedRewritingJob_RecordsRetiredSchemaAsHistory() throws Exception {
+        LakeTableAddIndexJob job = newJob();
+        setField(job, "jobState", AlterJobV2.JobState.FINISHED_REWRITING);
+        Map<Long, Long> commit = new HashMap<>();
+        commit.put(100L, 5L);
+        setField(job, "commitVersionMap", commit);
+        setPublishFuture(job, true);
+        // The meta this flip re-stamps, i.e. the one whose current schema id is about to be retired.
+        job.putNewSchema(7L, 4242L, 2L);
+
+        Database db = new Database(2L, "db");
+        OlapTable table = mock(OlapTable.class);
+        when(table.getIndexes()).thenReturn(new ArrayList<>());
+        PhysicalPartition pp = mock(PhysicalPartition.class);
+        when(table.getPhysicalPartition(100L)).thenReturn(pp);
+        MaterializedIndexMeta retiredMeta = mock(MaterializedIndexMeta.class);
+        when(retiredMeta.getSchemaId()).thenReturn(999L);
+        when(retiredMeta.getSchemaVersion()).thenReturn(1);
+        when(retiredMeta.getKeysType()).thenReturn(KeysType.DUP_KEYS);
+        when(retiredMeta.getShortKeyColumnCount()).thenReturn((short) 1);
+        when(retiredMeta.getSchema()).thenReturn(List.of(new Column("c0", com.starrocks.type.IntegerType.INT)));
+        when(retiredMeta.shallowCopy()).thenReturn(retiredMeta);
+        when(table.getIndexMetaByMetaId(7L)).thenReturn(retiredMeta);
+        when(table.getStorageType()).thenReturn(TStorageType.COLUMN);
+        when(table.getCopiedIndexes()).thenReturn(new ArrayList<>());
+        when(table.getBaseIndexMetaId()).thenReturn(7L);
+        when(table.getIndexMetaIdToMeta()).thenReturn(new HashMap<>());
+
+        GlobalStateMgr gsm = buildLockableGsm(db, table);
+        GlobalTransactionMgr txnMgr = mock(GlobalTransactionMgr.class);
+        TransactionIdGenerator idGenerator = mock(TransactionIdGenerator.class);
+        when(idGenerator.getNextTransactionId()).thenReturn(555L);
+        when(txnMgr.getTransactionIDGenerator()).thenReturn(idGenerator);
+        when(gsm.getGlobalTransactionMgr()).thenReturn(txnMgr);
+
+        try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class)) {
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+            invokePrivate(job, "runFinishedRewritingJob");
+        }
+
+        assertEquals(AlterJobV2.JobState.FINISHED, job.getJobState());
+        OlapTableHistorySchema history = job.getHistorySchema().orElse(null);
+        assertNotNull(history, "the flip must record the schema it retired");
+        assertEquals(555L, history.getHistoryTxnIdThreshold());
+        assertFalse(history.isExpired());
     }
 
     @Test

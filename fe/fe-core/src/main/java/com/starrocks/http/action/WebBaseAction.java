@@ -59,6 +59,7 @@ import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.cookie.DefaultCookie;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.owasp.encoder.Encode;
 
 import java.util.List;
 import java.util.UUID;
@@ -288,8 +289,8 @@ public class WebBaseAction extends BaseAction {
 
     protected void getPageHeader(BaseRequest request, StringBuilder sb) {
         String newPageHeaderString = PAGE_HEADER;
-        newPageHeaderString = newPageHeaderString.replaceAll("<title>StarRocks</title>",
-                "<title>" + Config.cluster_name + "</title>");
+        newPageHeaderString = newPageHeaderString.replace("<title>StarRocks</title>",
+                "<title>" + Encode.forHtml(Config.cluster_name) + "</title>");
 
         sb.append(newPageHeaderString);
         sb.append(NAVIGATION_BAR_PREFIX);
@@ -329,12 +330,13 @@ public class WebBaseAction extends BaseAction {
     }
 
     // Note: DO NOT omit '<thead>', because it is useful in 'datatable' plugin.
+    // Headers and cells are HTML-encoded because they may carry user-controlled text, such as SQL statements.
     protected void appendTableHeader(StringBuilder buffer, List<String> columnHeaders) {
         buffer.append("<table id=\"table_id\" "
                 + "class=\"table table-hover table-bordered table-striped table-condensed\">");
         buffer.append("<thead><tr> ");
         for (String str : columnHeaders) {
-            buffer.append("<th>" + str + "</th>");
+            buffer.append("<th>").append(Encode.forHtml(str)).append("</th>");
         }
         buffer.append(" </tr></thead>");
     }
@@ -345,7 +347,7 @@ public class WebBaseAction extends BaseAction {
             buffer.append("<tr>");
             for (String column : row) {
                 buffer.append("<td>");
-                buffer.append(column);
+                buffer.append(Encode.forHtml(column));
                 buffer.append("</td>");
             }
             buffer.append("</tr>");

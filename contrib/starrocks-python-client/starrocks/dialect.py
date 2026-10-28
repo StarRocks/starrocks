@@ -88,14 +88,17 @@ from .datatype import (
     SMALLINT,
     STRING,
     STRUCT,
+    TIME,
     TINYINT,
     VARBINARY,
     VARCHAR,
+    VARIANT,
 )
 from .engine.interfaces import ReflectedMVState, ReflectedState, ReflectedViewState
 from .reflection import StarRocksInspector, StarRocksTableDefinitionParser
 from .sql.ddl import (
     AlterMaterializedView,
+    AlterTableColumns,
     AlterTableDistribution,
     AlterTableEngine,
     AlterTableKey,
@@ -160,10 +163,12 @@ ischema_names = {
     "char": CHAR,
     "string": STRING,
     "json": JSON,
+    "variant": VARIANT,
     # === Date and time ===
     "date": DATE,
     "datetime": DATETIME,
     "timestamp": DATETIME,
+    "time": TIME,
     # == binary ==
     "binary": BINARY,
     "varbinary": VARBINARY,
@@ -180,6 +185,7 @@ colspecs = base_colspecs | {
     sqltypes.Date: DATE,
     sqltypes.DateTime: DATETIME,
     sqltypes.DECIMAL: DECIMAL,
+    sqltypes.Time: TIME,
 }
 
 class StarRocksTypeCompiler(MySQLTypeCompiler):
@@ -252,6 +258,9 @@ class StarRocksTypeCompiler(MySQLTypeCompiler):
 
     def visit_BITMAP(self, type_, **kw):
         return "BITMAP"
+
+    def visit_VARIANT(self, type_, **kw):
+        return "VARIANT"
 
     def visit_BLOB(self, type_, **kw):
         return "BINARY"
@@ -1159,6 +1168,35 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
         table_name = format_table_name(self, alter.table_name, alter.schema)
         return f"ALTER TABLE {table_name} PARTITION BY {alter.partition_by}"
 
+    def visit_alter_table_columns(self, alter: AlterTableColumns, **kw: Any) -> str:
+        """Compile a combined ALTER TABLE ADD/DROP COLUMN DDL for StarRocks.
+
+        Renders every column change as a clause of a single ALTER TABLE
+        statement so StarRocks submits them as one schema-change job:
+
+            ALTER TABLE t ADD COLUMN a INT, DROP COLUMN c, ADD COLUMN b INT
+        """
+        table_name = format_table_name(self, alter.table_name, alter.schema)
+
+        clauses: List[str] = []
+        for column in alter.adds:
+            clauses.append(f"ADD COLUMN {self.get_column_specification(column, **kw)}")
+        for column_name in alter.drops:
+            clauses.append(f"DROP COLUMN {self.preparer.quote(column_name)}")
+
+        if not clauses:
+            raise exc.CompileError(
+                f"ALTER TABLE {table_name} has no column changes to apply."
+            )
+
+        # notice users about such a time consuming operation
+        from_db_clause = f"FROM {alter.schema} " if alter.schema else ""
+        show_clause = f"SHOW ALTER TABLE COLUMN {from_db_clause}WHERE TableName='{alter.table_name}'"
+        logger.info(f"You probably should use ({show_clause}) to check the execution status "
+                    f"of the column schema change before doing another ALTER TABLE statement.")
+
+        return f"ALTER TABLE {table_name} " + ", ".join(clauses)
+
     def visit_alter_table_distribution(self, alter: AlterTableDistribution, **kw: Any) -> str:
         """Compile ALTER TABLE DISTRIBUTED BY DDL for StarRocks."""
         # TODO:
@@ -1642,11 +1680,30 @@ class StarRocksDialect(MySQLDialect_pymysql):
 
     @staticmethod
     def gen_show_alter_table_statement(table_name: str, alter_type: str,
-            schema: Optional[str] = None, state: str = 'RUNNING') -> str:
-        """Generate the SHOW ALTER TABLE OPTIMIZE statement for a given table."""
+            schema: Optional[str] = None, state: Optional[str] = 'RUNNING',
+            order_by: Optional[str] = None, limit: Optional[int] = None,
+            bind_table_name: bool = False) -> str:
+        """Generate a SHOW ALTER TABLE [ COLUMN | OPTIMIZE ] statement for a table.
+
+        Args:
+            table_name: The name of the table to filter on.
+            alter_type: ``COLUMN`` or ``OPTIMIZE``.
+            schema: The schema (StarRocks database) of the table.
+            state: Filter on a job state (e.g. ``RUNNING``); pass ``None`` to
+                return jobs in any state.
+            order_by: An ``ORDER BY`` expression, e.g. ``JobId DESC``.
+            limit: A ``LIMIT`` row count.
+            bind_table_name: Render the table predicate as the bound parameter
+                ``:table_name`` instead of a literal, so the caller can pass it
+                through the driver (the caller then binds ``table_name``).
+        """
         from_db_clause = f"FROM `{schema}` " if schema else ""
+        table_predicate = ":table_name" if bind_table_name else f"'{table_name}'"
         state_clause = f" AND State='{state}'" if state else ""
-        stmt = f"SHOW ALTER TABLE {alter_type} {from_db_clause}WHERE TableName='{table_name}'{state_clause}"
+        order_by_clause = f" ORDER BY {order_by}" if order_by else ""
+        limit_clause = f" LIMIT {int(limit)}" if limit else ""
+        stmt = (f"SHOW ALTER TABLE {alter_type} {from_db_clause}"
+                f"WHERE TableName={table_predicate}{state_clause}{order_by_clause}{limit_clause}")
         # logger.debug("generate show alter table statement: %s", stmt)
         return stmt
 

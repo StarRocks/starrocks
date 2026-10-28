@@ -21,9 +21,11 @@
 #include "base/bthreads/util.h"
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
+#include "common/config_hdfs_fwd.h"
 #include "fs/fs_registry.h"
 #include "fs/fs_util.h"
 #include "fs_ext/hdfs/fs_hdfs.h"
+#include "fs_ext/hdfs/hdfs_fs_cache.h"
 #include "fs_ext/hdfs/hdfs_util.h"
 #include "runtime/java/java_env.h"
 
@@ -46,10 +48,109 @@ public:
     void TearDown() override { ASSERT_TRUE(fs::remove_all(_root_path).ok()); }
 
     void create_file_and_destroy();
+    enum class WriterRelease { kClose, kCloseFromBthread, kDestroy };
+    void writable_file_survives_cache_eviction(WriterRelease release);
 
 public:
     std::string _root_path;
 };
+
+void HdfsFileSystemTest::writable_file_survives_cache_eviction(WriterRelease release) {
+    if (release == WriterRelease::kCloseFromBthread && JavaEnv::GetInstance()->jvm_call_pool() == nullptr) {
+        auto st = JavaEnv::GetInstance()->init();
+        ASSERT_TRUE(st.ok()) << st;
+    }
+    const auto old_capacity = config::hdfs_client_max_cache_size;
+    DeferOp restore_capacity([&] { config::hdfs_client_max_cache_size = old_capacity; });
+    config::hdfs_client_max_cache_size = 1;
+
+    // Distinct configurations force eviction even if earlier tests populated the singleton cache.
+    TCloudConfiguration writer_cloud;
+    writer_cloud.__set_cloud_properties({{"starrocks.test.cache.identity", _root_path + "/writer"}});
+    FSOptions writer_options(&writer_cloud);
+    auto fs = new_fs_hdfs(writer_options);
+    const std::string filepath = "file://" + _root_path + "/writer";
+    const std::string seedpath = "file://" + _root_path + "/seed";
+    const std::string payload = "data written across filesystem cache eviction";
+    {
+        auto seed = fs->new_writable_file(seedpath);
+        ASSERT_TRUE(seed.ok()) << seed.status();
+        ASSERT_TRUE((*seed)->append(Slice(payload)).ok());
+        ASSERT_TRUE((*seed)->close().ok());
+    }
+
+    // Keep a guard until the ownership assertion so a regression fails without using a disconnected handle.
+    // Declare it before the writer so assertion failure also closes the writer before releasing the guard.
+    std::shared_ptr<HdfsFsClient> client;
+    ASSERT_TRUE(HdfsFsCache::instance()->get_connection("file:///", client, writer_options).ok());
+    std::weak_ptr<HdfsFsClient> weak_client = client;
+    auto writer = fs->new_writable_file(filepath);
+    ASSERT_TRUE(writer.ok()) << writer.status();
+    ASSERT_TRUE((*writer)->append(Slice(payload)).ok());
+
+    TCloudConfiguration reader_cloud;
+    reader_cloud.__set_cloud_properties({{"starrocks.test.cache.identity", _root_path + "/reader"}});
+    auto reader_fs = new_fs_hdfs(FSOptions(&reader_cloud));
+    auto reader = reader_fs->new_random_access_file(seedpath);
+    ASSERT_TRUE(reader.ok()) << reader.status();
+    auto seed_contents = (*reader)->read_all(); // Force the lazy reader to acquire a different cached client.
+    ASSERT_TRUE(seed_contents.ok()) << seed_contents.status();
+    ASSERT_EQ(payload, *seed_contents);
+
+    // Only the guard and the writer own the evicted client; the reader uses a different client.
+    ASSERT_EQ(2, client.use_count());
+    client.reset();
+    ASSERT_FALSE(weak_client.expired());
+    ASSERT_TRUE((*writer)->append(Slice(payload)).ok());
+    ASSERT_TRUE((*writer)->flush(WritableFile::FlushMode::FLUSH_SYNC).ok());
+    ASSERT_TRUE((*writer)->sync().ok());
+    switch (release) {
+    case WriterRelease::kClose:
+        ASSERT_TRUE((*writer)->close().ok());
+        break;
+    case WriterRelease::kCloseFromBthread: {
+        // close() hops to a pthread and must drop the last client reference there, so hdfsDisconnect()
+        // never runs on the bthread. The client is therefore already gone when close() returns.
+        Status close_status;
+        bool expired_after_close = false;
+        auto bthread_status = bthreads::start_bthread_and_join([&] {
+            close_status = (*writer)->close();
+            expired_after_close = weak_client.expired();
+        });
+        ASSERT_TRUE(bthread_status.ok()) << bthread_status;
+        ASSERT_TRUE(close_status.ok()) << close_status;
+        ASSERT_TRUE(expired_after_close);
+        break;
+    }
+    case WriterRelease::kDestroy:
+        break;
+    }
+    if (release != WriterRelease::kDestroy) {
+        // close() itself releases the evicted client instead of deferring disconnect to destruction.
+        EXPECT_TRUE(weak_client.expired());
+        ASSERT_TRUE((*writer)->close().ok()); // Closing twice must remain harmless after eviction.
+    }
+    (*writer).reset(); // For kDestroy this exercises the implicit close in the destructor.
+    EXPECT_TRUE(weak_client.expired());
+
+    auto result = reader_fs->new_random_access_file(filepath);
+    ASSERT_TRUE(result.ok()) << result.status();
+    auto contents = (*result)->read_all();
+    ASSERT_TRUE(contents.ok()) << contents.status();
+    EXPECT_EQ(payload + payload, *contents);
+}
+
+TEST_F(HdfsFileSystemTest, writable_file_close_after_cache_eviction) {
+    writable_file_survives_cache_eviction(WriterRelease::kClose);
+}
+
+TEST_F(HdfsFileSystemTest, writable_file_close_from_bthread_after_cache_eviction) {
+    writable_file_survives_cache_eviction(WriterRelease::kCloseFromBthread);
+}
+
+TEST_F(HdfsFileSystemTest, writable_file_destructor_after_cache_eviction) {
+    writable_file_survives_cache_eviction(WriterRelease::kDestroy);
+}
 
 void HdfsFileSystemTest::create_file_and_destroy() {
     auto fs = new_fs_hdfs(FSOptions());
@@ -63,8 +164,14 @@ void HdfsFileSystemTest::create_file_and_destroy() {
     EXPECT_TRUE(fs->new_sequential_file(filepath).ok());
     EXPECT_TRUE(fs->new_random_access_file(filepath).ok());
 
-    // error injection during HDFSWritableFile::close, it is hard to simulate a sync failure with a POSIX filesystem.
-    // HDFS FileSystem sync operation will fail if the file is removed from remote name node.
+    // done the file, check if there is any memory leak
+    (*wfile).reset();
+
+    // error injection during HDFSWritableFile::close, it is hard to simulate a close failure with a POSIX filesystem.
+    // HDFS FileSystem close operation will fail if the file is removed from remote name node.
+    std::string filepath2 = "file://" + _root_path + "/create_file_and_destroy_close_failure_file";
+    auto wfile2 = fs->new_writable_file(filepath2);
+    ASSERT_TRUE(wfile2.ok());
     SyncPoint::GetInstance()->SetCallBack("HDFSWritableFile::close", [](void* arg) { *(int*)arg = -1; });
     SyncPoint::GetInstance()->EnableProcessing();
 
@@ -73,8 +180,11 @@ void HdfsFileSystemTest::create_file_and_destroy() {
         SyncPoint::GetInstance()->DisableProcessing();
     });
 
-    // done the file, check if there is any memory leak
-    (*wfile).reset();
+    auto close_st = (*wfile2)->close();
+    EXPECT_TRUE(close_st.is_io_error()) << close_st;
+    // the file is marked closed even if hdfsCloseFile() failed, so a second close() is a no-op
+    EXPECT_TRUE((*wfile2)->close().ok());
+    (*wfile2).reset();
 }
 
 TEST_F(HdfsFileSystemTest, get_namenode_from_path) {

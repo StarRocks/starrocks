@@ -233,6 +233,91 @@ public class LakeTableTxnStateListenerTest extends LakeTableTestHelper {
         Assertions.assertTrue(exception.getMessage().contains("has unfinished tablets"));
     }
 
+    /**
+     * A transaction drawn at or after an alter's watershed must write the shadow index. One whose recorded
+     * index set lacks it resolved tablets before the index existed (replication, a bypass-write client with
+     * cached metadata) and is rejected. The shadow index here keeps visibleTxnId at 0, as LakeRollupJob's
+     * does, so the check relies only on the watershed stamp.
+     */
+    @Test
+    public void testRejectTxnAtOrAfterWatershedMissingShadowIndex() {
+        LakeTable table = buildLakeTableWithShadowIndex(40001, 40002, 9000);
+        TransactionState txnState = newTransactionState(); // txn id 10000 >= watershed 9000
+        txnState.addPartitionLoadedIndexes(tableId, physicalPartitionId, Lists.newArrayList(indexId));
+
+        LakeTableTxnStateListener listener = new LakeTableTxnStateListener(addDatabaseTransactionMgr(), table);
+        TransactionCommitFailedException exception = Assertions.assertThrows(TransactionCommitFailedException.class,
+                () -> listener.prePrepared(txnState, buildFullTabletCommitInfo(), Collections.emptyList()));
+        Assertions.assertTrue(exception.getMessage().contains("without shadow index 40001"), exception.getMessage());
+        Assertions.assertTrue(exception.getMessage().contains("since 9000"), exception.getMessage());
+    }
+
+    /**
+     * A transaction drawn before the watershed legitimately misses the shadow index: the alter waits for it
+     * and its rows reach the shadow index through the conversion.
+     */
+    @Test
+    public void testAcceptTxnBeforeWatershedMissingShadowIndex() throws TransactionException {
+        LakeTable table = buildLakeTableWithShadowIndex(40011, 40012, 20000);
+        TransactionState txnState = newTransactionState(); // txn id 10000 < watershed 20000
+        txnState.addPartitionLoadedIndexes(tableId, physicalPartitionId, Lists.newArrayList(indexId));
+
+        LakeTableTxnStateListener listener = new LakeTableTxnStateListener(addDatabaseTransactionMgr(), table);
+        listener.prePrepared(txnState, buildFullTabletCommitInfo(), Collections.emptyList());
+    }
+
+    @Test
+    public void testAcceptTxnCarryingShadowIndex() throws TransactionException {
+        LakeTable table = buildLakeTableWithShadowIndex(40021, 40022, 9000);
+        TransactionState txnState = newTransactionState();
+        txnState.addPartitionLoadedIndexes(tableId, physicalPartitionId, Lists.newArrayList(indexId, 40021L));
+        List<TabletCommitInfo> finishedTablets = buildFullTabletCommitInfo();
+        finishedTablets.add(new TabletCommitInfo(40022, 1));
+
+        LakeTableTxnStateListener listener = new LakeTableTxnStateListener(addDatabaseTransactionMgr(), table);
+        listener.prePrepared(txnState, finishedTablets, Collections.emptyList());
+    }
+
+    /**
+     * A shadow index exposed by an FE without the watershed stamp is not checked.
+     */
+    @Test
+    public void testUnstampedShadowIndexIsNotChecked() throws TransactionException {
+        LakeTable table = buildLakeTableWithShadowIndex(40031, 40032, 0);
+        TransactionState txnState = newTransactionState();
+        txnState.addPartitionLoadedIndexes(tableId, physicalPartitionId, Lists.newArrayList(indexId));
+
+        LakeTableTxnStateListener listener = new LakeTableTxnStateListener(addDatabaseTransactionMgr(), table);
+        listener.prePrepared(txnState, buildFullTabletCommitInfo(), Collections.emptyList());
+    }
+
+    /**
+     * Lake compaction compacts only visible tablets by design, so it is not held to the shadow index.
+     */
+    @Test
+    public void testCompactionIsNotChecked() throws TransactionException {
+        LakeTable table = buildLakeTableWithShadowIndex(40041, 40042, 9000);
+        TransactionState txnState = newCompactionTransactionState();
+        txnState.addPartitionLoadedIndexes(tableId, physicalPartitionId, Lists.newArrayList(indexId));
+
+        LakeTableTxnStateListener listener = new LakeTableTxnStateListener(addDatabaseTransactionMgr(), table);
+        listener.prePrepared(txnState, buildFullTabletCommitInfo(), Collections.emptyList());
+    }
+
+    private LakeTable buildLakeTableWithShadowIndex(long shadowIndexId, long shadowTabletId, long shadowWatershedTxnId) {
+        LakeTable table = buildLakeTable();
+        PhysicalPartition partition = table.getPhysicalPartition(physicalPartitionId);
+        MaterializedIndex shadowIndex = new MaterializedIndex(shadowIndexId, MaterializedIndex.IndexState.SHADOW);
+        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, physicalPartitionId, shadowIndexId, TStorageMedium.HDD, true);
+        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().addTablet(shadowTabletId, tabletMeta);
+        shadowIndex.addTablet(new LakeTablet(shadowTabletId), tabletMeta);
+        if (shadowWatershedTxnId > 0) {
+            shadowIndex.setShadowWatershedTxnId(shadowWatershedTxnId);
+        }
+        partition.createRollupIndex(shadowIndex);
+        return table;
+    }
+
     private void makeCompactionScoreExceedSlowdownThreshold() {
         long currentTimeMs = System.currentTimeMillis();
         CompactionMgr compactionMgr = GlobalStateMgr.getCurrentState().getCompactionMgr();

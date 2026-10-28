@@ -37,7 +37,6 @@ import org.apache.arrow.flight.FlightRuntimeException;
 import org.apache.commons.lang3.StringUtils;
 import org.jetbrains.annotations.NotNull;
 
-import java.nio.charset.StandardCharsets;
 import java.util.concurrent.TimeUnit;
 
 public class ArrowFlightSqlSessionManager {
@@ -72,8 +71,8 @@ public class ArrowFlightSqlSessionManager {
         ctx.setRemoteIP(remoteIP);
 
         try {
-            AuthenticationHandler.authenticate(
-                    ctx, username, remoteIP, password.getBytes(StandardCharsets.UTF_8));
+            // The Arrow Flight Basic handshake carries a cleartext password, like HTTP Basic.
+            AuthenticationHandler.authenticateWithClearPassword(ctx, username, remoteIP, password);
         } catch (AuthenticationException e) {
             throw CallStatus.UNAUTHENTICATED
                     .withDescription("Access denied for user: " + username)

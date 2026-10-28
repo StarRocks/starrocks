@@ -34,7 +34,11 @@
 
 package com.starrocks.http;
 
+import com.starrocks.context.ai.AIProvider;
+import com.starrocks.context.ai.AIProviderType;
+import com.starrocks.persist.DropAIProviderLog;
 import com.starrocks.rpc.ConfigurableSerDesFactory;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TQueryPlanInfo;
 import okhttp3.Request;
@@ -47,7 +51,9 @@ import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.util.Base64;
+import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
 
 public class TableQueryPlanActionTest extends StarRocksHttpTestCase {
 
@@ -117,6 +123,33 @@ public class TableQueryPlanActionTest extends StarRocksHttpTestCase {
             String exception = jsonObject.getString("exception");
             Assertions.assertNotNull(exception);
             Assertions.assertEquals("POST body must contains [sql] root object", exception);
+        }
+    }
+
+    @Test
+    public void testQueryPlanExportRejectsAIWithoutDisclosingCredentials() throws Exception {
+        super.setUpWithCatalog();
+        AIProvider provider = new AIProvider(UUID.randomUUID().toString(), "http_export_provider", AIProviderType.CHAT,
+                Map.of("endpoint", "https://models.example.test/v1/chat/completions", "model", "test-model",
+                        "api_key", "export-test-secret"), "");
+        GlobalStateMgr.getCurrentState().getAIProviderMgr().replayCreateProvider(provider);
+        try {
+            String sql = "select ai_custom_query('http_export_provider', cast(k1 as varchar)) from "
+                    + DB_NAME + "." + TABLE_NAME;
+            Request request = new Request.Builder()
+                    .post(RequestBody.create(JSON, new JSONObject().put("sql", sql).toString()))
+                    .addHeader("Authorization", rootAuth)
+                    .url(URI + PATH_URI).build();
+            try (Response response = networkClient.newCall(request).execute()) {
+                String body = Objects.requireNonNull(response.body()).string();
+                JSONObject result = new JSONObject(body);
+                Assertions.assertEquals(400, result.getInt("status"));
+                Assertions.assertTrue(result.getString("exception").contains("filter-prune-scan"));
+                Assertions.assertFalse(result.has("opaqued_query_plan"));
+                Assertions.assertFalse(body.contains("export-test-secret"));
+            }
+        } finally {
+            GlobalStateMgr.getCurrentState().getAIProviderMgr().replayDropProvider(new DropAIProviderLog(provider.getId()));
         }
     }
 

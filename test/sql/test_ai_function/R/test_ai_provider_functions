@@ -1,0 +1,124 @@
+-- name: test_ai_provider_functions
+-- Metadata and EXPLAIN only: no external requests or BE-local credentials are needed.
+
+CREATE AI PROVIDER ai_chat_${uuid0} TYPE chat COMMENT 'integration provider'
+PROPERTIES ('endpoint' = 'https://models.example.test/v1/chat/completions',
+'model' = 'chat-model', 'api_key' = 'fixture-not-a-real-key', 'timeout_ms' = '2500');
+-- result:
+-- !result
+
+CREATE AI PROVIDER IF NOT EXISTS ai_chat_${uuid0} TYPE chat
+PROPERTIES ('endpoint' = 'https://models.example.test/v1/chat/completions',
+'model' = 'must-not-replace');
+-- result:
+-- !result
+
+SHOW AI PROVIDERS LIKE 'ai_chat_${uuid0}';
+-- result:
+[REGEX]^ai_chat_[0-9a-f]{32}\tchat\topenai\tfalse\thttps://models\.example\.test/v1/chat/completions\tchat-model\t\t\t2500\t\*{6}\tintegration provider$
+-- !result
+
+EXPLAIN SELECT ai_custom_query('ai_chat_${uuid0}', 'prompt');
+-- result:
+[REGEX](?s)^(?!.*fixture-not-a-real-key).*[0-9]+:AIProject
+-- !result
+
+EXPLAIN SELECT ai_custom_query('ai_chat_${uuid0}', 'prompt', map{'temperature': 0.0});
+-- result:
+[REGEX](?s)^(?!.*fixture-not-a-real-key).*[0-9]+:AIProject
+-- !result
+
+ALTER AI PROVIDER ai_chat_${uuid0} SET ('model' = 'chat-v2', 'timeout_ms' = '1000');
+-- result:
+-- !result
+
+DESC AI PROVIDER ai_chat_${uuid0};
+-- result:
+[REGEX](?s)^(?!.*fixture-not-a-real-key)(?=.*Name\tai_chat_[0-9a-f]{32})(?=.*Type\tchat)(?=.*protocol\topenai)(?=.*IsDefault\tfalse)(?=.*model\tchat-v2)(?=.*timeout_ms\t1000)(?=.*api_key\t\*{6}).*$
+-- !result
+
+CREATE AI PROVIDER ai_embedding_${uuid0} TYPE embedding COMMENT 'integration embedding provider'
+PROPERTIES ('endpoint' = 'http://models.example.test/v1/embeddings',
+'model' = 'embedding-model', 'dimensions' = '256', 'timeout_ms' = '2500');
+-- result:
+-- !result
+
+EXPLAIN SELECT ai_custom_embedding('ai_embedding_${uuid0}', 'text');
+-- result:
+[REGEX][0-9]+:AIProject
+-- !result
+
+EXPLAIN SELECT ai_custom_embedding('ai_embedding_${uuid0}', 'text', map{'dimensions': 128});
+-- result:
+[REGEX][0-9]+:AIProject
+-- !result
+
+EXPLAIN SELECT ai_custom_embedding('ai_embedding_${uuid0}', 'text', CAST(NULL AS MAP<VARCHAR, JSON>));
+-- result:
+[REGEX][0-9]+:AIProject
+-- !result
+
+SHOW AI PROVIDERS LIKE 'ai_embedding_${uuid0}';
+-- result:
+[REGEX]^ai_embedding_[0-9a-f]{32}\tembedding\topenai\tfalse\thttp://models\.example\.test/v1/embeddings\tembedding-model\t256\t\t2500\t\tintegration embedding provider$
+-- !result
+
+ALTER AI PROVIDER ai_chat_${uuid0} SET ('protocol' = 'anthropic');
+-- result:
+-- !result
+
+EXPLAIN SELECT ai_custom_query('ai_chat_${uuid0}', 'prompt');
+-- result:
+E: (1064, "Getting analyzing error. Detail message: AI functions require an OPENAI provider protocol, not ANTHROPIC.")
+-- !result
+
+ALTER AI PROVIDER ai_chat_${uuid0} SET ('protocol' = 'openai');
+-- result:
+-- !result
+
+EXPLAIN SELECT ai_custom_query('ai_chat_${uuid0}', 'prompt');
+-- result:
+[REGEX](?s)^(?!.*fixture-not-a-real-key).*[0-9]+:AIProject
+-- !result
+
+ALTER AI PROVIDER ai_embedding_${uuid0} SET ('protocol' = 'cohere');
+-- result:
+-- !result
+
+EXPLAIN SELECT ai_custom_embedding('ai_embedding_${uuid0}', 'text');
+-- result:
+E: (1064, "Getting analyzing error. Detail message: AI functions require an OPENAI provider protocol, not COHERE.")
+-- !result
+
+ALTER AI PROVIDER ai_embedding_${uuid0} SET ('protocol' = 'openai');
+-- result:
+-- !result
+
+EXPLAIN SELECT ai_custom_embedding('ai_embedding_${uuid0}', 'text');
+-- result:
+[REGEX][0-9]+:AIProject
+-- !result
+
+DROP AI PROVIDER ai_chat_${uuid0};
+-- result:
+-- !result
+
+DROP AI PROVIDER IF EXISTS ai_chat_${uuid0};
+-- result:
+-- !result
+
+SHOW AI PROVIDERS LIKE 'ai_chat_${uuid0}';
+-- result:
+-- !result
+
+DROP AI PROVIDER ai_embedding_${uuid0};
+-- result:
+-- !result
+
+SHOW AI PROVIDERS LIKE 'ai_embedding_${uuid0}';
+-- result:
+-- !result
+CLEANUP {
+    DROP AI PROVIDER IF EXISTS ai_chat_${uuid0};
+    DROP AI PROVIDER IF EXISTS ai_embedding_${uuid0};
+} END CLEANUP

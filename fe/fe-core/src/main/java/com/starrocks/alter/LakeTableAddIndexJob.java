@@ -25,6 +25,7 @@ import com.starrocks.task.AlterReplicaTask;
 import com.starrocks.thrift.TOlapTableIndex;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -53,9 +54,9 @@ public class LakeTableAddIndexJob extends LakeTableIndexFastPathJobBase {
     private List<Index> newIndexes = new ArrayList<>();
 
     /**
-     * Thrift payload sent to BE. Carries column *names* (not unique ids);
-     * BE resolves names via the new tablet schema at
-     * {@code do_process_add_index_only}.
+     * Persisted index definitions carrying column display names. Keep this
+     * journal representation compatible with existing jobs; dispatch converts
+     * copies to stable ColumnIds, matching the column names in the BE schema.
      */
     @SerializedName(value = "indexesToAdd")
     private List<TOlapTableIndex> indexesToAdd = new ArrayList<>();
@@ -130,9 +131,11 @@ public class LakeTableAddIndexJob extends LakeTableIndexFastPathJobBase {
      * failing the alter. Matching by ColumnId (not name) is required so a rollup
      * / sync-MV that keeps the indexed column's ColumnId under a renamed output
      * is still indexed — otherwise its FE schema (which includes the index) and
-     * BE tablet (never stamped) would diverge. The index's columns are resolved
-     * to their base-table ColumnId via {@code table}; when {@code table} or
-     * {@code meta} is null (defensive), every index applies.
+     * BE tablet (never stamped) would diverge. Resolve the persisted display
+     * names through {@code table} and return copies with stable ColumnIds for
+     * the BE request. Do not mutate the journaled definitions: a retry could
+     * otherwise resolve a ColumnId as another column's reused display name.
+     * When {@code meta} is null (defensive), every index applies unchanged.
      */
     static List<TOlapTableIndex> applicableIndexes(List<TOlapTableIndex> indexes, MaterializedIndexMeta meta,
                                                    OlapTable table) {
@@ -149,6 +152,7 @@ public class LakeTableAddIndexJob extends LakeTableIndexFastPathJobBase {
                 continue;
             }
             boolean allCarried = true;
+            List<String> columnIds = new ArrayList<>();
             for (String columnName : ix.getColumns()) {
                 Column baseColumn = table != null ? table.getColumn(columnName) : null;
                 ColumnId columnId = baseColumn != null ? baseColumn.getColumnId() : ColumnId.create(columnName);
@@ -156,9 +160,12 @@ public class LakeTableAddIndexJob extends LakeTableIndexFastPathJobBase {
                     allCarried = false;
                     break;
                 }
+                columnIds.add(columnId.getId());
             }
             if (allCarried) {
-                applicable.add(ix);
+                TOlapTableIndex requestIndex = ix.deepCopy();
+                requestIndex.setColumns(columnIds);
+                applicable.add(requestIndex);
             }
         }
         return applicable;
@@ -182,6 +189,12 @@ public class LakeTableAddIndexJob extends LakeTableIndexFastPathJobBase {
         if (newSchema != null && newSchema[0] > 0) {
             task.setNewIndexSchema(newSchema[0], newSchema[1]);
         }
+    }
+
+    /** applyCatalogMutation re-stamps these metas with a new schema id, retiring the previous one. */
+    @Override
+    protected Collection<Long> retiredIndexMetaIdsAtFlip() {
+        return indexMetaIdToNewSchema == null ? List.of() : List.copyOf(indexMetaIdToNewSchema.keySet());
     }
 
     @Override
@@ -224,7 +237,7 @@ public class LakeTableAddIndexJob extends LakeTableIndexFastPathJobBase {
                 if (col == null) {
                     continue;
                 }
-                merged.add(ColumnId.create(col.getName()));
+                merged.add(col.getColumnId());
             }
             double fpp = table.getBfFpp();
             if (fpp <= 0) {
@@ -276,6 +289,9 @@ public class LakeTableAddIndexJob extends LakeTableIndexFastPathJobBase {
         copy.partitionToTablets = this.partitionToTablets;
         copy.tabletToIndexMetaId = this.tabletToIndexMetaId;
         copy.commitVersionMap = this.commitVersionMap;
+        // Must be journaled: replay() installs whatever the FINISHED entry carries, so a null here
+        // would leave a recovered FE unable to resolve the schema this flip retired.
+        copy.historySchema = this.historySchema;
         copySubclassFields(copy);
         return copy;
     }

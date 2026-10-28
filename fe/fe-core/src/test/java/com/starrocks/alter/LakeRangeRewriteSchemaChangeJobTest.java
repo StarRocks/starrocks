@@ -23,6 +23,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FlatJsonConfig;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.OlapTable;
@@ -42,10 +43,14 @@ import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
 import com.starrocks.persist.EditLog;
+import com.starrocks.persist.OperationType;
 import com.starrocks.persist.WALApplier;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -75,6 +80,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -93,10 +100,13 @@ public class LakeRangeRewriteSchemaChangeJobTest {
         connectContext = UtFrameUtils.createDefaultCtx();
         UtFrameUtils.stopBackgroundSchemaChangeHandler(60000);
         Config.enable_range_distribution = true;
+        UtFrameUtils.setUpForPersistTest();
     }
 
     @BeforeEach
     public void before() throws Exception {
+        // Only the tests that read the journal drain the follower queue, so start every test from an empty one.
+        UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
         GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(DB_NAME);
         connectContext.setDatabase(DB_NAME);
         db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
@@ -3288,5 +3298,418 @@ public class LakeRangeRewriteSchemaChangeJobTest {
         job.getInfo(infos);
         Assertions.assertEquals("", String.valueOf(infos.get(0).get(10)),
                 "a successful retry must clear the diagnostic before the partition is observed DONE");
+    }
+
+    // ---- pruning the per-partition state of a done job ----------------------------------------
+
+    @Test
+    public void testLeaderPrunesFinishedJob() throws Exception {
+        LakeRangeRewriteSchemaChangeJob job = jobInFinishedRewriting();
+        assertHasPartitionStates(job);
+
+        runToFinished(job);
+
+        assertPruned(job);
+        List<LakeRangeRewriteSchemaChangeJob> entries = readJournaledEntries(job.getJobId());
+        for (LakeRangeRewriteSchemaChangeJob entry : entries) {
+            assertHasPartitionStates(entry);
+        }
+        LakeRangeRewriteSchemaChangeJob finishedEntry = entries.get(entries.size() - 1);
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED, finishedEntry.getJobState());
+        assertShowAlterUnchangedByPrune(finishedEntry);
+    }
+
+    @Test
+    public void testLeaderPrunesCancelledJob() throws Exception {
+        LakeRangeRewriteSchemaChangeJob job = jobInRunning();
+        long physicalPartitionId = table.getPhysicalPartitions().iterator().next().getId();
+        List<Long> shadowTabletIds = job.getShadowIndex(physicalPartitionId).getTablets()
+                .stream().map(Tablet::getId).collect(Collectors.toList());
+
+        Assertions.assertTrue(job.cancel("cancel"));
+
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+        assertPruned(job);
+        assertShadowCleanedUp(job, physicalPartitionId, shadowTabletIds);
+        List<LakeRangeRewriteSchemaChangeJob> entries = readJournaledEntries(job.getJobId());
+        for (LakeRangeRewriteSchemaChangeJob entry : entries) {
+            assertHasPartitionStates(entry);
+        }
+        LakeRangeRewriteSchemaChangeJob cancelledEntry = entries.get(entries.size() - 1);
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, cancelledEntry.getJobState());
+        assertShowAlterUnchangedByPrune(cancelledEntry);
+    }
+
+    @Test
+    public void testFollowerReplayPrunesFinishedJob() throws Exception {
+        // The follower starts from the catalog as it was before the rewrite.
+        UtFrameUtils.PseudoImage initialImage = saveMetastore();
+        LakeRangeRewriteSchemaChangeJob job = jobInFinishedRewriting();
+        runToFinished(job);
+        List<LakeRangeRewriteSchemaChangeJob> entries = readJournaledEntries(job.getJobId());
+
+        LocalMetastore followerMetastore = loadMetastore(initialImage);
+        SchemaChangeHandler followerHandler = new SchemaChangeHandler();
+        for (LakeRangeRewriteSchemaChangeJob entry : entries) {
+            replayOn(followerMetastore, followerHandler, entry);
+        }
+
+        // The handler keeps the first replayed entry and copies the state of each later one into it.
+        LakeRangeRewriteSchemaChangeJob retained = entries.get(0);
+        Assertions.assertSame(retained, followerHandler.getAlterJobsV2().get(job.getJobId()));
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED, retained.getJobState());
+        assertPruned(retained);
+        for (LakeRangeRewriteSchemaChangeJob entry : entries.subList(1, entries.size())) {
+            assertHasPartitionStates(entry);
+        }
+        OlapTable followerTable = tableIn(followerMetastore);
+        Assertions.assertEquals(job.getShadowIndexMetaId(), followerTable.getBaseIndexMetaId());
+        Assertions.assertEquals(catalogSnapshot(table), catalogSnapshot(followerTable));
+    }
+
+    @Test
+    public void testFollowerReplayDropsShadowIndexOfCancelledJob() throws Exception {
+        // The follower starts from the catalog as it was before the rewrite.
+        UtFrameUtils.PseudoImage initialImage = saveMetastore();
+        LakeRangeRewriteSchemaChangeJob job = jobInRunning();
+        Assertions.assertTrue(job.cancel("cancel"));
+        List<LakeRangeRewriteSchemaChangeJob> entries = readJournaledEntries(job.getJobId());
+
+        LocalMetastore followerMetastore = loadMetastore(initialImage);
+        OlapTable followerTable = tableIn(followerMetastore);
+        SchemaChangeHandler followerHandler = new SchemaChangeHandler();
+        for (LakeRangeRewriteSchemaChangeJob entry : entries.subList(0, entries.size() - 1)) {
+            replayOn(followerMetastore, followerHandler, entry);
+        }
+        LakeRangeRewriteSchemaChangeJob retained = entries.get(0);
+        assertHasPartitionStates(retained);
+        Assertions.assertEquals(1, shadowIndexCount(followerTable));
+        replayOn(followerMetastore, followerHandler, entries.get(entries.size() - 1));
+
+        // The CANCELLED replay drops the shadow index it reads from the entry; the prune comes after it.
+        Assertions.assertSame(retained, followerHandler.getAlterJobsV2().get(job.getJobId()));
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, retained.getJobState());
+        assertPruned(retained);
+        Assertions.assertEquals(0, shadowIndexCount(followerTable));
+        Assertions.assertEquals(catalogSnapshot(table), catalogSnapshot(followerTable));
+    }
+
+    @Test
+    public void testReplaySameFinishedEntryTwice() throws Exception {
+        LakeRangeRewriteSchemaChangeJob job = jobInFinishedRewritingWithCommitReserved();
+        // The follower starts from the catalog as it was right before the flip.
+        UtFrameUtils.PseudoImage reservedImage = saveMetastore();
+        runToFinished(job);
+        LakeRangeRewriteSchemaChangeJob entry = lastJournaledEntry(job.getJobId());
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED, entry.getJobState());
+        List<Object> catalogAfterFinish = catalogSnapshot(table);
+
+        LocalMetastore followerMetastore = loadMetastore(reservedImage);
+        Assertions.assertNotEquals(catalogAfterFinish, catalogSnapshot(tableIn(followerMetastore)));
+        SchemaChangeHandler followerHandler = new SchemaChangeHandler();
+        replayCopyAndAssertPruned(followerHandler, entry, followerMetastore, catalogAfterFinish);
+        AlterJobV2 retained = followerHandler.getAlterJobsV2().get(job.getJobId());
+        replayCopyAndAssertPruned(followerHandler, entry, followerMetastore, catalogAfterFinish);
+        Assertions.assertSame(retained, followerHandler.getAlterJobsV2().get(job.getJobId()));
+    }
+
+    @Test
+    public void testReplayFinishedEntryOntoJobLoadedFromImage() throws Exception {
+        LakeRangeRewriteSchemaChangeJob job = jobInFinishedRewriting();
+        AlterJobMgr leaderMgr = newAlterJobMgr();
+        leaderMgr.getSchemaChangeHandler().addAlterJobV2(job);
+        runToFinished(job);
+        // An image taken after the flip holds the already pruned job; the catalog is the one the flip left.
+        UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
+        leaderMgr.save(image.getImageWriter());
+        LakeRangeRewriteSchemaChangeJob entry = lastJournaledEntry(job.getJobId());
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED, entry.getJobState());
+        List<Object> catalogAfterFinish = catalogSnapshot(table);
+
+        SchemaChangeHandler followerHandler = loadAlterJobMgr(image).getSchemaChangeHandler();
+        AlterJobV2 loaded = followerHandler.getAlterJobsV2().get(job.getJobId());
+        assertPruned((LakeRangeRewriteSchemaChangeJob) loaded);
+
+        replayCopyAndAssertPruned(followerHandler, entry, GlobalStateMgr.getCurrentState().getLocalMetastore(),
+                catalogAfterFinish);
+        Assertions.assertSame(loaded, followerHandler.getAlterJobsV2().get(job.getJobId()));
+    }
+
+    @Test
+    public void testLoadPrunesDoneJobFromImage() throws Exception {
+        LakeRangeRewriteSchemaChangeJob job = jobInFinishedRewriting();
+        runToFinished(job);
+        // Images written by older versions hold the done job with its partition states, as the journal entry does.
+        LakeRangeRewriteSchemaChangeJob doneJob = lastJournaledEntry(job.getJobId());
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED, doneJob.getJobState());
+        assertHasPartitionStates(doneJob);
+        AlterJobMgr alterJobMgr = newAlterJobMgr();
+        alterJobMgr.getSchemaChangeHandler().addAlterJobV2(doneJob);
+        // SHOW ALTER of the loaded job must match that of a job that went through the same serialization.
+        List<List<Comparable>> expectedRows = new ArrayList<>();
+        gsonCopy(doneJob).getInfo(expectedRows);
+
+        UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
+        alterJobMgr.save(image.getImageWriter());
+        AlterJobMgr restoredMgr = loadAlterJobMgr(image);
+
+        LakeRangeRewriteSchemaChangeJob restored = (LakeRangeRewriteSchemaChangeJob)
+                restoredMgr.getSchemaChangeHandler().getAlterJobsV2().get(job.getJobId());
+        assertPruned(restored);
+        List<List<Comparable>> restoredRows = new ArrayList<>();
+        restored.getInfo(restoredRows);
+        Assertions.assertFalse(expectedRows.isEmpty());
+        Assertions.assertEquals(expectedRows, restoredRows);
+    }
+
+    @Test
+    public void testReplayAfterTableDroppedPrunesCancelledJob() throws Exception {
+        LakeRangeRewriteSchemaChangeJob job = jobInRunning();
+        db.dropTable(table.getName());
+        Assertions.assertTrue(job.cancel("table does not exist anymore"));
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+        assertPruned(job);
+        List<LakeRangeRewriteSchemaChangeJob> entries = readJournaledEntries(job.getJobId());
+
+        // Every replay returns early as the table is gone; each later one first copies the entry's partition states
+        // into the job the handler keeps.
+        SchemaChangeHandler followerHandler = new SchemaChangeHandler();
+        for (LakeRangeRewriteSchemaChangeJob entry : entries.subList(0, entries.size() - 1)) {
+            followerHandler.replayAlterJobV2(entry);
+        }
+        LakeRangeRewriteSchemaChangeJob retained = entries.get(0);
+        assertHasPartitionStates(retained);
+        followerHandler.replayAlterJobV2(entries.get(entries.size() - 1));
+
+        Assertions.assertSame(retained, followerHandler.getAlterJobsV2().get(job.getJobId()));
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, retained.getJobState());
+        assertPruned(retained);
+    }
+
+    @Test
+    public void testForceCancelWithPublishInFlightPrunesOncePublishCompletes() throws Exception {
+        new MockUp<Utils>() {
+            @Mock
+            public boolean noOpPublishForForceSkip(long jobId, String reason, long watershedTxnId, long watershedGtid,
+                                                   Map<Long, Long> commitVersionMap,
+                                                   Map<Long, List<Tablet>> tabletsByPartition,
+                                                   ComputeResource computeResource,
+                                                   boolean useAggregatePublish) {
+                return true;
+            }
+        };
+        LakeRangeRewriteSchemaChangeJob job = jobInFinishedRewritingWithCommitReserved();
+        CompletableFuture<Boolean> publish = publishInFlight(job);
+        SchemaChangeHandler handler = new SchemaChangeHandler();
+        handler.addAlterJobV2(job);
+
+        Assertions.assertTrue(job.cancel("force cancel", /*force=*/ true));
+
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+        assertPrunedOncePublishCompletes(job, publish, handler);
+    }
+
+    @Test
+    public void testCancelAfterTableDroppedWithPublishInFlightPrunesOncePublishCompletes() throws Exception {
+        LakeRangeRewriteSchemaChangeJob job = jobInFinishedRewritingWithCommitReserved();
+        CompletableFuture<Boolean> publish = publishInFlight(job);
+        SchemaChangeHandler handler = new SchemaChangeHandler();
+        handler.addAlterJobV2(job);
+        db.dropTable(table.getName());
+
+        Assertions.assertTrue(job.cancel("table does not exist anymore"));
+
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+        assertPrunedOncePublishCompletes(job, publish, handler);
+    }
+
+    @Test
+    public void testGetInfoProgressCountsPublishedPartitions() throws Exception {
+        LakeRangeRewriteSchemaChangeJob job = twoPartitionJobInRunning();
+        long publishedPartitionId = job.getPartitionIdsForTest().iterator().next();
+        long publishedTxnId = 555003L;
+        job.setRewriteTxnIdForTest(publishedPartitionId, publishedTxnId);
+        mockTransactionStatusById(Map.of(publishedTxnId, shadowRewriteTransactionState(
+                job.getTransactionId().get(), job.getWatershedVersion(publishedPartitionId))));
+
+        List<List<Comparable>> infos = new ArrayList<>();
+        job.getInfo(infos);
+
+        Assertions.assertEquals("1/2", infos.get(0).get(11));
+    }
+
+    /**
+     * Drives the FINISHED_REWRITING job to FINISHED through run(), the scheduler's entry point, with the publish
+     * stubbed out (no backend).
+     */
+    private static void runToFinished(LakeRangeRewriteSchemaChangeJob job) {
+        job.setPublishExecutor(j -> true);
+        job.run();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED, job.getJobState(), job.errMsg);
+    }
+
+    /**
+     * Makes the job look as if its publish task was submitted and has not returned yet: that task reads the
+     * partition states without the job lock.
+     */
+    private static CompletableFuture<Boolean> publishInFlight(LakeRangeRewriteSchemaChangeJob job) {
+        CompletableFuture<Boolean> publish = new CompletableFuture<>();
+        job.publishVersionFuture = publish;
+        return publish;
+    }
+
+    /**
+     * The cancelled job keeps its partition states while its publish task may still read them, and the next
+     * scheduling round of its handler prunes it once the task has completed.
+     */
+    private static void assertPrunedOncePublishCompletes(LakeRangeRewriteSchemaChangeJob job,
+                                                         CompletableFuture<Boolean> publish,
+                                                         SchemaChangeHandler handler) {
+        assertHasPartitionStates(job);
+        handler.runAfterLeaseValid();
+        assertHasPartitionStates(job);
+
+        publish.complete(true);
+        handler.runAfterLeaseValid();
+        assertPruned(job);
+    }
+
+    /**
+     * Reads the journal entries of the job, from the first one to the one of its final state. The tests build their
+     * jobs directly, so the first entry is the one runPendingJob writes.
+     */
+    private static List<LakeRangeRewriteSchemaChangeJob> readJournaledEntries(long jobId) throws Exception {
+        List<LakeRangeRewriteSchemaChangeJob> entries = new ArrayList<>();
+        AlterJobV2 entry;
+        do {
+            entry = (AlterJobV2) UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_ALTER_JOB_V2);
+            Assertions.assertEquals(jobId, entry.getJobId());
+            entries.add((LakeRangeRewriteSchemaChangeJob) entry);
+        } while (!entry.isDone());
+        Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, entries.get(0).getJobState());
+        return entries;
+    }
+
+    private static LakeRangeRewriteSchemaChangeJob lastJournaledEntry(long jobId) throws Exception {
+        List<LakeRangeRewriteSchemaChangeJob> entries = readJournaledEntries(jobId);
+        return entries.get(entries.size() - 1);
+    }
+
+    private static AlterJobV2 gsonCopy(AlterJobV2 job) {
+        return GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(job, AlterJobV2.class), AlterJobV2.class);
+    }
+
+    private static AlterJobMgr newAlterJobMgr() {
+        return new AlterJobMgr(new SchemaChangeHandler(), new MaterializedViewHandler(), new SystemHandler());
+    }
+
+    private static AlterJobMgr loadAlterJobMgr(UtFrameUtils.PseudoImage image) throws Exception {
+        AlterJobMgr alterJobMgr = newAlterJobMgr();
+        SRMetaBlockReader reader = new SRMetaBlockReaderV2(image.getJsonReader());
+        alterJobMgr.load(reader);
+        reader.close();
+        return alterJobMgr;
+    }
+
+    private static UtFrameUtils.PseudoImage saveMetastore() throws Exception {
+        UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
+        GlobalStateMgr.getCurrentState().getLocalMetastore().save(image.getImageWriter());
+        return image;
+    }
+
+    private static LocalMetastore loadMetastore(UtFrameUtils.PseudoImage image) throws Exception {
+        LocalMetastore metastore = new LocalMetastore(GlobalStateMgr.getCurrentState(), null, null);
+        SRMetaBlockReader reader = new SRMetaBlockReaderV2(image.getJsonReader());
+        metastore.load(reader);
+        reader.close();
+        return metastore;
+    }
+
+    private OlapTable tableIn(LocalMetastore metastore) {
+        return (OlapTable) metastore.getTable(DB_NAME, table.getName());
+    }
+
+    /**
+     * Replays the journal entry into the handler against the given catalog, as a follower does.
+     */
+    private static void replayOn(LocalMetastore metastore, SchemaChangeHandler handler, AlterJobV2 entry) {
+        LocalMetastore leaderMetastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        GlobalStateMgr.getCurrentState().setLocalMetastore(metastore);
+        try {
+            handler.replayAlterJobV2(entry);
+        } finally {
+            GlobalStateMgr.getCurrentState().setLocalMetastore(leaderMetastore);
+        }
+    }
+
+    /**
+     * Replays an independently deserialized copy of the FINISHED journal entry, then checks that the job kept by
+     * the handler is pruned and that the catalog is the same as right after the leader applied the entry.
+     */
+    private void replayCopyAndAssertPruned(SchemaChangeHandler handler, AlterJobV2 entry, LocalMetastore metastore,
+                                           List<Object> expectedCatalog) {
+        replayOn(metastore, handler, gsonCopy(entry));
+
+        LakeRangeRewriteSchemaChangeJob retained =
+                (LakeRangeRewriteSchemaChangeJob) handler.getAlterJobsV2().get(entry.getJobId());
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED, retained.getJobState());
+        assertPruned(retained);
+        Assertions.assertEquals(expectedCatalog, catalogSnapshot(tableIn(metastore)));
+    }
+
+    /**
+     * What a FINISHED or CANCELLED replay changes in the catalog: the table state, its indexes, and the versions,
+     * GC pin and indexes of each partition.
+     */
+    private static List<Object> catalogSnapshot(OlapTable olapTable) {
+        List<Object> snapshot = new ArrayList<>();
+        snapshot.add(olapTable.getState());
+        snapshot.add(olapTable.getBaseIndexMetaId());
+        snapshot.add(new TreeMap<>(olapTable.getIndexNameToMetaId()));
+        for (PhysicalPartition physicalPartition : olapTable.getPhysicalPartitions()) {
+            snapshot.add(physicalPartition.getVisibleVersion());
+            snapshot.add(physicalPartition.getNextVersion());
+            snapshot.add(physicalPartition.getMinRetainVersion());
+            snapshot.add(physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL).stream()
+                    .map(MaterializedIndex::getMetaId).sorted().collect(Collectors.toList()));
+        }
+        return snapshot;
+    }
+
+    private static int shadowIndexCount(OlapTable olapTable) {
+        int count = 0;
+        for (PhysicalPartition physicalPartition : olapTable.getPhysicalPartitions()) {
+            count += physicalPartition.getLatestMaterializedIndices(IndexExtState.SHADOW).size();
+        }
+        return count;
+    }
+
+    /**
+     * SHOW ALTER of a done job reads none of the partition states the prune drops, and shows no progress.
+     */
+    private static void assertShowAlterUnchangedByPrune(LakeRangeRewriteSchemaChangeJob doneJob) {
+        List<List<Comparable>> rowsBefore = new ArrayList<>();
+        doneJob.getInfo(rowsBefore);
+        doneJob.pruneMeta();
+        assertPruned(doneJob);
+        List<List<Comparable>> rowsAfter = new ArrayList<>();
+        doneJob.getInfo(rowsAfter);
+        Assertions.assertEquals(1, rowsBefore.size());
+        Assertions.assertEquals(FeConstants.NULL_STRING, rowsBefore.get(0).get(11));
+        Assertions.assertEquals(rowsBefore, rowsAfter);
+    }
+
+    /**
+     * Every partition the job rewrites has its state, which holds the shadow index and its tablets.
+     */
+    private static void assertHasPartitionStates(LakeOnlineRewriteJobBase job) {
+        Assertions.assertFalse(job.partitionStates.isEmpty(), "partition states");
+        for (LakeOnlineRewriteJobBase.PartitionRewriteState state : job.partitionStates.values()) {
+            Assertions.assertFalse(state.shadowIndex.getTablets().isEmpty(), "shadow tablets");
+        }
+    }
+
+    private static void assertPruned(LakeOnlineRewriteJobBase job) {
+        Assertions.assertEquals(Set.of(), job.partitionStates.keySet());
     }
 }

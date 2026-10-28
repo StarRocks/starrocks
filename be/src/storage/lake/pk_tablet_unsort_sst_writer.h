@@ -49,8 +49,9 @@ namespace starrocks::lake {
 // tracker.
 class PkTabletUnsortSSTWriter : public PkTabletSSTWriter {
 public:
-    PkTabletUnsortSSTWriter(TabletSchemaCSPtr tablet_schema_ptr, TabletManager* tablet_mgr, int64_t tablet_id)
-            : PkTabletSSTWriter(std::move(tablet_schema_ptr), tablet_mgr, tablet_id) {}
+    PkTabletUnsortSSTWriter(TabletSchemaCSPtr tablet_schema_ptr, TabletManager* tablet_mgr, int64_t tablet_id,
+                            int64_t txn_id)
+            : PkTabletSSTWriter(std::move(tablet_schema_ptr), tablet_mgr, tablet_id, txn_id) {}
     ~PkTabletUnsortSSTWriter() override = default;
     Status append_sst_record(const Chunk& data, const std::vector<uint64_t>* rssid_rowids = nullptr,
                              const std::vector<uint32_t>* column_indexes = nullptr) override;

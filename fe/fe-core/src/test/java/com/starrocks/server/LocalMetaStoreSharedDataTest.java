@@ -15,6 +15,7 @@
 package com.starrocks.server;
 
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
@@ -57,6 +58,26 @@ public class LocalMetaStoreSharedDataTest {
     @AfterEach
     public void teardown() {
         UtFrameUtils.tearDownForPersisTest();
+    }
+
+    @Test
+    public void testBaseCompactionForbiddenTimeRangesForLakeTables() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE test.base_window_dup(k int) DUPLICATE KEY(k) "
+                + "DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES("
+                + "'base_compaction_forbidden_time_ranges' = '* 8-20 * * *')");
+        starRocksAssert.withTable("CREATE TABLE test.base_window_pk(k int NOT NULL, v int) PRIMARY KEY(k) "
+                + "DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES("
+                + "'base_compaction_forbidden_time_ranges' = '* 8-20 * * *')");
+
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        OlapTable dup = (OlapTable) metastore.getTable("test", "base_window_dup");
+        OlapTable pk = (OlapTable) metastore.getTable("test", "base_window_pk");
+        Assertions.assertEquals("* 8-20 * * *", dup.getBaseCompactionForbiddenTimeRanges());
+        Assertions.assertEquals("* 8-20 * * *", pk.getBaseCompactionForbiddenTimeRanges());
+
+        starRocksAssert.ddl("ALTER TABLE test.base_window_pk SET ("
+                + "'base_compaction_forbidden_time_ranges' = '* 0-5 * * *')");
+        Assertions.assertEquals("* 0-5 * * *", pk.getBaseCompactionForbiddenTimeRanges());
     }
 
     @Test

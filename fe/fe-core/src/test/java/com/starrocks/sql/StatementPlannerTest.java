@@ -22,8 +22,10 @@ import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.PlannerMetaLocker;
 import com.starrocks.sql.analyzer.QueryAnalyzer;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.InsertStmt;
@@ -73,6 +75,24 @@ import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.times;
 
 class StatementPlannerTest extends PlanTestBase {
+
+    @Test
+    public void testAuthorizationPrecedesAIProviderResolution() throws Exception {
+        boolean oldBypassAuthorizerCheck = connectContext.isBypassAuthorizerCheck();
+        connectContext.setBypassAuthorizerCheck(false);
+        RuntimeException denied = new RuntimeException("authorization-order-sentinel");
+        try (MockedStatic<Authorizer> authorizer = mockStatic(Authorizer.class)) {
+            authorizer.when(() -> Authorizer.check(Mockito.any(), Mockito.same(connectContext))).thenThrow(denied);
+            StatementBase statement = UtFrameUtils.parseStmtWithNewParser(
+                    "select ai_custom_query('missing_authorization_order_provider', 'prompt')", connectContext);
+
+            Assertions.assertSame(denied,
+                    Assertions.assertThrows(RuntimeException.class,
+                            () -> StatementPlanner.plan(statement, connectContext)));
+        } finally {
+            connectContext.setBypassAuthorizerCheck(oldBypassAuthorizerCheck);
+        }
+    }
 
     @Test
     public void testDeferLock() throws Exception {
@@ -394,6 +414,40 @@ class StatementPlannerTest extends PlanTestBase {
         } finally {
             FeConstants.runningUnitTest = originalRunningUnitTest;
         }
+    }
+
+    @Test
+    public void testQueryFilesJoinedWithNormalTableResolvedBeforeLock() throws Exception {
+        String sql = "with src as (select col_int from files(\"path\"=\"fake://query\", \"format\"=\"csv\")) "
+                + "select src.col_int from src join t0 on src.col_int = t0.v1";
+        assertFilesResolvedBeforeLock(sql);
+    }
+
+    @Test
+    public void testCreatePipeFilesResolvedBeforeLock() throws Exception {
+        // CREATE PIPE analyzes its INSERT from inside PipeAnalyzer, i.e. after the lock of the outer
+        // statement is already held, so the INSERT's own deferred-lock path cannot help it.
+        String sql = "create pipe pipe_files_before_lock as insert into t0 "
+                + "select col_int, col_int, col_int from files(\"path\"=\"fake://pipe\", \"format\"=\"csv\")";
+        assertFilesResolvedBeforeLock(sql);
+    }
+
+    @Test
+    public void testCreatePipeRejectsBadPropertiesBeforeTouchingFiles() throws Exception {
+        // The files() pre-pass must not move the property check behind storage access: an invalid statement
+        // still fails on its properties, with files() never resolved.
+        String sql = "create pipe pipe_bad_property properties ('no_such_property' = '1') as insert into t0 "
+                + "select col_int, col_int, col_int from files(\"path\"=\"fake://pipe\", \"format\"=\"csv\")";
+        StatementBase stmt = UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sql, connectContext);
+        List<FileTableFunctionRelation> fileRelations = AnalyzerUtils.collectFileTableFunctionRelation(stmt);
+        assertFalse(fileRelations.isEmpty());
+        try (PlannerMetaLocker locker = new PlannerMetaLocker(connectContext, stmt)) {
+            SemanticException e = assertThrows(SemanticException.class,
+                    () -> StatementPlanner.analyzeStatement(stmt, connectContext, locker));
+            assertTrue(e.getMessage().contains("no_such_property"), e.getMessage());
+        }
+        fileRelations.forEach(relation -> assertNull(relation.getTable(),
+                "files() was resolved before the invalid property was reported"));
     }
 
     /**

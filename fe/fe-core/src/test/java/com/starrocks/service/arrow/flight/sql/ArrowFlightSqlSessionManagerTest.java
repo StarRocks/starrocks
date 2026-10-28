@@ -101,7 +101,10 @@ public class ArrowFlightSqlSessionManagerTest {
 
     private void mockAuthentication(MockedStatic<AuthenticationHandler> mockedAuth,
                                     AtomicReference<ArrowFlightSqlConnectContext> contextRef) {
-        mockedAuth.when(() -> AuthenticationHandler.authenticate(any(), any(), any(), any()))
+        // The Basic handshake goes through the clear-password entry now; a stub left on the old entry
+        // silently returns null (mockStatic default) instead of running this answer, which shows up as
+        // an NPE in assertAllocatorClosed rather than as an authentication problem.
+        mockedAuth.when(() -> AuthenticationHandler.authenticateWithClearPassword(any(), any(), any(), any()))
                 .thenAnswer(invocation -> {
                     ConnectContext ctx = invocation.getArgument(0);
                     ctx.setCurrentUserIdentity(null);

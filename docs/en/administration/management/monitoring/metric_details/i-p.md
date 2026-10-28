@@ -254,6 +254,12 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Bytes
 - Description: Memory used by jit compiled function cache.
 
+## `lake_compaction_held_segment_bytes`
+
+- Unit: Bytes
+- Type: Instantaneous
+- Description: Segment metadata currently pinned by running lake compaction tasks that hold their input segments (`lake_compaction_hold_input_segments`). Unlike the metadata cache, this memory is not managed by an LRU and is released when the holding task ends, so a persistently high value indicates long-running compactions rather than a cache that needs resizing.
+
 ## `lake_compaction_failed`
 
 - Unit: Count
@@ -284,6 +290,18 @@ For more information on how to build a monitoring service for your StarRocks clu
 
 - Unit: Count
 - Description: Counter of successful lake compaction jobs.
+
+## `lake_tablet_location_handoff_entries`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: Shared-data only. Number of tablet storage locations this BE holds for tablets it does not own, as handed over by their owners for writing combined transaction logs (see the BE configuration item `lake_enable_tablet_location_handoff`). They are kept in an LRU cache of 16 MiB: an entry is used for five minutes after its last refresh and is evicted when the cache needs room, so the value reflects cache occupancy rather than whether the handoff is in use.
+
+## `lake_tablet_location_handoff_hits_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Shared-data only. Number of times this BE resolved the storage location of a tablet it does not own from a location handed over by the tablet's owner instead of requesting it from StarMgr. Each increment is one StarMgr GetShard RPC avoided. It rises on the nodes that coordinate loads into tables with `file_bundling` enabled. Together with `staros_shard_info_fallback_total`, the share answered by the handoff is `hits / (hits + fallback)`.
 
 ## `lake_vacuum_del_file_batch_size_minute`
 
@@ -455,6 +473,12 @@ Latency metrics expose percentile series such as `merge_commit_request_latency_9
 - Type: Summary
 - Description: Combined latency for the RPC request and waiting for the stream load pipe to become available.
 
+## `meta_replay_lag_second`
+
+- Unit: Seconds
+- Type: Gauge
+- Description: How far the metadata replayed by this FE lags behind the Leader's clock. The Leader FE writes a timestamp into the journal every 10 seconds, and this metric is the age of the most recent timestamp that this node has replayed. Unlike `max_journal_replay_lag`, which only the Leader reports, this metric is reported by the lagging node itself, and it keeps growing while a single journal entry is stuck in replay. The Leader FE always reports `0`, because it writes the timestamps instead of replaying them. Once this value exceeds `meta_delay_toleration_second`, the node stops serving reads from its own metadata and forwards its queries to the Leader. Two cases are exempt: reads continue while `ignore_meta_check` is `true`, and a node that has replayed nothing since the previous check keeps whatever read availability it already had, unless it has also lost contact with the Leader, because falling behind a Leader that is writing nothing says nothing about this node. This second case only stops a node from being taken out of service; it never returns one that has already stopped serving.
+
 ## `meta_request_duration`
 
 - Unit: us
@@ -539,6 +563,11 @@ Latency metrics expose percentile series such as `merge_commit_request_latency_9
 
 - Unit: Count
 - Description: Cumulative number of driver scheduling times for pipeline executors in the BE.
+
+## `pipe_drivers`
+
+- Unit: Count
+- Description: Current logical driver capacity reserved by BE admission control. Includes reservations held while a fragment instantiates drivers and operators, as well as reservations retained after instantiation until they are released. The value follows logical DOP accounting, including colocate execution groups, and is not a count of instantiated driver objects or running threads. Releasing a reservation, including on preparation failure or fragment completion, decreases the value.
 
 ## `pipe_poller_block_queue_len`
 

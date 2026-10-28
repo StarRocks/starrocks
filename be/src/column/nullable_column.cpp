@@ -380,21 +380,4 @@ void NullableColumn::check_or_die() const {
     _null_column->check_or_die();
 }
 
-StatusOr<MutableColumnPtr> NullableColumn::upgrade_if_overflow() {
-    RETURN_IF_ERROR(_null_column->capacity_limit_reached());
-    auto ret = upgrade_helper_func(_data_column->as_mutable_raw_ptr());
-    if (ret.ok() && ret.value() != nullptr) {
-        _data_column = std::move(ret.value());
-    }
-    return ret;
-}
-
-StatusOr<MutableColumnPtr> NullableColumn::downgrade() {
-    auto ret = downgrade_helper_func(_data_column->as_mutable_raw_ptr());
-    if (ret.ok() && ret.value() != nullptr) {
-        _data_column = std::move(ret.value());
-    }
-    return ret;
-}
-
 } // namespace starrocks

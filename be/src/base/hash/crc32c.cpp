@@ -22,9 +22,8 @@
 #ifdef __SSE4_2__
 #include <nmmintrin.h>
 #endif
-#if defined(__ARM_NEON) && defined(__aarch64__)
+#if defined(__aarch64__) && defined(__ARM_FEATURE_CRC32)
 #include <arm_acle.h>
-#include <arm_neon.h>
 #endif
 #include "base/coding.h"
 
@@ -174,14 +173,14 @@ static inline uint64_t LE_LOAD64(const uint8_t* p) {
 
 static inline void Fast_CRC32(uint64_t* l, uint8_t const** p) {
 #ifndef __SSE4_2__
-#if defined(__ARM_NEON) && defined(__aarch64__)
+#if defined(__aarch64__) && defined(__ARM_FEATURE_CRC32)
     *l = __crc32cw(static_cast<unsigned int>(*l), LE_LOAD32(*p));
     *p += 4;
     *l = __crc32cw(static_cast<unsigned int>(*l), LE_LOAD32(*p));
     *p += 4;
 #else
     Slow_CRC32(l, p);
-#endif // defined(__ARM_NEON) && defined(__aarch64__)
+#endif // defined(__aarch64__) && defined(__ARM_FEATURE_CRC32)
 #elif defined(__LP64__) || defined(_WIN64)
     *l = _mm_crc32_u64(*l, LE_LOAD64(*p));
     *p += 8;

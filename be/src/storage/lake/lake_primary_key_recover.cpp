@@ -20,8 +20,8 @@
 #include "platform/key_cache.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/meta_file.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/tablet.h"
-#include "storage/lake/update_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage_primitive/primary_key_encoder.h"
@@ -34,7 +34,7 @@ Status LakePrimaryKeyRecover::pre_cleanup() {
     _metadata->clear_delvec_meta();
     _metadata->clear_sstable_meta();
     // 2. reset primary index
-    RETURN_ERROR_IF_FALSE(_tablet->update_mgr()->try_remove_primary_index_cache(_tablet->id()));
+    RETURN_ERROR_IF_FALSE(_tablet->primary_key_mgr()->try_remove_primary_index_cache(_tablet->id()));
     DataDir* data_dir = StorageEngine::instance()->get_persistent_index_store(_tablet->id());
     if (data_dir != nullptr) {
         // clear local persistent index's index meta from rocksdb, and index files.

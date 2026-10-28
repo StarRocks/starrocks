@@ -35,8 +35,10 @@
 package com.starrocks.common;
 
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.starrocks.authentication.SecurityIntegration;
+import com.starrocks.common.util.CredentialMask;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.qe.ConnectContext;
@@ -94,6 +96,29 @@ public class ConfigBase {
          * @return an array of alias names
          */
         String[] aliases() default {};
+
+        /**
+         * Whether the value is a credential (password, secret key, token, ...). ADMIN SHOW FRONTEND CONFIG and
+         * the /variable page report a set value as {@link CredentialMask#LONG}; the field keeps the real value.
+         */
+        boolean sensitive() default false;
+    }
+
+    // An empty value stays empty, so the output still tells an unset credential from a set one.
+    static String maskIfSensitive(ConfField anno, String value) {
+        if (anno.sensitive() && !Strings.isNullOrEmpty(value)) {
+            return CredentialMask.LONG;
+        }
+        return value;
+    }
+
+    // Same as maskIfSensitive(ConfField, String), for the config named key (its name or an alias). An unknown key is
+    // not masked.
+    public static String maskIfSensitive(String key, String value) {
+        if (sensitiveConfigNames.contains(key) && !Strings.isNullOrEmpty(value)) {
+            return CredentialMask.LONG;
+        }
+        return value;
     }
 
     protected Properties props;
@@ -101,11 +126,15 @@ public class ConfigBase {
     private static String configPath;
     protected static Field[] configFields;
     protected static Map<String, Field> allMutableConfigs = new HashMap<>();
+    // The names and aliases of the sensitive configs, so that maskIfSensitive(String, String) need not scan
+    // configFields: it runs for every parameter of a request uri that is logged, before authentication.
+    private static Set<String> sensitiveConfigNames = ImmutableSet.of();
 
     public void init(String propFile) throws Exception {
         configPath = propFile;
         configFields = this.getClass().getFields();
         initAllMutableConfigs();
+        initSensitiveConfigNames();
         props = new Properties();
         try (FileReader reader = new FileReader(propFile)) {
             props.load(reader);
@@ -135,6 +164,17 @@ public class ConfigBase {
         }
     }
 
+    private static void initSensitiveConfigNames() {
+        ImmutableSet.Builder<String> names = ImmutableSet.builder();
+        for (Field field : configFields) {
+            ConfField confField = field.getAnnotation(ConfField.class);
+            if (confField != null && confField.sensitive()) {
+                names.add(field.getName()).add(confField.aliases());
+            }
+        }
+        sensitiveConfigNames = names.build();
+    }
+
     public static Map<String, Field> getAllMutableConfigs() {
         return allMutableConfigs;
     }
@@ -143,35 +183,38 @@ public class ConfigBase {
         HashMap<String, String> map = new HashMap<String, String>();
         Field[] fields = configFields;
         for (Field f : fields) {
-            if (f.getAnnotation(ConfField.class) == null) {
+            ConfField anno = f.getAnnotation(ConfField.class);
+            if (anno == null) {
                 continue;
             }
+            String value;
             if (f.getType().isArray()) {
                 switch (f.getType().getSimpleName()) {
                     case "short[]":
-                        map.put(f.getName(), Arrays.toString((short[]) f.get(null)));
+                        value = Arrays.toString((short[]) f.get(null));
                         break;
                     case "int[]":
-                        map.put(f.getName(), Arrays.toString((int[]) f.get(null)));
+                        value = Arrays.toString((int[]) f.get(null));
                         break;
                     case "long[]":
-                        map.put(f.getName(), Arrays.toString((long[]) f.get(null)));
+                        value = Arrays.toString((long[]) f.get(null));
                         break;
                     case "double[]":
-                        map.put(f.getName(), Arrays.toString((double[]) f.get(null)));
+                        value = Arrays.toString((double[]) f.get(null));
                         break;
                     case "boolean[]":
-                        map.put(f.getName(), Arrays.toString((boolean[]) f.get(null)));
+                        value = Arrays.toString((boolean[]) f.get(null));
                         break;
                     case "String[]":
-                        map.put(f.getName(), Arrays.toString((String[]) f.get(null)));
+                        value = Arrays.toString((String[]) f.get(null));
                         break;
                     default:
                         throw new InvalidConfException("unknown type: " + f.getType().getSimpleName());
                 }
             } else {
-                map.put(f.getName(), f.get(null).toString());
+                value = f.get(null).toString();
             }
+            map.put(f.getName(), maskIfSensitive(anno, value));
         }
         return map;
     }
@@ -262,11 +305,32 @@ public class ConfigBase {
                             + confVal);
                 }
                 break;
+            case "group_provider_http_connect_timeout_ms":
+            case "group_provider_http_read_timeout_ms":
+                // URLConnection reads 0 as "no timeout" - the unbounded read these exist to prevent - and
+                // rejects a negative value with an unchecked exception that would surface on the journal
+                // replay thread. Neither may reach the setter.
+                int timeoutMs = Integer.parseInt(confVal);
+                if (timeoutMs <= 0) {
+                    throw new InvalidConfException("'" + f.getName() + "' must be a positive number of " +
+                            "milliseconds, current value: " + confVal);
+                }
+                break;
             case "db_used_data_quota_update_interval_secs":
                 int intVal = Integer.parseInt(confVal);
                 if (intVal < 30) {
                     throw new InvalidConfException("'db_used_data_quota_update_interval_secs' configuration " +
                             "must be at least 30 seconds, current value: " + confVal);
+                }
+                break;
+            case "label_clean_interval_second":
+                // The value drives Daemon.run()'s Thread.sleep(): 0 spins the label cleaner and a
+                // negative value throws IllegalArgumentException, which escapes the daemon loop and
+                // kills the cleaner thread for good.
+                int labelCleanInterval = Integer.parseInt(confVal);
+                if (labelCleanInterval <= 0) {
+                    throw new InvalidConfException("'label_clean_interval_second' configuration " +
+                            "must be greater than 0, current value: " + confVal);
                 }
                 break;
             case "http_request_allow_private_in_allowlist":
@@ -462,7 +526,8 @@ public class ConfigBase {
             }
 
             try {
-                appendPersistedProperties(key, parsedConfigValue.confVal, userIdentity);
+                appendPersistedProperties(key, field.getAnnotation(ConfField.class), parsedConfigValue.confVal,
+                        userIdentity);
             } catch (IOException e) {
                 throw new InvalidConfException("Failed to set config '" + key + "'. err: " + e.getMessage());
             }
@@ -474,10 +539,13 @@ public class ConfigBase {
             throw new InvalidConfException("Failed to set config '" + key + "'. err: " + e.getMessage());
         }
 
-        LOG.info("set config {} to {}", key, value);
+        // The value as it is set and persisted: e.g. a blank one sets an empty credential, which is not masked.
+        LOG.info("set config {} to {}", key,
+                maskIfSensitive(field.getAnnotation(ConfField.class), parsedConfigValue.confVal));
     }
 
-    private static void appendPersistedProperties(String key, String value, String userIdentity) throws IOException {
+    private static void appendPersistedProperties(String key, ConfField anno, String value, String userIdentity)
+            throws IOException {
         Properties props = new Properties();
         Path path = Paths.get(configPath);
         List<String> lines = Files.readAllLines(path);
@@ -486,12 +554,15 @@ public class ConfigBase {
         }
 
         String oldValue = props.getProperty(key);
+        // Only the comment is masked: the key = value line below must keep the real value to be loaded on restart,
+        // but the comments pile up, and would otherwise keep every old credential in the file.
         String comment;
         if (StringUtils.isEmpty(oldValue)) {
-            comment = String.format("# The user %s added %s=%s at %s", userIdentity, key, value,
+            comment = String.format("# The user %s added %s=%s at %s", userIdentity, key, maskIfSensitive(anno, value),
                     LocalDateTime.now().format(DateUtils.DATE_TIME_FORMATTER_UNIX));
         } else {
-            comment = String.format("# The user %s changed %s to %s at %s", userIdentity, oldValue, value,
+            comment = String.format("# The user %s changed %s to %s at %s", userIdentity,
+                    maskIfSensitive(anno, oldValue), maskIfSensitive(anno, value),
                     LocalDateTime.now().format(DateUtils.DATE_TIME_FORMATTER_UNIX));
         }
 
@@ -588,7 +659,7 @@ public class ConfigBase {
 
             config.add(confKey);
             config.add(Arrays.toString(anno.aliases()));
-            config.add(Strings.nullToEmpty(confVal));
+            config.add(Strings.nullToEmpty(maskIfSensitive(anno, confVal)));
             config.add(f.getType().getSimpleName());
             config.add(String.valueOf(anno.mutable()));
             config.add(anno.comment());

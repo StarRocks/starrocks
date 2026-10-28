@@ -1,0 +1,90 @@
+-- name: test_share_json_parse_equivalence
+-- Several get_json_xxx calls on one VARCHAR document share one parse_json when
+-- enable_share_json_parse is on. Results must be identical with the rule off and on.
+create database db_${uuid0};
+use db_${uuid0};
+create table edge (id int, doc varchar(1000)) duplicate key(id) distributed by hash(id) buckets 1 properties('replication_num' = '1');
+insert into edge values
+ (1, '{"a": 1, "b": "x", "c": {"d": [1, 2, {"e": null}]}}'),
+ (2, '{"a": 9223372036854775807, "b": 1.5e308, "c": 18446744073709551615}'),
+ (3, '{"a": "line\\nbreak \\u00e9 \\"q\\"", "b": true, "c": false}'),
+ (4, '[{"a": 1}, {"a": 2}]'),
+ (5, 'not json at all'),
+ (6, '{"a": 1,'),
+ (7, ''),
+ (8, NULL),
+ (9, '   {"a" : "  spaced  " }   '),
+ (10, '"just a string"'),
+ (11, '123'),
+ (12, '{"a": {"b": {"c": "deep"}}, "b": [], "c": {}}'),
+ (13, '{"a": 1, "a": 2}'),
+ (14, '{"": "empty key", "a.b": "dotted"}');
+set enable_share_json_parse = false;
+function: assert_explain_not_contains("select get_json_string(doc, '$.a'), get_json_int(doc, '$.b') from edge", "parse_json")
+[ORDER]select id,
+ get_json_string(doc, '$.a'), get_json_string(doc, '$.b'), get_json_string(doc, '$.c'),
+ get_json_string(doc, '$.c.d'), get_json_string(doc, '$.c.d[2].e'), get_json_string(doc, '$[1].a'),
+ get_json_string(doc, '$.a.b.c'), get_json_string(doc, '$'), get_json_string(doc, '$."a.b"'),
+ get_json_int(doc, '$.a'), get_json_int(doc, '$.b'), get_json_int(doc, '$.c'),
+ get_json_double(doc, '$.a'), get_json_double(doc, '$.b'), get_json_double(doc, '$.c'),
+ get_json_object(doc, '$.c'), get_json_object(doc, '$.a'),
+ get_json_scalar(doc, '$.a'), get_json_scalar(doc, '$.c'),
+ if(id > 5, get_json_string(doc, '$.a'), get_json_string(doc, '$.b'))
+from edge order by id;
+set enable_share_json_parse = true;
+function: assert_explain_contains("select get_json_string(doc, '$.a'), get_json_int(doc, '$.b') from edge", "parse_json")
+[ORDER]select id,
+ get_json_string(doc, '$.a'), get_json_string(doc, '$.b'), get_json_string(doc, '$.c'),
+ get_json_string(doc, '$.c.d'), get_json_string(doc, '$.c.d[2].e'), get_json_string(doc, '$[1].a'),
+ get_json_string(doc, '$.a.b.c'), get_json_string(doc, '$'), get_json_string(doc, '$."a.b"'),
+ get_json_int(doc, '$.a'), get_json_int(doc, '$.b'), get_json_int(doc, '$.c'),
+ get_json_double(doc, '$.a'), get_json_double(doc, '$.b'), get_json_double(doc, '$.c'),
+ get_json_object(doc, '$.c'), get_json_object(doc, '$.a'),
+ get_json_scalar(doc, '$.a'), get_json_scalar(doc, '$.c'),
+ if(id > 5, get_json_string(doc, '$.a'), get_json_string(doc, '$.b'))
+from edge order by id;
+drop database db_${uuid0};
+
+-- name: test_share_json_parse_threshold
+create database db_${uuid0};
+use db_${uuid0};
+create table t (id int, doc varchar(1000)) duplicate key(id) distributed by hash(id) buckets 1 properties('replication_num' = '1');
+insert into t values (1, '{"a": "x", "b": 2, "c": 3.5}'), (2, '{"a": "y", "b": 4}'), (3, NULL);
+set enable_share_json_parse = true;
+set share_json_parse_min_extractions = 3;
+function: assert_explain_not_contains("select get_json_string(doc, '$.a'), get_json_int(doc, '$.b') from t", "parse_json")
+function: assert_explain_contains("select get_json_string(doc, '$.a'), get_json_int(doc, '$.b'), get_json_double(doc, '$.c') from t", "parse_json")
+[ORDER]select id, get_json_string(doc, '$.a'), get_json_int(doc, '$.b'), get_json_double(doc, '$.c') from t order by id;
+set share_json_parse_min_extractions = 2;
+drop database db_${uuid0};
+
+-- name: test_share_json_parse_throw_exception_mode
+-- Expression reuse may parse rows a CASE branch skips, so the rule stays off when
+-- errors are raised instead of returning NULL.
+create database db_${uuid0};
+use db_${uuid0};
+create table t (id int, doc varchar(1000)) duplicate key(id) distributed by hash(id) buckets 1 properties('replication_num' = '1');
+insert into t values (1, '{"a": "x", "b": 2}'), (2, '{"a": "y", "b": 4}');
+set enable_share_json_parse = true;
+set sql_mode = 'ALLOW_THROW_EXCEPTION';
+function: assert_explain_not_contains("select get_json_string(doc, '$.a'), get_json_int(doc, '$.b') from t", "parse_json")
+[ORDER]select id, get_json_string(doc, '$.a'), get_json_int(doc, '$.b') from t order by id;
+set sql_mode = '';
+drop database db_${uuid0};
+
+-- name: test_share_json_parse_json_column
+-- JSON columns are not rewritten; a VARCHAR extracted from a JSON column is.
+create database db_${uuid0};
+use db_${uuid0};
+create table t (id int, j json) duplicate key(id) distributed by hash(id) buckets 1 properties('replication_num' = '1');
+insert into t values (1, parse_json('{"a": "x", "payload": "{\\"k\\": 1, \\"v\\": \\"one\\"}"}')),
+ (2, parse_json('{"a": "y", "payload": "{\\"k\\": 2}"}')), (3, NULL);
+set enable_share_json_parse = true;
+function: assert_explain_not_contains("select get_json_string(j, '$.a'), get_json_string(j, '$.payload') from t", "parse_json")
+[ORDER]select id, get_json_string(j, '$.a'), get_json_string(j, '$.payload') from t order by id;
+set enable_share_json_parse = false;
+[ORDER]select id, get_json_int(get_json_string(j, '$.payload'), '$.k'), get_json_string(get_json_string(j, '$.payload'), '$.v') from t order by id;
+set enable_share_json_parse = true;
+function: assert_explain_contains("select get_json_int(get_json_string(j, '$.payload'), '$.k'), get_json_string(get_json_string(j, '$.payload'), '$.v') from t", "parse_json")
+[ORDER]select id, get_json_int(get_json_string(j, '$.payload'), '$.k'), get_json_string(get_json_string(j, '$.payload'), '$.v') from t order by id;
+drop database db_${uuid0};

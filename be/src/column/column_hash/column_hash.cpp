@@ -25,6 +25,7 @@
 #include "column/column_visitor_adapter.h"
 #include "column/const_column.h"
 #include "column/decimalv3_column.h"
+#include "column/file_column.h"
 #include "column/fixed_length_column_base.h"
 #include "column/json_column.h"
 #include "column/map_column.h"
@@ -232,8 +233,7 @@ public:
         }
     }
 
-    template <typename SizeT>
-    Status do_visit(const BinaryColumnBase<SizeT>& column) {
+    Status do_visit(const BinaryColumn& column) {
         const auto& offsets = column.get_offset();
         const auto& bytes = column.get_immutable_bytes();
         const auto column_size = column.size();
@@ -373,6 +373,13 @@ public:
     }
 
     Status do_visit(const StructColumn& column) {
+        for (const ColumnPtr& field : column.fields()) {
+            (void)field->accept(this);
+        }
+        return Status::OK();
+    }
+
+    Status do_visit(const FileColumn& column) {
         for (const ColumnPtr& field : column.fields()) {
             (void)field->accept(this);
         }

@@ -30,7 +30,9 @@ public:
 
     METRIC_DEFINE_INT_COUNTER(staros_shard_info_fallback_total, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(staros_shard_info_fallback_failed_total, MetricUnit::REQUESTS);
+    METRIC_DEFINE_INT_COUNTER(lake_tablet_location_handoff_hits_total, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_GAUGE(staros_shard_count, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_GAUGE(lake_tablet_location_handoff_entries, MetricUnit::NOUNIT);
 
 private:
     MetricRegistry* _registry = nullptr;

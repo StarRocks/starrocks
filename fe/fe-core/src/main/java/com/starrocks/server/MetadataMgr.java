@@ -36,6 +36,7 @@ import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
+import com.starrocks.catalog.mv.PreResolvedBaseTables;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -590,8 +591,8 @@ public class MetadataMgr {
         if (baseTableInfo.isInternalCatalog()) {
             return Optional.ofNullable(localMetastore.getTable(baseTableInfo.getDbId(), baseTableInfo.getTableId()));
         } else {
-            return Optional.ofNullable(
-                    getTable(context, baseTableInfo.getCatalogName(), baseTableInfo.getDbName(), baseTableInfo.getTableName()));
+            return PreResolvedBaseTables.getOrResolve(baseTableInfo, () -> Optional.ofNullable(
+                    getTable(context, baseTableInfo.getCatalogName(), baseTableInfo.getDbName(), baseTableInfo.getTableName())));
         }
     }
 
@@ -986,6 +987,15 @@ public class MetadataMgr {
                              List<String> partitionNames, boolean onlyCachedPartitions) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         connectorMetadata.ifPresent(metadata -> metadata.refreshTable(srDbName, table, partitionNames, onlyCachedPartitions));
+    }
+
+    /**
+     * See {@link ConnectorMetadata#invalidateTableForRead}. Goes through the query-level metadata when there is a
+     * query, so what this query already cached about the table is dropped along with the catalog's cache.
+     */
+    public void invalidateTableForRead(String catalogName, String srDbName, Table table) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+        connectorMetadata.ifPresent(metadata -> metadata.invalidateTableForRead(srDbName, table));
     }
 
     public void finishSink(String catalogName, String dbName, String tableName,

@@ -34,6 +34,7 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.Daemon;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.lake.CommitRateLimiter;
 import com.starrocks.lake.LakeAggregator;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.proto.AggregateCompactRequest;
@@ -56,12 +57,14 @@ import com.starrocks.transaction.VisibleStateWaiter;
 import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.commons.collections4.queue.CircularFifoQueue;
+import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -361,15 +364,16 @@ public class CompactionScheduler extends Daemon {
 
             // Skip compaction while the table is under an alter that makes it wasteful or unsafe:
             //   - SCHEMA_CHANGE: the compacted data would be discarded once the schema change finishes.
-            //   - ROLLUP on a range-distribution table: this is an online-rewrite rollup (LakeRangeRollupJob) whose
-            //     flip replays the shadow tablets' per-version txn vlogs over [alter_version + 1, new_version). A
-            //     compaction commits a partition version with no vlog, leaving a gap the flip cannot bridge, which
-            //     wedges the publish forever. Only range-distribution rollups take the online-rewrite path (there
-            //     the sort key IS the distribution, so a new sort key redistributes rows across tablets); traditional
-            //     hash rollups build eagerly via BE alter tasks, hold no such dependency, and must keep compacting.
+            //   - ROLLUP: both lake rollup paths (LakeRollupJob for hash tables and sync MVs, LakeRangeRollupJob
+            //     for range-distribution tables) publish the new index by replaying the rollup tablets' per-version
+            //     txn vlogs over [alter_version + 1, commit_version). A compaction only writes the visible (base)
+            //     index tablets, so a compaction version inside that range has no rollup vlog and the rollup
+            //     publish fails on every retry, wedging the job forever (RB-320).
             if (table != null && (table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE
-                    || (table.getState() == OlapTable.OlapTableState.ROLLUP && table.isRangeDistribution()))) {
-                compactionManager.enableCompactionAfter(partitionIdentifier, Config.lake_compaction_interval_ms_on_failure);
+                    || table.getState() == OlapTable.OlapTableState.ROLLUP)) {
+                long retryAfterMs = Config.lake_compaction_interval_ms_on_failure;
+                compactionManager.enableCompactionAfter(partitionIdentifier, retryAfterMs);
+                logCompactionSkippedByAlter(db, table, partitionStatisticsSnapshot, retryAfterMs);
                 return null;
             }
             partition = (table != null) ? table.getPhysicalPartition(partitionIdentifier.getPartitionId()) : null;
@@ -393,9 +397,9 @@ public class CompactionScheduler extends Daemon {
                     || !partition.isUnsharing() || !table.isFileBundling())) {
                 // Clear the marker before dropping the request. Priority is otherwise only reset for
                 // partitions that made it into runningCompactions, and this one never will -- while
-                // ScoreSelector admits any non-DEFAULT priority regardless of score or cooldown, so the
-                // partition would be reselected and refused every cycle and its ordinary compaction
-                // would never resume. Reachable across a leader switch: a new leader can retrigger
+                // the retained priority would route every retry back here as UNSHARE, so the partition
+                // would be refused on each retry and its ordinary compaction would never resume.
+                // Reachable across a leader switch: a new leader can retrigger
                 // UNSHARE while the committed transaction is still becoming visible, and the cutover
                 // returns the table to NORMAL before this request is served.
                 compactionManager.resetPriority(partitionIdentifier);
@@ -465,6 +469,30 @@ public class CompactionScheduler extends Daemon {
         }
     }
 
+    // While an alter pauses compaction, the partition's compaction score keeps climbing under ingestion, and
+    // loads get delayed or rejected with a hint to raise compaction concurrency, which cannot help. Log each
+    // skip so an operator can tie the score to the running alter job. The partition id and score match
+    // PARTITION_ID and MAX_CS in information_schema.partitions_meta. A skipped partition is retried at most
+    // once per retryAfterMs, so log at INFO only while its score already delays or rejects commits into it, and
+    // at DEBUG otherwise to keep a wide table from flooding fe.log.
+    private static void logCompactionSkippedByAlter(Database db, OlapTable table, PartitionStatisticsSnapshot snapshot,
+                                                    long retryAfterMs) {
+        double score = snapshot.getCompactionScore().getMax();
+        Level level = CommitRateLimiter.throttlesIngestion(score) ? Level.INFO : Level.DEBUG;
+        LOG.log(level, "Skip compaction of partition {} of table {}.{} while the table is in {} state, compaction "
+                        + "score: {}. Compaction resumes after the alter job finishes; next check in {}ms",
+                snapshot.getPartition().getPartitionId(), db.getFullName(), table.getName(), table.getState(), score,
+                retryAfterMs);
+    }
+
+    private static boolean allowBaseCompaction(OlapTable table, PartitionStatistics.CompactionPriority priority) {
+        // An explicit manual request is an operator override. The forbidden
+        // ranges only limit automatic base compaction.
+        return priority == PartitionStatistics.CompactionPriority.MANUAL_COMPACT ||
+                !CompactionControlScheduler.isBaseCompactionForbidden(
+                        table.getBaseCompactionForbiddenTimeRanges(), new Date());
+    }
+
     @NotNull
     private List<CompactionTask> createCompactionTasks(long currentVersion, Map<Long, List<Long>> beToTablets, long txnId,
             boolean allowPartialSuccess, PartitionStatistics.CompactionPriority priority, OlapTable table)
@@ -474,6 +502,7 @@ public class CompactionScheduler extends Daemon {
         // Get parallel compaction configuration from table property
         // maxParallel > 0 means parallel compaction is enabled
         int maxParallel = table.getTableProperty().getLakeCompactionMaxParallel();
+        boolean allowBaseCompaction = allowBaseCompaction(table, priority);
 
         for (Map.Entry<Long, List<Long>> entry : beToTablets.entrySet()) {
             ComputeNode node = systemInfoService.getBackendOrComputeNode(entry.getKey());
@@ -491,6 +520,7 @@ public class CompactionScheduler extends Daemon {
             request.allowPartialSuccess = allowPartialSuccess;
             request.encryptionMeta = GlobalStateMgr.getCurrentState().getKeyMgr().getCurrentKEKAsEncryptionMeta();
             request.forceBaseCompaction = (priority == PartitionStatistics.CompactionPriority.MANUAL_COMPACT);
+            request.allowBaseCompaction = allowBaseCompaction;
             request.unshareSegments = priority == PartitionStatistics.CompactionPriority.UNSHARE;
 
             // Set parallel compaction configuration if enabled via table property
@@ -553,6 +583,7 @@ public class CompactionScheduler extends Daemon {
             request.allowPartialSuccess = false;
             request.encryptionMeta = GlobalStateMgr.getCurrentState().getKeyMgr().getCurrentKEKAsEncryptionMeta();
             request.forceBaseCompaction = (priority == PartitionStatistics.CompactionPriority.MANUAL_COMPACT);
+            request.allowBaseCompaction = allowBaseCompaction(table, priority);
             request.skipWriteTxnlog = true;
             request.unshareSegments = priority == PartitionStatistics.CompactionPriority.UNSHARE;
 

@@ -22,6 +22,7 @@
 #include <mutex>
 #include <string_view>
 
+#include "base/testutil/sync_point.h"
 #include "base/time/time.h"
 #include "base/uid_util.h"
 #include "base/utility/defer_op.h"
@@ -127,6 +128,17 @@ Status SinkBuffer::add_request(TransmitChunkInfo& request) {
         auto& instance_id = request.fragment_instance_id;
         auto& context = sink_ctx(instance_id.lo);
 
+        // _num_sending_rpc is part of is_finished(), but _try_to_send_rpc() decreases it without notifying.
+        // If another thread sets _is_finishing meanwhile (e.g. driver 0 cancels the buffer while this sinker
+        // is still sending), its notification and its own pending-finish check may both see this thread as
+        // still sending. Under the event scheduler nothing else would wake driver 0 then, so notify here once
+        // this thread has left _try_to_send_rpc(). The fragment stays alive because this sinker's driver has
+        // not finished yet.
+        DeferOp notify_if_finishing([this]() {
+            if (_is_finishing) {
+                _observable.notify_sink_observers();
+            }
+        });
         RETURN_IF_ERROR(_try_to_send_rpc(instance_id, [&]() { context.buffer.push(request); }));
     }
 
@@ -193,6 +205,8 @@ void SinkBuffer::update_profile(RuntimeProfile* profile) {
     RuntimeProfile::Counter* rpc_avg_timer = ADD_TIMER(profile, "RpcAvgTime");
     RuntimeProfile::Counter* network_timer = ADD_TIMER(profile, "NetworkTime");
     RuntimeProfile::Counter* wait_timer = ADD_TIMER(profile, "WaitTime");
+    RuntimeProfile::Counter* buffer_full_timer = ADD_CHILD_TIMER(profile, "BufferFullTime", "WaitTime");
+    RuntimeProfile::Counter* pending_finish_timer = ADD_CHILD_TIMER(profile, "PendingFinishTime", "WaitTime");
     RuntimeProfile::Counter* overall_timer = ADD_TIMER(profile, "OverallTime");
 
     COUNTER_SET(rpc_count, _rpc_count.load());
@@ -201,11 +215,11 @@ void SinkBuffer::update_profile(RuntimeProfile* profile) {
     COUNTER_SET(network_timer, _network_time());
     COUNTER_SET(overall_timer, _last_receive_time - _first_send_time);
 
-    // WaitTime consists two parts
-    // 1. buffer full time
-    // 2. pending finish time
-    COUNTER_SET(wait_timer, _full_time.load());
-    COUNTER_UPDATE(wait_timer, MonotonicNanos() - _pending_timestamp);
+    const int64_t buffer_full_time = _full_time.load();
+    const int64_t pending_finish_time = MonotonicNanos() - _pending_timestamp;
+    COUNTER_SET(buffer_full_timer, buffer_full_time);
+    COUNTER_SET(pending_finish_timer, pending_finish_time);
+    COUNTER_SET(wait_timer, buffer_full_time + pending_finish_time);
 
     RuntimeProfile::Counter* bytes_sent_counter = ADD_COUNTER(profile, "BytesSent", TUnit::BYTES);
     RuntimeProfile::Counter* request_sent_counter = ADD_COUNTER(profile, "RequestSent", TUnit::UNIT);
@@ -309,6 +323,7 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
 
     DeferOp decrease_defer([this]() { --_num_sending_rpc; });
     ++_num_sending_rpc;
+    TEST_SYNC_POINT("SinkBuffer::_try_to_send_rpc:after_incr_sending");
 
     // When the driver worker thread sends request and creates the protobuf request,
     // also use process_mem_tracker to record the memory of the protobuf request.

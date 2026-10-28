@@ -89,6 +89,37 @@ if starrocks_is_darwin ; then
     PARALLEL=$(starrocks_detect_parallelism)
     # Darwin thirdparty is prepared separately and validated before BE configure.
 else
+    # Resolve ARM CRC32 configuration before third-party build
+    # 1. Start with environment variable if provided, otherwise default ON
+    if [[ -z "${USE_ARM_CRC32}" ]]; then
+        RESOLVED_ARM_CRC32=ON
+    else
+        RESOLVED_ARM_CRC32="${USE_ARM_CRC32}"
+    fi
+
+    # 2. Hardware auto-detection overrides default (must have CRC on all cores)
+    if [[ -z "${USE_ARM_CRC32}" && -e /proc/cpuinfo && ("${MACHINE_TYPE}" == "aarch64" || "${MACHINE_TYPE}" == "arm64") ]]; then
+        features_count=$(grep -c '^Features' /proc/cpuinfo 2>/dev/null || true)
+        features_count=${features_count:-0}
+        crc_count=$(grep '^Features' /proc/cpuinfo 2>/dev/null | grep -E -c '\bcrc32\b' || true)
+        crc_count=${crc_count:-0}
+        if [[ ${features_count} -eq 0 || ${crc_count} -lt ${features_count} ]]; then
+            RESOLVED_ARM_CRC32=OFF
+        fi
+    fi
+
+    # 3. CLI arguments override everything
+    for arg in "$@"; do
+        if [[ "$arg" == "--without-arm-crc32" ]]; then
+            RESOLVED_ARM_CRC32=OFF
+        elif [[ "$arg" == "--with-arm-crc32" ]]; then
+            RESOLVED_ARM_CRC32=ON
+        fi
+    done
+
+    export THIRD_PARTY_BUILD_WITH_ARM_CRC="${RESOLVED_ARM_CRC32}"
+    export USE_ARM_CRC32="${RESOLVED_ARM_CRC32}"
+
     if [[ ! -f ${STARROCKS_THIRDPARTY}/installed/llvm/lib/libLLVMInstCombine.a ]]; then
         echo "Thirdparty libraries need to be build ..."
         ${STARROCKS_THIRDPARTY}/build-thirdparty.sh
@@ -151,7 +182,11 @@ Usage: $0 <options>
                         build with compressing debug symbol. (default: $WITH_COMPRESS)
      --with-source-file-relative-path {ON|OFF}
                         build source file with relative path. (default: $WITH_RELATIVE_SRC_PATH)
-     --without-avx2     build Backend without avx2(instruction)    
+     --without-avx2     build Backend without avx2(instruction)
+     --without-arm-crc32
+                        build ARM64 Backend without CRC32 instructions
+     --with-arm-crc32
+                        build ARM64 Backend with CRC32 instructions
      --with-maven-batch-mode {ON|OFF}
                         build maven project in batch mode (default: $WITH_MAVEN_BATCH_MODE)
      --output           specify the output directory (default: $STARROCKS_HOME/output)
@@ -209,6 +244,8 @@ OPTS=$(${GETOPT_BIN} \
   -l 'with-compress-debug-symbol:' \
   -l 'with-source-file-relative-path:' \
   -l 'without-avx2' \
+  -l 'without-arm-crc32' \
+  -l 'with-arm-crc32' \
   -l 'with-maven-batch-mode:' \
   -l 'output:' \
   -l 'help' \
@@ -283,6 +320,9 @@ if [[ -z ${USE_SSE4_2} ]]; then
 fi
 if [[ -z ${USE_BMI_2} ]]; then
     USE_BMI_2=ON
+fi
+if [[ -z ${USE_ARM_CRC32} ]]; then
+    USE_ARM_CRC32=ON
 fi
 if [[ -z ${ENABLE_JIT} ]]; then
     if starrocks_is_darwin; then
@@ -374,6 +414,8 @@ else
             --without-tenann) WITH_TENANN=OFF; shift ;;
             --configure-only) CONFIGURE_ONLY=ON; shift ;;
             --without-avx2) USE_AVX2=OFF; shift ;;
+            --without-arm-crc32) USE_ARM_CRC32=OFF; shift ;;
+            --with-arm-crc32) USE_ARM_CRC32=ON; shift ;;
             --with-compress-debug-symbol) WITH_COMPRESS=$2 ; shift 2 ;;
             --with-source-file-relative-path) WITH_RELATIVE_SRC_PATH=$2 ; shift 2 ;;
             --with-maven-batch-mode) WITH_MAVEN_BATCH_MODE=$2 ; shift 2 ;;
@@ -447,6 +489,7 @@ echo "Get params:
     USE_AVX512                  -- $USE_AVX512
     USE_SSE4_2                  -- $USE_SSE4_2
     USE_BMI_2                   -- $USE_BMI_2
+    USE_ARM_CRC32               -- $USE_ARM_CRC32
     PARALLEL                    -- $PARALLEL
     ENABLE_FAULT_INJECTION      -- $ENABLE_FAULT_INJECTION
     BUILD_JAVA_EXT              -- $BUILD_JAVA_EXT
@@ -584,6 +627,7 @@ if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
                   -DMAKE_TEST=OFF -DWITH_GCOV=${WITH_GCOV}              \
                   -DUSE_AVX2=$USE_AVX2 -DUSE_AVX512=$USE_AVX512         \
                   -DUSE_SSE4_2=$USE_SSE4_2 -DUSE_BMI_2=$USE_BMI_2       \
+                  -DUSE_ARM_CRC32=$USE_ARM_CRC32                       \
                   -DWITH_BENCH=${WITH_BENCH}                            \
                   -DWITH_CONNECTOR_BENCHMARK=${WITH_CONNECTOR_BENCHMARK} \
                   -DWITH_CONNECTOR_ELASTICSEARCH=${WITH_CONNECTOR_ELASTICSEARCH} \

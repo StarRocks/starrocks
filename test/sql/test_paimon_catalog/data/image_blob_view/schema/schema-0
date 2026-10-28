@@ -1,0 +1,28 @@
+{
+  "version" : 3,
+  "id" : 0,
+  "fields" : [ {
+    "id" : 0,
+    "name" : "id",
+    "type" : "INT"
+  }, {
+    "id" : 1,
+    "name" : "label",
+    "type" : "STRING"
+  }, {
+    "id" : 2,
+    "name" : "image_ref",
+    "type" : "BLOB"
+  } ],
+  "highestFieldId" : 2,
+  "partitionKeys" : [ ],
+  "primaryKeys" : [ ],
+  "options" : {
+    "data-evolution.enabled" : "true",
+    "owner" : "smith",
+    "blob-field" : "image_ref",
+    "blob-view-field" : "image_ref",
+    "row-tracking.enabled" : "true"
+  },
+  "timeMillis" : 1789958312772
+}

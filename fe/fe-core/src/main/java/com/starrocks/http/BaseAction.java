@@ -106,7 +106,8 @@ public abstract class BaseAction implements IAction {
         try {
             execute(request, response);
         } catch (Exception e) {
-            LOG.warn("fail to process url: {}, exception: {}", request.getRequest().uri(), DebugUtil.getStackTrace(e));
+            LOG.warn("fail to process url: {}, exception: {}", WebUtils.sanitizeHttpReqUriForLog(request.getRequest().uri()),
+                    DebugUtil.getStackTrace(e));
             if (e instanceof AccessDeniedException) {
                 response.updateHeader(HttpHeaderNames.WWW_AUTHENTICATE.toString(), "Basic realm=\"\"");
                 writeResponse(request, response, HttpResponseStatus.UNAUTHORIZED);
@@ -318,8 +319,10 @@ public abstract class BaseAction implements IAction {
     // return currentUserIdentity from StarRocks auth
     public static UserIdentity checkPassword(ActionAuthorizationInfo authInfo) throws AccessDeniedException {
         try {
-            return AuthenticationHandler.authenticate(new ConnectContext(), authInfo.fullUserName,
-                    authInfo.remoteIp, authInfo.password.getBytes(StandardCharsets.UTF_8));
+            // HTTP Basic carries a cleartext password: declare that so security integrations that
+            // consume a password (LDAP) are matched instead of skipped.
+            return AuthenticationHandler.authenticateWithClearPassword(new ConnectContext(), authInfo.fullUserName,
+                    authInfo.remoteIp, authInfo.password);
         } catch (AuthenticationException e) {
             throw new AccessDeniedException("Access denied for " + authInfo.fullUserName + "@" + authInfo.remoteIp);
         }
@@ -330,7 +333,7 @@ public abstract class BaseAction implements IAction {
         ActionAuthorizationInfo authInfo = new ActionAuthorizationInfo();
         try {
             if (!parseAuthInfo(request, authInfo)) {
-                LOG.info("parse auth info failed, url {}", request.getRequest().uri());
+                LOG.info("parse auth info failed, url {}", WebUtils.sanitizeHttpReqUriForLog(request.getRequest().uri()));
                 throw new AccessDeniedException("Need auth information.");
             }
             LOG.debug("get auth info: {}", authInfo);

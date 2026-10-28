@@ -51,6 +51,7 @@ import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.ColumnFilterConverter;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -188,6 +189,11 @@ public class OptOlapPartitionPruner {
         }
     }
 
+    private static boolean isEqualityPredicate(ScalarOperator predicate) {
+        return predicate instanceof BinaryPredicateOperator
+                && ((BinaryPredicateOperator) predicate).getBinaryType().isEqual();
+    }
+
     private static Pair<ScalarOperator, List<ScalarOperator>> prunePartitionPredicates(
             LogicalOlapScanOperator logicalOlapScanOperator, List<Long> selectedPartitionIds) {
         List<ScalarOperator> scanPredicates = Utils.extractConjuncts(logicalOlapScanOperator.getPredicate());
@@ -247,6 +253,21 @@ public class OptOlapPartitionPruner {
 
             // In predicate don't support predicate prune
             if (null != pcf.getInPredicateLiterals()) {
+                continue;
+            }
+
+            // Dropping a predicate claims the opposite of what pruning needs: not "every matching row
+            // is in a kept partition" but "every row in the kept partitions matches". A filter mapped
+            // through a partition expression cannot support that for a range bound. f collapses many
+            // source values onto one partition value, so `dt >= c` keeps the partition c maps to, and
+            // that partition also holds rows below c -- dropping the predicate returns them. Prune
+            // with these bounds, but leave the predicate to filter the rows.
+            //
+            // Equality is left as it was. It has the same shape of hole -- the partition f(c) also
+            // holds rows whose source value merely maps to f(c) -- but that is how equality has been
+            // eliminated since the rewrite was introduced, no case has been observed to depend on it,
+            // and narrowing it is a separate question from the range bounds this change is about.
+            if (pcf.isMappedThroughPartitionExpr() && !isEqualityPredicate(predicate)) {
                 continue;
             }
 

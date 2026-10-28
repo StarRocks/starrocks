@@ -55,6 +55,11 @@ public class AccessControlContext {
     // The authentication provider used for this authentication.
     private AuthenticationProvider authenticationProvider = null;
 
+    /**
+     * @see #getAuthenticatedUserName()
+     */
+    private String authenticatedUserName = null;
+
     // After negotiate and switching with the client,
     // the auth plugin type used for this authentication is finally determined.
     private String authPlugin = null;
@@ -62,8 +67,17 @@ public class AccessControlContext {
     // Auth Data salt generated at mysql negotiate used for password salting
     private byte[] authDataSalt = null;
 
-    // groups of current user
+    // The session's effective group set: the union of every source enabled at login. Two things it
+    // is NOT: it is not filtered by `permitted_groups` (that is a login gate - an admitted user
+    // keeps all its groups), and it is not recomputed while the session runs. Values are kept
+    // exactly as the directory returned them, because Ranger matches group names case-sensitively.
     private Set<String> groups = new HashSet<>();
+
+    // One input to `groups` above, not a second group set: the groups read from the `memberOf`
+    // attribute of the user's own LDAP entry. The LDAP provider writes it on every authentication -
+    // empty when the group source does not read memberOf - so it always states what *this* login
+    // resolved. Nothing caches it. Never null.
+    private Set<String> memberOfGroups = new HashSet<>();
 
     // currentRoleIds is the role that has taken effect in the current session.
     private Set<Long> currentRoleIds = new HashSet<>();
@@ -89,6 +103,19 @@ public class AccessControlContext {
 
     public void setCurrentUserIdentity(UserIdentity currentUserIdentity) {
         this.currentUserIdentity = currentUserIdentity;
+    }
+
+    /**
+     * The user name exactly as the directory holds it, filled in by an authentication provider that
+     * looked the entry up. Null when the provider had no chance to read it, for example when it bound
+     * directly through a DN pattern instead of searching.
+     */
+    public String getAuthenticatedUserName() {
+        return authenticatedUserName;
+    }
+
+    public void setAuthenticatedUserName(String authenticatedUserName) {
+        this.authenticatedUserName = authenticatedUserName;
     }
 
     public void setDistinguishedName(String distinguishedName) {
@@ -147,8 +174,20 @@ public class AccessControlContext {
         this.currentRoleIds = currentRoleIds;
     }
 
+    /**
+     * @return the effective group set of this session - the union of all enabled sources, not
+     * filtered by `permitted_groups`. See the field comment for what does and does not go in.
+     */
     public Set<String> getGroups() {
         return groups;
+    }
+
+    public Set<String> getMemberOfGroups() {
+        return memberOfGroups;
+    }
+
+    public void setMemberOfGroups(Set<String> memberOfGroups) {
+        this.memberOfGroups = memberOfGroups == null ? new HashSet<>() : memberOfGroups;
     }
 
     public void setGroups(Set<String> groups) {

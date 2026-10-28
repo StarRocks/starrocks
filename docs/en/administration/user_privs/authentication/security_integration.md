@@ -82,7 +82,16 @@ PROPERTIES (
 ##### authentication_ldap_simple_user_search_attr
 
 - Required: No
-- Description: The user's attribute used to log in to the LDAP service, for example, `uid`. Required when using search-and-bind mode.
+- Description: The attribute of a user entry that carries the login name. It is interpolated into the search filter of search-and-bind mode, so it must be the attribute whose value the user actually types when logging in. Default: `uid`, the convention on OpenLDAP, where it is usually also the entry's RDN (`uid=alice,ou=People,dc=example,dc=com`). Not used in direct bind mode.
+
+:::note On Active Directory, set this to `sAMAccountName`
+
+An AD entry's RDN is the display name (`CN=Dana Scully,OU=People,DC=company,DC=com`), while the name a user types to log in is its `sAMAccountName` (`dscully`). AD's schema does contain `uid`, but it holds no value unless an administrator populated it, so the default finds nobody and every login fails. Two settings follow from this choice:
+
+- **Use search-and-bind, not direct bind.** `sAMAccountName` is not part of an AD entry's DN, so no `authentication_ldap_simple_bind_dn_pattern` can produce one. Leave that property unset and set `authentication_ldap_simple_bind_base_dn`, `authentication_ldap_simple_bind_root_dn` and `authentication_ldap_simple_bind_root_pwd` instead.
+- **A Group Provider cannot match members by `sAMAccountName` either.** An AD group lists its members by DN (`member: CN=Dana Scully,OU=People,...`), and that DN carries no `sAMAccountName`, so a group provider configured with `"ldap_user_search_attr" = "sAMAccountName"` matches nobody. Either leave the group provider's own `ldap_user_search_attr` unset, so that it matches by DN, or read the groups from the user's own entry with `authentication_ldap_simple_group_source = memberof`.
+
+:::
 
 :::note
 
@@ -111,6 +120,34 @@ For more details, see the DN matching mechanism in [Authenticate User Groups](..
 
 - Required: No
 - Description: The DN pattern for direct bind authentication. Use `${USER}` as a placeholder for the username. The pattern must produce a valid LDAP Distinguished Name (DN); UPN-style patterns like `${USER}@domain` are not supported. For example, `uid=${USER},ou=People,dc=example,dc=com`. Multiple patterns can be separated by semicolons, and the system will try each pattern in order until one succeeds. When this parameter is set, the system skips the search step and directly binds with the constructed DN, so `authentication_ldap_simple_bind_base_dn`, `authentication_ldap_simple_user_search_attr`, `authentication_ldap_simple_bind_root_dn`, and `authentication_ldap_simple_bind_root_pwd` are not required.
+
+##### authentication_ldap_simple_group_source
+
+- Required: No
+- Description: Where the groups of an LDAP-authenticated user come from. Valid values:
+  - `group_provider` (default): only the group providers configured in `group_provider` are used. This is the behavior of earlier versions.
+  - `memberof`: only the group membership attribute of the user's own LDAP entry is used. Group providers configured in `group_provider` are ignored, but the configuration is kept, so switching back only takes one `ALTER SECURITY INTEGRATION`.
+  - `both`: the union of the two sources.
+
+  With `memberof` or `both`, a group newly created in the directory takes effect on the next login without any configuration change here. The resolved groups take part in role mapping via `GRANT ... TO EXTERNAL GROUP`, in the `permitted_groups` login check, in `current_group()`, and in Apache Ranger authorization, exactly like the groups of a group provider. The cluster-wide default is the FE configuration item of the same name. Supported from v4.2 onwards.
+
+##### authentication_ldap_simple_memberof_attr
+
+- Required: No
+- Description: The name of the attribute on the user entry that carries its group membership, used when `authentication_ldap_simple_group_source` is `memberof` or `both`. Matched ignoring case, like every LDAP attribute name. Default: `memberOf`, which fits Active Directory and OpenLDAP with the `memberof` overlay installed. Oracle Directory Server and 389 Directory Server use `isMemberOf`. The cluster-wide default is the FE configuration item of the same name. Supported from v4.2 onwards.
+
+:::note Reading group membership from the user entry
+
+- Only direct membership is resolved. Nested groups, the Active Directory primary group (`Domain Users` by default), and groups from another domain or forest are not included, because they do not appear in the attribute.
+- The group name is the value of the first RDN of each group DN. For example, `CN=SR Analysts,OU=Groups,DC=company,DC=com` becomes `SR Analysts`. The original case is kept.
+- The attribute is read on the connection that authentication already opened, so no additional LDAP connection is made. In search-and-bind mode the number of requests does not change at all; in direct bind mode (`authentication_ldap_simple_bind_dn_pattern`) one read request is added, because a bind response cannot carry attributes.
+- In direct bind mode the user reads its own attribute. If the directory does not allow that and `authentication_ldap_simple_bind_root_dn` and `authentication_ldap_simple_bind_root_pwd` are set, the FE retries once with that account, so there is no need to change the authentication mode. If neither reader can see the attribute, the group set is empty and the login still succeeds.
+- If the group set is empty and `permitted_groups` is set, the user is rejected, because the intersection is necessarily empty.
+- The group set is computed at login and stored in the session. A membership change in the directory takes effect on the next login, not in a running session.
+- The legacy per-user form `CREATE USER ... IDENTIFIED WITH authentication_ldap_simple AS '<dn>'` does not support this feature. Use a security integration instead.
+- `EXECUTE AS` resolves the groups of the **target** identity from that identity's own configuration: a native-password user has no LDAP identity and only gets its group providers, while `EXECUTE AS EXTERNAL USER` uses the first `authentication_ldap_simple` integration of `authentication_chain`. Impersonation never presents the target's password, so the attribute is read with `authentication_ldap_simple_bind_root_dn` and `authentication_ldap_simple_bind_root_pwd`; with no service account configured, only the group providers contribute.
+
+:::
 
 ##### authentication_ldap_simple_ssl_conn_allow_insecure
 

@@ -14,9 +14,11 @@
 
 #pragma once
 
+#include <cmath>
 #include <utility>
 
 #include "base/statusor.h"
+#include "base/string/string_parser.hpp"
 #include "column/column_builder.h"
 #include "column/runtime_type_traits.h"
 #include "types/date_value.h"
@@ -78,6 +80,28 @@ public:
             VARIANT_CAST_CASE(DECIMAL4, get_decimal4)
             VARIANT_CAST_CASE(DECIMAL8, get_decimal8)
             VARIANT_CAST_CASE(DECIMAL16, get_decimal16)
+        case VariantType::STRING: {
+            ASSIGN_OR_RETURN(const auto text, variant.get_string());
+            StringParser::ParseResult parsed;
+            RunTimeCppType<ResultType> value;
+            if constexpr (lt_is_integer<ResultType>) {
+                value = StringParser::string_to_int<RunTimeCppType<ResultType>>(text.data(), text.size(), &parsed);
+            } else if constexpr (lt_is_float<ResultType>) {
+                value = StringParser::string_to_float<RunTimeCppType<ResultType>>(text.data(), text.size(), &parsed);
+                // Match VARCHAR casts: a parsed NaN or infinity is still a cast failure.
+                if (!std::isfinite(value)) {
+                    parsed = StringParser::PARSE_FAILURE;
+                }
+            } else {
+                return VARIANT_CAST_NOT_SUPPORT(type, ResultType);
+            }
+            if (parsed != StringParser::PARSE_SUCCESS) {
+                return Status::VariantError(
+                        fmt::format("Failed to parse variant string as {}", logical_type_to_string(ResultType)));
+            }
+            result.append(value);
+            return Status::OK();
+        }
         default:
             return VARIANT_CAST_NOT_SUPPORT(type, ResultType);
         }

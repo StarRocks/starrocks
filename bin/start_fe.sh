@@ -172,6 +172,17 @@ if [ -z "$final_java_opt" ] ; then
     echo "JAVA_OPTS is not set in fe.conf, use default java options to start fe process: $final_java_opt"
 fi
 
+# JDK 18+ (JEP 411) rejects System.setSecurityManager unless the JVM is started with
+# -Djava.security.manager=allow, which the FE needs to install the UDF security manager
+# while analyzing CREATE FUNCTION. JDK 24+ (JEP 486) rejects every value other than
+# 'disallow' and the JVM will not start at all, so only [18,24) gets the flag. Whatever
+# JAVA_OPTS already sets wins, including a deliberate -Djava.security.manager=disallow.
+if [[ "${JAVA_VERSION:-0}" -ge 18 && "${JAVA_VERSION:-0}" -lt 24 ]]; then
+    if [[ "$final_java_opt" != *"-Djava.security.manager="* ]]; then
+        final_java_opt="${final_java_opt} -Djava.security.manager=allow"
+    fi
+fi
+
 # Auto detect jvm -Xmx parameter in case $FE_ENABLE_AUTO_JVM_XMX_DETECT = true
 #  default to 70% of total available mem and can be tuned by env var: FE_JVM_XMX_PERCENTAGE
 # NOTE: the feature is only supported in container env

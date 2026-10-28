@@ -47,6 +47,7 @@ import com.starrocks.http.BaseResponse;
 import com.starrocks.http.HttpConnectContext;
 import com.starrocks.http.HttpConnectProcessor;
 import com.starrocks.http.IllegalArgException;
+import com.starrocks.http.WebUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.qe.QueryState;
@@ -161,7 +162,7 @@ public class ExecuteSqlAction extends RestBaseAction {
                 context.getNettyChannel().close();
             }
         } catch (StarRocksHttpException e) {
-            LOG.warn("fail to process url: {}", request.getRequest().uri(), e);
+            LOG.warn("fail to process url: {}", WebUtils.sanitizeHttpReqUriForLog(request.getRequest().uri()), e);
             RestBaseResult failResult = new RestBaseResult(e.getMessage());
             response.getContent().append(failResult.toJson());
             writeResponse(request, response, HttpResponseStatus.valueOf(e.getCode().code()));

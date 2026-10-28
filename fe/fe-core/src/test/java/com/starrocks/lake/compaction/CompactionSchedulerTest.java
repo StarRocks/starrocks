@@ -56,6 +56,11 @@ import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import mockit.Verifications;
+import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.core.LogEvent;
+import org.apache.logging.log4j.core.appender.AbstractAppender;
+import org.apache.logging.log4j.core.config.Configurator;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -65,6 +70,7 @@ import org.mockito.Mockito;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -173,7 +179,7 @@ public class CompactionSchedulerTest {
     }
 
     @Test
-    public void testStartCompactionSuppressesRangeRollup() {
+    public void testStartCompactionSuppressesRollup() {
         final boolean[] rangeDistributed = {true};
         final boolean[] partitionAccessed = {false};
         OlapTable table = new LakeTable();
@@ -220,12 +226,155 @@ public class CompactionSchedulerTest {
         Assertions.assertNull(compactionScheduler.startCompaction(snapshot, info));
         Assertions.assertFalse(partitionAccessed[0], "range-distribution rollup compaction must be suppressed");
 
-        // A hash-distribution rollup is a traditional (eager) rollup with no vlog dependency, so this guard must
-        // NOT suppress it: execution proceeds past the guard to the partition lookup.
+        // A hash-distribution rollup (LakeRollupJob, also used by sync MVs) publishes by replaying the same per-version
+        // vlogs, so a compaction version inside its range would wedge the publish too (RB-320); it must be suppressed.
         rangeDistributed[0] = false;
         partitionAccessed[0] = false;
         Assertions.assertNull(compactionScheduler.startCompaction(snapshot, info));
-        Assertions.assertTrue(partitionAccessed[0], "hash-distribution rollup must not be suppressed by this guard");
+        Assertions.assertFalse(partitionAccessed[0], "hash-distribution rollup compaction must be suppressed");
+
+        // Once the rollup is done the table returns to NORMAL, and execution proceeds past the guard to the
+        // partition lookup.
+        table.setState(OlapTable.OlapTableState.NORMAL);
+        partitionAccessed[0] = false;
+        Assertions.assertNull(compactionScheduler.startCompaction(snapshot, info));
+        Assertions.assertTrue(partitionAccessed[0], "a NORMAL table must not be suppressed by this guard");
+    }
+
+    @Test
+    public void testStartCompactionLogsSkipForAlter() {
+        OlapTable table = new LakeTable();
+        table.setName("t_alter");
+        CompactionMgr compactionManager = new CompactionMgr();
+        PartitionIdentifier partition = new PartitionIdentifier(1, 2, 3);
+        CompactionScheduler compactionScheduler = new CompactionScheduler(compactionManager, null, globalTransactionMgr,
+                globalStateMgr, "");
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public LocalMetastore getLocalMetastore() {
+                return new LocalMetastore(globalStateMgr, null, null);
+            }
+        };
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(long dbId) {
+                return new Database(100, "db_alter");
+            }
+            @Mock
+            public Table getTable(Long dbId, Long tableId) {
+                return table;
+            }
+        };
+        CompactionWarehouseInfo info = new CompactionWarehouseInfo("aaa", WarehouseManager.DEFAULT_RESOURCE, 0, 0);
+        boolean oldSlowdown = Config.lake_enable_ingest_slowdown;
+        long oldThreshold = Config.lake_ingest_slowdown_threshold;
+        double oldMinScore = Config.lake_compaction_score_selector_min_score;
+        double oldRatio = Config.lake_ingest_slowdown_ratio;
+        Config.lake_enable_ingest_slowdown = true;
+        Config.lake_ingest_slowdown_threshold = 100;
+        Config.lake_compaction_score_selector_min_score = 10;
+        Config.lake_ingest_slowdown_ratio = 0.1;
+        double threshold = 100;
+        long retryAfterMs = Config.lake_compaction_interval_ms_on_failure;
+
+        List<String> logs = new ArrayList<>();
+        AbstractAppender appender = new AbstractAppender("compaction-skip-log-capture", null, null) {
+            @Override
+            public void append(LogEvent event) {
+                logs.add(event.getLevel() + " " + event.getMessage().getFormattedMessage());
+            }
+        };
+        org.apache.logging.log4j.core.Logger logger =
+                (org.apache.logging.log4j.core.Logger) LogManager.getLogger(CompactionScheduler.class);
+        Level oldLevel = logger.getLevel();
+        appender.start();
+        logger.addAppender(appender);
+        Configurator.setLevel(CompactionScheduler.class.getName(), Level.DEBUG);
+        try {
+            // Up to the ingestion slowdown threshold commits are not delayed yet, so the skip is only a DEBUG line.
+            table.setState(OlapTable.OlapTableState.ROLLUP);
+            Assertions.assertNull(compactionScheduler.startCompaction(snapshotWithMaxScore(partition, threshold), info));
+            // Above it, commits into the partition are delayed, so the skip is an INFO line naming the alter state.
+            Assertions.assertNull(compactionScheduler.startCompaction(snapshotWithMaxScore(partition, threshold + 1), info));
+            table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
+            Assertions.assertNull(compactionScheduler.startCompaction(snapshotWithMaxScore(partition, threshold + 1), info));
+            // With ingestion slowdown disabled no commit is delayed or rejected, so the skip stays at DEBUG.
+            Config.lake_enable_ingest_slowdown = false;
+            Assertions.assertNull(compactionScheduler.startCompaction(snapshotWithMaxScore(partition, threshold + 1), info));
+        } finally {
+            Config.lake_enable_ingest_slowdown = oldSlowdown;
+            Config.lake_ingest_slowdown_threshold = oldThreshold;
+            Config.lake_compaction_score_selector_min_score = oldMinScore;
+            Config.lake_ingest_slowdown_ratio = oldRatio;
+            Configurator.setLevel(CompactionScheduler.class.getName(), oldLevel);
+            logger.removeAppender(appender);
+            appender.stop();
+        }
+
+        String expected = "Skip compaction of partition 3 of table db_alter.t_alter while the table is in %s state, "
+                + "compaction score: %s. Compaction resumes after the alter job finishes; next check in %dms";
+        Assertions.assertEquals(List.of(
+                "DEBUG " + String.format(expected, "ROLLUP", threshold, retryAfterMs),
+                "INFO " + String.format(expected, "ROLLUP", threshold + 1, retryAfterMs),
+                "INFO " + String.format(expected, "SCHEMA_CHANGE", threshold + 1, retryAfterMs),
+                "DEBUG " + String.format(expected, "SCHEMA_CHANGE", threshold + 1, retryAfterMs)), logs);
+    }
+
+    @Test
+    public void testDeferredPriorityCompactionWaitsForRetryDeadline() {
+        OlapTable table = new LakeTable();
+        table.setState(OlapTable.OlapTableState.ROLLUP);
+        String oldSelector = Config.lake_compaction_selector;
+        Config.lake_compaction_selector = "ScoreSelector";
+        CompactionMgr compactionManager;
+        try {
+            compactionManager = new CompactionMgr();
+        } finally {
+            Config.lake_compaction_selector = oldSelector;
+        }
+        PartitionIdentifier partition = new PartitionIdentifier(1, 2, 3);
+        compactionManager.handleLoadingFinished(partition, 1, System.currentTimeMillis(), new Quantiles(1.0, 1.0, 500.0));
+        compactionManager.triggerManualCompaction(partition);
+        CompactionScheduler compactionScheduler = new CompactionScheduler(compactionManager, null, globalTransactionMgr,
+                globalStateMgr, "");
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public LocalMetastore getLocalMetastore() {
+                return new LocalMetastore(globalStateMgr, null, null);
+            }
+        };
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(long dbId) {
+                return new Database(100, "aaa");
+            }
+            @Mock
+            public Table getTable(Long dbId, Long tableId) {
+                return table;
+            }
+        };
+        CompactionWarehouseInfo info = new CompactionWarehouseInfo("aaa", WarehouseManager.DEFAULT_RESOURCE, 0, 0);
+
+        List<PartitionStatisticsSnapshot> selected = compactionManager.choosePartitionsToCompact(Set.of());
+        Assertions.assertEquals(1, selected.size());
+        // The table is under a rollup, so the manual request is deferred ...
+        Assertions.assertNull(compactionScheduler.startCompaction(selected.get(0), info));
+        // ... but kept, and not reselected before its retry deadline instead of on every one-second cycle.
+        Assertions.assertEquals(PartitionStatistics.CompactionPriority.MANUAL_COMPACT,
+                compactionManager.getStatistics(partition).getPriority());
+        Assertions.assertTrue(compactionManager.choosePartitionsToCompact(Set.of()).isEmpty());
+
+        // Past the deadline the retained request is selected again.
+        compactionManager.getStatistics(partition).setNextCompactionTime(System.currentTimeMillis() - 1);
+        selected = compactionManager.choosePartitionsToCompact(Set.of());
+        Assertions.assertEquals(1, selected.size());
+        Assertions.assertEquals(PartitionStatistics.CompactionPriority.MANUAL_COMPACT, selected.get(0).getPriority());
+    }
+
+    private static PartitionStatisticsSnapshot snapshotWithMaxScore(PartitionIdentifier partition, double maxScore) {
+        PartitionStatistics statistics = new PartitionStatistics(partition);
+        statistics.setCompactionScore(new Quantiles(1.0, 1.0, maxScore));
+        return new PartitionStatisticsSnapshot(statistics);
     }
 
     @Test
@@ -844,6 +993,7 @@ public class CompactionSchedulerTest {
 
         OlapTable mockTable = Mockito.mock(OlapTable.class);
         Mockito.when(mockTable.getTableProperty()).thenReturn(tableProperty);
+        Mockito.when(mockTable.getBaseCompactionForbiddenTimeRanges()).thenReturn("* * * * *");
 
         Method method = CompactionScheduler.class.getDeclaredMethod("createCompactionTasks",
                 long.class, Map.class, long.class, boolean.class, PartitionStatistics.CompactionPriority.class,
@@ -865,6 +1015,12 @@ public class CompactionSchedulerTest {
         Assertions.assertEquals(5, (int) request.parallelConfig.maxParallelPerTablet);
         // maxBytesPerSubtask is 0 (let BE use its own config)
         Assertions.assertEquals(0L, (long) request.parallelConfig.maxBytesPerSubtask);
+        Assertions.assertFalse(request.allowBaseCompaction);
+
+        List<CompactionTask> manualTasks = (List<CompactionTask>) method.invoke(scheduler, currentVersion, beToTablets,
+                txnId, false, PartitionStatistics.CompactionPriority.MANUAL_COMPACT, mockTable);
+        CompactRequest manualRequest = (CompactRequest) requestField.get(manualTasks.get(0));
+        Assertions.assertTrue(manualRequest.allowBaseCompaction);
     }
 
     /**
@@ -925,6 +1081,7 @@ public class CompactionSchedulerTest {
 
         OlapTable mockTable = Mockito.mock(OlapTable.class);
         Mockito.when(mockTable.getTableProperty()).thenReturn(tableProperty);
+        Mockito.when(mockTable.getBaseCompactionForbiddenTimeRanges()).thenReturn("* * * * *");
 
         Method method = CompactionScheduler.class.getDeclaredMethod("createAggregateCompactionTask",
                 long.class, Map.class, long.class, PartitionStatistics.CompactionPriority.class, 
@@ -948,6 +1105,7 @@ public class CompactionSchedulerTest {
             Assertions.assertTrue(req.parallelConfig.enableParallel);
             Assertions.assertEquals(8, (int) req.parallelConfig.maxParallelPerTablet);
             Assertions.assertFalse(req.unshareSegments);
+            Assertions.assertFalse(req.allowBaseCompaction);
             // maxBytesPerSubtask is 0 (let BE use its own config)
             Assertions.assertEquals(0L, (long) req.parallelConfig.maxBytesPerSubtask);
         }

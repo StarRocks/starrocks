@@ -94,15 +94,21 @@ public:
         return _levels_decoded - _levels_parsed;
     }
 
+    // Append `level_nums` default levels to the parsed levels. Levels decoded but not consumed yet (look-ahead)
+    // are kept behind the appended ones, so the decoder position in the page does not change.
     void append_default_levels(size_t level_nums) {
-        size_t new_capacity = _levels_parsed + level_nums;
+        size_t num_lookahead = _levels_decoded - _levels_parsed;
+        size_t new_capacity = _levels_decoded + level_nums;
         if (new_capacity > _levels_capacity) {
             _levels.resize(new_capacity);
             _levels_capacity = new_capacity;
         }
+        if (num_lookahead > 0) {
+            memmove(&_levels[_levels_parsed + level_nums], &_levels[_levels_parsed], num_lookahead * sizeof(level_t));
+        }
         memset(&_levels[_levels_parsed], 0x0, level_nums * sizeof(level_t));
         _levels_parsed += level_nums;
-        _levels_decoded = _levels_parsed;
+        _levels_decoded += level_nums;
     }
 
 private:

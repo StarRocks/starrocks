@@ -20,12 +20,10 @@
 #include <vector>
 
 #include "base/testutil/assert.h"
-#include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/chunk_factory.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
-#include "common/config_rowset_fwd.h"
 #include "fs/fs_memory.h"
 #include "gen_cpp/segment.pb.h"
 #include "gutil/strings/substitute.h"
@@ -105,8 +103,8 @@ protected:
         return seg_footer;
     }
 
-    // Decode all key entries of an index page. |full| selects the SORT_KEY_PAGE footer variant.
-    std::vector<std::string> read_index_entries(const std::string& filename, const PagePointerPB& page, bool full) {
+    // Decode all key entries of an index page.
+    std::vector<std::string> read_index_entries(const std::string& filename, const PagePointerPB& page) {
         ASSIGN_OR_ABORT(auto read_file, _fs->new_random_access_file(filename));
         PageReadOptions opts;
         opts.read_file = read_file.get();
@@ -121,11 +119,7 @@ protected:
         CHECK(PageIO::read_and_decompress_page(opts, &handle, &body, &page_footer).ok());
 
         ShortKeyIndexDecoder decoder;
-        if (full) {
-            CHECK(decoder.parse(body, page_footer.sort_key_page_footer()).ok());
-        } else {
-            CHECK(decoder.parse(body, page_footer.short_key_page_footer()).ok());
-        }
+        CHECK(decoder.parse(body, page_footer.short_key_page_footer()).ok());
         std::vector<std::string> keys;
         for (uint32_t i = 0; i < decoder.num_items(); ++i) {
             keys.emplace_back(decoder.key(i).to_string());
@@ -135,12 +129,11 @@ protected:
 
     // Golden encodings produced the way the writer used to: materialize the WHOLE row, then encode.
     std::vector<std::string> golden_entries(const Chunk& chunk, const TabletSchema& schema,
-                                            const std::vector<uint32_t>& sort_column_indexes, bool full) {
+                                            const std::vector<uint32_t>& sort_column_indexes) {
         std::vector<std::string> keys;
         for (size_t row = 0; row < chunk.num_rows(); row += kRowsPerBlock) {
             SeekTuple tuple(*chunk.schema(), chunk.get(row).datums());
-            keys.emplace_back(full ? tuple.full_sort_key_encode(sort_column_indexes, 0)
-                                   : tuple.short_key_encode(schema.num_short_key_columns(), sort_column_indexes, 0));
+            keys.emplace_back(tuple.short_key_encode(schema.num_short_key_columns(), sort_column_indexes, 0));
         }
         return keys;
     }
@@ -160,14 +153,8 @@ protected:
 
         SegmentFooterPB seg_footer = read_segment_footer(w->segment_path());
         ASSERT_TRUE(seg_footer.has_short_key_index_page());
-        EXPECT_EQ(golden_entries(chunk, *schema, w->_sort_column_indexes, /*full=*/false),
-                  read_index_entries(w->segment_path(), seg_footer.short_key_index_page(), /*full=*/false));
-
-        ASSERT_EQ(config::enable_full_sort_key_index, seg_footer.has_full_sort_key_index_page());
-        if (seg_footer.has_full_sort_key_index_page()) {
-            EXPECT_EQ(golden_entries(chunk, *schema, w->_sort_column_indexes, /*full=*/true),
-                      read_index_entries(w->segment_path(), seg_footer.full_sort_key_index_page(), /*full=*/true));
-        }
+        EXPECT_EQ(golden_entries(chunk, *schema, w->_sort_column_indexes),
+                  read_index_entries(w->segment_path(), seg_footer.short_key_index_page()));
     }
 
     std::shared_ptr<TabletSchema> make_schema(const std::vector<ColumnPB>& cols, int num_short_key_columns) {
@@ -233,37 +220,12 @@ TEST_F(SegmentWriterShortKeyEncodeTest, entries_match_whole_row_golden_varchar_k
     auto chunk = ChunkFactory::new_chunk(s, kNumRows);
     auto cols = chunk->columns();
     for (int64_t i = 0; i < kNumRows; ++i) {
-        // Longer than index_length, so the short key is truncated while the full sort key is not.
+        // Longer than index_length, so the short key entry is a truncated prefix of the value.
         std::string v = strings::Substitute("key_that_is_long_$0", i);
         cols[0]->as_mutable_ptr()->append_datum(Datum(Slice(v)));
         cols[1]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
     }
     expect_entries_match_golden(0, schema, *chunk, {0});
-}
-
-// The full sort key index (footer field 11) is encoded from the same SeekTuple, so it must match the
-// whole-row golden too. Runs the shapes whose full and truncated encodings differ.
-TEST_F(SegmentWriterShortKeyEncodeTest, entries_match_whole_row_golden_with_full_sort_key_index) {
-    const bool old_enable = config::enable_full_sort_key_index;
-    config::enable_full_sort_key_index = true;
-    DeferOp restore([&] { config::enable_full_sort_key_index = old_enable; });
-
-    auto int_schema = make_schema({create_int_key_pb(1), create_int_key_pb(2), create_int_value_pb(3)},
-                                  /*num_short_key_columns=*/1);
-    expect_entries_match_golden(0, int_schema, *make_int_key_chunk(int_schema, /*null_at_block_start=*/true), {0, 1});
-
-    auto varchar_schema =
-            make_schema({create_varchar_key_pb(1, /*length=*/32, /*index_length=*/4), create_int_value_pb(2)},
-                        /*num_short_key_columns=*/1);
-    auto s = ChunkHelper::convert_schema(varchar_schema);
-    auto chunk = ChunkFactory::new_chunk(s, kNumRows);
-    auto cols = chunk->columns();
-    for (int64_t i = 0; i < kNumRows; ++i) {
-        std::string v = strings::Substitute("key_that_is_long_$0", i);
-        cols[0]->as_mutable_ptr()->append_datum(Datum(Slice(v)));
-        cols[1]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
-    }
-    expect_entries_match_golden(1, varchar_schema, *chunk, {0});
 }
 
 // ---------------------------------------------------------------------------
@@ -303,12 +265,8 @@ TEST_F(SegmentWriterShortKeyEncodeTest, vertical_writer_key_pass_uses_chunk_loca
 
     SegmentFooterPB seg_footer = read_segment_footer(w->segment_path());
     ASSERT_TRUE(seg_footer.has_short_key_index_page());
-    EXPECT_EQ(golden_entries(*sort_key_chunk, *schema, {0}, /*full=*/false),
-              read_index_entries(w->segment_path(), seg_footer.short_key_index_page(), /*full=*/false));
-    if (seg_footer.has_full_sort_key_index_page()) {
-        EXPECT_EQ(golden_entries(*sort_key_chunk, *schema, {0}, /*full=*/true),
-                  read_index_entries(w->segment_path(), seg_footer.full_sort_key_index_page(), /*full=*/true));
-    }
+    EXPECT_EQ(golden_entries(*sort_key_chunk, *schema, {0}),
+              read_index_entries(w->segment_path(), seg_footer.short_key_index_page()));
 }
 
 // ---------------------------------------------------------------------------
@@ -368,8 +326,7 @@ TEST_F(SegmentWriterShortKeyEncodeTest, short_key_index_stays_seekable) {
     ASSERT_OK(w->finalize(&file_size, &index_size, &footer_position));
 
     std::vector<std::string> entries =
-            read_index_entries(w->segment_path(), read_segment_footer(w->segment_path()).short_key_index_page(),
-                               /*full=*/false);
+            read_index_entries(w->segment_path(), read_segment_footer(w->segment_path()).short_key_index_page());
     ASSERT_EQ(static_cast<size_t>((kNumRows + kRowsPerBlock - 1) / kRowsPerBlock), entries.size());
     // Entries are the keys of rows 0, 4, 8, 12 and must stay strictly increasing for seeks to work.
     for (size_t i = 1; i < entries.size(); ++i) {

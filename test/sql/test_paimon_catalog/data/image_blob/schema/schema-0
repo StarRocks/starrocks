@@ -1,0 +1,28 @@
+{
+  "version" : 3,
+  "id" : 0,
+  "fields" : [ {
+    "id" : 0,
+    "name" : "id",
+    "type" : "INT"
+  }, {
+    "id" : 1,
+    "name" : "name",
+    "type" : "STRING"
+  }, {
+    "id" : 2,
+    "name" : "image",
+    "type" : "BLOB",
+    "description" : "raw image bytes"
+  } ],
+  "highestFieldId" : 2,
+  "partitionKeys" : [ ],
+  "primaryKeys" : [ ],
+  "options" : {
+    "data-evolution.enabled" : "true",
+    "owner" : "smith",
+    "blob-field" : "image",
+    "row-tracking.enabled" : "true"
+  },
+  "timeMillis" : 1789874331099
+}

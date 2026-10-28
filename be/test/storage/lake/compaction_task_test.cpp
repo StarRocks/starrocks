@@ -194,8 +194,12 @@ TEST_P(LakeDuplicateKeyCompactionTest, test1) {
 
 // Pins the cache-fill flags that reach SegmentReadOptions from the compaction read path:
 //  - fill_data_cache must follow the per-algorithm config, not a hardcoded value;
-//  - horizontal compaction must keep fill_metadata_cache on, so the read pass reuses the segments
-//    already opened by calculate_chunk_size() instead of re-reading every footer.
+//  - with hold_segments on (the default), neither algorithm may fill the shared metadata cache:
+//    the task reuses the Segment objects held on the Rowset instance, and its inputs are deleted
+//    right after compaction, so filling would only evict neighbors' entries;
+//  - with the hold_segments kill switch off, horizontal compaction must keep fill_metadata_cache
+//    on, so the read pass reuses the segments already opened by calculate_chunk_size() instead of
+//    re-reading every footer (covered by test_compaction_read_cache_options_no_hold below).
 // The two data-cache configs are deliberately set to opposite values so that a hardcoded flag on
 // either side would fail here rather than accidentally match the expectation.
 TEST_P(LakeDuplicateKeyCompactionTest, test_compaction_read_cache_options) {
@@ -229,11 +233,84 @@ TEST_P(LakeDuplicateKeyCompactionTest, test_compaction_read_cache_options) {
     const bool horizontal = GetParam().algorithm == HORIZONTAL_COMPACTION;
     const bool saved_horizontal_fill = config::lake_enable_horizontal_compaction_fill_data_cache;
     const bool saved_vertical_fill = config::lake_enable_vertical_compaction_fill_data_cache;
+    const bool saved_hold = config::lake_compaction_hold_input_segments;
     config::lake_enable_horizontal_compaction_fill_data_cache = true;
     config::lake_enable_vertical_compaction_fill_data_cache = false;
+    config::lake_compaction_hold_input_segments = true;
     DeferOp restore_config([&]() {
         config::lake_enable_horizontal_compaction_fill_data_cache = saved_horizontal_fill;
         config::lake_enable_vertical_compaction_fill_data_cache = saved_vertical_fill;
+        config::lake_compaction_hold_input_segments = saved_hold;
+    });
+
+    bool seen = false;
+    bool fill_data_cache = !horizontal;
+    bool fill_metadata_cache = true;
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->SetCallBack("Rowset::read::seg_options", [&](void* arg) {
+        auto* seg_options = static_cast<SegmentReadOptions*>(arg);
+        seen = true;
+        fill_data_cache = seg_options->lake_io_opts.fill_data_cache;
+        fill_metadata_cache = seg_options->lake_io_opts.fill_metadata_cache;
+    });
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("Rowset::read::seg_options");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    auto txn_id = next_id();
+    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, false, nullptr);
+    ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
+    check_task(task);
+    ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
+
+    ASSERT_TRUE(seen);
+    EXPECT_EQ(horizontal, fill_data_cache);
+    EXPECT_FALSE(fill_metadata_cache);
+}
+
+// The kill-switch leg of the contract pinned above: with hold_segments off, the task depends on
+// the shared metadata cache again, so horizontal compaction must fill it (cross-phase reuse) and
+// vertical must not (its reader path never did).
+TEST_P(LakeDuplicateKeyCompactionTest, test_compaction_read_cache_options_no_hold) {
+    auto chunk0 = generate_data(kChunkSize);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    for (int i = 0; i < 3; i++) {
+        auto write_txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(write_txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, write_txn_id).status());
+        version++;
+    }
+
+    const bool horizontal = GetParam().algorithm == HORIZONTAL_COMPACTION;
+    const bool saved_horizontal_fill = config::lake_enable_horizontal_compaction_fill_data_cache;
+    const bool saved_vertical_fill = config::lake_enable_vertical_compaction_fill_data_cache;
+    const bool saved_hold = config::lake_compaction_hold_input_segments;
+    config::lake_enable_horizontal_compaction_fill_data_cache = true;
+    config::lake_enable_vertical_compaction_fill_data_cache = false;
+    config::lake_compaction_hold_input_segments = false;
+    DeferOp restore_config([&]() {
+        config::lake_enable_horizontal_compaction_fill_data_cache = saved_horizontal_fill;
+        config::lake_enable_vertical_compaction_fill_data_cache = saved_vertical_fill;
+        config::lake_compaction_hold_input_segments = saved_hold;
     });
 
     bool seen = false;

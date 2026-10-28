@@ -94,11 +94,8 @@ public class TestUtil {
         Assertions.assertFalse(t0.isSealed());
         t0.seal();
         Assertions.assertTrue(t0.isSealed());
-        try {
-            t0.add("i");
-            Assertions.fail();
-        } catch (Throwable ex) {
-        }
+        IllegalArgumentException ex = Assertions.assertThrows(IllegalArgumentException.class, () -> t0.add("i"));
+        Assertions.assertTrue(ex.getMessage().contains("TieredList.isSealed"));
         Assertions.assertEquals("abcdefgh", String.join("", t0.build().toArray(new String[0])));
 
         Assertions.assertEquals(t0.build().toString(), "TieredList.tier#0\n" +

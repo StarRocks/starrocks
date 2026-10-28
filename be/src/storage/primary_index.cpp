@@ -1338,7 +1338,7 @@ Status PrimaryIndex::_build_persistent_values(uint32_t rssid, const vector<uint3
 
 StatusOr<const Slice*> PrimaryIndex::build_persistent_keys(const Column& pks, size_t key_size, uint32_t idx_begin,
                                                            uint32_t idx_end, Buffer<Slice>* key_slices) {
-    if (pks.is_binary() || pks.is_large_binary()) {
+    if (pks.is_binary()) {
         ColumnHelper::build_slices(&pks, *key_slices);
         return key_slices->data() + idx_begin;
     } else {

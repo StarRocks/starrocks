@@ -31,6 +31,7 @@ description: "StarRocks Connector for Apache Flink 的发布说明和更新日�
 
 | Connector | Flink                         | StarRocks     | Java | Scala     |
 |-----------|-------------------------------|---------------| ---- |-----------|
+| 1.2.16    | 1.16,1.17,1.18,1.19,1.20      | 2.1 及以上     | 8    | 2.11,2.12 |
 | 1.2.15    | 1.16,1.17,1.18,1.19,1.20      | 2.1 及以上     | 8    | 2.11,2.12 |
 | 1.2.14    | 1.16,1.17,1.18,1.19,1.20      | 2.1 及以上     | 8    | 2.11,2.12 |
 | 1.2.12    | 1.16,1.17,1.18,1.19,1.20      | 2.1 及以上     | 8    | 2.11,2.12 |
@@ -43,6 +44,26 @@ description: "StarRocks Connector for Apache Flink 的发布说明和更新日�
 ## 发布记录
 
 ### 1.2
+
+#### 1.2.16
+
+发布日期：2026 年 9 月 24 日
+
+##### 新增特性
+
+- 从 Flink Schema 推导 `json` 的 columns Header。 [#510](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/510)
+
+##### 功能优化
+
+- 多表事务：切换 Batch Chunk，以减少冗余的小批量加载。 [#506](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/506)
+- 仅配置一个 Load URL 时，跳过 Host Probe。 [#502](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/502)
+
+##### 错误修复
+
+- 多表事务：避免 Writer 因无法在 `txnEnd` 前刷新的字节数据而停滞。 [#512](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/)
+- 多表事务：在 Commit Response 丢失时进行恢复，而不是卡住或失败。 [#501](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/501)
+- 多表事务：使 `flushQ` Region Label 与当前生效的共享 Label 保持一致。 [#500](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/500)
+- 修复 Query Plan Visitor 中的共享状态竞争问题。 [#499](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/499)
 
 #### 1.2.15
 

@@ -74,6 +74,7 @@ namespace brpc {
 DECLARE_uint64(max_body_size);
 DECLARE_int64(socket_max_unwritten_bytes);
 DECLARE_bool(socket_keepalive);
+DECLARE_int32(max_connection_pool_size);
 
 } // namespace brpc
 
@@ -320,6 +321,11 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     brpc::FLAGS_socket_keepalive = config::brpc_socket_keepalive;
 
     brpc::FLAGS_socket_max_unwritten_bytes = config::brpc_socket_max_unwritten_bytes;
+
+    // Client-side flag, only consulted when brpc_connection_type is "pooled". brpc re-reads it on every
+    // pooled get/return, so it can also be tuned at runtime through brpc's builtin /flags page.
+    brpc::FLAGS_max_connection_pool_size = config::brpc_max_connection_pool_size;
+
     auto brpc_server = std::make_unique<brpc::Server>();
 
     auto* load_channel_mgr = data_workflows_env->load_channel_mgr();

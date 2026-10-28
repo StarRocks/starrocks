@@ -779,8 +779,7 @@ public abstract class LakeOnlineRewriteJobBase
      * <p>On the first run ({@code watershedTxnId == -1}) it allocates the watershed transaction id,
      * exposes each partition's shadow {@link MaterializedIndex} to the catalog with
      * {@code visibleTxnId = watershedTxnId} (so loads after the watershed double-write base+shadow
-     * while loads before it ignore the shadow), runs the next-txn guard, and re-journals
-     * {@code WAITING_TXN}.
+     * while loads before it ignore the shadow) and re-journals {@code WAITING_TXN}.
      *
      * <p>On each subsequent run it waits until every transaction before the watershed has finished;
      * only then does it capture each physical partition's visible version as the per-partition
@@ -837,10 +836,11 @@ public abstract class LakeOnlineRewriteJobBase
     /**
      * First {@code WAITING_TXN} run: allocate the watershed transaction id and expose every
      * partition's shadow index to the catalog so post-watershed loads double-write it. Mirrors the
-     * standard lake schema-change watershed, including the next-txn guard that detects a transaction
-     * sneaking in between allocating the watershed and exposing the shadow.
+     * standard lake schema-change watershed; a writer that resolved tablets before the exposure is
+     * rejected at commit by LakeTableTxnStateListener rather than detected here.
      */
     private void allocateWatershedAndExposeShadow() throws AlterCancelException {
+        long nextTxnId;
         try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.WRITE)) {
             OlapTable table = getTableOrThrow();
             Preconditions.checkState(table.getState() == jobTableState(), table.getState());
@@ -848,17 +848,15 @@ public abstract class LakeOnlineRewriteJobBase
             watershedGtid = getNextGtid();
             exposeShadowIndexToCatalog(table);
 
-            // Getting the watershed and exposing the shadow are not atomic. A transaction beginning in
-            // between is safe as long as it gets the tablet list (under the database lock) after
-            // beginTransaction(), so it sees the shadow and writes to it; all import transactions do
-            // this. beginTransaction()-first is a convention not a requirement, so guard against a new
-            // beginTransaction() succeeding in the window, which would let a txn > watershedTxnId miss
-            // the shadow.
-            long nextTxnId = peekNextTransactionId();
-            if (nextTxnId != watershedTxnId + 1) {
-                throw new AlterCancelException(
-                        "concurrent transaction detected while adding shadow index, please re-run the alter table command");
-            }
+            // Getting the watershed and exposing the shadow are not atomic, and the id generator is shared
+            // by the whole cluster, so other ids are routinely drawn in between. That is safe without a
+            // check here: a writer that begins its transaction before resolving tablets does so under the
+            // table READ lock, which this WRITE lock excludes, so any such transaction with an id above the
+            // watershed sees the shadow and writes it. A writer that resolves tablets first (replication, a
+            // bypass-write client with cached metadata) is rejected at commit by
+            // LakeTableTxnStateListener#checkShadowIndexesLoaded if it misses the shadow and commits before
+            // this job makes the shadow NORMAL. The next id is kept only as a breadcrumb for the log line below.
+            nextTxnId = peekNextTransactionId();
 
             // Re-journal WAITING_TXN so the allocated watershed and the exposure are durable; the
             // exposure is idempotent, so a leader transfer re-runs it harmlessly.
@@ -869,8 +867,8 @@ public abstract class LakeOnlineRewriteJobBase
             span.setAttribute("watershedTxnId", this.watershedTxnId);
             span.addEvent("exposeShadow");
         }
-        LOG.info("online rewrite job {} allocated watershed txn id {} and exposed shadow index",
-                jobId, watershedTxnId);
+        LOG.info("online rewrite job {} allocated watershed txn id {} and exposed shadow index, next txn id"
+                + " after exposing it: {}", jobId, watershedTxnId, nextTxnId);
     }
 
     /**
@@ -895,6 +893,7 @@ public abstract class LakeOnlineRewriteJobBase
             Preconditions.checkState(shadowIndex.getState() == MaterializedIndex.IndexState.SHADOW,
                     shadowIndex.getState());
             shadowIndex.setVisibleTxnId(watershedTxnId);
+            shadowIndex.setShadowWatershedTxnId(watershedTxnId);
             physicalPartition.createRollupIndex(shadowIndex);
         }
     }
@@ -1056,7 +1055,10 @@ public abstract class LakeOnlineRewriteJobBase
      * shadow and the real rewrite is re-issued under a fresh id.
      */
     protected RewriteStatus classifyRewrite(long physicalPartitionId) {
-        PartitionRewriteState partitionState = partitionStates.get(physicalPartitionId);
+        return classifyRewrite(partitionStates.get(physicalPartitionId));
+    }
+
+    private RewriteStatus classifyRewrite(PartitionRewriteState partitionState) {
         Long txnId = (partitionState == null) ? null : partitionState.rewriteTxnId;
         if (txnId == null) {
             return RewriteStatus.NEEDS_RUN;
@@ -1955,18 +1957,30 @@ public abstract class LakeOnlineRewriteJobBase
 
     // ---- SHOW / replay ---------------------------------------------------------------------------
 
+    /**
+     * Drops the per-partition rewrite state of a done job, which stays in memory only for SHOW ALTER. Each state
+     * holds a shadow index with its tablets; getInfo reads none of them once the job is done. The map is replaced,
+     * not cleared: replay shares it with the journal entry it came from.
+     */
+    @Override
+    public void pruneMeta() {
+        partitionStates = Maps.newHashMap();
+    }
+
     @Override
     protected void getInfo(List<List<Comparable>> infos) {
         // Progress: partitions whose rewrite has published / total. Only meaningful while RUNNING.
+        // Read once: this runs without the job lock, and pruning the done job replaces the map.
+        Map<Long, PartitionRewriteState> states = partitionStates;
         String progress = FeConstants.NULL_STRING;
-        if (jobState == JobState.RUNNING && !partitionStates.isEmpty()) {
+        if (jobState == JobState.RUNNING && !states.isEmpty()) {
             int published = 0;
-            for (long physicalPartitionId : partitionStates.keySet()) {
-                if (classifyRewrite(physicalPartitionId) == RewriteStatus.DONE) {
+            for (PartitionRewriteState state : states.values()) {
+                if (classifyRewrite(state) == RewriteStatus.DONE) {
                     published++;
                 }
             }
-            progress = published + "/" + partitionStates.size();
+            progress = published + "/" + states.size();
         }
 
         // One display row for the single shadow index this job builds.

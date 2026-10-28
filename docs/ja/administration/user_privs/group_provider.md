@@ -68,7 +68,8 @@ ldap_search_user_arg ::=
     "ldap_user_search_attr" = ""
 
 ldap_cache_arg ::= 
-    "ldap_cache_refresh_interval" = ""
+    ["ldap_cache_refresh_interval" = "",]
+    ["ldap_cache_max_stale_time" = ""]
 ```
 
 <UnixFileSyntax />
@@ -178,7 +179,17 @@ LDAP グループ情報のキャッシュ動作を定義するために使用さ
 
 ##### `ldap_cache_refresh_interval`
 
-オプション。StarRocks がキャッシュされた LDAP グループ情報を自動的に更新する間隔。単位: 秒。デフォルト: `900`。
+オプション。StarRocks がキャッシュされた LDAP グループ情報を自動的に更新する間隔。単位: 秒。デフォルト: `300`。
+
+##### `ldap_cache_max_stale_time`
+
+オプション。更新が失敗し続けている間、最後に正常に構築されたキャッシュを引き続き使用できる期間。単位: 秒。デフォルト: `3600`。
+
+更新が LDAP サーバーに到達できない場合、StarRocks はこの値を超えて古くなるまで以前のキャッシュを引き続き使用します。それを超えるとキャッシュは破棄され、すべてのユーザーは空のグループセットに解決されます。更新が失敗した時点で直ちにキャッシュを破棄するには、この項目を `0` に設定します。
+
+:::note
+`permitted_groups` が設定されている場合、キャッシュを直ちに破棄すると、LDAP の一時的な停止がクラスタ全体のログイン失敗に拡大します。空のグループセットは許可リストと決して交差しないためです。この値を大きくすると、グループ情報が古くなる期間が長くなる代わりに、ディレクトリサービスの停止に対する耐性が得られます。
+:::
 
 ### 例
 
@@ -265,6 +276,67 @@ PROPERTIES(
 
 このアプローチは、Microsoft AD 環境において特に適しています。AD のグループメンバーには単純なユーザー名属性が存在しない場合があるためです。
 
+## Group Provider を変更する
+
+既存の Group Provider は、削除して再作成しなくてもプロパティを更新できます。新しい設定は有効になる前に同期的に検証され、ウォームアップされます。新しいインスタンスの準備が整うまで古いインスタンスがリクエストを処理し続けるため、変更中にグループ検索が空を返すことはありません。
+
+### 構文
+
+```SQL
+ALTER GROUP PROVIDER <group_provider_name> SET
+(
+    "<property_key>" = "<property_value>"
+    [, "<property_key>" = "<property_value>" ...]
+)
+```
+
+### 注意事項
+
+- 指定したプロパティのみが変更されます。指定しなかったプロパティは以前の値を保持します。
+- `type` プロパティは変更できません。タイプを切り替える必要がある場合は、Group Provider を削除して再作成してください。
+- `SET` はプロパティの追加と上書きはできますが、削除はできません。そのため、共存できない 2 つのプロパティを `ALTER` で入れ替えることはできません。LDAP Group Provider は `ldap_group_dn` と `ldap_group_filter` のどちらか一方のみを受け付けるため、一方から他方へ切り替えるには Group Provider を削除して再作成する必要があります。
+- そのタイプが定義しておらず、その Group Provider も現在保持していないプロパティは拒否されます。プロパティ名は大文字小文字を区別せずに照合されるため、`SET ("LDAP_BIND_ROOT_PWD" = ...)` は `ldap_bind_root_pwd` を更新します。名前を綴り間違えた場合は、変更したかったプロパティの隣に保存されるのではなく、ステートメントが失敗します。
+- 新しい設定は同期的に検証されます。設定が使用できない場合 (例: LDAP のバインド認証情報が誤っている、またはサーバーに到達できない場合)、ステートメントは失敗し、Group Provider は以前の設定を保持します。
+- 認証情報はエコーバックされません。`SHOW CREATE GROUP PROVIDER` は `ldap_bind_root_pwd` と `ldap_ssl_conn_trust_store_pwd` の値の代わりに `***` を出力し、監査ログに記録されるステートメントでもこれらはマスクされます。
+
+### 例
+
+```SQL
+-- LDAP バインドパスワードをローテーションする
+ALTER GROUP PROVIDER ldap_group_provider SET ("ldap_bind_root_pwd" = "<new_password>");
+
+-- キャッシュのリフレッシュ間隔を調整する
+ALTER GROUP PROVIDER ldap_group_provider SET ("ldap_cache_refresh_interval" = "10");
+
+-- 複数のプロパティを一度に更新する
+ALTER GROUP PROVIDER ldap_group_provider SET (
+    "ldap_conn_url" = "ldaps://new-host:636",
+    "ldap_ssl_conn_trust_store_path" = "/etc/ssl/new-truststore.jks"
+);
+```
+
+## Group Provider を確認する
+
+```SQL
+-- すべての Group Provider をタイプとともに一覧表示します。Comment 列は常に NULL です: コメントを設定できるステートメントは存在しません。
+SHOW GROUP PROVIDERS;
+
+-- ある Group Provider を再作成するためのステートメントを表示します。`ldap_bind_root_pwd` や
+-- `ldap_ssl_conn_trust_store_pwd` などの認証情報は `***` として出力されるため、出力をそのまま
+-- 再実行することはできません。パスワードは自分で補ってください。
+SHOW CREATE GROUP PROVIDER <group_provider_name>;
+```
+
+どちらのステートメントにも SYSTEM レベルの `SECURITY` 権限が必要です。
+
+## Group Provider を削除する
+
+```SQL
+DROP GROUP PROVIDER [IF EXISTS] <group_provider_name>;
+```
+
+削除は即座に有効になります。以降にログインするユーザーはその Group Provider が解決していたグループを持たなくなるため、`GRANT ... TO EXTERNAL GROUP` で付与したロールも適用されなくなります。参照しているセキュリティインテグレーションの `group_provider` プロパティには名前が残りますが、そこからグループは解決されません。プロパティを変更したいだけの場合は、削除して再作成するのではなく [ALTER GROUP PROVIDER](#group-provider-を変更する) を使用してください。
+
 ## Group Provider をセキュリティインテグレーションと組み合わせる
 
 Group Provider を作成した後、セキュリティインテグレーションと組み合わせて、Group Provider で指定されたユーザーが StarRocks にログインできるようにすることができます。セキュリティインテグレーションの作成に関する詳細は、[Authenticate with Security Integration](./authentication/security_integration.md) を参照してください。
@@ -284,6 +356,8 @@ ALTER SECURITY INTEGRATION <security_integration_name> SET
 #### `group_provider`
 
 セキュリティインテグレーションと組み合わせる Group Provider の名前。複数の Group Provider はカンマで区切られます。設定されると、StarRocks はログイン時に各指定されたプロバイダーの下でユーザーのグループ情報を記録します。
+
+このプロパティが設定されていない場合、セキュリティインテグレーションは FE 設定項目 `group_provider`（クラスター全体のデフォルトリスト）にフォールバックします。v4.2 より前のバージョンでは、その場合に Group Provider は一切参照されなかったため、FE 設定項目がこの種のセキュリティインテグレーションに効くのは v4.2 以降です。
 
 #### `permitted_groups`
 

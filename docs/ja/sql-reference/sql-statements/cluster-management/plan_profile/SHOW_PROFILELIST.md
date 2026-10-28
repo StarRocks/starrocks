@@ -11,7 +11,7 @@ StarRocks クラスターにキャッシュされている query profile レコ�
 
 この機能は v3.1 以降でサポートされています。
 
-この操作を行うための特別な権限は必要ありません。
+デフォルトでは、この操作を行うための特別な権限は必要ありません。FE 設定項目 `authorization_enable_query_profile_access_check` を `true` に設定した場合、ユーザーは自分が実行したクエリの query profile レコードのみを一覧表示でき、他のユーザーが実行したクエリの query profile レコードを一覧表示するには SYSTEM レベルの OPERATE 権限が必要です。この権限を付与するには、[GRANT](../../account-management/GRANT.md) を参照してください。
 
 ## 構文
 
@@ -28,6 +28,7 @@ SHOW PROFILELIST [LIMIT n]
 | **戻り値** | **説明**                                                      |
 | ---------- | ------------------------------------------------------------- |
 | QueryId    | クエリの ID。                                                 |
+| CustomQueryId | セッションで `custom_query_id` が設定されている場合、そのクエリに割り当てられたカスタムクエリ ID。設定されていない場合は空。 |
 | StartTime  | クエリの開始時間。                                            |
 | Time       | クエリのレイテンシー。                                        |
 | State      | クエリの状態。`Error`: クエリでエラーが発生した場合。`Finished`: クエリが完了した場合。`Running`: クエリが実行中の場合。 |

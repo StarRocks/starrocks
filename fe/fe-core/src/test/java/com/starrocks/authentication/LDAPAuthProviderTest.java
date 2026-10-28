@@ -32,6 +32,7 @@ import org.junit.jupiter.api.Test;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -164,6 +165,55 @@ class LDAPAuthProviderTest {
             String normalized = LDAPAuthProvider.normalizeUsername(testUser);
             Assertions.assertEquals("allen", normalized,
                     "Username '" + testUser + "' should normalize to 'allen'");
+        }
+    }
+
+    @Test
+    void testCanonicalDn() {
+        Assertions.assertNull(LDAPAuthProvider.canonicalDn(null));
+
+        // Attribute types and attribute values are both folded to lowercase.
+        Assertions.assertEquals("uid=allen,ou=people,dc=example,dc=com",
+                LDAPAuthProvider.canonicalDn("uid=Allen,OU=People,DC=example,DC=Com"));
+
+        // Whitespace around the RDN separators is not part of the name.
+        Assertions.assertEquals(
+                LDAPAuthProvider.canonicalDn("uid=Allen,OU=People,DC=example,DC=Com"),
+                LDAPAuthProvider.canonicalDn("uid=Allen, OU=People , DC=example,DC=Com"));
+
+        // An escaped comma stays inside the attribute value instead of splitting the RDN.
+        Assertions.assertEquals("uid=al\\,en,ou=people",
+                LDAPAuthProvider.canonicalDn("uid=al\\,en,OU=People"));
+
+        // A multi-valued RDN keeps both of its parts.
+        Assertions.assertEquals("cn=a+sn=b,dc=x", LDAPAuthProvider.canonicalDn("CN=a+SN=b,DC=x"));
+
+        // Not a DN at all: fall back to a plain lowercase instead of failing the login. This is the
+        // normal case when the distinguished name defaults to the bare user name.
+        Assertions.assertEquals("not_a_dn", LDAPAuthProvider.canonicalDn("Not_A_DN"));
+        Assertions.assertEquals("", LDAPAuthProvider.canonicalDn(""));
+    }
+
+    /**
+     * Test case: normalize a user name while the JVM default locale is Turkish.
+     * Test point: the result does not depend on the locale the FE happens to run under. Turkish maps
+     *             uppercase ASCII 'I' to a dotless 'i', so a cluster whose FEs disagree on locale
+     *             would otherwise normalize the same name to different strings, and neither the
+     *             authentication nor the group lookup would agree between nodes.
+     */
+    @Test
+    void testNormalizeUsernameIsLocaleIndependent() {
+        Locale savedDefault = Locale.getDefault();
+        try {
+            Locale.setDefault(Locale.forLanguageTag("tr-TR"));
+            // Inputs must contain an uppercase ASCII 'I'; names such as 'Allen' or 'Li' come out the
+            // same under any locale and would not test anything.
+            Assertions.assertEquals("li", LDAPAuthProvider.normalizeUsername("LI"));
+            Assertions.assertEquals("ian", LDAPAuthProvider.normalizeUsername("Ian"));
+            Assertions.assertEquals("itadmin", LDAPAuthProvider.normalizeUsername("ITAdmin"));
+            Assertions.assertEquals("uid=itadmin,ou=people", LDAPAuthProvider.canonicalDn("uid=ITAdmin,OU=People"));
+        } finally {
+            Locale.setDefault(savedDefault);
         }
     }
 
@@ -505,12 +555,12 @@ class LDAPAuthProviderTest {
             provider.authenticate(authCtx, user, "password\0".getBytes(StandardCharsets.UTF_8));
 
             Assertions.assertEquals("uid=alice,ou=People,dc=test,dc=com", authCtx.getDistinguishedName());
-            Set<String> groups = AuthenticationHandler.getGroups(user, authCtx.getDistinguishedName(),
+            Set<String> groups = AuthenticationHandler.resolveGroupsFromProviders(user, authCtx.getDistinguishedName(),
                     List.of("gp_dn_simple"));
             Assertions.assertEquals(Set.of("engineers"), groups);
 
             // Unknown DN → empty
-            Assertions.assertTrue(AuthenticationHandler.getGroups(user,
+            Assertions.assertTrue(AuthenticationHandler.resolveGroupsFromProviders(user,
                     "uid=unknown,ou=People,dc=test,dc=com", List.of("gp_dn_simple")).isEmpty());
         } finally {
             gpMap.remove("gp_dn_simple");
@@ -541,7 +591,7 @@ class LDAPAuthProviderTest {
 
             Assertions.assertEquals("uid=alice@abc.com,ou=People,dc=test,dc=com",
                     authCtx.getDistinguishedName());
-            Set<String> groups = AuthenticationHandler.getGroups(user, authCtx.getDistinguishedName(),
+            Set<String> groups = AuthenticationHandler.resolveGroupsFromProviders(user, authCtx.getDistinguishedName(),
                     List.of("gp_dn_at"));
             Assertions.assertEquals(Set.of("staff"), groups);
         } finally {
@@ -572,7 +622,7 @@ class LDAPAuthProviderTest {
             UserIdentity user = UserIdentity.createEphemeralUserIdent("alice", "%");
             provider.authenticate(authCtx, user, "password\0".getBytes(StandardCharsets.UTF_8));
 
-            Set<String> groups = AuthenticationHandler.getGroups(user, authCtx.getDistinguishedName(),
+            Set<String> groups = AuthenticationHandler.resolveGroupsFromProviders(user, authCtx.getDistinguishedName(),
                     List.of("gp_attr_simple"));
             Assertions.assertEquals(Set.of("developers"), groups);
         } finally {
@@ -608,7 +658,7 @@ class LDAPAuthProviderTest {
             provider.authenticate(authCtx, user, "password\0".getBytes(StandardCharsets.UTF_8));
 
             // Lookup key "alice" vs cache key "alice@abc.com" → mismatch → empty
-            Set<String> groups = AuthenticationHandler.getGroups(user, authCtx.getDistinguishedName(),
+            Set<String> groups = AuthenticationHandler.resolveGroupsFromProviders(user, authCtx.getDistinguishedName(),
                     List.of("gp_attr_wrong"));
             Assertions.assertTrue(groups.isEmpty(),
                     "ldap_user_search_attr=uid extracts 'alice@abc.com' as cache key, " +
@@ -641,11 +691,35 @@ class LDAPAuthProviderTest {
             UserIdentity user = UserIdentity.createEphemeralUserIdent("alice", "%");
             provider.authenticate(authCtx, user, "password\0".getBytes(StandardCharsets.UTF_8));
 
-            Set<String> groups = AuthenticationHandler.getGroups(user, authCtx.getDistinguishedName(),
+            Set<String> groups = AuthenticationHandler.resolveGroupsFromProviders(user, authCtx.getDistinguishedName(),
                     List.of("gp_regex_correct"));
             Assertions.assertEquals(Set.of("developers"), groups);
         } finally {
             gpMap.remove("gp_regex_correct");
+        }
+    }
+
+    @Test
+    public void testBindEnvCarriesConnectAndReadTimeouts() throws Exception {
+        // Without these two the bind falls back to the OS TCP timeout, which pins whichever thread is
+        // authenticating -- an HTTP worker or a thrift handler now that security integrations serve those
+        // channels too.
+        LDAPAuthProvider provider = new LDAPAuthProvider("localhost", 389, false, "", "",
+                "cn=admin,dc=example,dc=com", "root_pwd", "dc=example,dc=com", "uid", null, null);
+        int savedConn = Config.authentication_ldap_simple_conn_timeout_ms;
+        int savedRead = Config.authentication_ldap_simple_conn_read_timeout_ms;
+        Config.authentication_ldap_simple_conn_timeout_ms = 1234;
+        Config.authentication_ldap_simple_conn_read_timeout_ms = 5678;
+
+        try {
+            java.util.Hashtable<String, String> env =
+                    provider.buildEnv("uid=alice,dc=example,dc=com", "pwd");
+
+            Assertions.assertEquals("1234", env.get("com.sun.jndi.ldap.connect.timeout"));
+            Assertions.assertEquals("5678", env.get("com.sun.jndi.ldap.read.timeout"));
+        } finally {
+            Config.authentication_ldap_simple_conn_timeout_ms = savedConn;
+            Config.authentication_ldap_simple_conn_read_timeout_ms = savedRead;
         }
     }
 }

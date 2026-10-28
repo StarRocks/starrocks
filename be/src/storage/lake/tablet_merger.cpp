@@ -42,10 +42,10 @@
 #include "storage/delta_column_group.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/meta_file.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_range_helper.h"
 #include "storage/lake/tablet_reshard_helper.h"
-#include "storage/lake/update_manager.h"
 #include "storage/lake/utils.h"
 #include "storage/olap_common.h"
 #include "storage/options.h"
@@ -3417,13 +3417,14 @@ void record_merge_sstable_meta_result(const MergeSstableMetaResult& result) {
 
 Status merge_sstables(TabletManager* tablet_manager, std::vector<TabletMergeContext>& merge_contexts,
                       const TabletMergeAllocationPlan& allocation_plan, TabletMetadataPB* new_metadata) {
-    auto* update_manager = tablet_manager->update_mgr();
+    auto* primary_key_manager = tablet_manager->primary_key_mgr();
     for (auto& context : merge_contexts) {
         bool skip_source_flush = false;
         FAIL_POINT_TRIGGER_EXECUTE(skip_lake_pk_index_merge_source_flush, { skip_source_flush = true; });
         if (skip_source_flush) continue;
         TEST_SYNC_POINT_CALLBACK("merge_sstables:source_pk_flush", nullptr);
-        ASSIGN_OR_RETURN(auto flushed, update_manager->flush_pk_memtable(context.metadata(), new_metadata->version()));
+        ASSIGN_OR_RETURN(auto flushed,
+                         primary_key_manager->flush_pk_memtable(context.metadata(), new_metadata->version()));
         context.set_metadata(std::move(flushed));
     }
 
@@ -3598,7 +3599,7 @@ DEFINE_FAIL_POINT(tablet_merge_after_rssid_reassign);
 StatusOr<MutableTabletMetadataPtr> merge_tablet(TabletManager* tablet_manager,
                                                 const std::vector<TabletMetadataPtr>& old_tablet_metadatas,
                                                 const MergingTabletInfoPB& merging_tablet, int64_t new_version,
-                                                const TxnInfoPB& txn_info, bool skip_sstable_merge) {
+                                                const TxnInfoPB& txn_info) {
     if (old_tablet_metadatas.empty()) {
         return Status::InvalidArgument("No old tablet metadata to merge");
     }
@@ -3613,7 +3614,7 @@ StatusOr<MutableTabletMetadataPtr> merge_tablet(TabletManager* tablet_manager,
         // cursor is restricted to INT32_MAX; source SST reuse is proved later
         // by the modern/legacy classifiers against the packed projection.
         RETURN_IF_ERROR(validate_source_rssid_domain(*old_tablet_metadata));
-        if (!skip_sstable_merge && is_primary_key(*old_tablet_metadata)) {
+        if (is_primary_key(*old_tablet_metadata)) {
             for (const auto& rowset : old_tablet_metadata->rowsets()) {
                 const uint64_t source_rowset_id = static_cast<uint64_t>(rowset.id());
                 if (source_rowset_id == 0) {
@@ -3701,10 +3702,7 @@ StatusOr<MutableTabletMetadataPtr> merge_tablet(TabletManager* tablet_manager,
                                       txn_info.txn_id(), new_tablet_metadata.get()));
     }
 
-    if (skip_sstable_merge) {
-        // Read-only alias: leave it without a primary index rather than paying the rebuild.
-        new_tablet_metadata->clear_sstable_meta();
-    } else if (uses_cloud_native_pk_index(*new_tablet_metadata)) {
+    if (uses_cloud_native_pk_index(*new_tablet_metadata)) {
         RETURN_IF_ERROR(merge_sstables(tablet_manager, merge_contexts, allocation_plan, new_tablet_metadata.get()));
     } else {
         // SST classification and source flushing are cloud-native PK contracts. Other key/index modes retain

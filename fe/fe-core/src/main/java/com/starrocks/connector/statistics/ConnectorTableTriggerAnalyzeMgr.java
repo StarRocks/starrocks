@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.statistics;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
@@ -53,11 +54,23 @@ public class ConnectorTableTriggerAnalyzeMgr {
         }
     }
 
-    private void schedulePendingTask() {
-        if (GlobalStateMgr.getCurrentState().isLeader()) {
-            connectorAnalyzeTaskQueue.schedulePendingTask();
+    // Any exception escaping from here would silently cancel the periodic schedule of scheduleAtFixedRate,
+    // which stops both query triggered analyze and global dict update until FE restarts.
+    @VisibleForTesting
+    void schedulePendingTask() {
+        try {
+            if (GlobalStateMgr.getCurrentState().isLeader()) {
+                connectorAnalyzeTaskQueue.schedulePendingTask();
+            }
+        } catch (Throwable e) {
+            LOG.warn("[ExternalStats] schedule pending task failed", e);
         }
-        scheduleDictUpdate();
+
+        try {
+            scheduleDictUpdate();
+        } catch (Throwable e) {
+            LOG.warn("[ExternalStats] schedule dict update failed", e);
+        }
     }
 
     private void scheduleDictUpdate() {

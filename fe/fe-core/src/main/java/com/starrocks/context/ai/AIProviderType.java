@@ -21,8 +21,17 @@ import java.util.Locale;
 /**
  * The kind of external AI service an {@link AIProvider} talks to. A single {@code AIProviderMgr}
  * registry holds providers of every type and keeps one default per type, so embedding, rerank and
- * (future) text/reasoning providers share the same DDL, persistence and credential handling instead
- * of each duplicating the machinery.
+ * chat providers share the same DDL, persistence and credential handling instead of each duplicating
+ * the machinery.
+ *
+ * <ul>
+ *   <li>EMBEDDING — text in, vector out.</li>
+ *   <li>RERANK — query + documents in, relevance scores out.</li>
+ *   <li>CHAT — chat/completion endpoint: any input modality the model accepts (text, images, documents)
+ *       in, text out. This is the provider kind AI functions consume.</li>
+ * </ul>
+ *
+ * <p>The wire protocol each type speaks is carried separately by {@link AIProviderProtocol}.
  *
  * <p>EMBEDDING is the original type — providers persisted before the unification carry no type tag,
  * so deserialization MUST treat a missing type as EMBEDDING (see {@code AIProviderMgr.gsonPostProcess}).
@@ -30,9 +39,7 @@ import java.util.Locale;
 public enum AIProviderType {
     EMBEDDING,
     RERANK,
-    // Reserved for a future text-generation / reasoning provider; no DDL/persistence change needed
-    // to add it beyond a request-schema + an HTTP client mapping.
-    TEXT;
+    CHAT;
 
     public static AIProviderType fromString(String s) {
         if (Strings.isNullOrEmpty(s)) {
@@ -42,7 +49,7 @@ public enum AIProviderType {
             return valueOf(s.trim().toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException e) {
             throw new IllegalArgumentException(
-                    "invalid AI provider type '" + s + "'; expected one of embedding, rerank, text");
+                    "invalid AI provider type '" + s + "'; expected one of embedding, rerank, chat");
         }
     }
 

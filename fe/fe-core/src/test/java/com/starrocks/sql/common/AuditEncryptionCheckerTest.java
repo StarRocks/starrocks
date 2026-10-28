@@ -23,6 +23,26 @@ import org.junit.jupiter.api.Test;
 public class AuditEncryptionCheckerTest {
 
     @Test
+    public void testProviderDdlKeepsRawSqlFormatting() {
+        // Provider DDL has no AST SQL formatter; keep the existing raw-SQL redaction path.
+        for (String sql : new String[] {
+                "CREATE AI PROVIDER p TYPE chat PROPERTIES ('endpoint'='https://models.example.test/chat', "
+                        + "'model'='chat', 'api_key'='audit-test-secret')",
+                "ALTER AI PROVIDER p SET ('api_key'='audit-test-secret')"
+        }) {
+            StatementBase stmt = SqlParser.parseSingleStatement(sql, SqlModeHelper.MODE_DEFAULT);
+            Assertions.assertFalse(AuditEncryptionChecker.needEncrypt(stmt));
+        }
+    }
+
+    @Test
+    public void testProviderFunctionDoesNotContainCredentials() {
+        StatementBase stmt = SqlParser.parseSingleStatement(
+                "SELECT ai_custom_query('p', 'prompt')", SqlModeHelper.MODE_DEFAULT);
+        Assertions.assertFalse(AuditEncryptionChecker.needEncrypt(stmt));
+    }
+
+    @Test
     public void testNeedEncryptInsertSelectFromFiles() {
         StatementBase stmt = SqlParser.parseSingleStatement(
                 "INSERT INTO t0 SELECT * FROM FILES(" +

@@ -28,6 +28,7 @@
 #include "common/thread/threadpool.h"
 #include "platform/platform_env.h"
 #include "runtime/diagnose_daemon.h"
+#include "runtime/global_thread_pools.h"
 #include "runtime/runtime_env_test_util.h"
 
 namespace starrocks {
@@ -151,6 +152,25 @@ TEST(RuntimeEnvTest, OwnsLakeThreadPools) {
     env->shutdown_thread_pools();
     env->destroy_thread_pools();
     ASSERT_EQ(env->lake_metadata_fetch_thread_pool(), nullptr);
+}
+
+TEST(GlobalThreadPoolsTest, PkIndexExecutionThreadPoolSizing) {
+    CpuInfo::init();
+    SCOPED_UPDATE(int32_t, config::pk_index_parallel_execution_threadpool_size, 8);
+
+    for (const auto& [configured_threads, expected_threads] :
+         {std::pair{0, CpuInfo::num_cores()}, std::pair{-1, CpuInfo::num_cores()}, std::pair{1, 1}, std::pair{7, 7}}) {
+        SCOPED_TRACE(configured_threads);
+        SCOPED_UPDATE(int32_t, config::pk_index_parallel_execution_threadpool_max_threads, configured_threads);
+
+        GlobalThreadPools pools;
+        // Exercise the production initializer; the ordinary BE_TEST lake pool stays fixed at one thread.
+        auto st = pools._init_pk_index_execution_thread_pool();
+        ASSERT_TRUE(st.ok()) << st;
+        ASSERT_NE(pools.pk_index_execution_thread_pool(), nullptr);
+        EXPECT_EQ(pools.pk_index_execution_thread_pool()->max_threads(), expected_threads);
+        pools.shutdown();
+    }
 }
 
 } // namespace starrocks

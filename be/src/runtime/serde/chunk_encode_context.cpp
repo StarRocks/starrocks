@@ -47,7 +47,11 @@ void EncodeContext::_adjust(const int col_id) {
     if (_encoded_bytes[col_id] < _raw_bytes[col_id] * EncodeRatioLimit) {
         _column_encode_level[col_id] = _session_encode_level;
     } else {
-        _column_encode_level[col_id] = 0;
+        // ENCODE_ALL_NULL selects a layout rather than a compression scheme, so it survives the
+        // ratio check. An all-NULL column is exactly the case where compression looks unprofitable
+        // -- its null flags barely shrink -- which is also where dropping the short-circuit costs
+        // the most.
+        _column_encode_level[col_id] = _session_encode_level & ENCODE_ALL_NULL;
     }
     if (old_level != _column_encode_level[col_id] || _session_encode_level < -1) {
         VLOG_ROW << "column " << col_id << " encode_level changed from " << old_level << " to "

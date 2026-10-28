@@ -24,6 +24,7 @@
 #include "base/status.h"
 #include "base/statusor.h"
 #include "platform/llm/ai_admission_controller.h"
+#include "platform/llm/ai_media_input.h"
 #include "platform/llm/ai_memory.h"
 
 namespace starrocks {
@@ -32,12 +33,14 @@ struct AIRuntimeConfig {
     int64_t request_timeout_ms = 600000;
     int64_t connect_timeout_ms = 10000;
     int64_t max_response_bytes = 8388608;
+    int64_t max_input_file_bytes = kDefaultAIMaxInputFileBytes;
     int32_t worker_thread_num = 16;
     int32_t sub_chunk_size = 64;
     int32_t max_retries = 3;
     int32_t max_retries_on_throttle = 5;
     std::string on_error = "ignore";
     int32_t rate_limit_qps_chat = 128;
+    int32_t rate_limit_qps_embedding = 128;
     int32_t max_inflight = 512;
 
     Status validate() const;

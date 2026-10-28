@@ -13,7 +13,7 @@ description: "ANALYZE PROFILE 以 Fragment 为单位分析指定 Query Profile�
 
 > **注意**
 >
-> 该操作需要有指定表的 SELECT 权限。
+> 默认情况下，该操作无需任何权限。如果将 FE 配置项 `authorization_enable_query_profile_access_check` 设置为 `true`，用户只能分析自己执行的查询的 Query Profile；分析其他用户执行的查询的 Query Profile，需要 SYSTEM 级 OPERATE 权限。
 
 ## 语法
 

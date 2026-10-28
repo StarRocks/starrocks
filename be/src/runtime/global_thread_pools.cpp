@@ -150,6 +150,18 @@ Status GlobalThreadPools::init_execution_thread_pools(MetricRegistry* metrics) {
     return Status::OK();
 }
 
+Status GlobalThreadPools::_init_pk_index_execution_thread_pool() {
+    int32_t max_thread_count = config::pk_index_parallel_execution_threadpool_max_threads;
+    if (max_thread_count <= 0) {
+        max_thread_count = CpuInfo::num_cores();
+    }
+    return ThreadPoolBuilder("lake_pkidx_exec")
+            .set_min_threads(1)
+            .set_max_threads(std::max(1, max_thread_count))
+            .set_max_queue_size(config::pk_index_parallel_execution_threadpool_size)
+            .build(&_pk_index_execution_thread_pool);
+}
+
 Status GlobalThreadPools::init_lake_thread_pools(MetricRegistry* metrics) {
     if (_lake_vector_index_build_thread_pool != nullptr) {
         return Status::OK();
@@ -167,15 +179,7 @@ Status GlobalThreadPools::init_lake_thread_pools(MetricRegistry* metrics) {
                             .build(&_put_aggregate_metadata_thread_pool));
     REGISTER_THREAD_POOL_RUNTIME_METRICS(metrics, put_aggregate_metadata, _put_aggregate_metadata_thread_pool.get());
 
-    max_thread_count = config::pk_index_parallel_execution_threadpool_max_threads;
-    if (max_thread_count <= 0) {
-        max_thread_count = CpuInfo::num_cores() / 2;
-    }
-    RETURN_IF_ERROR(ThreadPoolBuilder("lake_pkidx_exec")
-                            .set_min_threads(1)
-                            .set_max_threads(std::max(1, max_thread_count))
-                            .set_max_queue_size(config::pk_index_parallel_execution_threadpool_size)
-                            .build(&_pk_index_execution_thread_pool));
+    RETURN_IF_ERROR(_init_pk_index_execution_thread_pool());
     REGISTER_THREAD_POOL_RUNTIME_METRICS(metrics, cloud_native_pk_index_execution,
                                          _pk_index_execution_thread_pool.get());
 

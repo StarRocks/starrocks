@@ -59,13 +59,7 @@ public class LakeTabletsProcDir implements ProcDirInterface {
     }
 
     public static int analyzeColumn(String columnName) throws AnalysisException {
-        for (String title : TITLE_NAMES) {
-            if (title.equalsIgnoreCase(columnName)) {
-                return TITLE_NAMES.indexOf(title);
-            }
-        }
-
-        throw new AnalysisException("Title name[" + columnName + "] does not exist");
+        return ProcUtils.analyzeColumn(TITLE_NAMES, columnName);
     }
 
     public List<List<Comparable>> fetchComparableResult() {

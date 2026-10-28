@@ -13,17 +13,90 @@
 // limitations under the License.
 package com.starrocks.common.lock;
 
+import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.concurrent.lock.DeadlockException;
 import com.starrocks.common.util.concurrent.lock.LockException;
 import com.starrocks.common.util.concurrent.lock.LockType;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 
 import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.atomic.AtomicReference;
 
 public class LockTestUtils {
+    private static final String DEFAULT_BLOCKING_CALL_VALIDATION_MODE = Config.lock_blocking_call_validation_mode;
+
+    /**
+     * Opt a test out of the blocking-call-under-lock check.
+     * <p>
+     * For a test that holds a metadata lock across a blocking call <em>on purpose</em> -- one that
+     * reproduces such a site, or asserts what the FE does when the connector is slow. A test that
+     * merely happens to trip the check is reporting a real defect and must not use this. Pair with
+     * {@link #restoreBlockingCallValidation()} in teardown.
+     */
+    public static void disableBlockingCallValidation() {
+        Config.lock_blocking_call_validation_mode = "off";
+    }
+
+    public static void restoreBlockingCallValidation() {
+        Config.lock_blocking_call_validation_mode = DEFAULT_BLOCKING_CALL_VALIDATION_MODE;
+    }
+
+    /**
+     * Fake {@code ThreadPoolExecutor.submit} so the task runs on a thread of its own and is joined,
+     * instead of running inline on the caller's thread.
+     * <p>
+     * Tests fake the pool to make an asynchronous step deterministic, and the usual one-liner --
+     * {@code CompletableFuture.completedFuture(task.call())} -- runs the task on the submitting
+     * thread. When that thread holds a metadata lock, as an alter job does while it submits its
+     * publish, the task inherits a critical section it never has in production, so everything it
+     * does under it -- a BE RPC, say -- runs under a lock the running system does not hold there.
+     * Joining right away keeps the determinism the fake was for.
+     * <p>
+     * A plain {@link Thread}, not an {@link java.util.concurrent.ExecutorService}: the fake is
+     * global, so a nested executor's {@code submit} would land back in it.
+     * <p>
+     * Whatever the task throws is re-thrown on the caller's thread, {@link Error} included. An
+     * assertion inside the task raises an Error, and a thread of its own is where an Error goes
+     * unnoticed: it would kill that thread, leave {@code join} to return normally, and hand back a
+     * successfully completed Future holding null -- a test that fails when the task runs inline
+     * would go green instead.
+     */
+    public static void fakeSynchronousExecutorOffTheCallersThread() {
+        new MockUp<ThreadPoolExecutor>() {
+            @Mock
+            public <T> Future<T> submit(Callable<T> task) throws Exception {
+                AtomicReference<T> result = new AtomicReference<>();
+                AtomicReference<Throwable> failure = new AtomicReference<>();
+                Thread thread = new Thread(() -> {
+                    try {
+                        result.set(task.call());
+                    } catch (Throwable t) {
+                        failure.set(t);
+                    }
+                });
+                thread.start();
+                thread.join();
+                Throwable failed = failure.get();
+                if (failed instanceof Exception) {
+                    throw (Exception) failed;
+                } else if (failed instanceof Error) {
+                    throw (Error) failed;
+                } else if (failed != null) {
+                    throw new IllegalStateException(failed);
+                }
+                return CompletableFuture.completedFuture(result.get());
+            }
+        };
+    }
+
     public static void assertLockSuccess(Future<LockResult> lockTaskResultFuture) {
         try {
             LockResult lockResult = lockTaskResultFuture.get();

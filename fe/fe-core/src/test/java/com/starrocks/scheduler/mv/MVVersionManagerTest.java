@@ -14,23 +14,29 @@
 
 package com.starrocks.scheduler.mv;
 
+import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.connector.PartitionUtil;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.WALApplier;
 import com.starrocks.scheduler.MvTaskRunContext;
 import com.starrocks.scheduler.TaskRun;
 import com.starrocks.scheduler.TaskRunContext;
+import com.starrocks.scheduler.mv.pct.PCTTableSnapshotInfo;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.KeysType;
+import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.type.IntegerType;
 import mockit.Mock;
 import mockit.MockUp;
@@ -42,8 +48,12 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 public class MVVersionManagerTest {
 
@@ -192,5 +202,74 @@ public class MVVersionManagerTest {
 
         Assertions.assertEquals(1000L, mv.getRefreshScheme().getLastFreshnessConfirmedAt());
         Assertions.assertEquals(0, editLogCount.get());
+    }
+
+    // PartitionUtil.getPartitionNames reaches a connector table's remote metadata, so it must not run under the
+    // mv write lock: that lock is contended by other refresh runs and DDLs, which tryLock with a bounded timeout.
+    @Test
+    public void collectExternalTablePartitionNamesResolvesOnlyExternalBaseTables() {
+        AtomicInteger resolveCount = new AtomicInteger();
+        mockGetPartitionNames(resolveCount);
+
+        MaterializedView mv = buildMv(1000L);
+        OlapTable olapBaseTable = mock(OlapTable.class);
+        when(olapBaseTable.isNativeTableOrMaterializedView()).thenReturn(true);
+        when(olapBaseTable.getId()).thenReturn(2000L);
+        Table externalBaseTable = mock(Table.class);
+        when(externalBaseTable.isNativeTableOrMaterializedView()).thenReturn(false);
+        when(externalBaseTable.getId()).thenReturn(3000L);
+
+        PCTTableSnapshotInfo olapSnapshot = new PCTTableSnapshotInfo(mock(BaseTableInfo.class), olapBaseTable);
+        PCTTableSnapshotInfo externalSnapshot = new PCTTableSnapshotInfo(mock(BaseTableInfo.class), externalBaseTable);
+
+        MVVersionManager manager = new MVVersionManager(mv, buildContext(null, statusWithProcessStartTime(2000L)));
+        Map<PCTTableSnapshotInfo, List<String>> partitionNames = manager.collectExternalTablePartitionNames(
+                Map.of(2000L, olapSnapshot, 3000L, externalSnapshot), Set.of(2000L, 3000L));
+
+        Assertions.assertEquals(Set.of(externalSnapshot), partitionNames.keySet(),
+                "only external base tables need their partition names resolved from the connector");
+        Assertions.assertEquals(List.of("p1", "p2"), partitionNames.get(externalSnapshot));
+        Assertions.assertEquals(1, resolveCount.get());
+    }
+
+    @Test
+    public void updateMVVersionInfoPrunesExternalPartitionsWithoutCallingTheConnector() {
+        AtomicInteger resolveCount = new AtomicInteger();
+        mockGetPartitionNames(resolveCount);
+
+        MaterializedView mv = buildMv(1000L);
+        Table externalBaseTable = mock(Table.class);
+        when(externalBaseTable.isNativeTableOrMaterializedView()).thenReturn(false);
+        when(externalBaseTable.getId()).thenReturn(3000L);
+        BaseTableInfo baseTableInfo = mock(BaseTableInfo.class);
+        PCTTableSnapshotInfo snapshot = new PCTTableSnapshotInfo(baseTableInfo, externalBaseTable);
+        snapshot.getRefreshedPartitionInfos().put("p1", new MaterializedView.BasePartitionInfo(1L, 1L, 1L));
+
+        // p3 no longer exists in the base table, so the version map entry must be pruned.
+        Map<String, MaterializedView.BasePartitionInfo> versionMap = new HashMap<>();
+        versionMap.put("p3", new MaterializedView.BasePartitionInfo(1L, 1L, 1L));
+        mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableInfoVisibleVersionMap()
+                .put(baseTableInfo, versionMap);
+
+        MVVersionManager manager = new MVVersionManager(mv, buildContext(null, statusWithProcessStartTime(2000L)));
+        manager.updateMVVersionInfo(Map.of(3000L, snapshot), PCellSortedSet.of(), Set.of(3000L),
+                Map.of(), null, Map.of(snapshot, List.of("p1", "p2")), true);
+
+        Assertions.assertEquals(Set.of("p1"), mv.getRefreshScheme().getAsyncRefreshContext()
+                        .getBaseTableInfoVisibleVersionMap().get(baseTableInfo).keySet(),
+                "the refreshed partition must be kept and the dropped one pruned");
+        Assertions.assertEquals(0, resolveCount.get(),
+                "the partition names were resolved before the lock, so the critical section must not call the "
+                        + "connector again");
+    }
+
+    private static void mockGetPartitionNames(AtomicInteger resolveCount) {
+        new MockUp<PartitionUtil>() {
+            @Mock
+            public List<String> getPartitionNames(Table table) {
+                resolveCount.incrementAndGet();
+                return List.of("p1", "p2");
+            }
+        };
     }
 }

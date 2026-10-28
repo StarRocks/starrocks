@@ -17,7 +17,6 @@ package com.starrocks.sql.analyzer;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
@@ -25,7 +24,6 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.planner.IcebergRowDeltaSink;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ColumnAssignment;
 import com.starrocks.sql.ast.HintNode;
 import com.starrocks.sql.ast.JoinOperator;
@@ -51,7 +49,6 @@ import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.IsNullPredicate;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.type.IntegerType;
 
@@ -69,12 +66,7 @@ public class MergeIntoAnalyzer {
         TableRef tableRef = AnalyzerUtils.normalizedTableRef(stmt.getTableRef(), session);
         stmt.setTableRef(tableRef);
         TableName tableName = TableName.fromTableRef(tableRef);
-        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                .getDb(session, tableName.getCatalog(), tableName.getDb());
-        if (db == null) {
-            throw new SemanticException("Database %s is not found", tableName.getCatalogAndDb());
-        }
-        Table table = MetaUtils.getSessionAwareTable(session, null, tableName);
+        Table table = AnalyzerUtils.resolveWriteTarget(session, tableName);
 
         if (table instanceof IcebergTable icebergTable) {
             analyzeIcebergTable(stmt, icebergTable, tableName, session);
@@ -248,8 +240,14 @@ public class MergeIntoAnalyzer {
 
         // ---- BUILD FROM: source LEFT OUTER JOIN target ON merge_condition ----
 
-        // Target table relation (with alias)
+        // Target table relation (with alias). The table it stands for is already in hand, so hand it over
+        // rather than let the analyzer resolve the same name a second time: this synthetic query is
+        // analyzed with the meta lock held, and that second resolve was the last request this statement
+        // made to the iceberg catalog from inside the critical section. QueryAnalyzer takes a pre-set table
+        // for an external catalog, which is the same door the unlocked pre-pass uses for tables on the read
+        // side.
         TableRelation targetRelation = new TableRelation(tableName);
+        targetRelation.setTable(icebergTable);
         if (stmt.getTargetAlias() != null) {
             targetRelation.setAlias(new TableName(null, null, stmt.getTargetAlias()));
         }

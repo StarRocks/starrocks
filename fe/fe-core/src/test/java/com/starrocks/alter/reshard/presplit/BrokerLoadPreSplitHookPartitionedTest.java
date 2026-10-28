@@ -182,7 +182,7 @@ public class BrokerLoadPreSplitHookPartitionedTest {
                     any(), any(), anyList(), anyInt(), any(), any(), any()), times(1));
             // ...and MUST NOT fall through to the single-partition entry.
             coordinator.verify(() -> TabletPreSplitCoordinator.submitAsynchronously(
-                    any(), any(), anyLong(), any(), any(), any(), anyInt()), never());
+                    any(), any(), anyLong(), any(), any(), any(), anyInt(), any()), never());
         }
     }
 
@@ -228,7 +228,7 @@ public class BrokerLoadPreSplitHookPartitionedTest {
             coordinator.verify(() -> TabletPreSplitCoordinator.submitForPartitionsCombined(
                     any(), any(), anyList(), anyInt(), any(), any(), any()), never());
             coordinator.verify(() -> TabletPreSplitCoordinator.submitAsynchronously(
-                    any(), any(), anyLong(), any(), any(), any(), anyInt()), never());
+                    any(), any(), anyLong(), any(), any(), any(), anyInt(), any()), never());
         }
     }
 
@@ -443,7 +443,7 @@ public class BrokerLoadPreSplitHookPartitionedTest {
             coordinator.verify(() -> TabletPreSplitCoordinator.submitForPartitionsCombined(
                     any(), any(), anyList(), anyInt(), any(), any(), any()), never());
             coordinator.verify(() -> TabletPreSplitCoordinator.submitAsynchronously(
-                    any(), any(), anyLong(), any(), any(), any(), anyInt()), never());
+                    any(), any(), anyLong(), any(), any(), any(), anyInt(), any()), never());
         }
     }
 
@@ -458,18 +458,24 @@ public class BrokerLoadPreSplitHookPartitionedTest {
     @Test
     public void persistedEnableTabletPreSplitKeyIsStable() {
         // BulkLoadJob persists `enable_tablet_pre_split` into sessionVariables so
-        // BrokerLoadJob.firePreSplitHooks can re-apply the opt-out after FE
-        // failover. The contract is that the key matches SessionVariable.ENABLE_TABLET_PRE_SPLIT
-        // — if the key drifts, the persisted opt-out becomes silently inert.
-        // This test pins the constant so a rename triggers a compile-and-test break.
+        // BrokerLoadJob.firePreSplitHooks can hand the submit-time value to the hook,
+        // including after FE failover. The contract is that the key matches
+        // SessionVariable.ENABLE_TABLET_PRE_SPLIT — if the key drifts, the persisted value
+        // becomes silently inert. This test pins the constant so a rename triggers a
+        // compile-and-test break.
         Assertions.assertEquals("enable_tablet_pre_split", SessionVariable.ENABLE_TABLET_PRE_SPLIT,
                 "SessionVariable.ENABLE_TABLET_PRE_SPLIT key must remain stable — BulkLoadJob "
-                        + "persists this key and BrokerLoadJob.firePreSplitHooks re-applies it across FE failover");
+                        + "persists this key and BrokerLoadJob.firePreSplitHooks reads it back");
         // Defensive: BrokerLoadJob must still reference the persisted key (regression guard).
         String brokerLoadJobSource = readSource(
                 "fe-core/src/main/java/com/starrocks/load/loadv2/BrokerLoadJob.java");
         Assertions.assertTrue(brokerLoadJobSource.contains("SessionVariable.ENABLE_TABLET_PRE_SPLIT"),
-                "BrokerLoadJob must reference SessionVariable.ENABLE_TABLET_PRE_SPLIT to re-apply the persisted opt-out");
+                "BrokerLoadJob must reference SessionVariable.ENABLE_TABLET_PRE_SPLIT to read the persisted value");
+        // And it must read that value, never write it back: outside an FE failover the job's
+        // ConnectContext is the submitter's own live session.
+        Assertions.assertFalse(brokerLoadJobSource.contains("setEnableTabletPreSplit("),
+                "BrokerLoadJob must not write enable_tablet_pre_split back onto its ConnectContext — "
+                        + "that context is normally the submitter's live session");
         // And BulkLoadJob must still persist it.
         String bulkLoadJobSource = readSource(
                 "fe-core/src/main/java/com/starrocks/load/loadv2/BulkLoadJob.java");

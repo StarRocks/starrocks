@@ -1,0 +1,41 @@
+-- name: test_agg_state_const_arg
+CREATE TABLE t0 (
+    k INT NULL,
+    s SMALLINT NULL
+)
+DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t0 SELECT generate_series, generate_series % 100 FROM TABLE(generate_series(1, 4096));
+-- result:
+-- !result
+SELECT ds_theta_count_distinct_merge(ds_theta_count_distinct_state(CAST(1 AS SMALLINT))) FROM t0;
+-- result:
+1
+-- !result
+SELECT ds_theta_count_distinct_merge(ds_theta_count_distinct_state(CAST('a' AS VARCHAR))) FROM t0;
+-- result:
+1
+-- !result
+SELECT ds_theta_count_distinct_merge(ds_theta_count_distinct_state(s)) FROM t0;
+-- result:
+100
+-- !result
+SELECT ds_hll_count_distinct_merge(ds_hll_count_distinct_state(CAST(1 AS INT))) FROM t0;
+-- result:
+1
+-- !result
+SELECT ds_hll_count_distinct_merge(ds_hll_count_distinct_state(s)) FROM t0;
+-- result:
+100
+-- !result
+SELECT ndv_merge(ndv_state(CAST(1 AS INT))) FROM t0;
+-- result:
+1
+-- !result
+SELECT ndv_merge(ndv_state(s)) FROM t0;
+-- result:
+100
+-- !result

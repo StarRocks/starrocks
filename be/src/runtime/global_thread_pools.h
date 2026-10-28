@@ -63,6 +63,8 @@ public:
     int64_t max_executor_threads() const { return _max_executor_threads; }
 
 private:
+    Status _init_pk_index_execution_thread_pool();
+
     std::unique_ptr<PriorityThreadPool> _thread_pool;
     std::unique_ptr<ThreadPool> _streaming_load_thread_pool;
     std::unique_ptr<ThreadPool> _load_rowset_thread_pool;

@@ -17,6 +17,7 @@ package com.starrocks.alter.reshard;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
@@ -24,6 +25,7 @@ import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Mock;
 import mockit.MockUp;
@@ -117,6 +119,63 @@ public class TabletReshardUtilsTest {
         long unsafeTarget = Long.MAX_VALUE; // far past the 6.15-EB overflow boundary
         assertEquals(1, TabletReshardUtils.calcSplitCount(0L, unsafeTarget));
         assertEquals(1, TabletReshardUtils.calcSplitCount(Long.MAX_VALUE, unsafeTarget));
+    }
+
+    /**
+     * A merge of a range-distributed primary-key table whose ORDER BY differs from the primary key
+     * cannot attribute the rows of a segment its sources share, so it is refused. The predicate must
+     * answer for exactly that shape -- MetaUtils.hasSeparateSortKey already folds the range-distribution
+     * test into itself -- and must never throw from a scheduling decision.
+     */
+    @Test
+    public void tabletMergeUnsupported_onlyForTheSeparateSortKeyShape() {
+        new MockUp<OlapTable>() {
+            @Mock
+            public long getBaseIndexMetaId() {
+                return 1L;
+            }
+        };
+
+        assertFalse(TabletReshardUtils.tabletMergeUnsupported(null), "a null table is not a shape to refuse");
+
+        OlapTable table = new OlapTable();
+        new MockUp<MetaUtils>() {
+            @Mock
+            public boolean hasSeparateSortKey(OlapTable olapTable, long indexMetaId) {
+                return true;
+            }
+        };
+        assertTrue(TabletReshardUtils.tabletMergeUnsupported(table));
+
+        new MockUp<MetaUtils>() {
+            @Mock
+            public boolean hasSeparateSortKey(OlapTable olapTable, long indexMetaId) {
+                return false;
+            }
+        };
+        assertFalse(TabletReshardUtils.tabletMergeUnsupported(table));
+    }
+
+    /**
+     * The base index meta can go away underneath a scheduling pass. Answering "not this shape" leaves
+     * the decision to the BE backstop, which is the only other place that can still refuse; throwing
+     * here would instead abort the whole statistics pass.
+     */
+    @Test
+    public void tabletMergeUnsupported_missingIndexMetaDoesNotThrow() {
+        new MockUp<OlapTable>() {
+            @Mock
+            public long getBaseIndexMetaId() {
+                return 1L;
+            }
+        };
+        new MockUp<MetaUtils>() {
+            @Mock
+            public boolean hasSeparateSortKey(OlapTable olapTable, long indexMetaId) {
+                throw new IllegalArgumentException("no MaterializedIndexMeta for indexMetaId");
+            }
+        };
+        assertFalse(TabletReshardUtils.tabletMergeUnsupported(new OlapTable()));
     }
 
     @Test
