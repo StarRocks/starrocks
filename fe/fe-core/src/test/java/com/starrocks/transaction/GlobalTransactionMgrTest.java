@@ -66,6 +66,7 @@ import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
 import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.routineload.RoutineLoadMgr;
 import com.starrocks.load.routineload.RoutineLoadTaskInfo;
+import com.starrocks.metric.LeaderAwareCounterMetricLong;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.metric.TableMetricsRegistry;
@@ -74,6 +75,7 @@ import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TKafkaRLTaskProgress;
 import com.starrocks.thrift.TLoadSourceType;
 import com.starrocks.thrift.TManualLoadTxnCommitAttachment;
@@ -150,6 +152,41 @@ public class GlobalTransactionMgrTest {
     @AfterEach
     public void tearDown() {
         UtFrameUtils.tearDownForPersisTest();
+    }
+
+    @Test
+    public void testThrottleCommitOnRateExceedChargesOnlyRealWaits() throws Exception {
+        String warehouse = MetricRepo.warehouseLabel(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        LeaderAwareCounterMetricLong throttled = MetricRepo.COUNTER_TXN_COMMIT_THROTTLED.getMetric(warehouse);
+        LeaderAwareCounterMetricLong delay = MetricRepo.COUNTER_TXN_COMMIT_THROTTLE_DELAY_MS.getMetric(warehouse);
+        long throttledBefore = throttled.getValueLeader();
+        long delayBefore = delay.getValueLeader();
+        long startTimeMs = System.currentTimeMillis();
+
+        // The request's timeout cannot cover the delay: it fails right away and nothing was waited.
+        CommitRateExceededException tooLong = new CommitRateExceededException(1001L, startTimeMs + 10_000L,
+                WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        Assertions.assertThrows(CommitRateExceededException.class,
+                () -> GlobalTransactionMgr.throttleCommitOnRateExceed(tooLong, startTimeMs, 1_000L));
+        Assertions.assertEquals(throttledBefore, throttled.getValueLeader());
+        Assertions.assertEquals(delayBefore, delay.getValueLeader());
+
+        // A wait that fits is charged once, with the time that was still left to wait.
+        long allowCommitTime = System.currentTimeMillis() + 50L;
+        GlobalTransactionMgr.throttleCommitOnRateExceed(
+                new CommitRateExceededException(1001L, allowCommitTime, WarehouseManager.DEFAULT_WAREHOUSE_ID),
+                startTimeMs, 60_000L);
+        Assertions.assertTrue(System.currentTimeMillis() >= allowCommitTime);
+        Assertions.assertEquals(throttledBefore + 1, throttled.getValueLeader());
+        long charged = delay.getValueLeader() - delayBefore;
+        Assertions.assertTrue(charged > 0 && charged <= 50L, "charged " + charged);
+
+        // Retried after its allow time: nothing left to wait for, so nothing more is charged.
+        GlobalTransactionMgr.throttleCommitOnRateExceed(
+                new CommitRateExceededException(1001L, System.currentTimeMillis() - 1L,
+                        WarehouseManager.DEFAULT_WAREHOUSE_ID), startTimeMs, 60_000L);
+        Assertions.assertEquals(throttledBefore + 1, throttled.getValueLeader());
+        Assertions.assertEquals(delayBefore + charged, delay.getValueLeader());
     }
 
     @Test

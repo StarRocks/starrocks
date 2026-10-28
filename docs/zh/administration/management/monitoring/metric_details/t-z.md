@@ -49,6 +49,21 @@ description: "Alphabetical t - z"
 - 单位: 字节
 - 描述: tablet schema使用的内存。
 
+## `tablet_sink_rpc_failed_total`
+
+- 单位: 计数
+- 描述: 导入的协调 BE 发出的 tablet writer RPC（open 和 add_chunk）在 RPC 层失败的次数，例如超时或连接被重置，不包括接收端 load channel 返回的错误。以 bvar 形式发布。sink 不重试，所以每次失败都可能按副本多数派规则让导入失败。在 RPC 完成时记录，因此 sink 在另一个 RPC 失败后不再等待的 add_chunk RPC 也会计入；协调 BE 自己取消的 RPC 不计入。
+
+## `tablet_sink_rpc_pending`
+
+- 单位: 计数
+- 描述: 导入的协调 BE 已发给 tablet writer 但尚未收到响应的 add_chunk RPC 数量。以 bvar 形式发布。持续偏高说明接收端 BE 或到它们的网络接收数据慢。
+
+## `tablet_sink_send_chunk_latency`
+
+- 单位: 微秒
+- 描述: 导入的协调 BE 向 tablet writer 发一个 add_chunk RPC 从发出到收到响应的耗时，以 bvar 延迟序列发布（平均值、分位数、最大值、qps 和计数）。在 RPC 完成时记录，因此 sink 在另一个 RPC 失败后不再等待的 RPC 也会采样；协调 BE 自己取消的 RPC 不采样。
+
 ## `tablet_update_max_compaction_score`
 
 - 单位: -
@@ -127,6 +142,18 @@ description: "Alphabetical t - z"
 
 - 单位: 计数
 - 描述: 事务加载请求的总数量。
+
+## `txn_commit_throttle_delay_ms_total`
+
+- 单位: 毫秒
+- 类型: 累积值
+- 描述: 存算分离（lake）表的事务提交因导入限流（ingestion slowdown）实际等待的总时长（毫秒）。当事务写入的某个分区的 Compaction Score 高于 `lake_ingest_slowdown_threshold` 时，导入限流会推迟该事务的提交。每次等待只计入距离允许提交时刻还剩的时间，因此重试不会重复计入同一段时间，没等待就放弃的请求不计入。带有 `warehouse_name` 标签，表示被延迟的导入所在的 warehouse，每个 warehouse 一个序列。将该值除以同一 `warehouse_name` 的 `txn_commit_throttled_total` 即可得到每次被限流提交的平均等待时间。仅 Leader FE 节点计数（`is_leader="true"`）。
+
+## `txn_commit_throttled_total`
+
+- 单位: 计数
+- 类型: 累积值
+- 描述: 存算分离（lake）表的事务提交因导入限流（ingestion slowdown）实际等待的次数，即写入的某个分区的 Compaction Score 高于 `lake_ingest_slowdown_threshold`。在真正等待的地方计数：提交请求的超时时间不够覆盖延迟时会直接失败、不等待，不计入；因 Compaction Score 高于 `lake_compaction_score_upper_bound` 而被直接拒绝的提交也不计入，这两种情况都会导致导入失败。带有 `warehouse_name` 标签，表示被延迟的导入所在的 warehouse，每个 warehouse 一个序列。仅 Leader FE 节点计数（`is_leader="true"`）。
 
 ## `txn_request`
 

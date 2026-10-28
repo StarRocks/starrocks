@@ -1984,7 +1984,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：String
 - 単位：-
 - 変更可能：Yes
-- 説明：レポートするトランザクションレイテンシーメトリックグループのコンマ区切りリスト。ロードタイプは監視のために論理グループに分類されます。グループが有効になっている場合、その名前はトランザクションメトリックに「type」ラベルとして追加されます。有効な値: `stream_load`、`routine_load`、`broker_load`、`insert`、および `compaction` (共有データクラスターでのみ利用可能)。例: `"stream_load,routine_load"`。
+- 説明：レポートするトランザクションレイテンシーメトリックグループのコンマ区切りリスト。ロードタイプは監視のために論理グループに分類されます。グループが有効になっている場合、その名前はトランザクションメトリックに「type」ラベルとして追加されます。有効な値: `stream_load`、`routine_load`、`broker_load`、`insert`、および `compaction` (共有データクラスターでのみ利用可能)。例: `"stream_load,routine_load"`。有効化されたグループは、warehouse ごとに `warehouse_name` ラベル付きの系列を 1 つずつ追加で出力します。
 - 導入時期：v4.0
 
 ### `txn_rollback_limit`

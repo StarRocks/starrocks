@@ -101,6 +101,8 @@ import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.DatabaseTransactionMgr;
 import com.starrocks.transaction.TransactionMetricRegistry;
+import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.cngroup.CRAcquireContext;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
@@ -189,6 +191,18 @@ public final class MetricRepo {
             new MetricWithLabelGroup<>("warehouse_name",
                     () -> new LongCounterMetric("mv_global_refresh_failed_jobs_total", MetricUnit.REQUESTS,
                             "total failed materialized view refresh jobs by warehouse"));
+    // The ingestion slowdown (CommitRateLimiter) only logged until now, so a load slowed by a high compaction
+    // score was indistinguishable from one slowed by the write itself. Labelled by the warehouse the delayed
+    // load ran in, which is where the slowdown is felt.
+    public static final MetricWithLabelGroup<LeaderAwareCounterMetricLong> COUNTER_TXN_COMMIT_THROTTLED =
+            new MetricWithLabelGroup<>("warehouse_name",
+                    () -> new LeaderAwareCounterMetricLong("txn_commit_throttled_total", MetricUnit.REQUESTS,
+                            "counter of transaction commits delayed by the lake ingestion slowdown"));
+    public static final MetricWithLabelGroup<LeaderAwareCounterMetricLong> COUNTER_TXN_COMMIT_THROTTLE_DELAY_MS =
+            new MetricWithLabelGroup<>("warehouse_name",
+                    () -> new LeaderAwareCounterMetricLong("txn_commit_throttle_delay_ms_total",
+                            MetricUnit.MILLISECONDS,
+                            "total milliseconds transaction commits were delayed by the lake ingestion slowdown"));
     public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_SPM_CAPTURE_CANDIDATE_TOTAL =
             new MetricWithLabelGroup<>("result",
                     () -> new LongCounterMetric(SPM_CAPTURE_CANDIDATE_TOTAL_METRIC_NAME, MetricUnit.REQUESTS,
@@ -384,6 +398,7 @@ public final class MetricRepo {
     public static LeaderAwareCounterMetricLong COUNTER_LAKE_COMPACTION_FAILED;
     public static LeaderAwareGaugeMetric<Long> GAUGE_LAKE_COMPACTION_RUNNING;
     public static LeaderAwareGaugeMetric<Long> GAUGE_LAKE_COMPACTION_RUNNING_TASKS;
+    public static LeaderAwareGaugeMetric<Long> GAUGE_LAKE_INGEST_SLOWDOWN_ACTIVE;
     public static LongCounterMetric COUNTER_ROUTINE_LOAD_ROWS;
     public static LongCounterMetric COUNTER_ROUTINE_LOAD_RECEIVED_BYTES;
     public static LongCounterMetric COUNTER_ROUTINE_LOAD_ERROR_ROWS;
@@ -1144,6 +1159,16 @@ public final class MetricRepo {
             }
         };
         STARROCKS_METRIC_REGISTER.addMetric(GAUGE_LAKE_COMPACTION_RUNNING_TASKS);
+        // Partition state, shared by every warehouse that loads into it, so no warehouse label.
+        GAUGE_LAKE_INGEST_SLOWDOWN_ACTIVE = new LeaderAwareGaugeMetricLong("lake_ingest_slowdown_active",
+                MetricUnit.NOUNIT,
+                "number of partitions whose compaction score currently delays or rejects commits into them") {
+            @Override
+            public Long getValueLeader() {
+                return GlobalStateMgr.getCurrentState().getCompactionMgr().getIngestSlowdownPartitionCount();
+            }
+        };
+        STARROCKS_METRIC_REGISTER.addMetric(GAUGE_LAKE_INGEST_SLOWDOWN_ACTIVE);
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_PUBLISH_VERSION_DAEMON_LOOP);
         COUNTER_ROUTINE_LOAD_ROWS =
                 new LongCounterMetric("routine_load_rows", MetricUnit.ROWS, "total rows of routine load");
@@ -2138,5 +2163,11 @@ public final class MetricRepo {
     public static void addMetric(Metric<?> metric) {
         init();
         STARROCKS_METRIC_REGISTER.addMetric(metric);
+    }
+
+    /** The warehouse_name label value for a warehouse id: its name, or the id once the warehouse is gone. */
+    public static String warehouseLabel(long warehouseId) {
+        Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseAllowNull(warehouseId);
+        return warehouse == null ? String.valueOf(warehouseId) : warehouse.getName();
     }
 }

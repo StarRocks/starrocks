@@ -1681,7 +1681,8 @@ public class Config extends ConfigBase {
             "Load job source types (see TransactionState.LoadJobSourceType) are categorized into logical groups " +
             "for monitoring. When a group is enabled, its name is added as a 'type' label to transaction metrics. " +
             "Common groups include 'stream_load', 'routine_load', 'broker_load', 'insert', and 'compaction' " +
-            "(for shared-data clusters). e.g. \"stream_load,routine_load\"")
+            "(for shared-data clusters). An enabled group also reports one extra series per warehouse, " +
+            "labelled 'warehouse_name'. e.g. \"stream_load,routine_load\"")
     public static String txn_latency_metric_report_groups = "";
 
     /**

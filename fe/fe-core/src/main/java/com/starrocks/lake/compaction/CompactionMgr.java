@@ -18,6 +18,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Config;
+import com.starrocks.lake.CommitRateLimiter;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.persist.ImageWriter;
@@ -224,6 +225,20 @@ public class CompactionMgr implements MemoryTrackable {
     public double getMaxCompactionScore() {
         return partitionStatisticsHashMap.values().stream().filter(stat -> stat.getCompactionScore() != null)
                 .mapToDouble(stat -> stat.getCompactionScore().getMax()).max().orElse(0);
+    }
+
+    /**
+     * Number of partitions whose compaction score currently delays or rejects commits into them, judged the
+     * way the commit path does (CommitRateLimiter.throttlesIngestion). 0 when the slowdown is disabled.
+     */
+    public long getIngestSlowdownPartitionCount() {
+        if (!Config.lake_enable_ingest_slowdown) {
+            return 0;
+        }
+        return partitionStatisticsHashMap.values().stream()
+                .filter(stat -> stat.getCompactionScore() != null)
+                .filter(stat -> CommitRateLimiter.throttlesIngestion(stat.getCompactionScore().getMax()))
+                .count();
     }
 
     /**

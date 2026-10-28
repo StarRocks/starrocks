@@ -305,6 +305,12 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Count
 - Description: Counter of successful lake compaction jobs.
 
+## `lake_ingest_slowdown_active`
+
+- Unit: Count
+- Type: Gauge
+- Description: Number of partitions of shared-data (lake) tables whose compaction score currently delays or rejects commits into them, that is, partitions above `lake_ingest_slowdown_threshold` (delayed) or `lake_compaction_score_upper_bound` (rejected). `0` means no load is being slowed down by the ingestion slowdown right now; it is always `0` when `lake_enable_ingest_slowdown` is `false`. Carries an `is_leader` label; follower FEs export `is_leader="false"` and return 0, so dashboards should filter on `is_leader="true"`.
+
 ## `lake_pk_index_cache_delvec_bytes`
 
 - Unit: Bytes

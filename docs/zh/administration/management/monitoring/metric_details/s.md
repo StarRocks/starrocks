@@ -858,43 +858,43 @@ description: "Alphabetical s"
 
 - 单位：毫秒
 - 类型：汇总
-- 描述：最终确认延迟，从 `ready-to-finish` 时间到事务被标记为 `VISIBLE` 的最终 `finish` 时间。此指标包括事务准备完成后的最终确认步骤。
+- 描述：最终确认延迟，从 `ready-to-finish` 时间到事务被标记为 `VISIBLE` 的最终 `finish` 时间。此指标包括事务准备完成后的最终确认步骤。带有 `status` 标签，取值为 `visible` 或 `aborted`；在 `commit` 之后被中止的事务记录在 `status="aborted"` 下。 当该类型分组通过 `txn_latency_metric_report_groups` 启用后，除集群范围的序列外，还会按 warehouse 各导出一条带 `warehouse_name` 标签（事务导入所在的 warehouse）的序列；`all` 类型不带 warehouse 标签。
 
 ## `starrocks_fe_txn_publish_can_finish_latency_ms`
 
 - 单位：毫秒
 - 类型：汇总
-- 描述：从 `publish` 任务完成到 `canTxnFinish()` 首次返回 true 的延迟，测量时间从 `publish version finish` 到 `ready-to-finish`。
+- 描述：从 `publish` 任务完成到 `canTxnFinish()` 首次返回 true 的延迟，测量时间从 `publish version finish` 到 `ready-to-finish`。带有 `status` 标签，取值为 `visible` 或 `aborted`；在 `commit` 之后被中止的事务记录在 `status="aborted"` 下。 当该类型分组通过 `txn_latency_metric_report_groups` 启用后，除集群范围的序列外，还会按 warehouse 各导出一条带 `warehouse_name` 标签（事务导入所在的 warehouse）的序列；`all` 类型不带 warehouse 标签。
 
 ## `starrocks_fe_txn_publish_execute_latency_ms`
 
 - 单位：毫秒
 - 类型：汇总
-- 描述：`publish` 任务的实际执行时间，从任务被选取到完成。此指标表示使事务更改可见所花费的实际时间。
+- 描述：`publish` 任务的实际执行时间，从任务被选取到完成。此指标表示使事务更改可见所花费的实际时间。带有 `status` 标签，取值为 `visible` 或 `aborted`；在 `commit` 之后被中止的事务记录在 `status="aborted"` 下。 当该类型分组通过 `txn_latency_metric_report_groups` 启用后，除集群范围的序列外，还会按 warehouse 各导出一条带 `warehouse_name` 标签（事务导入所在的 warehouse）的序列；`all` 类型不带 warehouse 标签。
 
 ## `starrocks_fe_txn_publish_latency_ms`
 
 - 单位：毫秒
 - 类型：汇总
-- 描述：`publish` 阶段的延迟，从 `commit` 时间到 `finish` 时间。这是已提交事务对查询可见所需的时间。它是 `schedule`、`execute`、`can_finish` 和 `ack` 子阶段的总和。
+- 描述：`publish` 阶段的延迟，从 `commit` 时间到 `finish` 时间。这是已提交事务对查询可见所需的时间。它是 `schedule`、`execute`、`can_finish` 和 `ack` 子阶段的总和。带有 `status` 标签，取值为 `visible` 或 `aborted`；在 `commit` 之后被中止的事务记录在 `status="aborted"` 下。 当该类型分组通过 `txn_latency_metric_report_groups` 启用后，除集群范围的序列外，还会按 warehouse 各导出一条带 `warehouse_name` 标签（事务导入所在的 warehouse）的序列；`all` 类型不带 warehouse 标签。
 
 ## `starrocks_fe_txn_publish_schedule_latency_ms`
 
 - 单位：毫秒
 - 类型：汇总
-- 描述：事务提交后等待发布的时间，从 `commit` 时间到发布任务被选取的时间。此指标反映了 `publish` 管道中的调度延迟或排队时间。
+- 描述：事务提交后等待发布的时间，从 `commit` 时间到发布任务被选取的时间。此指标反映了 `publish` 管道中的调度延迟或排队时间。带有 `status` 标签，取值为 `visible` 或 `aborted`；在 `commit` 之后被中止的事务记录在 `status="aborted"` 下。 当该类型分组通过 `txn_latency_metric_report_groups` 启用后，除集群范围的序列外，还会按 warehouse 各导出一条带 `warehouse_name` 标签（事务导入所在的 warehouse）的序列；`all` 类型不带 warehouse 标签。
 
 ## `starrocks_fe_txn_total_latency_ms`
 
 - 单位：毫秒
 - 类型：汇总
-- 描述：事务完成的总延迟，从 `prepare` 时间到 `finish` 时间。此指标表示事务的完整端到端持续时间。
+- 描述：事务完成的总延迟，从 `prepare` 时间到 `finish` 时间。此指标表示事务的完整端到端持续时间。带有 `status` 标签，取值为 `visible` 或 `aborted`，因此被中止的事务（例如超时后被中止）会记录在 `status="aborted"` 下，而不是被排除在分布之外。 当该类型分组通过 `txn_latency_metric_report_groups` 启用后，除集群范围的序列外，还会按 warehouse 各导出一条带 `warehouse_name` 标签（事务导入所在的 warehouse）的序列；`all` 类型不带 warehouse 标签。
 
 ## `starrocks_fe_txn_write_latency_ms`
 
 - 单位：毫秒
 - 类型：汇总
-- 描述：事务 `write` 阶段的延迟，从 `prepare` 时间到 `commit` 时间。此指标隔离了事务准备发布之前的数据写入和准备阶段的性能。
+- 描述：事务 `write` 阶段的延迟，从 `prepare` 时间到 `commit` 时间。此指标隔离了事务准备发布之前的数据写入和准备阶段的性能。带有 `status` 标签，取值为 `visible` 或 `aborted`。对于在 `commit` 之前被中止的事务，该阶段在中止时刻结束，因此写入过程中超时的导入也会被统计。 当该类型分组通过 `txn_latency_metric_report_groups` 启用后，除集群范围的序列外，还会按 warehouse 各导出一条带 `warehouse_name` 标签（事务导入所在的 warehouse）的序列；`all` 类型不带 warehouse 标签。
 
 ## `starrocks_fe_unfinished_backup_job`
 
