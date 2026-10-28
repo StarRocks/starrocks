@@ -497,8 +497,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：共有データクラスターでのバージョン公開タスクの最大スレッド数。
 - 導入時期：v3.2.0
 
-<<<<<<< HEAD
-=======
 ### `lake_publish_version_timeout_ms`
 
 - デフォルト：60000
@@ -508,16 +506,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：共有データクラスターにおけるトランザクションのバージョン公開（Publish Version）RPC のタイムアウトです。この値は、FE がコンピュートノードの応答を待つ時間と、コンピュートノードが公開タスクに適用する期限の両方を制限するため、両者は常に一致します。1 つのトランザクションが大量の tablet を公開するなど、公開に本当にデフォルトより長い時間が必要で、公開タイムアウトによってトランザクションが失敗する場合は、この値を上げてください。
 - 導入時期：v4.2.0
 
-### `slow_publish_partition_log_threshold_ms`
-
-- デフォルト：3000
-- タイプ：Long
-- 単位：ミリ秒
-- 変更可能：Yes
-- 説明：`PublishVersionDaemon` がパーティション公開の所要時間がこの値を超えた場合に、各フェーズの内訳（`executor_queue` + `db_lock_wait` + `fe_prep` + `rpc`）を WARN レベルで出力するしきい値です。稼働中のクラスターで公開レイテンシを調査する際は、この値を下げてサブ秒単位のジッターを捕捉できます。通常の許容範囲内の遅い公開を抑制するには、この値を上げます。デフォルト値では動作に変更はありません。
-- 導入時期：v4.2
-
->>>>>>> 68752e6 ([Enhancement] Make the shared-data publish version timeout configurable (#79332))
 ### `meta_sync_force_delete_shard_meta`
 
 - デフォルト：false

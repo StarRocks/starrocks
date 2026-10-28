@@ -14,11 +14,7 @@
 
 package com.starrocks.lake;
 
-<<<<<<< HEAD
-=======
 import com.baidu.jprotobuf.pbrpc.utils.TalkTimeoutController;
-import com.google.common.annotations.VisibleForTesting;
->>>>>>> 68752e6 ([Enhancement] Make the shared-data publish version timeout configurable (#79332))
 import com.google.common.collect.Lists;
 import com.staros.proto.ShardInfo;
 import com.starrocks.alter.reshard.PublishTabletsInfo;
@@ -28,11 +24,7 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
-<<<<<<< HEAD
-=======
-import com.starrocks.catalog.TabletRange;
 import com.starrocks.common.Config;
->>>>>>> 68752e6 ([Enhancement] Make the shared-data publish version timeout configurable (#79332))
 import com.starrocks.common.NoAliveBackendException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.proto.AggregatePublishVersionRequest;

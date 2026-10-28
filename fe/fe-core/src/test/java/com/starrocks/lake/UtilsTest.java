@@ -24,12 +24,9 @@ import com.starrocks.common.NoAliveBackendException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.DnsCache;
 import com.starrocks.proto.AggregatePublishVersionRequest;
-<<<<<<< HEAD
-=======
 import com.starrocks.proto.PublishVersionRequest;
 import com.starrocks.proto.PublishVersionResponse;
 import com.starrocks.proto.StatusPB;
->>>>>>> 68752e6 ([Enhancement] Make the shared-data publish version timeout configurable (#79332))
 import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
@@ -178,102 +175,6 @@ public class UtilsTest {
         // when choosing an aggregator.
         Assertions.assertEquals(1001L, (long) request.getComputeNodes().get(0).getId());
     }
-<<<<<<< HEAD
-=======
-
-    // ---- prefer_shared_initial_metadata predicate ----------------------------------------
-    //
-    // This predicate decides whether the BE may skip probing a tablet's own version-1 metadata key
-    // and read the partition-shared object instead. A false positive is not merely a wasted request:
-    // where a shared object exists but belongs to a DIFFERENT index, the read succeeds and returns
-    // the wrong schema, so every clause below is a correctness guard.
-
-    private static OlapTable lakeTable(boolean fileBundling) {
-        new MockUp<LakeTable>() {
-            @Mock
-            public boolean isCloudNativeTableOrMaterializedView() {
-                return true;
-            }
-
-            @Mock
-            public Boolean isFileBundling() {
-                return fileBundling;
-            }
-        };
-        return new LakeTable();
-    }
-
-    private static PhysicalPartition singleIndexPartition() {
-        return new PhysicalPartition(100L, 10L, new MaterializedIndex(1000L));
-    }
-
-    @Test
-    public void testSharedInitialMetadataOnBundledSingleIndexPartition() {
-        Assertions.assertTrue(Utils.preferSharedInitialMetadata(lakeTable(true), singleIndexPartition(),
-                PhysicalPartition.PARTITION_INIT_VERSION));
-    }
-
-    @Test
-    public void testSharedInitialMetadataRequiresFileBundling() {
-        Assertions.assertFalse(Utils.preferSharedInitialMetadata(lakeTable(false), singleIndexPartition(),
-                PhysicalPartition.PARTITION_INIT_VERSION),
-                "only file_bundling makes DDL write the shared version-1 object");
-    }
-
-    @Test
-    public void testSharedInitialMetadataOnlyAtVersionOne() {
-        Assertions.assertFalse(Utils.preferSharedInitialMetadata(lakeTable(true), singleIndexPartition(), 2L),
-                "only version 1 is ever shared; later versions are per-tablet or bundled");
-    }
-
-    @Test
-    public void testSharedInitialMetadataNotBeforeMetadataSwitchVersion() {
-        PhysicalPartition partition = singleIndexPartition();
-        // The partition predates the switch to bundling, so its version 1 is per-tablet even though
-        // the table is bundling now.
-        partition.setMetadataSwitchVersion(5L);
-        Assertions.assertFalse(Utils.preferSharedInitialMetadata(lakeTable(true), partition,
-                PhysicalPartition.PARTITION_INIT_VERSION));
-    }
-
-    /**
-     * The regression guard. A rollup / schema-change shadow index keeps its own per-tablet version-1
-     * metadata, and both alter jobs publish those tablets with base_version hardcoded to 1 and
-     * enable_aggregate_publish set. Counting over ALL rather than VISIBLE is what keeps them out: a
-     * shadow index is invisible to VISIBLE exactly while its tablets are reading version 1, so a
-     * VISIBLE-based implementation would pass every other case here and hand the shadow tablets the
-     * base index's metadata.
-     */
-    @Test
-    public void testSharedInitialMetadataExcludesPartitionWithShadowIndex() {
-        PhysicalPartition partition = singleIndexPartition();
-        partition.createRollupIndex(
-                new MaterializedIndex(2000L, 2000L, MaterializedIndex.IndexState.SHADOW, 0L));
-
-        Assertions.assertEquals(1, partition.getLatestMaterializedIndices(
-                MaterializedIndex.IndexExtState.VISIBLE).size(), "the shadow index is invisible to VISIBLE");
-        Assertions.assertEquals(2, partition.getLatestMaterializedIndices(
-                MaterializedIndex.IndexExtState.ALL).size());
-        Assertions.assertFalse(Utils.preferSharedInitialMetadata(lakeTable(true), partition,
-                PhysicalPartition.PARTITION_INIT_VERSION),
-                "a shadow index in the same storage path must disable the hint");
-    }
-
-    @Test
-    public void testSharedInitialMetadataExcludesPartitionWithRollupIndex() {
-        PhysicalPartition partition = singleIndexPartition();
-        partition.createRollupIndex(new MaterializedIndex(3000L, 3000L, MaterializedIndex.IndexState.NORMAL, 0L));
-
-        Assertions.assertFalse(Utils.preferSharedInitialMetadata(lakeTable(true), partition,
-                PhysicalPartition.PARTITION_INIT_VERSION),
-                "DDL never writes the shared object for a multi-index partition");
-    }
-
-    @Test
-    public void testSharedInitialMetadataNullSafe() {
-        Assertions.assertFalse(Utils.preferSharedInitialMetadata(null, singleIndexPartition(), 1L));
-        Assertions.assertFalse(Utils.preferSharedInitialMetadata(lakeTable(true), null, 1L));
-    }
 
     // Both halves of the publish version timeout have to follow the config: PublishVersionRequest.timeoutMs
     // is the deadline the compute node applies to the publish task, and the brpc once-talk timeout is how
@@ -302,7 +203,7 @@ public class UtilsTest {
         Config.lake_publish_version_timeout_ms = 12345;
         try {
             Utils.publishVersionBatch(Lists.newArrayList(), Lists.newArrayList(new TxnInfoPB()), 1L, 2L,
-                    null, null, WarehouseManager.DEFAULT_RESOURCE, null, null);
+                    null, null, WarehouseManager.DEFAULT_RESOURCE, null);
         } finally {
             Config.lake_publish_version_timeout_ms = savedTimeoutMs;
         }
@@ -346,7 +247,7 @@ public class UtilsTest {
         Config.lake_publish_version_timeout_ms = 23456;
         try {
             Utils.aggregatePublishVersion(Lists.newArrayList(), Lists.newArrayList(new TxnInfoPB()), 1L, 2L,
-                    null, null, null, WarehouseManager.DEFAULT_RESOURCE, null, null);
+                    null, null, WarehouseManager.DEFAULT_RESOURCE, null);
         } finally {
             Config.lake_publish_version_timeout_ms = savedTimeoutMs;
         }
@@ -398,5 +299,4 @@ public class UtilsTest {
             }
         };
     }
->>>>>>> 68752e6 ([Enhancement] Make the shared-data publish version timeout configurable (#79332))
 }
