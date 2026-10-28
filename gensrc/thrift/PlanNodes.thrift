@@ -404,6 +404,14 @@ struct TIcebergDeleteFile {
     // Set for a position delete file whose every row references the data file of this scan
     // range, so the BE reads only its pos column.
     6: optional bool references_only_data_file
+<<<<<<< HEAD
+=======
+
+    // Enterprise-only fields start at 300, reserve some fields for upstream StarRocks so a sync
+    // never collides on ordinals.
+    // Set only for Iceberg V3 deletion vectors; its presence is what selects the DV read path.
+    300: optional TIcebergDeletionVectorBlob deletion_vector
+>>>>>>> 353afbb4d6f... [Enhancement][RB-225] Skip deleted Iceberg data before IO and cut the BE cost of position deletes (#67208)
 }
 
 struct TPaimonDeletionFile {

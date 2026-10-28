@@ -22,6 +22,11 @@
 #include <functional>
 #include <limits>
 #include <memory>
+<<<<<<< HEAD
+=======
+#include <numeric>
+#include <optional>
+>>>>>>> 353afbb4d6f... [Enhancement][RB-225] Skip deleted Iceberg data before IO and cut the BE cost of position deletes (#67208)
 #include <vector>
 
 #include "base/testutil/assert.h"
@@ -36,6 +41,7 @@
 #include "column/column_helper.h"
 #include "common/config_cache_fwd.h"
 #include "common/config_exec_fwd.h"
+#include "common/config_scan_io_fwd.h"
 #include "compute_env/global_dict/fragment_dict_state.h"
 #include "compute_env/query/fragment_runtime_state.h"
 #include "connector/hive/scanner/hdfs_scanner_avro.h"
@@ -47,9 +53,13 @@
 #include "exprs/expr_factory.h"
 #include "formats/column_evaluator.h"
 #include "formats/csv/csv_defaults.h"
+<<<<<<< HEAD
 #include "formats/iceberg/iceberg_delete_builder.h"
 #include "formats/parquet/file_writer.h"
 #include "formats/parquet/parquet_file_writer.h"
+=======
+#include "formats/puffin/deletion_vector_blob.h"
+>>>>>>> 353afbb4d6f... [Enhancement][RB-225] Skip deleted Iceberg data before IO and cut the BE cost of position deletes (#67208)
 #include "runtime/chunk_helper.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/runtime_filter_builder.h"
@@ -237,6 +247,265 @@ TEST_F(HdfsScannerTest, TestParquetOpen) {
 
     status = scanner->open(_runtime_state);
     ASSERT_TRUE(status.ok());
+}
+
+// A position delete file that covers every row of its data file: the data file is never opened.
+// The delete file repeats position 3, so it has 5 rows but deletes only 4 distinct positions.
+TEST_F(HdfsScannerTest, TestParquetSkipFileWithAllRowsDeleted) {
+    const std::string delete_file_path =
+            "./be/test/exec/test_data/parquet_scanner/iceberg_position_delete_repeated_pos.parquet";
+    // The data file does not exist: any attempt to open it fails the scan.
+    const std::string data_file_path = "missing_data_file.parquet";
+    ASSIGN_OR_ABORT(const int64_t delete_file_size, FileSystem::Default()->get_file_size(delete_file_path));
+    TIcebergDeleteFile delete_file;
+    delete_file.__set_full_path(delete_file_path);
+    delete_file.__set_file_content(TIcebergFileContent::POSITION_DELETES);
+    delete_file.__set_length(delete_file_size);
+
+    auto run = [&](int64_t record_count, bool expect_open_ok) {
+        auto scanner = std::make_shared<HdfsParquetScanner>();
+        auto* range = _create_scan_range(default_parquet_file, 0, 0);
+        range->__set_record_count(record_count);
+        auto* tuple_desc = _create_tuple_desc(default_parquet_descs);
+        auto* ctx = _create_ctx(data_file_path, range, tuple_desc);
+        ctx->format_scan_context.timezone = "UTC";
+        ctx->profile.runtime_profile = _runtime_profile;
+        ctx->table_specific.iceberg_delete_files.emplace_back(&delete_file);
+
+        ASSERT_OK(scanner->init(_runtime_state, ctx));
+        Status status = scanner->open(_runtime_state);
+        if (!expect_open_ok) {
+            ASSERT_FALSE(status.ok());
+            ctx->profile.runtime_profile = nullptr;
+            scanner->close();
+            return;
+        }
+        ASSERT_OK(status);
+        ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
+        status = scanner->get_next(_runtime_state, &chunk);
+        ASSERT_TRUE(status.is_end_of_file()) << status;
+        ASSERT_EQ(0, chunk->num_rows());
+
+        HdfsScannerProfile profile;
+        profile.runtime_profile = _runtime_profile;
+        scanner->do_update_counter(&profile);
+        ASSERT_NE(nullptr, _runtime_profile->get_counter("DeletedFilesSkipped"));
+        ASSERT_EQ(1, _runtime_profile->get_counter("DeletedFilesSkipped")->value());
+        // The fixture never sets up the HdfsScannerProfile counters that close() publishes into.
+        ctx->profile.runtime_profile = nullptr;
+        scanner->close();
+    };
+    // 4 rows, all deleted.
+    run(4, true);
+    // 5 rows: the 5 delete rows do not cover row 4, so the file must be opened.
+    run(5, false);
+}
+
+// Scans iceberg_three_row_groups.parquet (c1 = 0..11, 3 row groups of 4 rows) with Iceberg deletes.
+class HdfsParquetDeletedSkipTest : public HdfsScannerTest {
+public:
+    void TearDown() override {
+        for (const auto& path : _dv_files) {
+            std::filesystem::remove(path);
+        }
+        HdfsScannerTest::TearDown();
+    }
+
+protected:
+    static constexpr const char* kDataFile =
+            "./be/test/exec/test_data/parquet_scanner/iceberg_three_row_groups.parquet";
+
+    const TIcebergDeleteFile* _position_delete(const std::string& name) {
+        const std::string path = "./be/test/exec/test_data/parquet_scanner/" + name;
+        auto* df = _pool.add(new TIcebergDeleteFile());
+        df->__set_full_path(path);
+        df->__set_file_content(TIcebergFileContent::POSITION_DELETES);
+        ASSIGN_OR_ABORT(const int64_t size, FileSystem::Default()->get_file_size(path));
+        df->__set_length(size);
+        return df;
+    }
+
+    // A V3 deletion vector of kDataFile, written to a puffin file holding just the blob.
+    const TIcebergDeleteFile* _deletion_vector(const std::vector<uint64_t>& positions) {
+        roaring64_bitmap_t* bitmap = roaring64_bitmap_create();
+        for (uint64_t pos : positions) {
+            roaring64_bitmap_add(bitmap, pos);
+        }
+        auto blob = formats::build_deletion_vector_blob(bitmap);
+        roaring64_bitmap_free(bitmap);
+        CHECK(blob.ok()) << blob.status();
+        const std::string path = "./hdfs_scanner_test_dv_" + std::to_string(_dv_files.size()) + ".puffin";
+        ASSIGN_OR_ABORT(auto wf, FileSystem::Default()->new_writable_file(path));
+        CHECK_OK(wf->append(Slice(blob.value())));
+        CHECK_OK(wf->close());
+        _dv_files.emplace_back(path);
+
+        auto* df = _pool.add(new TIcebergDeleteFile());
+        df->__set_full_path(path);
+        df->__set_file_content(TIcebergFileContent::POSITION_DELETES);
+        df->__set_length(static_cast<int64_t>(blob.value().size()));
+        TIcebergDeletionVectorBlob dv;
+        dv.__set_content_offset(0);
+        dv.__set_content_size_in_bytes(static_cast<int64_t>(blob.value().size()));
+        dv.__set_record_count(static_cast<int64_t>(positions.size()));
+        dv.__set_referenced_data_file(kDataFile);
+        df->__set_deletion_vector(dv);
+        return df;
+    }
+
+    HdfsScannerContext* _create_deletes_ctx(SlotDesc* slot_descs, const std::vector<const TIcebergDeleteFile*>& deletes,
+                                            TupleDescriptor** tuple_desc) {
+        auto* range = _create_scan_range(kDataFile, 0, 0);
+        range->__set_record_count(12);
+        *tuple_desc = _create_tuple_desc(slot_descs);
+        auto* ctx = _create_ctx(kDataFile, range, *tuple_desc);
+        ctx->format_scan_context.timezone = "UTC";
+        ctx->profile.runtime_profile = _runtime_profile;
+        // As the FE sends them: on the scan range, and referenced from table_specific.
+        std::vector<TIcebergDeleteFile> range_deletes;
+        for (const auto* df : deletes) {
+            range_deletes.emplace_back(*df);
+        }
+        range->__set_delete_files(range_deletes);
+        for (const auto& df : range->delete_files) {
+            ctx->table_specific.iceberg_delete_files.emplace_back(&df);
+        }
+        return ctx;
+    }
+
+    // Reads the scanner to EOF and returns the rows; publishes its counters into _runtime_profile.
+    std::vector<std::string> _read_all(HdfsScanner* scanner, HdfsScannerContext* ctx, TupleDescriptor* tuple_desc) {
+        std::vector<std::string> rows;
+        Status status;
+        while (status.ok()) {
+            ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
+            status = scanner->get_next(_runtime_state, &chunk);
+            CHECK(status.ok() || status.is_end_of_file()) << status;
+            for (size_t i = 0; i < chunk->num_rows(); i++) {
+                rows.emplace_back(chunk->debug_row(i));
+            }
+        }
+        HdfsScannerProfile profile;
+        profile.runtime_profile = _runtime_profile;
+        scanner->do_update_counter(&profile);
+        // The fixture never sets up the HdfsScannerProfile counters that close() publishes into.
+        ctx->profile.runtime_profile = nullptr;
+        scanner->close();
+        return rows;
+    }
+
+    std::vector<std::string> _scan(const std::vector<const TIcebergDeleteFile*>& deletes) {
+        SlotDesc slot_descs[] = {{"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)}, {""}};
+        TupleDescriptor* tuple_desc = nullptr;
+        auto* ctx = _create_deletes_ctx(slot_descs, deletes, &tuple_desc);
+        auto scanner = std::make_shared<HdfsParquetScanner>();
+        CHECK_OK(scanner->init(_runtime_state, ctx));
+        CHECK_OK(scanner->open(_runtime_state));
+        return _read_all(scanner.get(), ctx, tuple_desc);
+    }
+
+    int64_t _counter(const std::string& name) {
+        auto* counter = _runtime_profile->get_counter(name);
+        return counter == nullptr ? -1 : counter->value();
+    }
+
+    // Rows left when row 0 and all of row group 1 (rows 4..7) are deleted.
+    const std::vector<std::string> _rows_without_group1{"[1]", "[2]", "[3]", "[8]", "[9]", "[10]", "[11]"};
+    std::vector<std::string> _dv_files;
+};
+
+// Row group 1 is fully deleted (position 6 repeated) and is skipped before any IO; row 0 of row
+// group 0 is deleted by the regular row filter.
+TEST_F(HdfsParquetDeletedSkipTest, SkipRowGroup) {
+    ASSERT_EQ(_rows_without_group1, _scan({_position_delete("iceberg_three_row_groups_position_delete.parquet")}));
+    ASSERT_EQ(3, _counter("TotalRowGroups"));
+    ASSERT_EQ(1, _counter("DeletedRowGroupsSkipped"));
+    ASSERT_EQ(0, _counter("DeletedFilesSkipped"));
+}
+
+// Neither delete file alone covers row group 1 ({0,4,5} and {6,7}); their union does. With a third
+// file the union covers the whole file.
+TEST_F(HdfsParquetDeletedSkipTest, SkipOnUnionOfDeleteFiles) {
+    const auto* a = _position_delete("iceberg_three_row_groups_position_delete_a.parquet");
+    const auto* b = _position_delete("iceberg_three_row_groups_position_delete_b.parquet");
+    const auto* c = _position_delete("iceberg_three_row_groups_position_delete_c.parquet");
+    ASSERT_EQ(_rows_without_group1, _scan({a, b}));
+    ASSERT_EQ(1, _counter("DeletedRowGroupsSkipped"));
+    ASSERT_EQ(0, _counter("DeletedFilesSkipped"));
+
+    ASSERT_TRUE(_scan({a, b, c}).empty());
+    ASSERT_EQ(1, _counter("DeletedFilesSkipped"));
+}
+
+// A V3 deletion vector takes the same skips.
+TEST_F(HdfsParquetDeletedSkipTest, SkipWithDeletionVector) {
+    ASSERT_EQ(_rows_without_group1, _scan({_deletion_vector({0, 4, 5, 6, 7})}));
+    ASSERT_EQ(1, _counter("DeletedRowGroupsSkipped"));
+    ASSERT_EQ(0, _counter("DeletedFilesSkipped"));
+
+    std::vector<uint64_t> all(12);
+    std::iota(all.begin(), all.end(), 0);
+    ASSERT_TRUE(_scan({_deletion_vector(all)}).empty());
+    ASSERT_EQ(1, _counter("DeletedFilesSkipped"));
+}
+
+// COUNT(*) with position deletes has no metadata count, so it reads the file without any column:
+// the skipped row group must not be counted, and a skipped file yields no count row.
+TEST_F(HdfsParquetDeletedSkipTest, CountSkipsDeletedRows) {
+    auto count = [&](const std::vector<const TIcebergDeleteFile*>& deletes) {
+        SlotDesc slot_descs[] = {{"___count___", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)}, {""}};
+        TupleDescriptor* tuple_desc = nullptr;
+        auto* ctx = _create_deletes_ctx(slot_descs, deletes, &tuple_desc);
+        ctx->format_scan_context.options.use_count_opt = true;
+        auto scanner = std::make_shared<HdfsParquetScanner>();
+        CHECK_OK(scanner->init(_runtime_state, ctx));
+        CHECK_OK(scanner->open(_runtime_state));
+        return _read_all(scanner.get(), ctx, tuple_desc);
+    };
+    ASSERT_EQ((std::vector<std::string>{"[7]"}),
+              count({_position_delete("iceberg_three_row_groups_position_delete.parquet")}));
+    ASSERT_EQ(1, _counter("DeletedRowGroupsSkipped"));
+
+    ASSERT_TRUE(count({_position_delete("iceberg_three_row_groups_position_delete_a.parquet"),
+                       _position_delete("iceberg_three_row_groups_position_delete_b.parquet"),
+                       _position_delete("iceberg_three_row_groups_position_delete_c.parquet")})
+                        .empty());
+    ASSERT_EQ(1, _counter("DeletedFilesSkipped"));
+}
+
+// The task that splits the file creates no split task for the deleted row group; the split tasks
+// it creates share its deletes.
+TEST_F(HdfsParquetDeletedSkipTest, NoSplitTaskForDeletedRowGroup) {
+    SlotDesc slot_descs[] = {{"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)}, {""}};
+    TupleDescriptor* tuple_desc = nullptr;
+    auto* ctx = _create_deletes_ctx(slot_descs, {_position_delete("iceberg_three_row_groups_position_delete.parquet")},
+                                    &tuple_desc);
+    ctx->format_scan_context.options.enable_split_tasks = true;
+    // one split task per row group: never merge
+    ctx->format_scan_context.options.connector_max_split_size = 1;
+    auto scanner = std::make_shared<HdfsParquetScanner>();
+    ASSERT_OK(scanner->init(_runtime_state, ctx));
+    ASSERT_OK(scanner->open(_runtime_state));
+    const auto& split_tasks = ctx->format_scan_context.split.split_tasks;
+    ASSERT_EQ(2, split_tasks.size());
+    ASSERT_TRUE(_read_all(scanner.get(), ctx, tuple_desc).empty());
+
+    std::vector<std::string> rows;
+    for (const auto& task : split_tasks) {
+        auto* split_range = _create_scan_range(kDataFile, task->start_offset, task->end_offset - task->start_offset);
+        split_range->__set_record_count(12);
+        auto* split_ctx = _create_ctx(kDataFile, split_range, tuple_desc);
+        split_ctx->format_scan_context.timezone = "UTC";
+        split_ctx->format_scan_context.split_context = task.get();
+        auto split_scanner = std::make_shared<HdfsParquetScanner>();
+        ASSERT_OK(split_scanner->init(_runtime_state, split_ctx));
+        ASSERT_OK(split_scanner->open(_runtime_state));
+        auto split_rows = _read_all(split_scanner.get(), split_ctx, tuple_desc);
+        rows.insert(rows.end(), split_rows.begin(), split_rows.end());
+    }
+    ASSERT_EQ(_rows_without_group1, rows);
+    // counted once, by the task that splits the file
+    ASSERT_EQ(1, _counter("DeletedRowGroupsSkipped"));
 }
 
 TEST_F(HdfsScannerTest, TestHdfsRunningTime) {
@@ -2073,6 +2342,255 @@ TEST_F(HdfsScannerTest, TestOrcSplitTasksShareDeletes) {
     split_scanner->close();
 }
 
+<<<<<<< HEAD
+=======
+// A scan that reads only _row_id reads no column from the file.
+
+// Stripes whose rows are all deleted are skipped: no IO, no split task; a scan range left with no
+// stripe returns nothing.
+TEST_F(HdfsScannerTest, TestOrcSkipStripesWithAllRowsDeleted) {
+    const std::string file = "orc_skip_deleted_stripes.orc";
+    std::filesystem::remove(file);
+    const size_t num_rows = 5000;
+    const size_t stripe_rows = 1000;
+    {
+        ORC_UNIQUE_PTR<orc::Type> schema(orc::Type::buildTypeFromString("struct<id:bigint>"));
+        orc::WriterOptions options;
+        // force a stripe per batch
+        options.setStripeSize(0);
+        ORC_UNIQUE_PTR<orc::OutputStream> out = orc::writeLocalFile(file);
+        ORC_UNIQUE_PTR<orc::Writer> writer = orc::createWriter(*schema, out.get(), options);
+        ORC_UNIQUE_PTR<orc::ColumnVectorBatch> batch = writer->createRowBatch(stripe_rows);
+        auto* root = dynamic_cast<orc::StructVectorBatch*>(batch.get());
+        auto* id = dynamic_cast<orc::LongVectorBatch*>(root->fields[0]);
+        for (size_t start = 0; start < num_rows; start += stripe_rows) {
+            for (size_t i = 0; i < stripe_rows; i++) {
+                id->data[i] = start + i;
+            }
+            id->numElements = stripe_rows;
+            root->numElements = stripe_rows;
+            writer->add(*batch);
+        }
+        writer->close();
+    }
+    DeferOp remove_file([&]() { std::filesystem::remove(file); });
+    const size_t num_stripes = orc::createReader(orc::readLocalFile(file), orc::ReaderOptions{})->getNumberOfStripes();
+    ASSERT_EQ(num_rows / stripe_rows, num_stripes);
+
+    SlotDesc descs[] = {{"id", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)}, {""}};
+    auto* tuple_desc = _create_tuple_desc(descs);
+    auto open_scanner = [&](const DeletionBitmapPtr& bitmap, bool enable_split_tasks) {
+        auto* range = _create_scan_range(file, 0, 0);
+        auto* ctx = _create_ctx(file, range, tuple_desc);
+        ctx->format_scan_context.options.enable_split_tasks = enable_split_tasks;
+        auto scanner = std::make_shared<HdfsOrcScanner>();
+        scanner->_skip_rows_ctx->deletion_bitmap = bitmap;
+        CHECK_OK(scanner->init(_runtime_state, ctx));
+        CHECK_OK(scanner->open(_runtime_state));
+        return std::make_pair(scanner, ctx);
+    };
+    auto read_ids = [&](HdfsOrcScanner* scanner) {
+        std::vector<int64_t> ids;
+        Status status;
+        while (status.ok()) {
+            ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
+            status = scanner->get_next(_runtime_state, &chunk);
+            CHECK(status.ok() || status.is_end_of_file()) << status;
+            const Column* col = chunk->get_column_raw_ptr_by_slot_id(0);
+            for (size_t i = 0; i < chunk->num_rows(); i++) {
+                ids.push_back(col->get(i).get_int64());
+            }
+        }
+        return ids;
+    };
+    auto skipped_counter = [&](HdfsOrcScanner* scanner) {
+        RuntimeProfile profile("orc");
+        HdfsScannerProfile hdfs_profile;
+        hdfs_profile.runtime_profile = &profile;
+        scanner->do_update_counter(&hdfs_profile);
+        auto* counter = profile.get_counter("DeletedStripesSkipped");
+        return counter == nullptr ? -1 : counter->value();
+    };
+
+    // row 0 and all of stripe 1
+    auto bitmap = std::make_shared<DeletionBitmap>(roaring64_bitmap_create());
+    bitmap->add_value(0);
+    for (size_t i = stripe_rows; i < 2 * stripe_rows; i++) {
+        bitmap->add_value(i);
+    }
+    {
+        auto [scanner, ctx] = open_scanner(bitmap, false);
+        auto ids = read_ids(scanner.get());
+        std::vector<int64_t> expected;
+        for (int64_t v = 1; v < static_cast<int64_t>(num_rows); v++) {
+            if (v < static_cast<int64_t>(stripe_rows) || v >= static_cast<int64_t>(2 * stripe_rows)) {
+                expected.push_back(v);
+            }
+        }
+        EXPECT_EQ(expected, ids);
+        EXPECT_EQ(1, skipped_counter(scanner.get()));
+        scanner->close();
+    }
+    {
+        // no split task for the deleted stripe
+        auto [scanner, ctx] = open_scanner(bitmap, true);
+        const auto& split_tasks = ctx->format_scan_context.split.split_tasks;
+        ASSERT_EQ(num_stripes - 1, split_tasks.size());
+        const int64_t deleted_offset =
+                orc::createReader(orc::readLocalFile(file), orc::ReaderOptions{})->getStripe(1)->getOffset();
+        for (const auto& task : split_tasks) {
+            EXPECT_NE(deleted_offset, task->start_offset);
+        }
+        // the task that splits the file reports the stripe it dropped
+        EXPECT_EQ(1, skipped_counter(scanner.get()));
+        scanner->close();
+    }
+    {
+        // every stripe deleted
+        auto all = std::make_shared<DeletionBitmap>(roaring64_bitmap_create());
+        for (size_t i = 0; i < num_rows; i++) {
+            all->add_value(i);
+        }
+        auto [scanner, ctx] = open_scanner(all, false);
+        EXPECT_TRUE(read_ids(scanner.get()).empty());
+        EXPECT_EQ(num_stripes, skipped_counter(scanner.get()));
+        scanner->close();
+    }
+}
+
+// The whole-stripe (tiny stripe) read is decided on every stripe of the scan range: dropping a large,
+// fully deleted stripe must not switch the small surviving ones to whole-stripe reads.
+TEST_F(HdfsScannerTest, TestOrcSkipDeletedStripeKeepsTinyStripeDecision) {
+    const std::string file = "orc_skip_deleted_large_stripe.orc";
+    std::filesystem::remove(file);
+    // stripe 1 is much larger than stripes 0 and 2
+    const std::vector<size_t> stripe_rows{100, 100000, 100};
+    {
+        ORC_UNIQUE_PTR<orc::Type> schema(orc::Type::buildTypeFromString("struct<id:bigint>"));
+        orc::WriterOptions options;
+        options.setStripeSize(0);
+        ORC_UNIQUE_PTR<orc::OutputStream> out = orc::writeLocalFile(file);
+        ORC_UNIQUE_PTR<orc::Writer> writer = orc::createWriter(*schema, out.get(), options);
+        int64_t next = 0;
+        for (size_t rows : stripe_rows) {
+            ORC_UNIQUE_PTR<orc::ColumnVectorBatch> batch = writer->createRowBatch(rows);
+            auto* root = dynamic_cast<orc::StructVectorBatch*>(batch.get());
+            auto* id = dynamic_cast<orc::LongVectorBatch*>(root->fields[0]);
+            for (size_t i = 0; i < rows; i++) {
+                // not compressible to nothing: keep the large stripe large
+                id->data[i] = (next++) * 2654435761LL;
+            }
+            id->numElements = rows;
+            root->numElements = rows;
+            writer->add(*batch);
+        }
+        writer->close();
+    }
+    DeferOp remove_file([&]() { std::filesystem::remove(file); });
+    auto reader = orc::createReader(orc::readLocalFile(file), orc::ReaderOptions{});
+    ASSERT_EQ(stripe_rows.size(), reader->getNumberOfStripes());
+    auto stripe_size = [&](size_t idx) {
+        auto stripe = reader->getStripe(idx);
+        return static_cast<int64_t>(stripe->getIndexLength() + stripe->getDataLength() + stripe->getFooterLength());
+    };
+    ASSERT_GT(stripe_size(1), 4 * stripe_size(0));
+    // stripes 0 and 2 are tiny, stripe 1 is not
+    const int32_t saved_threshold = config::orc_tiny_stripe_threshold_size;
+    DeferOp restore([&]() { config::orc_tiny_stripe_threshold_size = saved_threshold; });
+    config::orc_tiny_stripe_threshold_size = static_cast<int32_t>((stripe_size(0) + stripe_size(1)) / 2);
+
+    auto bitmap = std::make_shared<DeletionBitmap>(roaring64_bitmap_create());
+    for (size_t i = stripe_rows[0]; i < stripe_rows[0] + stripe_rows[1]; i++) {
+        bitmap->add_value(i);
+    }
+    SlotDesc descs[] = {{"id", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)}, {""}};
+    auto* tuple_desc = _create_tuple_desc(descs);
+    auto* range = _create_scan_range(file, 0, 0);
+    auto* ctx = _create_ctx(file, range, tuple_desc);
+    auto scanner = std::make_shared<HdfsOrcScanner>();
+    scanner->_skip_rows_ctx->deletion_bitmap = bitmap;
+    ASSERT_OK(scanner->init(_runtime_state, ctx));
+    ASSERT_OK(scanner->open(_runtime_state));
+    size_t rows = 0;
+    Status status;
+    while (status.ok()) {
+        ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
+        status = scanner->get_next(_runtime_state, &chunk);
+        ASSERT_TRUE(status.ok() || status.is_end_of_file()) << status;
+        rows += chunk->num_rows();
+    }
+    EXPECT_EQ(stripe_rows[0] + stripe_rows[2], rows);
+
+    RuntimeProfile profile("orc");
+    HdfsScannerProfile hdfs_profile;
+    hdfs_profile.runtime_profile = &profile;
+    scanner->do_update_counter(&hdfs_profile);
+    EXPECT_EQ(1, profile.get_counter("DeletedStripesSkipped")->value());
+    EXPECT_EQ(0, profile.get_counter("TotalTinyStripeSize")->value());
+    scanner->close();
+}
+
+TEST_F(HdfsScannerTest, TestOrcIcebergRowIdOnly) {
+    const std::string file = "orc_iceberg_row_id_only.orc";
+    write_iceberg_lineage_orc_file(file, false, 3);
+    DeferOp remove_file([&]() { std::filesystem::remove(file); });
+
+    SlotDesc row_id_descs[] = {{"_row_id", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)}, {""}};
+    auto scanner = std::make_shared<HdfsOrcScanner>();
+    auto* range = _create_scan_range(file, 0, 0);
+    range->__set_first_row_id(50);
+    auto* tuple_desc = _create_tuple_desc(row_id_descs);
+    auto* ctx = _create_ctx(file, range, tuple_desc);
+
+    Status status = scanner->init(_runtime_state, ctx);
+    ASSERT_OK(status);
+    status = scanner->open(_runtime_state);
+    ASSERT_OK(status);
+    _debug_rows_per_call = 10;
+    READ_SCANNER_ROWS(scanner, 3);
+    EXPECT_EQ("[50]\n[51]\n[52]\n", _debug_row_output);
+    scanner->close();
+}
+
+// Without a stored column, _row_id is first_row_id + _pos and the sequence number is the file's; without either
+// value from FE, both are NULL.
+TEST_F(HdfsScannerTest, TestOrcIcebergInheritedRowLineage) {
+    const std::string file = "orc_iceberg_inherited_row_lineage.orc";
+    write_iceberg_lineage_orc_file(file, false, 3);
+    DeferOp remove_file([&]() { std::filesystem::remove(file); });
+
+    for (bool has_values : {true, false}) {
+        auto scanner = std::make_shared<HdfsOrcScanner>();
+        auto* range = _create_scan_range(file, 0, 0);
+        if (has_values) {
+            range->__set_first_row_id(50);
+            range->__set_extended_columns({{2, create_bigint_literal_texpr(3)}});
+        }
+        auto* tuple_desc = _create_tuple_desc(iceberg_lineage_orc_descs);
+        auto* ctx = _create_ctx(file, range, tuple_desc);
+        TIcebergSchema schema;
+        TIcebergSchemaField id_field;
+        id_field.__set_field_id(1);
+        id_field.__set_name("id");
+        schema.__set_fields({id_field});
+        ctx->format_scan_context.lake_schema = &schema;
+
+        Status status = scanner->init(_runtime_state, ctx);
+        ASSERT_OK(status);
+        status = scanner->open(_runtime_state);
+        ASSERT_OK(status);
+        _debug_rows_per_call = 10;
+        READ_SCANNER_ROWS(scanner, 3);
+        if (has_values) {
+            EXPECT_EQ("[0, 50, 3, 0]\n[1, 51, 3, 1]\n[2, 52, 3, 2]\n", _debug_row_output);
+        } else {
+            EXPECT_EQ("[0, NULL, NULL, 0]\n[1, NULL, NULL, 1]\n[2, NULL, NULL, 2]\n", _debug_row_output);
+        }
+        scanner->close();
+    }
+}
+
+>>>>>>> 353afbb4d6f... [Enhancement][RB-225] Skip deleted Iceberg data before IO and cut the BE cost of position deletes (#67208)
 // =============================================================================
 
 /*

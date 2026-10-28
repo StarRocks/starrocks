@@ -1043,11 +1043,12 @@ void FragmentExecutor::_fail_cleanup(bool fragment_has_registed) {
     }
 }
 
-Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const TExecPlanFragmentParams& request,
+Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, TExecPlanFragmentParams&& request,
                                                         TExecPlanFragmentResult* response) {
     DCHECK(!request.__isset.fragment);
     DCHECK(request.__isset.params);
-    const TPlanFragmentExecParams& params = request.params;
+    // The scan ranges are moved into the morsels below.
+    TPlanFragmentExecParams& params = request.params;
     const TUniqueId& query_id = params.query_id;
     const TUniqueId& instance_id = params.fragment_instance_id;
 
@@ -1067,7 +1068,7 @@ Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const
     std::unordered_set<int> notify_ids;
     std::vector<int32_t> closed_scan_nodes;
 
-    for (const auto& [node_id, scan_ranges] : params.per_node_scan_ranges) {
+    for (auto& [node_id, scan_ranges] : params.per_node_scan_ranges) {
         if (scan_ranges.size() == 0) continue;
         auto iter = fragment_ctx->morsel_queue_factories().find(node_id);
         if (iter == fragment_ctx->morsel_queue_factories().end()) {
@@ -1085,7 +1086,7 @@ Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const
         RETURN_IF_ERROR(FragmentExecutor::add_scan_ranges_partition_values(runtime_state, scan_ranges));
         pipeline::Morsels morsels;
         bool has_more_morsel = false;
-        pipeline::ScanMorsel::build_scan_morsels(node_id, scan_ranges, true, &morsels, &has_more_morsel);
+        pipeline::ScanMorsel::build_scan_morsels(node_id, std::move(scan_ranges), true, &morsels, &has_more_morsel);
         RETURN_IF_ERROR(morsel_queue_factory->append_morsels(0, std::move(morsels)));
         morsel_queue_factory->set_has_more_scan_ranges(has_more_morsel);
         notify_ids.insert(node_id);
@@ -1096,7 +1097,7 @@ Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const
     }
 
     if (params.__isset.node_to_per_driver_seq_scan_ranges) {
-        for (const auto& [node_id, per_driver_scan_ranges] : params.node_to_per_driver_seq_scan_ranges) {
+        for (auto& [node_id, per_driver_scan_ranges] : params.node_to_per_driver_seq_scan_ranges) {
             auto iter = fragment_ctx->morsel_queue_factories().find(node_id);
             if (iter == fragment_ctx->morsel_queue_factories().end()) {
                 return Status::InternalError(
@@ -1111,12 +1112,13 @@ Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const
             }
 
             bool has_more_morsel = has_more_per_driver_seq_scan_ranges(per_driver_scan_ranges);
-            for (const auto& [driver_seq, scan_ranges] : per_driver_scan_ranges) {
+            for (auto& [driver_seq, scan_ranges] : per_driver_scan_ranges) {
                 if (scan_ranges.size() == 0) continue;
                 RETURN_IF_ERROR(FragmentExecutor::add_scan_ranges_partition_values(runtime_state, scan_ranges));
                 pipeline::Morsels morsels;
                 [[maybe_unused]] bool local_has_more;
-                pipeline::ScanMorsel::build_scan_morsels(node_id, scan_ranges, true, &morsels, &local_has_more);
+                pipeline::ScanMorsel::build_scan_morsels(node_id, std::move(scan_ranges), true, &morsels,
+                                                         &local_has_more);
                 RETURN_IF_ERROR(morsel_queue_factory->append_morsels(driver_seq, std::move(morsels)));
             }
             morsel_queue_factory->set_has_more_scan_ranges(has_more_morsel);

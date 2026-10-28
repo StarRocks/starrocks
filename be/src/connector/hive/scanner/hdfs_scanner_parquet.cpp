@@ -55,7 +55,20 @@ Status HdfsParquetScanner::do_init(RuntimeState* runtime_state, const HdfsScanne
             }
         }
         _skip_rows_ctx->deletion_bitmap = iceberg_delete_builder.deletion_bitmap();
+<<<<<<< HEAD
         _app_stats.iceberg_delete_files_per_scan += _scanner_ctx->table_specific.iceberg_delete_files.size();
+=======
+        _app_stats.iceberg_delete_files_per_scan += v2_delete_files;
+        // The bitmap is exact (repeated positions collapse), so when it covers every row of the
+        // data file there is nothing to read: skip opening the file at all.
+        const auto* scan_range = _scanner_ctx->scan_range;
+        if (scan_range->__isset.record_count && scan_range->record_count > 0 && _skip_rows_ctx->has_skip_rows() &&
+            _skip_rows_ctx->deletion_bitmap->get_range_cardinality(0, scan_range->record_count) ==
+                    static_cast<uint64_t>(scan_range->record_count)) {
+            _all_rows_deleted = true;
+            _app_stats.deleted_files_skipped += 1;
+        }
+>>>>>>> 353afbb4d6f... [Enhancement][RB-225] Skip deleted Iceberg data before IO and cut the BE cost of position deletes (#67208)
     } else if (_scanner_ctx->table_specific.paimon_deletion_file != nullptr) {
         formats::PaimonDeleteFileBuilder paimon_delete_file_builder(_scanner_ctx->fs);
         ASSIGN_OR_RETURN(auto deletion_bitmap,
@@ -83,6 +96,11 @@ void HdfsParquetScanner::do_update_counter(HdfsScannerProfile* profile) {
     // and do not need to re-build in sub io tasks.
     do_update_deletion_vector_build_counter(root);
     do_update_iceberg_v2_counter(root, kParquetProfileSectionPrefix);
+    // the task that splits a file drops its deleted row groups before splitting
+    COUNTER_UPDATE(ADD_CHILD_COUNTER(root, "DeletedRowGroupsSkipped", TUnit::UNIT, kParquetProfileSectionPrefix),
+                   _app_stats.deleted_row_groups_skipped);
+    COUNTER_UPDATE(ADD_CHILD_COUNTER(root, "DeletedFilesSkipped", TUnit::UNIT, kParquetProfileSectionPrefix),
+                   _app_stats.deleted_files_skipped);
     // if we have split tasks, we don't need to update counter
     // and we will update those counters in sub io tasks.
     if (has_split_tasks()) {
@@ -289,6 +307,9 @@ void HdfsParquetScanner::do_update_counter(HdfsScannerProfile* profile) {
 }
 
 Status HdfsParquetScanner::do_open(RuntimeState* runtime_state) {
+    if (_all_rows_deleted) {
+        return Status::OK();
+    }
     RETURN_IF_ERROR(open_random_access_file());
     ASSIGN_OR_RETURN(const int64_t file_size, _file->get_size());
     // create file reader
@@ -301,6 +322,9 @@ Status HdfsParquetScanner::do_open(RuntimeState* runtime_state) {
 }
 
 Status HdfsParquetScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
+    if (_all_rows_deleted) {
+        return Status::EndOfFile("");
+    }
     return _reader->get_next(chunk);
 }
 
