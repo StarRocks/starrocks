@@ -1140,6 +1140,15 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: Whether to write the combined transaction logs of a load in parallel in a shared-data cluster. When the load sink closes, it writes one combined transaction log for each partition the load touched to object storage. When this item is set to `true`, these writes run concurrently in a dedicated thread pool, whose size is capped by `put_combined_txn_log_thread_pool_num_max` (default `64`). When it is set to `false`, the partitions are written one after another. In both cases the load waits for all writes to finish, and fails if any write fails.
 - Introduced in: -
 
+### put_combined_txn_log_thread_pool_num_max
+
+- Default: 64
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of threads in the thread pool that writes combined transaction logs to object storage in a shared-data cluster. When `enable_put_combinded_txn_log_parallel` is set to `true`, the combined transaction logs of the partitions that a load touched are written concurrently in this pool. When all threads are busy, further writes wait in the queue of the pool, which has no size limit. This limit can be changed at runtime without restarting the BE or CN. A value less than or equal to `0` is treated as `1`. Lowering the limit does not interrupt writes already running. Idle threads exit after 500 ms.
+- Introduced in: -
+
 ### enable_rejected_record_sync
 
 - Default: false
