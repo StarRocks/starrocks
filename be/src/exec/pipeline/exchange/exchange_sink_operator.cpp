@@ -105,19 +105,7 @@ private:
     Status _close_internal(RuntimeState* state, FragmentContext* fragment_ctx);
 
     bool _check_use_pass_through();
-<<<<<<< HEAD
-    void _prepare_pass_through();
-=======
     void _prepare_pass_through(RuntimeState* state);
-    // Account the memory retained by _chunks[driver_sequence] into the parent's profile counter.
-    // Container (capacity) usage is re-read each time, which is O(#columns); memory referenced by
-    // out-of-line objects (JSON, bitmap, HLL, ...) is only measured for the rows just appended and
-    // accumulated, so the cost stays proportional to the rows copied instead of O(rows) per append.
-    void _on_chunk_buffer_appended(int32_t driver_sequence, size_t from, size_t size, bool recount_reference);
-    void _on_chunk_buffer_reset(int32_t driver_sequence);
-    void _on_chunk_buffer_released(int32_t driver_sequence);
-    void _account_chunk_buffer(int64_t delta);
->>>>>>> 7e354c6 ([BugFix] Account buffered pass-through chunks in query and process memory (#80910))
 
     ExchangeSinkOperator* _parent;
 

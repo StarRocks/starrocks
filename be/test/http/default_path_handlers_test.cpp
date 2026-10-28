@@ -19,18 +19,11 @@
 
 #include <gtest/gtest.h>
 
-<<<<<<< HEAD
 #include "common/config.h"
 #include "runtime/exec_env.h"
+#include "runtime/mem_tracker.h"
 #include "util/credential_mask.h"
 #include "util/defer_op.h"
-=======
-#include "base/auth/credential_mask.h"
-#include "base/utility/defer_op.h"
-#include "common/config_object_storage_fwd.h"
-#include "exec/exec_env.h"
-#include "runtime/mem_tracker.h"
->>>>>>> 7e354c6 ([BugFix] Account buffered pass-through chunks in query and process memory (#80910))
 
 namespace starrocks {
 
@@ -55,14 +48,14 @@ TEST_F(DefaultPathHandlersTest, mem_tracker) {
 
 TEST_F(DefaultPathHandlersTest, passthrough_is_rendered_once_outside_process_tree) {
     WebPageHandler::ArgumentMap args;
-    const auto& runtime_env = *RuntimeEnv::GetInstance();
-    auto* process = runtime_env.process_mem_tracker();
+    auto* runtime_env = GlobalEnv::GetInstance();
+    auto* process = runtime_env->process_mem_tracker();
     // The passthrough tracker only mirrors bytes the query trackers already count, so it must not be a
     // real child of process (that would count them twice); the page appends it for diagnosis.
-    ASSERT_EQ(nullptr, runtime_env.passthrough_mem_tracker()->parent());
+    ASSERT_EQ(nullptr, runtime_env->passthrough_mem_tracker()->parent());
 
     std::stringstream output;
-    MemTrackerWebPageHandler::handle(runtime_env, process, args, &output);
+    MemTrackerWebPageHandler::handle(process, args, &output);
     const std::string page = output.str();
     const std::string cell = "<td>passthrough</td>";
     const auto first = page.find(cell);

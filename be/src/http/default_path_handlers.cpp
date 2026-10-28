@@ -186,14 +186,9 @@ void MemTrackerWebPageHandler::handle(MemTracker* mem_tracker, const WebPageHand
             auto* update_item = update_mem_tracker->get_snapshot(&obj_pool, upper_level);
             update_item->parent = root;
 
-<<<<<<< HEAD
-            // passthrough memory tracker not in RootMemTrackerTree
-            MemTracker* passthrough_mem_tracker = GlobalEnv::GetInstance()->passthrough_mem_tracker();
-=======
             // passthrough memory tracker not in RootMemTrackerTree. It only mirrors bytes that the query
             // trackers (and so the process tracker) already count, so it is shown for diagnosis only.
-            MemTracker* passthrough_mem_tracker = runtime_env.passthrough_mem_tracker();
->>>>>>> 7e354c6 ([BugFix] Account buffered pass-through chunks in query and process memory (#80910))
+            MemTracker* passthrough_mem_tracker = GlobalEnv::GetInstance()->passthrough_mem_tracker();
             auto* passthrough_item = passthrough_mem_tracker->get_snapshot(&obj_pool, upper_level);
             passthrough_item->parent = root;
 
