@@ -1,0 +1,219 @@
+-- A view tracks its base tables by id but reads them by name. Swapping or renaming a base inactivates the view even
+-- with enable_mv_automatic_inactive_by_base_table_changes off; its next refresh binds it to the table that now has the
+-- name and recomputes, so it never mixes the rows of two tables, and incremental refresh resumes afterwards.
+
+-- name: test_ivm_base_table_swapped_with_automatic_inactive_off @cloud @sequential
+[UC]ADMIN SET FRONTEND CONFIG ("enable_mv_automatic_inactive_by_base_table_changes" = "false");
+set enable_materialized_view_rewrite = false;
+CREATE TABLE sw_base (dt date, k int, v bigint)
+DUPLICATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+CREATE TABLE sw_other (dt date, k int, v bigint)
+DUPLICATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO sw_base VALUES ('2026-08-01',1,10),('2026-08-02',1,20);
+INSERT INTO sw_other VALUES ('2026-08-01',9,90),('2026-08-02',9,92);
+CREATE MATERIALIZED VIEW sw_inc
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'incremental')
+AS SELECT dt, k, SUM(v) AS s, COUNT(*) AS c FROM sw_base GROUP BY dt, k;
+CREATE MATERIALIZED VIEW sw_auto
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'auto')
+AS SELECT dt, k, SUM(v) AS s, COUNT(*) AS c FROM sw_base GROUP BY dt, k;
+CREATE MATERIALIZED VIEW sw_pct
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'pct')
+AS SELECT dt, k, SUM(v) AS s, COUNT(*) AS c FROM sw_base GROUP BY dt, k;
+[UC]TASK_INC=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'sw_inc';
+[UC]TASK_AUTO=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'sw_auto';
+[UC]REFRESH MATERIALIZED VIEW sw_inc WITH SYNC MODE;
+[UC]REFRESH MATERIALIZED VIEW sw_auto WITH SYNC MODE;
+[UC]REFRESH MATERIALIZED VIEW sw_pct WITH SYNC MODE;
+ALTER TABLE sw_base SWAP WITH sw_other;
+SELECT TABLE_NAME, INACTIVE_REASON, IS_ACTIVE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() ORDER BY TABLE_NAME;
+-- Write the table that now has the name, then the swapped-out one: a view still tracking the latter would skip the
+-- first refresh and recompute only 2026-08-02 from the former on the second.
+INSERT INTO sw_base VALUES ('2026-08-01',9,1);
+[UC]REFRESH MATERIALIZED VIEW sw_inc WITH SYNC MODE;
+[UC]REFRESH MATERIALIZED VIEW sw_auto WITH SYNC MODE;
+[UC]REFRESH MATERIALIZED VIEW sw_pct WITH SYNC MODE;
+function: assert_equal_result("SELECT dt, k, s, c FROM sw_inc ORDER BY dt, k", "SELECT dt, k, SUM(v), COUNT(*) FROM sw_base GROUP BY dt, k ORDER BY dt, k")
+function: assert_equal_result("SELECT dt, k, s, c FROM sw_auto ORDER BY dt, k", "SELECT dt, k, SUM(v), COUNT(*) FROM sw_base GROUP BY dt, k ORDER BY dt, k")
+function: assert_equal_result("SELECT dt, k, s, c FROM sw_pct ORDER BY dt, k", "SELECT dt, k, SUM(v), COUNT(*) FROM sw_base GROUP BY dt, k ORDER BY dt, k")
+INSERT INTO sw_other VALUES ('2026-08-02',1,21);
+[UC]REFRESH MATERIALIZED VIEW sw_inc WITH SYNC MODE;
+[UC]REFRESH MATERIALIZED VIEW sw_auto WITH SYNC MODE;
+[UC]REFRESH MATERIALIZED VIEW sw_pct WITH SYNC MODE;
+function: assert_equal_result("SELECT dt, k, s, c FROM sw_inc ORDER BY dt, k", "SELECT dt, k, SUM(v), COUNT(*) FROM sw_base GROUP BY dt, k ORDER BY dt, k")
+function: assert_equal_result("SELECT dt, k, s, c FROM sw_auto ORDER BY dt, k", "SELECT dt, k, SUM(v), COUNT(*) FROM sw_base GROUP BY dt, k ORDER BY dt, k")
+function: assert_equal_result("SELECT dt, k, s, c FROM sw_pct ORDER BY dt, k", "SELECT dt, k, SUM(v), COUNT(*) FROM sw_base GROUP BY dt, k ORDER BY dt, k")
+SELECT TABLE_NAME, IS_ACTIVE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() ORDER BY TABLE_NAME;
+INSERT INTO sw_base VALUES ('2026-08-02',9,3),('2026-08-03',9,4);
+[UC]REFRESH MATERIALIZED VIEW sw_inc WITH SYNC MODE;
+[UC]REFRESH MATERIALIZED VIEW sw_auto WITH SYNC MODE;
+[UC]REFRESH MATERIALIZED VIEW sw_pct WITH SYNC MODE;
+SELECT STATE, get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_INC}' ORDER BY get_json_double(EXTRA_MESSAGE, '$.processStartTime') DESC LIMIT 1;
+SELECT STATE, get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_AUTO}' ORDER BY get_json_double(EXTRA_MESSAGE, '$.processStartTime') DESC LIMIT 1;
+function: assert_equal_result("SELECT dt, k, s, c FROM sw_inc ORDER BY dt, k", "SELECT dt, k, SUM(v), COUNT(*) FROM sw_base GROUP BY dt, k ORDER BY dt, k")
+function: assert_equal_result("SELECT dt, k, s, c FROM sw_auto ORDER BY dt, k", "SELECT dt, k, SUM(v), COUNT(*) FROM sw_base GROUP BY dt, k ORDER BY dt, k")
+function: assert_equal_result("SELECT dt, k, s, c FROM sw_pct ORDER BY dt, k", "SELECT dt, k, SUM(v), COUNT(*) FROM sw_base GROUP BY dt, k ORDER BY dt, k")
+CLEANUP {
+ADMIN SET FRONTEND CONFIG ("enable_mv_automatic_inactive_by_base_table_changes" = "true");
+} END CLEANUP
+
+-- name: test_ivm_base_table_renamed_and_recreated_with_automatic_inactive_off @cloud @sequential
+[UC]ADMIN SET FRONTEND CONFIG ("enable_mv_automatic_inactive_by_base_table_changes" = "false");
+set enable_materialized_view_rewrite = false;
+CREATE TABLE rn_base (dt date, k int, v bigint)
+DUPLICATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO rn_base VALUES ('2026-08-01',1,10),('2026-08-02',1,20);
+CREATE MATERIALIZED VIEW rn_inc
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'incremental')
+AS SELECT dt, k, SUM(v) AS s, COUNT(*) AS c FROM rn_base GROUP BY dt, k;
+CREATE MATERIALIZED VIEW rn_auto
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'auto')
+AS SELECT dt, k, SUM(v) AS s, COUNT(*) AS c FROM rn_base GROUP BY dt, k;
+CREATE MATERIALIZED VIEW rn_pct
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'pct')
+AS SELECT dt, k, SUM(v) AS s, COUNT(*) AS c FROM rn_base GROUP BY dt, k;
+[UC]TASK_INC=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'rn_inc';
+[UC]TASK_AUTO=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'rn_auto';
+[UC]REFRESH MATERIALIZED VIEW rn_inc WITH SYNC MODE;
+[UC]REFRESH MATERIALIZED VIEW rn_auto WITH SYNC MODE;
+[UC]REFRESH MATERIALIZED VIEW rn_pct WITH SYNC MODE;
+ALTER TABLE rn_base RENAME rn_old;
+SELECT TABLE_NAME, INACTIVE_REASON, IS_ACTIVE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() ORDER BY TABLE_NAME;
+CREATE TABLE rn_base (dt date, k int, v bigint)
+DUPLICATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO rn_base VALUES ('2026-08-01',9,90),('2026-08-02',9,92);
+INSERT INTO rn_old VALUES ('2026-08-02',1,21);
+[UC]REFRESH MATERIALIZED VIEW rn_inc WITH SYNC MODE;
+[UC]REFRESH MATERIALIZED VIEW rn_auto WITH SYNC MODE;
+[UC]REFRESH MATERIALIZED VIEW rn_pct WITH SYNC MODE;
+function: assert_equal_result("SELECT dt, k, s, c FROM rn_inc ORDER BY dt, k", "SELECT dt, k, SUM(v), COUNT(*) FROM rn_base GROUP BY dt, k ORDER BY dt, k")
+function: assert_equal_result("SELECT dt, k, s, c FROM rn_auto ORDER BY dt, k", "SELECT dt, k, SUM(v), COUNT(*) FROM rn_base GROUP BY dt, k ORDER BY dt, k")
+function: assert_equal_result("SELECT dt, k, s, c FROM rn_pct ORDER BY dt, k", "SELECT dt, k, SUM(v), COUNT(*) FROM rn_base GROUP BY dt, k ORDER BY dt, k")
+SELECT TABLE_NAME, IS_ACTIVE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() ORDER BY TABLE_NAME;
+INSERT INTO rn_base VALUES ('2026-08-02',1,3),('2026-08-03',9,4);
+[UC]REFRESH MATERIALIZED VIEW rn_inc WITH SYNC MODE;
+[UC]REFRESH MATERIALIZED VIEW rn_auto WITH SYNC MODE;
+[UC]REFRESH MATERIALIZED VIEW rn_pct WITH SYNC MODE;
+SELECT STATE, get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_INC}' ORDER BY get_json_double(EXTRA_MESSAGE, '$.processStartTime') DESC LIMIT 1;
+SELECT STATE, get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_AUTO}' ORDER BY get_json_double(EXTRA_MESSAGE, '$.processStartTime') DESC LIMIT 1;
+function: assert_equal_result("SELECT dt, k, s, c FROM rn_inc ORDER BY dt, k", "SELECT dt, k, SUM(v), COUNT(*) FROM rn_base GROUP BY dt, k ORDER BY dt, k")
+function: assert_equal_result("SELECT dt, k, s, c FROM rn_auto ORDER BY dt, k", "SELECT dt, k, SUM(v), COUNT(*) FROM rn_base GROUP BY dt, k ORDER BY dt, k")
+function: assert_equal_result("SELECT dt, k, s, c FROM rn_pct ORDER BY dt, k", "SELECT dt, k, SUM(v), COUNT(*) FROM rn_base GROUP BY dt, k ORDER BY dt, k")
+CLEANUP {
+ADMIN SET FRONTEND CONFIG ("enable_mv_automatic_inactive_by_base_table_changes" = "true");
+} END CLEANUP
+
+-- name: test_ivm_pk_base_table_swapped_with_automatic_inactive_off @cloud @sequential
+[UC]ADMIN SET FRONTEND CONFIG ("enable_mv_automatic_inactive_by_base_table_changes" = "false");
+set enable_materialized_view_rewrite = false;
+CREATE TABLE ps_base (dt date NOT NULL, k int NOT NULL, v bigint)
+PRIMARY KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 2
+PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
+CREATE TABLE ps_other (dt date NOT NULL, k int NOT NULL, v bigint)
+PRIMARY KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 2
+PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
+INSERT INTO ps_base VALUES ('2026-08-01',1,10),('2026-08-01',2,20),('2026-08-02',1,30);
+INSERT INTO ps_other VALUES ('2026-08-01',1,100),('2026-08-02',1,300),('2026-08-02',2,400);
+CREATE MATERIALIZED VIEW ps_inc
+PARTITION BY dt
+DISTRIBUTED BY HASH(dt) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'incremental')
+AS SELECT dt, SUM(v) AS s, COUNT(*) AS c FROM ps_base GROUP BY dt;
+CREATE MATERIALIZED VIEW ps_auto
+PARTITION BY dt
+DISTRIBUTED BY HASH(dt) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'auto')
+AS SELECT dt, SUM(v) AS s, COUNT(*) AS c FROM ps_base GROUP BY dt;
+[UC]TASK_INC=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'ps_inc';
+[UC]TASK_AUTO=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'ps_auto';
+[UC]REFRESH MATERIALIZED VIEW ps_inc WITH SYNC MODE;
+[UC]REFRESH MATERIALIZED VIEW ps_auto WITH SYNC MODE;
+ALTER TABLE ps_base SWAP WITH ps_other;
+SELECT TABLE_NAME, INACTIVE_REASON, IS_ACTIVE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() ORDER BY TABLE_NAME;
+UPDATE ps_base SET v = 101 WHERE dt = '2026-08-01' AND k = 1;
+DELETE FROM ps_other WHERE dt = '2026-08-01' AND k = 2;
+[UC]REFRESH MATERIALIZED VIEW ps_inc WITH SYNC MODE;
+[UC]REFRESH MATERIALIZED VIEW ps_auto WITH SYNC MODE;
+function: assert_equal_result("SELECT dt, s, c FROM ps_inc ORDER BY dt", "SELECT dt, SUM(v), COUNT(*) FROM ps_base GROUP BY dt ORDER BY dt")
+function: assert_equal_result("SELECT dt, s, c FROM ps_auto ORDER BY dt", "SELECT dt, SUM(v), COUNT(*) FROM ps_base GROUP BY dt ORDER BY dt")
+UPDATE ps_base SET v = 301 WHERE dt = '2026-08-02' AND k = 1;
+DELETE FROM ps_base WHERE dt = '2026-08-02' AND k = 2;
+INSERT INTO ps_base VALUES ('2026-08-03',1,500);
+[UC]REFRESH MATERIALIZED VIEW ps_inc WITH SYNC MODE;
+[UC]REFRESH MATERIALIZED VIEW ps_auto WITH SYNC MODE;
+SELECT STATE, get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_INC}' ORDER BY get_json_double(EXTRA_MESSAGE, '$.processStartTime') DESC LIMIT 1;
+SELECT STATE, get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_AUTO}' ORDER BY get_json_double(EXTRA_MESSAGE, '$.processStartTime') DESC LIMIT 1;
+function: assert_equal_result("SELECT dt, s, c FROM ps_inc ORDER BY dt", "SELECT dt, SUM(v), COUNT(*) FROM ps_base GROUP BY dt ORDER BY dt")
+function: assert_equal_result("SELECT dt, s, c FROM ps_auto ORDER BY dt", "SELECT dt, SUM(v), COUNT(*) FROM ps_base GROUP BY dt ORDER BY dt")
+CLEANUP {
+ADMIN SET FRONTEND CONFIG ("enable_mv_automatic_inactive_by_base_table_changes" = "true");
+} END CLEANUP
+
+-- name: test_ivm_base_mv_renamed_and_recreated @cloud
+-- Renaming a base view inactivates the views on it in the default configuration too.
+set enable_materialized_view_rewrite = false;
+CREATE TABLE bm_base (dt date, k int, v bigint)
+DUPLICATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO bm_base VALUES ('2026-08-01',1,10),('2026-08-02',1,20),('2026-08-02',9,92);
+CREATE MATERIALIZED VIEW bm_mid
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1')
+AS SELECT dt, k, v FROM bm_base WHERE k < 5;
+CREATE MATERIALIZED VIEW bm_top
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1')
+AS SELECT dt, k, SUM(v) AS s, COUNT(*) AS c FROM bm_mid GROUP BY dt, k;
+[UC]REFRESH MATERIALIZED VIEW bm_mid WITH SYNC MODE;
+[UC]REFRESH MATERIALIZED VIEW bm_top WITH SYNC MODE;
+ALTER MATERIALIZED VIEW bm_mid RENAME bm_mid_old;
+SELECT TABLE_NAME, INACTIVE_REASON, IS_ACTIVE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() ORDER BY TABLE_NAME;
+CREATE MATERIALIZED VIEW bm_mid
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1')
+AS SELECT dt, k, v FROM bm_base WHERE k > 5;
+[UC]REFRESH MATERIALIZED VIEW bm_mid WITH SYNC MODE;
+INSERT INTO bm_base VALUES ('2026-08-02',2,30);
+[UC]REFRESH MATERIALIZED VIEW bm_mid_old WITH SYNC MODE;
+[UC]REFRESH MATERIALIZED VIEW bm_top WITH SYNC MODE;
+SELECT TABLE_NAME, IS_ACTIVE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() ORDER BY TABLE_NAME;
+function: assert_equal_result("SELECT dt, k, s, c FROM bm_top ORDER BY dt, k", "SELECT dt, k, SUM(v), COUNT(*) FROM bm_mid GROUP BY dt, k ORDER BY dt, k")
