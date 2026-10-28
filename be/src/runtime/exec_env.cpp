@@ -236,6 +236,9 @@ Status GlobalEnv::_init_mem_tracker() {
     int32_t update_mem_percent = std::max(std::min(100, config::update_memory_limit_percent), 0);
     _update_mem_tracker = regist_tracker(MemTrackerType::UPDATE, bytes_limit * update_mem_percent / 100, nullptr);
     _update_mem_tracker->set_level(2);
+    // Diagnostic only: mirrors the bytes buffered in local pass-through channels. Those bytes are
+    // already accounted on the query tracker (or the process tracker as a fallback), so keep this
+    // tracker out of the tree, or they would be counted twice.
     _passthrough_mem_tracker = regist_tracker(MemTrackerType::PASSTHROUGH, -1, nullptr);
     _passthrough_mem_tracker->set_level(2);
     _clone_mem_tracker = regist_tracker(MemTrackerType::CLONE, -1, process_mem_tracker());
