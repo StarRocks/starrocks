@@ -1,0 +1,394 @@
+-- name: test_iceberg_trino_initial_default_time_types
+trino: CREATE SCHEMA iceberg.sqltest_db_${uuid0} WITH (location = 'oss://${oss_bucket}/sqltest_db_${uuid0}.db');
+-- result:
+-- !result
+trino: CREATE TABLE iceberg.sqltest_db_${uuid0}.t (id integer) WITH (format = 'PARQUET', format_version = 3);
+-- result:
+-- !result
+trino: INSERT INTO iceberg.sqltest_db_${uuid0}.t VALUES (1), (2);
+-- result:
+2
+-- !result
+trino: ALTER TABLE iceberg.sqltest_db_${uuid0}.t ADD COLUMN c integer DEFAULT 7;
+-- result:
+-- !result
+trino: ALTER TABLE iceberg.sqltest_db_${uuid0}.t ADD COLUMN tm time(6) DEFAULT TIME '01:02:03';
+-- result:
+-- !result
+trino: ALTER TABLE iceberg.sqltest_db_${uuid0}.t ADD COLUMN tz timestamp(6) with time zone DEFAULT TIMESTAMP '2024-01-01 00:00:01 UTC';
+-- result:
+-- !result
+trino: INSERT INTO iceberg.sqltest_db_${uuid0}.t VALUES (3, 8, TIME '04:05:06', TIMESTAMP '2024-07-01 12:00:00 UTC');
+-- result:
+1
+-- !result
+create external catalog ice_cat_${uuid0} properties ("type" = "iceberg", "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+);
+-- result:
+-- !result
+set time_zone = 'UTC';
+-- result:
+-- !result
+select id, c, tm, tz from ice_cat_${uuid0}.sqltest_db_${uuid0}.t order by id;
+-- result:
+1	7	01:02:03	2024-01-01 00:00:01
+2	7	01:02:03	2024-01-01 00:00:01
+3	8	04:05:06	2024-07-01 12:00:00
+-- !result
+select id from ice_cat_${uuid0}.sqltest_db_${uuid0}.t where c = 7 order by id;
+-- result:
+1
+2
+-- !result
+select id from ice_cat_${uuid0}.sqltest_db_${uuid0}.t where tz = '2024-01-01 00:00:01' order by id;
+-- result:
+1
+2
+-- !result
+set time_zone = 'Asia/Shanghai';
+-- result:
+-- !result
+select id, tm, tz from ice_cat_${uuid0}.sqltest_db_${uuid0}.t order by id;
+-- result:
+1	01:02:03	2024-01-01 08:00:01
+2	01:02:03	2024-01-01 08:00:01
+3	04:05:06	2024-07-01 20:00:00
+-- !result
+select id from ice_cat_${uuid0}.sqltest_db_${uuid0}.t where tz = '2024-01-01 08:00:01' order by id;
+-- result:
+1
+2
+-- !result
+set time_zone = 'UTC';
+-- result:
+-- !result
+drop catalog ice_cat_${uuid0};
+-- result:
+-- !result
+trino: DROP TABLE iceberg.sqltest_db_${uuid0}.t;
+-- result:
+-- !result
+trino: DROP SCHEMA iceberg.sqltest_db_${uuid0};
+-- result:
+-- !result
+-- name: test_iceberg_trino_orc_schema_evolution
+trino: CREATE SCHEMA iceberg.sqltest_db_${uuid0} WITH (location = 'oss://${oss_bucket}/sqltest_db_${uuid0}.db');
+-- result:
+-- !result
+trino: CREATE TABLE iceberg.sqltest_db_${uuid0}.t (id integer, c1 varchar, s row(a integer), d integer) WITH (format = 'ORC');
+-- result:
+-- !result
+trino: INSERT INTO iceberg.sqltest_db_${uuid0}.t VALUES (1, 'x', row(100), 10), (2, 'y', NULL, 20);
+-- result:
+2
+-- !result
+trino: ALTER TABLE iceberg.sqltest_db_${uuid0}.t RENAME COLUMN c1 TO c1_new;
+-- result:
+-- !result
+trino: ALTER TABLE iceberg.sqltest_db_${uuid0}.t RENAME COLUMN s.a TO a_new;
+-- result:
+-- !result
+trino: ALTER TABLE iceberg.sqltest_db_${uuid0}.t DROP COLUMN d;
+-- result:
+-- !result
+trino: ALTER TABLE iceberg.sqltest_db_${uuid0}.t ADD COLUMN d integer;
+-- result:
+-- !result
+trino: ALTER TABLE iceberg.sqltest_db_${uuid0}.t ADD COLUMN s.b integer;
+-- result:
+-- !result
+trino: INSERT INTO iceberg.sqltest_db_${uuid0}.t VALUES (3, 'z', row(300, 3000), 30);
+-- result:
+1
+-- !result
+create external catalog ice_cat_${uuid0} properties ("type" = "iceberg", "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+);
+-- result:
+-- !result
+select id, c1_new, d, s from ice_cat_${uuid0}.sqltest_db_${uuid0}.t order by id;
+-- result:
+1	x	None	{"a_new":100,"b":null}
+2	y	None	None
+3	z	30	{"a_new":300,"b":3000}
+-- !result
+select id, s.a_new, s.b from ice_cat_${uuid0}.sqltest_db_${uuid0}.t order by id;
+-- result:
+1	100	None
+2	None	None
+3	300	3000
+-- !result
+select id, s.b from ice_cat_${uuid0}.sqltest_db_${uuid0}.t order by id;
+-- result:
+1	None
+2	None
+3	3000
+-- !result
+select id from ice_cat_${uuid0}.sqltest_db_${uuid0}.t where s.b is null order by id;
+-- result:
+1
+2
+-- !result
+drop catalog ice_cat_${uuid0};
+-- result:
+-- !result
+trino: DROP TABLE iceberg.sqltest_db_${uuid0}.t;
+-- result:
+-- !result
+trino: DROP SCHEMA iceberg.sqltest_db_${uuid0};
+-- result:
+-- !result
+-- name: test_iceberg_trino_parquet_only_added_subfields
+trino: CREATE SCHEMA iceberg.sqltest_db_${uuid0} WITH (location = 'oss://${oss_bucket}/sqltest_db_${uuid0}.db');
+-- result:
+-- !result
+trino: CREATE TABLE iceberg.sqltest_db_${uuid0}.t (id integer, s row(name varchar, a integer), l array(row(a integer))) WITH (format = 'PARQUET');
+-- result:
+-- !result
+trino: INSERT INTO iceberg.sqltest_db_${uuid0}.t VALUES (1, row('n1', 10), array[row(1), NULL]), (2, NULL, NULL);
+-- result:
+2
+-- !result
+trino: ALTER TABLE iceberg.sqltest_db_${uuid0}.t ADD COLUMN s.b integer;
+-- result:
+-- !result
+trino: ALTER TABLE iceberg.sqltest_db_${uuid0}.t ADD COLUMN l.element.b integer;
+-- result:
+-- !result
+trino: INSERT INTO iceberg.sqltest_db_${uuid0}.t VALUES (3, row('n3', 30, 300), array[row(3, 33)]);
+-- result:
+1
+-- !result
+create external catalog ice_cat_${uuid0} properties ("type" = "iceberg", "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+);
+-- result:
+-- !result
+select id, s, l from ice_cat_${uuid0}.sqltest_db_${uuid0}.t order by id;
+-- result:
+1	{"name":"n1","a":10,"b":null}	[{"a":1,"b":null},null]
+2	None	None
+3	{"name":"n3","a":30,"b":300}	[{"a":3,"b":33}]
+-- !result
+select id, s.b from ice_cat_${uuid0}.sqltest_db_${uuid0}.t order by id;
+-- result:
+1	None
+2	None
+3	300
+-- !result
+select id, array_map(x -> x.b, l) from ice_cat_${uuid0}.sqltest_db_${uuid0}.t order by id;
+-- result:
+1	[null,null]
+2	None
+3	[33]
+-- !result
+select id from ice_cat_${uuid0}.sqltest_db_${uuid0}.t where s.b is null order by id;
+-- result:
+1
+2
+-- !result
+drop catalog ice_cat_${uuid0};
+-- result:
+-- !result
+trino: DROP TABLE iceberg.sqltest_db_${uuid0}.t;
+-- result:
+-- !result
+trino: DROP SCHEMA iceberg.sqltest_db_${uuid0};
+-- result:
+-- !result
+-- name: test_iceberg_trino_parquet_nested_and_string_defaults
+trino: CREATE SCHEMA iceberg.sqltest_db_${uuid0} WITH (location = 'oss://${oss_bucket}/sqltest_db_${uuid0}.db');
+-- result:
+-- !result
+trino: CREATE TABLE iceberg.sqltest_db_${uuid0}.t (id integer, n row(t row(a integer), x integer)) WITH (format = 'PARQUET', format_version = 3);
+-- result:
+-- !result
+trino: INSERT INTO iceberg.sqltest_db_${uuid0}.t VALUES (1, row(row(10), 100)), (2, NULL), (3, row(NULL, 300)), (4, row(row(40), 400)), (5, row(row(50), 500));
+-- result:
+5
+-- !result
+trino: ALTER TABLE iceberg.sqltest_db_${uuid0}.t ADD COLUMN n.t.b integer;
+-- result:
+-- !result
+trino: ALTER TABLE iceberg.sqltest_db_${uuid0}.t ADD COLUMN c integer DEFAULT 7;
+-- result:
+-- !result
+trino: ALTER TABLE iceberg.sqltest_db_${uuid0}.t ADD COLUMN e varchar DEFAULT '';
+-- result:
+-- !result
+trino: ALTER TABLE iceberg.sqltest_db_${uuid0}.t ADD COLUMN bin varbinary DEFAULT X'616263';
+-- result:
+-- !result
+trino: INSERT INTO iceberg.sqltest_db_${uuid0}.t VALUES (6, row(row(60, 600), 6), 8, 'z', X'00ff');
+-- result:
+1
+-- !result
+create external catalog ice_cat_${uuid0} properties ("type" = "iceberg", "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+);
+-- result:
+-- !result
+select id, n, c, e, hex(bin) from ice_cat_${uuid0}.sqltest_db_${uuid0}.t order by id;
+-- result:
+1	{"t":{"a":10,"b":null},"x":100}	7		616263
+2	None	7		616263
+3	{"t":null,"x":300}	7		616263
+4	{"t":{"a":40,"b":null},"x":400}	7		616263
+5	{"t":{"a":50,"b":null},"x":500}	7		616263
+6	{"t":{"a":60,"b":600},"x":6}	8	z	00FF
+-- !result
+select id, n.t.b from ice_cat_${uuid0}.sqltest_db_${uuid0}.t order by id;
+-- result:
+1	None
+2	None
+3	None
+4	None
+5	None
+6	600
+-- !result
+select id from ice_cat_${uuid0}.sqltest_db_${uuid0}.t where n.t is null order by id;
+-- result:
+2
+3
+-- !result
+select id from ice_cat_${uuid0}.sqltest_db_${uuid0}.t where e = '' order by id;
+-- result:
+1
+2
+3
+4
+5
+-- !result
+set chunk_size = 2;
+-- result:
+-- !result
+select id from ice_cat_${uuid0}.sqltest_db_${uuid0}.t where c = 7 order by id;
+-- result:
+1
+2
+3
+4
+5
+-- !result
+select count(*), max(c), min(c) from ice_cat_${uuid0}.sqltest_db_${uuid0}.t where c >= 7;
+-- result:
+6	8	7
+-- !result
+set chunk_size = 4096;
+-- result:
+-- !result
+drop catalog ice_cat_${uuid0};
+-- result:
+-- !result
+trino: DROP TABLE iceberg.sqltest_db_${uuid0}.t;
+-- result:
+-- !result
+trino: DROP SCHEMA iceberg.sqltest_db_${uuid0};
+-- result:
+-- !result
+-- name: test_iceberg_trino_orc_nested_and_string_defaults
+trino: CREATE SCHEMA iceberg.sqltest_db_${uuid0} WITH (location = 'oss://${oss_bucket}/sqltest_db_${uuid0}.db');
+-- result:
+-- !result
+trino: CREATE TABLE iceberg.sqltest_db_${uuid0}.t (id integer, n row(t row(a integer), x integer)) WITH (format = 'ORC', format_version = 3);
+-- result:
+-- !result
+trino: INSERT INTO iceberg.sqltest_db_${uuid0}.t VALUES (1, row(row(10), 100)), (2, NULL), (3, row(NULL, 300)), (4, row(row(40), 400)), (5, row(row(50), 500));
+-- result:
+5
+-- !result
+trino: ALTER TABLE iceberg.sqltest_db_${uuid0}.t ADD COLUMN n.t.b integer;
+-- result:
+-- !result
+trino: ALTER TABLE iceberg.sqltest_db_${uuid0}.t ADD COLUMN c integer DEFAULT 7;
+-- result:
+-- !result
+trino: ALTER TABLE iceberg.sqltest_db_${uuid0}.t ADD COLUMN e varchar DEFAULT '';
+-- result:
+-- !result
+trino: ALTER TABLE iceberg.sqltest_db_${uuid0}.t ADD COLUMN bin varbinary DEFAULT X'616263';
+-- result:
+-- !result
+trino: INSERT INTO iceberg.sqltest_db_${uuid0}.t VALUES (6, row(row(60, 600), 6), 8, 'z', X'00ff');
+-- result:
+1
+-- !result
+create external catalog ice_cat_${uuid0} properties ("type" = "iceberg", "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+);
+-- result:
+-- !result
+select id, n, c, e, hex(bin) from ice_cat_${uuid0}.sqltest_db_${uuid0}.t order by id;
+-- result:
+1	{"t":{"a":10,"b":null},"x":100}	7		616263
+2	None	7		616263
+3	{"t":null,"x":300}	7		616263
+4	{"t":{"a":40,"b":null},"x":400}	7		616263
+5	{"t":{"a":50,"b":null},"x":500}	7		616263
+6	{"t":{"a":60,"b":600},"x":6}	8	z	00FF
+-- !result
+select id, n.t.b from ice_cat_${uuid0}.sqltest_db_${uuid0}.t order by id;
+-- result:
+1	None
+2	None
+3	None
+4	None
+5	None
+6	600
+-- !result
+select id from ice_cat_${uuid0}.sqltest_db_${uuid0}.t where n.t is null order by id;
+-- result:
+2
+3
+-- !result
+select id from ice_cat_${uuid0}.sqltest_db_${uuid0}.t where e = '' order by id;
+-- result:
+1
+2
+3
+4
+5
+-- !result
+set chunk_size = 2;
+-- result:
+-- !result
+select id from ice_cat_${uuid0}.sqltest_db_${uuid0}.t where c = 7 order by id;
+-- result:
+1
+2
+3
+4
+5
+-- !result
+select count(*), max(c), min(c) from ice_cat_${uuid0}.sqltest_db_${uuid0}.t where c >= 7;
+-- result:
+6	8	7
+-- !result
+set chunk_size = 4096;
+-- result:
+-- !result
+drop catalog ice_cat_${uuid0};
+-- result:
+-- !result
+trino: DROP TABLE iceberg.sqltest_db_${uuid0}.t;
+-- result:
+-- !result
+trino: DROP SCHEMA iceberg.sqltest_db_${uuid0};
+-- result:
+-- !result

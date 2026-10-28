@@ -22,6 +22,18 @@ description: "Alphabetical d - h"
 - 单位：计数
 - 描述：BE 中作为 Exchange 接收器的实例的累计数量。
 
+## `datacache_corruption_removed_files`
+
+- 单位：个
+- 类型：累计
+- 描述：扫描从数据缓存读到的内容解析失败后，删除了损坏缓存块的外表文件累计数。由 `external_table_clear_corrupted_cache_data` 控制。
+
+## `datacache_corruption_retried_files`
+
+- 单位：个
+- 类型：累计
+- 描述：为验证缓存副本是否损坏、绕过数据缓存重新读取的外表文件累计数。仅 Parquet 文件会重新读取。
+
 ## `datacache_disk_quota_bytes`
 
 - 单位：字节

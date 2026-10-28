@@ -118,6 +118,7 @@ import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.HistoryEntry;
 import org.apache.iceberg.IncrementalAppendScan;
 import org.apache.iceberg.IsolationLevel;
+import org.apache.iceberg.ManifestContent;
 import org.apache.iceberg.ManifestFile;
 import org.apache.iceberg.ManifestFiles;
 import org.apache.iceberg.ManifestReader;
@@ -181,6 +182,7 @@ import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -771,7 +773,9 @@ public class IcebergMetadata implements ConnectorMetadata {
         try {
             icebergTable = getTable(new ConnectContext(), stmt.getDbName(), stmt.getTableName());
         } catch (StarRocksConnectorException | NotFoundException e) {
-            if (!isMetadataFileMissing(e) || !isTableMetadataMissing(stmt.getDbName(), stmt.getTableName())) {
+            // DROP VIEW must not remove a table's entry; it is also authorized against views, not tables.
+            if (stmt.isView() || !isMetadataFileMissing(e)
+                    || !isTableMetadataMissing(stmt.getDbName(), stmt.getTableName())) {
                 throw e;
             }
             // Iceberg tolerates this on drop: HiveCatalog#dropTable still removes the catalog entry when the
@@ -1210,10 +1214,17 @@ public class IcebergMetadata implements ConnectorMetadata {
         List<RemoteMetaSplit> remoteMetaSplits = new ArrayList<>();
         IcebergTable icebergTable = (IcebergTable) getTable(new ConnectContext(), dbName, tableName);
         org.apache.iceberg.Table nativeTable = icebergTable.getNativeTable();
+        // The tables over all snapshots list a branch written while main has no snapshot yet
+        boolean allSnapshots = metadataTableType == MetadataTableType.ALL_DATA_FILES
+                || metadataTableType == MetadataTableType.ALL_DELETE_FILES
+                || metadataTableType == MetadataTableType.ALL_MANIFESTS
+                || metadataTableType == MetadataTableType.ALL_ENTRIES;
         if (snapshotId == -1) {
             Snapshot currentSnapshot = nativeTable.currentSnapshot();
             if (currentSnapshot == null) {
-                return IcebergMetaSpec.EMPTY;
+                if (!allSnapshots) {
+                    return IcebergMetaSpec.EMPTY;
+                }
             } else {
                 snapshotId = nativeTable.currentSnapshot().snapshotId();
             }
@@ -1234,6 +1245,34 @@ public class IcebergMetadata implements ConnectorMetadata {
 
         if (IcebergMetaSplit.onlyNeedSingleSplit(metadataTableType)) {
             return new IcebergMetaSpec(serializedTable, List.of(IcebergMetaSplit.placeholderSplit()), false);
+        }
+
+        if (metadataTableType == MetadataTableType.ENTRIES) {
+            // a manifest without live files still has the entries of the files it removed
+            for (ManifestFile manifest : snapshot.allManifests(nativeTable.io())) {
+                remoteMetaSplits.add(IcebergMetaSplit.from(manifest));
+            }
+            return new IcebergMetaSpec(serializedTable, remoteMetaSplits, false);
+        }
+
+        if (allSnapshots) {
+            // every manifest reachable from any snapshot, once
+            Map<String, ManifestFile> manifests = new LinkedHashMap<>();
+            for (Snapshot reachable : nativeTable.snapshots()) {
+                for (ManifestFile manifest : reachable.allManifests(nativeTable.io())) {
+                    manifests.putIfAbsent(manifest.path(), manifest);
+                }
+            }
+            for (ManifestFile manifest : manifests.values()) {
+                boolean live = manifest.hasAddedFiles() || manifest.hasExistingFiles();
+                boolean data = manifest.content() == ManifestContent.DATA;
+                // the files tables list only live files
+                if (metadataTableType == MetadataTableType.ALL_ENTRIES
+                        || (live && data == (metadataTableType == MetadataTableType.ALL_DATA_FILES))) {
+                    remoteMetaSplits.add(IcebergMetaSplit.from(manifest));
+                }
+            }
+            return new IcebergMetaSpec(serializedTable, remoteMetaSplits, false);
         }
 
         List<ManifestFile> dataManifests = snapshot.dataManifests(nativeTable.io());
@@ -2583,8 +2622,11 @@ public class IcebergMetadata implements ConnectorMetadata {
                            ConnectContext context) {
         // Skip the commit entirely when there is nothing to write — a zero-row INSERT/UPDATE/DELETE
         // would otherwise produce an empty `append` snapshot that pollutes snapshot history and
-        // confuses downstream CDC consumers.
-        if (commitInfos.isEmpty()) {
+        // confuses downstream CDC consumers. A rewrite that only drops files (every row of them deleted) has
+        // no data file to add but must still commit.
+        boolean rewriteOnlyRemovesFiles = commitInfos.isEmpty() && extra instanceof IcebergSinkExtra sinkExtra
+                && sinkExtra.isRewrite() && !sinkExtra.getScannedDataFiles().isEmpty();
+        if (commitInfos.isEmpty() && !rewriteOnlyRemovesFiles) {
             LOG.info("Skipping empty Iceberg commit for {}.{} (no data or delete files produced)", dbName, tableName);
             return;
         }
@@ -2616,7 +2658,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             }
         } else {
             isOverwrite = false;
-            isRewrite = false;
+            isRewrite = rewriteOnlyRemovesFiles;
         }
 
         final List<TIcebergDataFile> dataFiles = commitInfos.stream()
@@ -2919,9 +2961,9 @@ public class IcebergMetadata implements ConnectorMetadata {
         Long baseSnapshotId = extra instanceof IcebergSinkExtra
                 ? ((IcebergSinkExtra) extra).getBaseSnapshotId() : null;
         if (baseSnapshotId == null) {
-            Snapshot currentSnapshot = nativeTbl.currentSnapshot();
-            if (currentSnapshot != null) {
-                baseSnapshotId = currentSnapshot.snapshotId();
+            Snapshot head = headSnapshot(nativeTbl, branch);
+            if (head != null) {
+                baseSnapshotId = head.snapshotId();
             }
         }
         if (baseSnapshotId != null) {
@@ -2968,8 +3010,8 @@ public class IcebergMetadata implements ConnectorMetadata {
                 transaction.commitTransaction();
             }, () -> invalidateCacheAfterCommit(dbName, tableName), dataFiles, dbName, tableName);
 
-            // Record metrics after successful commit
-            Snapshot newSnapshot = nativeTbl.currentSnapshot();
+            // Record metrics after successful commit, from the head of the branch it committed to
+            Snapshot newSnapshot = headSnapshot(nativeTbl, branch);
             if (newSnapshot != null && newSnapshot.summary() != null) {
                 Map<String, String> summary = newSnapshot.summary();
                 long deletedRows = Long.parseLong(
@@ -2992,6 +3034,11 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
 
         asyncRefreshOthersFeMetadataCache(dbName, tableName);
+    }
+
+    // The head of the branch a row delta commits to: validation must start from an ancestor of it
+    private static Snapshot headSnapshot(org.apache.iceberg.Table nativeTbl, String branch) {
+        return branch == null ? nativeTbl.currentSnapshot() : nativeTbl.snapshot(branch);
     }
 
     private void commitRowDeltaOperation(Transaction transaction, org.apache.iceberg.Table nativeTbl,
@@ -3029,14 +3076,14 @@ public class IcebergMetadata implements ConnectorMetadata {
 
         // Use the base snapshot id frozen at plan time so conflict detection covers every
         // commit landed between scan and commit. The MERGE/UPDATE planners freeze it from the
-        // target scan whenever existing rows are modified; the currentSnapshot fallback below
-        // covers paths that do not (plain appends, target-less MERGE).
+        // target scan whenever existing rows are modified; the fallback to the head of the target
+        // branch below covers paths that do not (plain appends, target-less MERGE).
         Long baseSnapshotId = extra instanceof IcebergSinkExtra
                 ? ((IcebergSinkExtra) extra).getBaseSnapshotId() : null;
         if (baseSnapshotId == null) {
-            Snapshot currentSnapshot = nativeTbl.currentSnapshot();
-            if (currentSnapshot != null) {
-                baseSnapshotId = currentSnapshot.snapshotId();
+            Snapshot head = headSnapshot(nativeTbl, branch);
+            if (head != null) {
+                baseSnapshotId = head.snapshotId();
             }
         }
         if (baseSnapshotId != null) {
@@ -3101,7 +3148,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             if (isMerge) {
                 ConnectorMetricsMgr.increaseIcebergMergeTotalSuccess();
 
-                Snapshot newSnapshot = nativeTbl.currentSnapshot();
+                Snapshot newSnapshot = headSnapshot(nativeTbl, branch);
                 if (newSnapshot != null && newSnapshot.summary() != null) {
                     // position_delete = target rows hit by UPDATE/DELETE (added position deletes);
                     // data = data rows written (UPDATE rewrites + INSERTs).
@@ -3126,7 +3173,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             } else {
                 ConnectorMetricsMgr.increaseUpdateTotalSuccess(ConnectorMetricsMgr.CONNECTOR_ICEBERG);
 
-                Snapshot updateSnapshot = nativeTbl.currentSnapshot();
+                Snapshot updateSnapshot = headSnapshot(nativeTbl, branch);
                 if (updateSnapshot != null && updateSnapshot.summary() != null) {
                     long affectedRows = Long.parseLong(updateSnapshot.summary()
                             .getOrDefault(SnapshotSummary.ADDED_POS_DELETES_PROP, "0"));
@@ -3382,6 +3429,9 @@ public class IcebergMetadata implements ConnectorMetadata {
         // Spec of the table descriptor the BE partitions this DML's output by, frozen at plan time.
         private Integer writeSpecId;
         private OperationType operationType = OperationType.UPDATE;
+        // Set by rewrite_data_files. A rewrite whose scanned files hold no live row writes no data file, yet it
+        // must still commit to remove those files and their deletion vectors.
+        private boolean rewrite = false;
 
         public IcebergSinkExtra() {
             this.scannedDataFiles = new HashSet<>();
@@ -3394,6 +3444,14 @@ public class IcebergMetadata implements ConnectorMetadata {
 
         public OperationType getOperationType() {
             return operationType;
+        }
+
+        public void setRewrite(boolean rewrite) {
+            this.rewrite = rewrite;
+        }
+
+        public boolean isRewrite() {
+            return rewrite;
         }
 
         public void addScannedDataFiles(Set<DataFile> o) {

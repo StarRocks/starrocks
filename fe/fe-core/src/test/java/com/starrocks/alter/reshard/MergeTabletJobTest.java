@@ -491,9 +491,9 @@ public class MergeTabletJobTest {
 
     @Test
     public void testRunAbortingJobCatch() throws Exception {
-        MergeTabletJob mergeJob = new MergeTabletJob(GlobalStateMgr.getCurrentState().getNextId(),
-                db.getId(), table.getId(), createMergeTabletReshardJob().getReshardingPhysicalPartitions()) {
-            @Override
+        MergeTabletJob mergeJob = createMergeTabletReshardJob();
+        new MockUp<MergeTabletJob>() {
+            @Mock
             protected void unregisterReshardingTablets() {
                 throw new RuntimeException("mock");
             }
@@ -679,17 +679,15 @@ public class MergeTabletJobTest {
 
     @Test
     public void testGetLockedTableNotFound() throws Exception {
-        // A dropped table during the reshard is surfaced via run()'s abort wrapper: PENDING -> ABORTED
-        // (no force-ABORTING from getOlapTable when canAbort() is true). The errorMessage is set on
-        // the ABORTING-via-getOlapTable step inside runAbortingJob.
+        // A dropped table follows the existing abort path, preserving the original failure context.
         MergeTabletJob mergeJob = new MergeTabletJob(GlobalStateMgr.getCurrentState().getNextId(),
                 db.getId(), -1, new HashMap<>());
-        // First tick: PENDING -> ABORTING via run()'s catch wrapper. Second tick: ABORTING -> ABORTED
-        // via runAbortingJob, which also restores errorMessage from the throwing getOlapTable.
         mergeJob.run();
+        String originalError = mergeJob.getErrorMessage();
+        Assertions.assertTrue(originalError.startsWith("Table not found"));
         mergeJob.run();
         Assertions.assertEquals(TabletReshardJob.JobState.ABORTED, mergeJob.getJobState());
-        Assertions.assertEquals("Table not found", mergeJob.getErrorMessage());
+        Assertions.assertEquals(originalError, mergeJob.getErrorMessage());
     }
 
     @Test

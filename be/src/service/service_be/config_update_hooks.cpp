@@ -403,6 +403,13 @@ void register_config_update_hooks(ExecEnv* exec_env, const RuntimeEnv& runtime_e
         }
         return Status::OK();
     });
+    registry->register_callback("put_combined_txn_log_thread_pool_num_max", [=]() -> Status {
+        auto* thread_pool = runtime_env_ptr->put_combined_txn_log_thread_pool();
+        if (thread_pool != nullptr) {
+            return thread_pool->update_max_threads(std::max(1, config::put_combined_txn_log_thread_pool_num_max));
+        }
+        return Status::OK();
+    });
     registry->register_callback("parallel_clone_task_per_path", [=]() -> Status {
         exec_env->agent_server()->update_max_thread_by_type(TTaskType::CLONE, config::parallel_clone_task_per_path);
         return Status::OK();

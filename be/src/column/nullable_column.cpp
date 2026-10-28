@@ -339,6 +339,22 @@ void NullableColumn::serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes
                                                   _has_null);
 }
 
+void NullableColumn::serialize_size_compact_batch(Buffer<uint64_t>& sizes, size_t chunk_size) const {
+    // Mirrors serialize_batch(): a one-byte null flag per row, then the data element unless the
+    // row is null. Like serialize_batch_with_null_masks(), the null mask is only consulted when
+    // _has_null is set; otherwise every row carries its data element.
+    if (!_has_null) {
+        uint64_t* __restrict s = sizes.data();
+        for (size_t i = 0; i < chunk_size; ++i) {
+            s[i] += sizeof(bool);
+        }
+        _data_column->serialize_size_compact_batch(sizes, chunk_size);
+        return;
+    }
+    _data_column->serialize_size_compact_batch_with_null_masks(sizes, chunk_size,
+                                                               _null_column->immutable_data().data());
+}
+
 const uint8_t* NullableColumn::deserialize_and_append(const uint8_t* pos) {
     bool null;
     memcpy(&null, pos, sizeof(bool));

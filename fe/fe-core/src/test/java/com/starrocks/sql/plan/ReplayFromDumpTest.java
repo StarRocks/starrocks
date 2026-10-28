@@ -348,7 +348,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Assertions.assertTrue(replayPair.second.contains("  |  <slot 40> : CAST(15: id_smallint AS INT)\n" +
                         "  |  <slot 41> : CAST(23: id_date AS DATETIME)\n" +
                         "  |  \n" +
-                        "  6:OlapScanNode\n" +
+                        "  8:OlapScanNode\n" +
                         "     TABLE: external_es_table_without_null"),
                 replayPair.second);
     }

@@ -79,6 +79,7 @@ import com.starrocks.common.util.RangeUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.WriteQuorum;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
+import com.starrocks.common.util.concurrent.lock.SnapshotCopyValidator;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.StorageInfo;
@@ -314,6 +315,10 @@ public class OlapTable extends Table {
     // It's not persisted but resolved in QueryAnalyzer, so only exists if it's in the context of query
     public volatile Long dbId;
 
+    // Not persisted. True on the private object copyOnlyForQuery fills, so copying it again is known not to
+    // read a published table -- see SnapshotCopyValidator for why this is a mark and not a metastore lookup.
+    private boolean planningSnapshot = false;
+
     public OlapTable() {
         this(TableType.OLAP);
     }
@@ -394,6 +399,8 @@ public class OlapTable extends Table {
     // Only Copy necessary metadata for query.
     // We don't do deep copy, because which is very expensive;
     public void copyOnlyForQuery(OlapTable olapTable) {
+        SnapshotCopyValidator.validateCopySource(this);
+        olapTable.planningSnapshot = true;
         olapTable.id = this.id;
         olapTable.name = this.name;
         olapTable.type = this.type;
@@ -471,6 +478,11 @@ public class OlapTable extends Table {
         }
         olapTable.dbId = this.dbId;
         olapTable.maxColUniqueId = new AtomicInteger(this.maxColUniqueId.get());
+    }
+
+    /** Whether this object is a private planning copy made by {@link #copyOnlyForQuery}, not a published table. */
+    public boolean isPlanningSnapshot() {
+        return planningSnapshot;
     }
 
     public void addDoubleWritePartition(long sourcePartitionId, long tempPartitionId) {

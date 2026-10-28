@@ -3949,7 +3949,10 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int starmgr_grpc_timeout_seconds = 5;
 
-    @ConfField(mutable = true, comment = "Number of threads for handling gRPC server I/O")
+    @ConfField(mutable = true, comment = "Maximum number of threads that run the starmgr gRPC server handlers. "
+            + "The pool keeps one thread per CPU core and starts more only while all of its threads are busy; "
+            + "the extra threads exit after 60 seconds idle. Calls wait in a queue once this many threads are busy. "
+            + "Valid values: 1 or more; fe.conf and ADMIN SET FRONTEND CONFIG reject a value of 0 or less.")
     public static int starmgr_grpc_server_max_worker_threads = 1024;
 
     @ConfField(mutable = true)
@@ -4140,6 +4143,13 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true, comment = "partitions which can be vacuumed immediately, test only, format:'id1;id2'")
     public static String lake_vacuum_immediately_partition_ids = "";
+
+    @ConfField(mutable = true, comment = "partitions whose incremental vacuum state should be force-reset, a "
+            + "recovery escape hatch for a wedged propose/commit that never advances, format:'id1;id2'. Only "
+            + "the serving leader honors it: ADMIN SET FRONTEND CONFIG broadcasts the value to every FE, and "
+            + "a node discards whatever it inherited when it becomes leader, so a request must be re-issued "
+            + "after a failover")
+    public static String lake_vacuum_reset_partition_ids = "";
 
     @ConfField(mutable = true, comment = "the max number of threads for publishing version",
             aliases = {"lake_publish_version_max_threads"})
@@ -5666,6 +5676,19 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static String lock_blocking_call_validation_mode = "warn";
+
+    /**
+     * How the FE reacts when a published native table or materialized view is copied for planning
+     * ({@code OlapTable#copyOnlyForQuery}) by a thread that holds neither that table's READ/WRITE lock
+     * nor its database's. The copy walks the live partition and index maps, so a concurrent DDL, an
+     * INSERT OVERWRITE swapping partitions or a follower's replayer can change them under it: the
+     * statement fails with a ConcurrentModificationException, or plans off half-applied metadata.
+     *
+     * {@code off} skips the check, {@code warn} logs the violation with the copier's stack and lets
+     * the copy proceed, {@code error} refuses it. Mutable. Unrecognized values behave as {@code warn}.
+     */
+    @ConfField(mutable = true)
+    public static String lock_snapshot_copy_validation_mode = "warn";
 
     /**
      * Minimum interval in milliseconds between lock-invariant violation log lines <b>from the same

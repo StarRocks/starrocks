@@ -40,6 +40,7 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.persist.EditLog;
+import com.starrocks.persist.WALApplier;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.KeysType;
@@ -245,10 +246,11 @@ class RangeDistributionMigrationServiceTest {
         AtomicReference<List<LockType>> journalLockTypes = new AtomicReference<>();
         new MockUp<EditLog>() {
             @Mock
-            public void logUpdateTabletReshardJob(TabletReshardJob job) {
+            public void logUpdateTabletReshardJob(TabletReshardJob job, WALApplier applier) {
                 publishedBeforeJournal.set(isolatedManager.getTabletReshardJob(job.getJobId()) == job);
                 journalLockTypes.set(currentTableLockTypes());
                 journaled.set(true);
+                applier.apply(job);
             }
         };
         RangeDistributionMigrationService migrationService = new RangeDistributionMigrationService() {
@@ -262,6 +264,7 @@ class RangeDistributionMigrationServiceTest {
             long jobId = migrationService.submitSplit(database.getFullName(), table.getName(), request);
             SplitTabletJob admittedJob = (SplitTabletJob) isolatedManager.getTabletReshardJob(jobId);
             Assertions.assertNotNull(admittedJob);
+            Assertions.assertTrue(admittedJob.isAdmissionReady());
             Assertions.assertEquals(2, admittedJob.getReshardingPhysicalPartitions().size());
             List<ReshardingMaterializedIndex> admittedIndexes = admittedJob.getReshardingPhysicalPartitions()
                     .values().stream().flatMap(partition -> partition.getReshardingIndexes().values().stream())

@@ -1,0 +1,66 @@
+-- name: test_iceberg_trino_orc_position_delete
+-- Trino writes an ORC v2 table; StarRocks deletes from it with position delete files, and Trino reads the result back.
+trino: CREATE SCHEMA iceberg.trino_orc_pd_${uuid0} WITH (location = 'oss://${oss_bucket}/trino_orc_pd_${uuid0}.db');
+trino: CREATE TABLE iceberg.trino_orc_pd_${uuid0}.t (id integer, v varchar) WITH (format = 'ORC', format_version = 2);
+trino: INSERT INTO iceberg.trino_orc_pd_${uuid0}.t VALUES (1, 'a'), (2, 'b'), (3, 'c'), (4, 'd');
+trino: DELETE FROM iceberg.trino_orc_pd_${uuid0}.t WHERE id = 1;
+create external catalog ice_cat_${uuid0} properties ("type" = "iceberg", "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+);
+delete from ice_cat_${uuid0}.trino_orc_pd_${uuid0}.t where v = 'c';
+select * from ice_cat_${uuid0}.trino_orc_pd_${uuid0}.t order by id;
+trino: SELECT * FROM iceberg.trino_orc_pd_${uuid0}.t ORDER BY id;
+drop catalog ice_cat_${uuid0};
+trino: DROP TABLE iceberg.trino_orc_pd_${uuid0}.t;
+trino: DROP SCHEMA iceberg.trino_orc_pd_${uuid0};
+
+-- name: test_iceberg_trino_row_lineage
+-- Row lineage across engines on a v3 table: StarRocks reads the _row_id and sequence number Trino keeps for an updated
+-- row, and a StarRocks DELETE leaves the lineage of the other rows unchanged for Trino.
+trino: CREATE SCHEMA iceberg.trino_lineage_${uuid0} WITH (location = 'oss://${oss_bucket}/trino_lineage_${uuid0}.db');
+trino: CREATE TABLE iceberg.trino_lineage_${uuid0}.t (id integer, v varchar) WITH (format = 'PARQUET', format_version = 3);
+trino: INSERT INTO iceberg.trino_lineage_${uuid0}.t VALUES (1, 'a');
+trino: INSERT INTO iceberg.trino_lineage_${uuid0}.t VALUES (2, 'b');
+trino: INSERT INTO iceberg.trino_lineage_${uuid0}.t VALUES (3, 'c');
+trino: UPDATE iceberg.trino_lineage_${uuid0}.t SET v = 'a2' WHERE id = 1;
+create external catalog ice_cat_${uuid0} properties ("type" = "iceberg", "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+);
+select id, v, _row_id, _last_updated_sequence_number from ice_cat_${uuid0}.trino_lineage_${uuid0}.t order by id;
+delete from ice_cat_${uuid0}.trino_lineage_${uuid0}.t where id = 3;
+select id, v, _row_id, _last_updated_sequence_number from ice_cat_${uuid0}.trino_lineage_${uuid0}.t order by id;
+trino: SELECT id, v, "$row_id", "$last_updated_sequence_number" FROM iceberg.trino_lineage_${uuid0}.t ORDER BY id;
+drop catalog ice_cat_${uuid0};
+trino: DROP TABLE iceberg.trino_lineage_${uuid0}.t;
+trino: DROP SCHEMA iceberg.trino_lineage_${uuid0};
+
+-- name: test_iceberg_trino_orc_row_position
+-- _pos of an ORC data file with many stripes: it is the row's position in the file, and predicates on it filter rows,
+-- also in a DELETE.
+trino: SET SESSION iceberg.orc_writer_max_stripe_rows = 1000;
+trino: SET SESSION iceberg.orc_writer_min_stripe_size = '1kB';
+trino: SET SESSION iceberg.orc_writer_max_stripe_size = '4kB';
+trino: CREATE SCHEMA iceberg.trino_orc_pos_${uuid0} WITH (location = 'oss://${oss_bucket}/trino_orc_pos_${uuid0}.db');
+trino: CREATE TABLE iceberg.trino_orc_pos_${uuid0}.t (id bigint, v varchar) WITH (format = 'ORC', format_version = 2);
+trino: INSERT INTO iceberg.trino_orc_pos_${uuid0}.t SELECT x, 'v' || CAST(x AS varchar) FROM UNNEST(sequence(1, 10000)) AS u(x);
+create external catalog ice_cat_${uuid0} properties ("type" = "iceberg", "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+);
+select min(_pos), max(_pos), count(distinct _pos) from ice_cat_${uuid0}.trino_orc_pos_${uuid0}.t;
+select count(*) from ice_cat_${uuid0}.trino_orc_pos_${uuid0}.t where _pos % 2 = 0;
+select count(*) from ice_cat_${uuid0}.trino_orc_pos_${uuid0}.t where abs(_pos - 1000) <= 1;
+delete from ice_cat_${uuid0}.trino_orc_pos_${uuid0}.t where _pos % 2 = 0;
+select count(*) from ice_cat_${uuid0}.trino_orc_pos_${uuid0}.t;
+trino: SELECT count(*) FROM iceberg.trino_orc_pos_${uuid0}.t;
+drop catalog ice_cat_${uuid0};
+trino: DROP TABLE iceberg.trino_orc_pos_${uuid0}.t;
+trino: DROP SCHEMA iceberg.trino_orc_pos_${uuid0};

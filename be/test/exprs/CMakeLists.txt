@@ -27,7 +27,6 @@ set(EXPR_TEST_FILES
     ai/ai_function_call_expr_test.cpp
     ai/ai_function_result_test.cpp
     ai/ai_provider_options_builder_test.cpp
-    ai_functions_test.cpp
     arithmetic_expr_test.cpp
     arithmetic_operation_test.cpp
     array_functions_test.cpp
@@ -115,6 +114,7 @@ set(EXPR_TEST_FILES
     unary_function_test.cpp
     unnest_core_test.cpp
     unnest_variant_test.cpp
+    variant_functions_test.cpp
     vectorized_literal_test.cpp
 )
 if (STARROCKS_JIT_ENABLE)

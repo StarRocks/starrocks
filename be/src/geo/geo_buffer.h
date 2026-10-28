@@ -33,7 +33,7 @@ public:
     ~PreparedGeoBuffer();
     static StatusOr<std::unique_ptr<PreparedGeoBuffer>> prepare(Slice wkb,
                                                                 const std::function<Status()>& checkpoint = {});
-    StatusOr<WkbGeometry> buffer(double distance, const std::function<Status()>& checkpoint = {}) const;
+    StatusOr<WkbGeometry> buffer(double distance) const;
 
 private:
     struct Impl;

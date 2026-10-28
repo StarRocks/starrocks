@@ -146,7 +146,7 @@ public class FlussTableTest {
                 .property(LAKE_WAREHOUSE, "oss://table-warehouse")
                 .property(TABLE_LOCAL_OPTION, "table-value")
                 .build();
-        return TableInfo.of(TablePath.of(DB, TABLE), 42L, 7, descriptor, 1000L, 2000L);
+        return TableInfo.of(TablePath.of(DB, TABLE), 42L, 7, descriptor, null, 1000L, 2000L);
     }
 
     private static Configuration decodeRuntimeConf(String encodedRuntimeConf) throws Exception {
