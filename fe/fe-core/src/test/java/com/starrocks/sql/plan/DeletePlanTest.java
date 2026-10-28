@@ -64,10 +64,10 @@ public class DeletePlanTest extends PlanTestBase {
     public void testIcebergDeleteWithMultipleConditions() throws Exception {
         // Test DELETE with multiple WHERE conditions
         String[] deleteStatements = {
-                "delete from iceberg0.unpartitioned_db.t0 where id = 1",
-                "delete from iceberg0.unpartitioned_db.t0 where id > 100",
-                "delete from iceberg0.unpartitioned_db.t0 where id between 10 and 100",
-                "delete from iceberg0.unpartitioned_db.t0 where data like '%test%'"
+                "delete from iceberg0.unpartitioned_db.t0_v2 where id = 1",
+                "delete from iceberg0.unpartitioned_db.t0_v2 where id > 100",
+                "delete from iceberg0.unpartitioned_db.t0_v2 where id between 10 and 100",
+                "delete from iceberg0.unpartitioned_db.t0_v2 where data like '%test%'"
         };
 
         for (String sql : deleteStatements) {
@@ -81,9 +81,9 @@ public class DeletePlanTest extends PlanTestBase {
     public void testPartitionedIcebergTableDelete() throws Exception {
         // Test DELETE on partitioned Iceberg tables
         String[] deleteStatements = {
-                "delete from iceberg0.partitioned_db.t1 where id = 1",
-                "delete from iceberg0.partitioned_db.t1 where `date` = '2023-01-01'",
-                "delete from iceberg0.partitioned_db.t1 where id > 100 and `date` >= '2023-01-01'"
+                "delete from iceberg0.partitioned_db.t1_v2 where id = 1",
+                "delete from iceberg0.partitioned_db.t1_v2 where `date` = '2023-01-01'",
+                "delete from iceberg0.partitioned_db.t1_v2 where id > 100 and `date` >= '2023-01-01'"
         };
 
         for (String sql : deleteStatements) {
@@ -99,7 +99,7 @@ public class DeletePlanTest extends PlanTestBase {
     @Test
     public void testIcebergDeleteWithSubquery() throws Exception {
         // Test DELETE with subquery (like: DELETE WHERE id IN (SELECT id FROM other_table))
-        String sql = "delete from iceberg0.unpartitioned_db.t0 where id in (select id from iceberg0.partitioned_db.t1)";
+        String sql = "delete from iceberg0.unpartitioned_db.t0_v2 where id in (select id from iceberg0.partitioned_db.t1)";
         String explainString = getDeleteExecPlanString(sql);
         assertTrue(explainString.contains("ICEBERG DELETE SINK"));
     }
@@ -107,7 +107,7 @@ public class DeletePlanTest extends PlanTestBase {
     @Test
     public void testIcebergDeleteOutputColumns() throws Exception {
         // Test that DELETE returns _file and _pos columns for Iceberg position delete
-        String sql = "delete from iceberg0.unpartitioned_db.t0 where id = 1";
+        String sql = "delete from iceberg0.unpartitioned_db.t0_v2 where id = 1";
         ExecPlan execPlan = getDeleteExecPlan(sql);
 
         assertNotNull(execPlan);
@@ -122,7 +122,7 @@ public class DeletePlanTest extends PlanTestBase {
         int previousSinkDop = connectContext.getSessionVariable().getPipelineSinkDop();
         try {
             connectContext.getSessionVariable().setPipelineSinkDop(8);
-            ExecPlan execPlan = getDeleteExecPlan("delete from iceberg0.unpartitioned_db.t0 where id = 1");
+            ExecPlan execPlan = getDeleteExecPlan("delete from iceberg0.unpartitioned_db.t0_v2 where id = 1");
             FragmentInstance instance = createFragmentInstance(execPlan.getTopFragment());
             Assertions.assertEquals(8, instance.getTableSinkDop());
         } finally {
@@ -144,7 +144,7 @@ public class DeletePlanTest extends PlanTestBase {
             connectContext.getSessionVariable().setPipelineSinkDop(0);
             connectContext.getSessionVariable().setPipelineDop(0);
 
-            ExecPlan execPlan = getDeleteExecPlan("delete from iceberg0.unpartitioned_db.t0 where id = 1");
+            ExecPlan execPlan = getDeleteExecPlan("delete from iceberg0.unpartitioned_db.t0_v2 where id = 1");
             FragmentInstance instance = createFragmentInstance(execPlan.getTopFragment());
             Assertions.assertEquals(6, instance.getTableSinkDop());
         } finally {
@@ -158,7 +158,7 @@ public class DeletePlanTest extends PlanTestBase {
         int previousSinkDop = connectContext.getSessionVariable().getPipelineSinkDop();
         try {
             connectContext.getSessionVariable().setPipelineSinkDop(0);
-            ExecPlan execPlan = getDeleteExecPlan("delete from iceberg0.partitioned_db.t1 where id = 1");
+            ExecPlan execPlan = getDeleteExecPlan("delete from iceberg0.partitioned_db.t1_v2 where id = 1");
             FragmentInstance instance = createFragmentInstance(execPlan.getTopFragment());
             Assertions.assertEquals(0, instance.getTableSinkDop());
         } finally {
@@ -168,7 +168,7 @@ public class DeletePlanTest extends PlanTestBase {
 
     @Test
     public void testIcebergDeleteFallsBackToFragmentDopWhenConnectContextIsMissing() throws Exception {
-        ExecPlan execPlan = getDeleteExecPlan("delete from iceberg0.unpartitioned_db.t0 where id = 1");
+        ExecPlan execPlan = getDeleteExecPlan("delete from iceberg0.unpartitioned_db.t0_v2 where id = 1");
         FragmentInstance instance = createFragmentInstance(execPlan.getTopFragment());
         int fragmentDop = execPlan.getTopFragment().getPipelineDop();
 
@@ -183,7 +183,7 @@ public class DeletePlanTest extends PlanTestBase {
     @Test
     public void testIsIcebergDeleteOperation() throws Exception {
         // Test case 1: Output columns contain _file and _pos
-        String sql1 = "delete from iceberg0.unpartitioned_db.t0 where id = 1";
+        String sql1 = "delete from iceberg0.unpartitioned_db.t0_v2 where id = 1";
         ExecPlan execPlan1 = getDeleteExecPlan(sql1);
         assertNotNull(execPlan1);
         
