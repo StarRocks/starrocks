@@ -1759,15 +1759,31 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
                         PrivilegeType.DROP.name(), ObjectType.VIEW.name(), statement.getTbl().getTbl());
             }
         } else {
-            Table table = null;
             try {
+<<<<<<< HEAD
                 table = MetaUtils.getSessionAwareTable(context, null, statement.getTbl());
                 Authorizer.checkTableAction(context,
                         statement.getTbl(), PrivilegeType.DROP);
+=======
+                MetaUtils.getSessionAwareTable(context, null, tableName);
+            } catch (Exception e) {
+                if (!statement.isSetIfExists()) {
+                    throw e;
+                }
+                // External privileges are keyed by name, so still check them: a connector may drop
+                // the entry of a table whose metadata cannot be loaded.
+                if (CatalogMgr.isInternalCatalog(tableName.getCatalog())) {
+                    return null;
+                }
+            }
+            try {
+                Authorizer.checkTableAction(context, tableName, PrivilegeType.DROP);
+>>>>>>> fcb6aa9 ([BugFix] Check DROP privilege on an unloadable external table under IF EXISTS (#81434))
             } catch (AccessDeniedException e) {
                 AccessDeniedException.reportAccessDenied(
                         statement.getTbl().getCatalog(),
                         context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+<<<<<<< HEAD
                         PrivilegeType.DROP.name(), ObjectType.TABLE.name(), statement.getTbl().getTbl());
             } catch (Exception e) {
                 if (table == null && statement.isSetIfExists()) {
@@ -1775,6 +1791,9 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
                     return null;
                 }
                 throw e;
+=======
+                        PrivilegeType.DROP.name(), ObjectType.TABLE.name(), tableName.getTbl());
+>>>>>>> fcb6aa9 ([BugFix] Check DROP privilege on an unloadable external table under IF EXISTS (#81434))
             }
         }
         return null;
