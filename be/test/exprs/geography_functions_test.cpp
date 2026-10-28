@@ -1941,8 +1941,7 @@ TEST_F(geographyFunctionsTest, nativeGeographyDirectRingAcceptsApplicableCases) 
         if (!test.applicable) continue;
         EXPECT_EQ(test.expected, relation);
         GeoCoordinateListList rings;
-        auto copy = std::make_unique<GeoCoordinateList>(ring);
-        rings.add(copy.release());
+        rings.add(GeoCoordinateList(ring));
         GeoPolygon prepared;
         ASSERT_EQ(GEO_PARSE_OK, prepared.from_coords(rings));
         EXPECT_EQ(prepared.point_relation(point), relation);
@@ -2923,9 +2922,9 @@ TEST_F(geographyFunctionsTest, nativeGeographyMeasurementsRetainExactPolygonResu
         }
         GeoCoordinateListList rings;
         for (const auto& ring : geometry.rings) {
-            auto coordinates = std::make_unique<GeoCoordinateList>();
-            for (const auto& point : ring) coordinates->add({point.x, point.y});
-            rings.add(coordinates.release());
+            GeoCoordinateList coordinates;
+            for (const auto& point : ring) coordinates.add({point.x, point.y});
+            rings.add(std::move(coordinates));
         }
         GeoPolygon polygon;
         const auto status = polygon.from_coords(rings);
@@ -5349,7 +5348,7 @@ TEST_F(geographyFunctionsTest, h3SingleRingValidityMatchesSphericalPredicate) {
         for (const auto& point : cases[scenario].rings.front()) coordinates.add({point.x, point.y});
         const bool actual = starrocks::GeoPolygon::is_valid_ring(coordinates);
         GeoCoordinateListList rings;
-        rings.add(new GeoCoordinateList(coordinates));
+        rings.add(GeoCoordinateList(coordinates));
         starrocks::GeoPolygon original;
         const bool original_valid = original.from_coords(rings) == GEO_PARSE_OK;
         ASSERT_TRUE(expected.ok()) << expected.status();

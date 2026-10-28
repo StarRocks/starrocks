@@ -831,11 +831,11 @@ bool planar_polygon_family_intersects(const WkbGeometry& lhs, const WkbGeometry&
 Status prepare_spherical_polygon(const WkbGeometry& polygon, GeoPolygon* native_polygon) {
     GeoCoordinateListList rings;
     for (const auto& ring : polygon.rings) {
-        auto* coordinates = new GeoCoordinateList();
+        GeoCoordinateList coordinates;
         for (const auto& coordinate : ring) {
-            coordinates->add({coordinate.x, coordinate.y});
+            coordinates.add({coordinate.x, coordinate.y});
         }
-        rings.add(coordinates);
+        rings.add(std::move(coordinates));
     }
     if (native_polygon->from_coords(rings) != GEO_PARSE_OK) {
         return Status::InvalidArgument("Invalid GEOGRAPHY polygon topology");

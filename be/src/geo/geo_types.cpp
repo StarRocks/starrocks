@@ -169,7 +169,7 @@ static GeoParseStatus to_s2polyline(const GeoCoordinateList& coords, std::unique
 static GeoParseStatus to_s2polygon(const GeoCoordinateListList& coords_list, std::unique_ptr<S2Polygon>* polygon) {
     std::vector<std::unique_ptr<S2Loop>> loops(coords_list.list.size());
     for (int i = 0; i < coords_list.list.size(); ++i) {
-        auto res = to_s2loop(*coords_list.list[i], &loops[i]);
+        auto res = to_s2loop(coords_list.list[i], &loops[i]);
         if (res != GEO_PARSE_OK) {
             return res;
         }
