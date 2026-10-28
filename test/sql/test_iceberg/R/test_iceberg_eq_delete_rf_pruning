@@ -243,6 +243,62 @@ select m.* from iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.mixed m join dim_p d on
 set enable_read_iceberg_equality_delete_with_partition_evolution = false;
 -- result:
 -- !result
+create table hive_eq_rf_${uuid0}.eq_rf_db_${uuid0}.migrated_src(
+    id int,
+    v string,
+    p int
+) partition by(p) properties ("location" = "oss://${oss_bucket}/eq_rf_db_${uuid0}/migrated_src");
+-- result:
+-- !result
+insert into hive_eq_rf_${uuid0}.eq_rf_db_${uuid0}.migrated_src values (1, 'a1', 1), (2, 'a2', 1), (1, 'b1', 2), (2, 'b2', 2);
+-- result:
+-- !result
+create table iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.migrated(
+    id int,
+    v string,
+    p int
+) partition by(p) properties ("format-version" = "2");
+-- result:
+-- !result
+alter table iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.migrated execute add_files(location="oss://${oss_bucket}/eq_rf_db_${uuid0}/migrated_src", file_format="parquet");
+-- result:
+-- !result
+create table hive_eq_rf_${uuid0}.eq_rf_db_${uuid0}.migrated_deletes(
+    id int,
+    p int
+) partition by(p) properties ("location" = "oss://${oss_bucket}/eq_rf_db_${uuid0}/migrated_deletes");
+-- result:
+-- !result
+insert into hive_eq_rf_${uuid0}.eq_rf_db_${uuid0}.migrated_deletes values (1, 1), (2, 2);
+-- result:
+-- !result
+alter table iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.migrated execute add_equality_delete_files(location="oss://${oss_bucket}/eq_rf_db_${uuid0}/migrated_deletes", file_format="parquet", equality_columns="id");
+-- result:
+-- !result
+select v from iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.migrated order by v;
+-- result:
+a2
+b1
+-- !result
+set enable_iceberg_identity_column_optimize = false;
+-- result:
+-- !result
+function: assert_explain_contains('select v from iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.migrated', '$partition_key')
+-- result:
+None
+-- !result
+select v from iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.migrated order by v;
+-- result:
+a2
+b1
+-- !result
+select count(*) from iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.migrated;
+-- result:
+2
+-- !result
+set enable_iceberg_identity_column_optimize = true;
+-- result:
+-- !result
 function: assert_explain_not_contains("delete from iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact where p in (select p from db_${uuid0}.dim_p) and v = 'a2'", 'Runtime filter pruning columns')
 -- result:
 None
@@ -274,6 +330,15 @@ drop table hive_eq_rf_${uuid0}.eq_rf_db_${uuid0}.mixed_global_deletes force;
 -- result:
 -- !result
 drop table hive_eq_rf_${uuid0}.eq_rf_db_${uuid0}.mixed_part_deletes force;
+-- result:
+-- !result
+drop table iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.migrated force;
+-- result:
+-- !result
+drop table hive_eq_rf_${uuid0}.eq_rf_db_${uuid0}.migrated_src force;
+-- result:
+-- !result
+drop table hive_eq_rf_${uuid0}.eq_rf_db_${uuid0}.migrated_deletes force;
 -- result:
 -- !result
 drop database iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0};
