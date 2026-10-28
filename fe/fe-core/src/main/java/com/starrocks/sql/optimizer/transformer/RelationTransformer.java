@@ -661,7 +661,9 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
 
         LogicalScanOperator scanOperator;
         if (node.getTable().isNativeTableOrMaterializedView()) {
-            DistributionSpec distributionSpec = getTableDistributionSpec(node, columnMetaToColRefMap);
+            boolean parallelRangeScan = session.getSessionVariable().isParallelRangeScan();
+            DistributionSpec distributionSpec = parallelRangeScan ? DistributionSpec.createAnyDistributionSpec()
+                    : getTableDistributionSpec(node, columnMetaToColRefMap);
             if (node.isMetaQuery()) {
                 scanOperator = LogicalMetaScanOperator.builder().setTable(node.getTable())
                         .setColRefToColumnMetaMap(colRefToColumnMetaMapBuilder.build())
@@ -683,7 +685,12 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
                         .build();
             } else {
                 scanOperator = LogicalOlapScanOperator.builder()
+<<<<<<< HEAD
                         .setTable(node.getTable())
+=======
+                        .setParallelRangeScan(parallelRangeScan)
+                        .setTable(scanTable)
+>>>>>>> cd6dc936f30... [Enhancement][RB-533] Add parallel scheduling for range-colocate scans (#67186)
                         .setColRefToColumnMetaMap(colRefToColumnMetaMapBuilder.build())
                         .setColumnMetaToColRefMap(columnMetaToColRefMap)
                         .setDistributionSpec(distributionSpec)

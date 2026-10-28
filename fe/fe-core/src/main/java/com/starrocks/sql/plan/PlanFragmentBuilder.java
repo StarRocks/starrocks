@@ -1099,13 +1099,14 @@ public class PlanFragmentBuilder {
 
             OlapScanNode scanNode = new OlapScanNode(context.getNextNodeId(), tupleDescriptor, "OlapScanNode",
                     node.getSelectedIndexMetaId(), context.getConnectContext().getCurrentComputeResource());
+            scanNode.setParallelRangeScan(node.isParallelRangeScan());
             scanNode.setLimit(node.getLimit());
             scanNode.computeStatistics(optExpr.getStatistics());
             scanNode.setScanOptimizeOption(node.getScanOptimizeOption());
-            scanNode.setIsSortedByKeyPerTablet(node.needSortedByKeyPerTablet());
-            scanNode.setIsOutputChunkByBucket(node.needOutputChunkByBucket());
+            scanNode.setIsSortedByKeyPerTablet(!node.isParallelRangeScan() && node.needSortedByKeyPerTablet());
+            scanNode.setIsOutputChunkByBucket(!node.isParallelRangeScan() && node.needOutputChunkByBucket());
             scanNode.setEnableGlobalLateMaterialization(node.isEnableGlobalLateMaterialization());
-            scanNode.setWithoutColocateRequirement(node.isWithoutColocateRequirement());
+            scanNode.setWithoutColocateRequirement(!node.isParallelRangeScan() && node.isWithoutColocateRequirement());
             scanNode.setGtid(node.getGtid());
             scanNode.setVectorSearchOptions(node.getVectorSearchOptions());
             scanNode.setSample(node.getSample());
@@ -1124,7 +1125,7 @@ public class PlanFragmentBuilder {
                 scanNode.setUsePreparedPhysicalSplitScan(true);
             }
 
-            currentExecGroup.add(scanNode);
+            currentExecGroup.add(scanNode, node.isParallelRangeScan());
 
             // set slot
             List<ColumnRefOperator> partitionRefs = Lists.newArrayList();
@@ -1186,7 +1187,8 @@ public class PlanFragmentBuilder {
                             .getBackendIdByHost(FrontendOptions.getLocalHostAddress());
                 }
 
-                RangeColocateScanDispatch dispatch = RangeColocateScanDispatch.forTable(referenceTable);
+                RangeColocateScanDispatch dispatch = node.isParallelRangeScan() ? null
+                        : RangeColocateScanDispatch.forTable(referenceTable);
 
                 // Filter out logical partitions that have no non-empty physical sub-partition. The result
                 // keeps deduplicated LOGICAL (parent) partition ids -- matching the convention used by every
@@ -1226,8 +1228,10 @@ public class PlanFragmentBuilder {
                         final MaterializedIndex selectedIndex = physicalPartition.getQueryableIndex(selectedIndexMetaId);
                         totalTabletsNum += selectedIndex.getTablets().size();
                         List<Long> allTabletIds = selectedIndex.getTabletIdsInOrder();
-                        OlapScanNode.fillTabletId2BucketSeq(
-                                dispatch, selectedIndex, allTabletIds, tabletId2BucketSeq);
+                        if (!node.isParallelRangeScan()) {
+                            OlapScanNode.fillTabletId2BucketSeq(
+                                    dispatch, selectedIndex, allTabletIds, tabletId2BucketSeq);
+                        }
                         List<Tablet> tablets =
                                 selectTabletIds.stream().map(selectedIndex::getTablet).collect(Collectors.toList());
                         scanNode.addScanRangeLocations(partition, physicalPartition, selectedIndex, tablets, partitionRange,
@@ -3109,7 +3113,38 @@ public class PlanFragmentBuilder {
 
         // Check whether colocate Table exists in the same Fragment
         public boolean hasColocateScanChildInFragment(PlanNode node) {
+<<<<<<< HEAD
             if (node instanceof OlapScanNode scanNode) {
+=======
+            // A CHANGES scan whose delta crosses a tablet reshard mixes generations, so it
+            // advertises no distribution and numbers no buckets: colocate dispatch has no bucket
+            // sequence to align on (range colocate throws, hash colocate would assign no scan range
+            // at all). The scheduler picks its backend selector per fragment, so such a scan
+            // anywhere in the fragment vetoes colocate for the WHOLE fragment; answering only for
+            // the crossing leaf would let an OR over siblings hand the fragment's colocate answer
+            // to a colocate sibling and drag the crossing scan into bucket-aware dispatch anyway.
+            // No colocate scan can actually share the fragment today -- that needs an exchange-free
+            // colocate arrangement, which the ANY distribution spec ChangesScanBuilder forces on a
+            // crossing scan never satisfies -- so the veto is what keeps this guard correct on its
+            // own rather than by that coincidence. Conservative for a delta read as a head-only
+            // full scan, matching the same condition that forces the spec to ANY.
+            return !containsParallelRangeScan(node) && !containsGenerationCrossingChangesScan(node)
+                    && hasColocateScanChild(node);
+        }
+
+        private boolean containsParallelRangeScan(PlanNode node) {
+            if (node instanceof OlapScanNode scan && scan.isParallelRangeScan()) {
+                return true;
+            }
+            if (node instanceof ExchangeNode) {
+                return false;
+            }
+            return node.getChildren().stream().anyMatch(this::containsParallelRangeScan);
+        }
+
+        private boolean hasColocateScanChild(PlanNode node) {
+            if (node instanceof OlapScanNode || node instanceof ChangesScanNode) {
+>>>>>>> cd6dc936f30... [Enhancement][RB-533] Add parallel scheduling for range-colocate scans (#67186)
                 ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
                 if (colocateIndex.isColocateTable(scanNode.getOlapTable().getId())) {
                     return true;
