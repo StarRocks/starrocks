@@ -19,12 +19,13 @@
 #include <thread>
 #include <unordered_map>
 
-#include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
-#include "common/memory/column_allocator.h"
 #include "runtime/current_thread.h"
-#include "runtime/runtime_env.h"
+#include "runtime/exec_env.h"
+#include "runtime/memory/column_allocator.h"
+#include "runtime/memory/mem_hook_allocator.h"
+#include "util/defer_op.h"
 
 namespace starrocks {
 
@@ -151,8 +152,8 @@ private:
 class LocalPassThroughMemoryTest : public testing::Test {
 protected:
     void SetUp() override {
-        _process = RuntimeEnv::GetInstance()->process_mem_tracker();
-        _passthrough = RuntimeEnv::GetInstance()->passthrough_mem_tracker();
+        _process = GlobalEnv::GetInstance()->process_mem_tracker();
+        _passthrough = GlobalEnv::GetInstance()->passthrough_mem_tracker();
         ASSERT_NE(nullptr, _process);
         ASSERT_NE(nullptr, _passthrough);
         flush();
@@ -467,8 +468,8 @@ TEST_F(LocalPassThroughMemoryTest, buffered_memory_triggers_query_limit_checks) 
 // tracker: the instance trackers stay balanced, the process tracker keeps counting the parked bytes, and
 // the passthrough tracker mirrors them.
 TEST(LocalPassThroughBufferTest, falls_back_to_process_tracker_without_query_tracker) {
-    MemTracker* process = RuntimeEnv::GetInstance()->process_mem_tracker();
-    MemTracker* passthrough = RuntimeEnv::GetInstance()->passthrough_mem_tracker();
+    MemTracker* process = GlobalEnv::GetInstance()->process_mem_tracker();
+    MemTracker* passthrough = GlobalEnv::GetInstance()->passthrough_mem_tracker();
     TrackedColumnAllocator allocator;
     auto sender = std::make_unique<MemTracker>(-1, "passthrough_fallback_sender", process);
     CurrentThread::current().mem_tracker_ctx_shift();

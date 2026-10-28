@@ -12,105 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "runtime/current_thread.h"
+
 #include <gtest/gtest.h>
 
-#include "runtime/current_thread.h"
+#include "runtime/mem_tracker.h"
+#include "util/defer_op.h"
 
 namespace starrocks {
 
-namespace {
-
-bool g_env_initialized = false;
-MemTracker* g_process_mem_tracker = nullptr;
-
-bool is_env_initialized_for_test() {
-    return g_env_initialized;
-}
-
-MemTracker* process_mem_tracker_for_test() {
-    return g_process_mem_tracker;
-}
-
-class CurrentThreadCoreTest : public testing::Test {
-protected:
-    void SetUp() override { _reset(); }
-    void TearDown() override { _reset(); }
-
-private:
-    static void _reset() {
-        CurrentThread::set_mem_tracker_source(nullptr, nullptr);
-        tls_mem_tracker = nullptr;
-        g_env_initialized = false;
-        g_process_mem_tracker = nullptr;
-    }
-};
-
-TEST_F(CurrentThreadCoreTest, default_provider_returns_null) {
-    EXPECT_EQ(CurrentThread::mem_tracker(), nullptr);
-}
-
-TEST_F(CurrentThreadCoreTest, custom_provider_with_uninitialized_env_returns_null) {
-    MemTracker process_tracker;
-    g_env_initialized = false;
-    g_process_mem_tracker = &process_tracker;
-    CurrentThread::set_mem_tracker_source(is_env_initialized_for_test, process_mem_tracker_for_test);
-
-    EXPECT_EQ(CurrentThread::mem_tracker(), nullptr);
-}
-
-TEST_F(CurrentThreadCoreTest, custom_provider_with_initialized_env_returns_process_tracker) {
-    MemTracker process_tracker;
-    g_env_initialized = true;
-    g_process_mem_tracker = &process_tracker;
-    CurrentThread::set_mem_tracker_source(is_env_initialized_for_test, process_mem_tracker_for_test);
-
-    EXPECT_EQ(CurrentThread::mem_tracker(), &process_tracker);
-}
-
-TEST_F(CurrentThreadCoreTest, mem_tracker_uses_tls_cache_until_reset) {
-    MemTracker process_tracker1;
-    MemTracker process_tracker2;
-    g_env_initialized = true;
-    g_process_mem_tracker = &process_tracker1;
-    CurrentThread::set_mem_tracker_source(is_env_initialized_for_test, process_mem_tracker_for_test);
-
-    EXPECT_EQ(CurrentThread::mem_tracker(), &process_tracker1);
-    g_process_mem_tracker = &process_tracker2;
-    EXPECT_EQ(CurrentThread::mem_tracker(), &process_tracker1);
-
-    tls_mem_tracker = nullptr;
-    EXPECT_EQ(CurrentThread::mem_tracker(), &process_tracker2);
-}
-
-TEST_F(CurrentThreadCoreTest, reset_provider_to_default_behaves_as_pre_init) {
-    MemTracker process_tracker;
-    g_env_initialized = true;
-    g_process_mem_tracker = &process_tracker;
-    CurrentThread::set_mem_tracker_source(is_env_initialized_for_test, process_mem_tracker_for_test);
-    EXPECT_EQ(CurrentThread::mem_tracker(), &process_tracker);
-
-    CurrentThread::set_mem_tracker_source(nullptr, nullptr);
-    tls_mem_tracker = nullptr;
-    EXPECT_EQ(CurrentThread::mem_tracker(), nullptr);
-}
-
-TEST_F(CurrentThreadCoreTest, exported_offsets_match_tls_layout) {
-    const auto* base = reinterpret_cast<const uint8_t*>(&tls_thread_status);
-    const auto* query_id = reinterpret_cast<const uint8_t*>(&tls_thread_status._query_id);
-    const auto* module_type = reinterpret_cast<const uint8_t*>(&tls_thread_status._module_type);
-
-    EXPECT_EQ(CurrentThread::query_id_offset(), static_cast<size_t>(query_id - base));
-    EXPECT_EQ(CurrentThread::module_type_offset(), static_cast<size_t>(module_type - base));
-}
-
-TEST_F(CurrentThreadCoreTest, transfer_keeps_common_ancestor_unchanged) {
+TEST(CurrentThreadTest, transfer_keeps_common_ancestor_unchanged) {
     constexpr int64_t kib = 1024;
     MemTracker process_tracker(2176 * kib, "process");
     MemTracker sender(-1, "sender", &process_tracker);
     MemTracker receiver(-1, "receiver", &process_tracker);
-    g_env_initialized = true;
-    g_process_mem_tracker = &process_tracker;
-    CurrentThread::set_mem_tracker_source(is_env_initialized_for_test, process_mem_tracker_for_test);
     CurrentThreadMemTrackerSetter sender_scope(&sender);
     auto& thread = CurrentThread::current();
     const int64_t consumed_before = thread.get_consumed_bytes();
@@ -135,18 +50,15 @@ TEST_F(CurrentThreadCoreTest, transfer_keeps_common_ancestor_unchanged) {
     EXPECT_EQ(2112 * kib, process_tracker.peak_consumption());
 }
 
-TEST_F(CurrentThreadCoreTest, transfer_from_does_not_spend_reservation) {
+TEST(CurrentThreadTest, transfer_from_does_not_spend_reservation) {
     constexpr int64_t mib = 1024 * 1024;
     MemTracker process(-1, "process");
     MemTracker buffer(-1, "buffer", &process);
     MemTracker receiver(-1, "receiver", &process);
-    g_env_initialized = true;
-    g_process_mem_tracker = &process;
-    CurrentThread::set_mem_tracker_source(is_env_initialized_for_test, process_mem_tracker_for_test);
     CurrentThreadMemTrackerSetter scope(&receiver);
     auto& thread = CurrentThread::current();
     buffer.consume(128);
-    ASSERT_TRUE(thread.try_mem_reserve(2 * mib, 0));
+    ASSERT_TRUE(thread.try_mem_reserve(2 * mib));
     const int64_t before = thread.get_consumed_bytes();
     thread.mem_transfer_from(&buffer, 128);
     EXPECT_EQ(before + 128, thread.get_consumed_bytes());
@@ -162,18 +74,15 @@ TEST_F(CurrentThreadCoreTest, transfer_from_does_not_spend_reservation) {
     EXPECT_EQ(0, process.consumption());
 }
 
-TEST_F(CurrentThreadCoreTest, transfer_does_not_replenish_exhausted_reservation) {
+TEST(CurrentThreadTest, transfer_does_not_replenish_exhausted_reservation) {
     constexpr int64_t kib = 1024;
     constexpr int64_t reserved_bytes = 2048 * kib;
     MemTracker process_tracker(-1, "process");
     MemTracker sender(-1, "sender", &process_tracker);
     MemTracker receiver(-1, "receiver", &process_tracker);
-    g_env_initialized = true;
-    g_process_mem_tracker = &process_tracker;
-    CurrentThread::set_mem_tracker_source(is_env_initialized_for_test, process_mem_tracker_for_test);
     CurrentThreadMemTrackerSetter sender_scope(&sender);
     auto& thread = CurrentThread::current();
-    ASSERT_TRUE(thread.try_mem_reserve(reserved_bytes, 0));
+    ASSERT_TRUE(thread.try_mem_reserve(reserved_bytes));
     thread.mem_consume(reserved_bytes + 1984 * kib);
     DeferOp cleanup([&] {
         thread.release_reserved();
@@ -198,7 +107,5 @@ TEST_F(CurrentThreadCoreTest, transfer_does_not_replenish_exhausted_reservation)
     thread.mem_tracker_ctx_shift();
     EXPECT_EQ(reserved_bytes + 2112 * kib, process_tracker.consumption());
 }
-
-} // namespace
 
 } // namespace starrocks

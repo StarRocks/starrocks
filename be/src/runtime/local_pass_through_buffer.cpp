@@ -29,18 +29,18 @@ namespace starrocks {
 // mirrors the parked bytes for diagnosis. Without a query tracker, fall back to the process tracker, the
 // common ancestor of every tracker, so the process tracker still counts the bytes.
 static MemTracker* parking_tracker(MemTracker* query_mem_tracker) {
-    return query_mem_tracker != nullptr ? query_mem_tracker : RuntimeEnv::GetInstance()->process_mem_tracker();
+    return query_mem_tracker != nullptr ? query_mem_tracker : GlobalEnv::GetInstance()->process_mem_tracker();
 }
 
 static void park_buffered_bytes(MemTracker* query_mem_tracker, int64_t bytes) {
     CurrentThread::current().mem_transfer_to(parking_tracker(query_mem_tracker), bytes);
-    RuntimeEnv::GetInstance()->passthrough_mem_tracker()->consume(bytes);
+    GlobalEnv::GetInstance()->passthrough_mem_tracker()->consume(bytes);
 }
 
 // Hand parked bytes to the current thread's tracker, which then frees them or keeps them as its own.
 static void unpark_buffered_bytes(MemTracker* query_mem_tracker, int64_t bytes) {
     CurrentThread::current().mem_transfer_from(parking_tracker(query_mem_tracker), bytes);
-    RuntimeEnv::GetInstance()->passthrough_mem_tracker()->release(bytes);
+    GlobalEnv::GetInstance()->passthrough_mem_tracker()->release(bytes);
 }
 
 // channel per [sender_id]
@@ -52,12 +52,7 @@ public:
 
     ~PassThroughSenderChannel() {
         if (_physical_bytes > 0) {
-<<<<<<< HEAD:be/src/runtime/local_pass_through_buffer.cpp
-            CurrentThread::current().mem_consume(_physical_bytes);
-            GlobalEnv::GetInstance()->passthrough_mem_tracker()->release(_physical_bytes);
-=======
             unpark_buffered_bytes(_query_mem_tracker, _physical_bytes);
->>>>>>> 7e354c6 ([BugFix] Account buffered pass-through chunks in query and process memory (#80910)):be/src/compute_env/data_stream/local_pass_through_buffer.cpp
         }
     }
 
@@ -67,12 +62,7 @@ public:
         auto clone = chunk->clone_unique();
         int64_t physical_bytes = CurrentThread::current().get_consumed_bytes() - before_bytes;
         DCHECK_GE(physical_bytes, 0);
-<<<<<<< HEAD:be/src/runtime/local_pass_through_buffer.cpp
-        CurrentThread::current().mem_release(physical_bytes);
-        GlobalEnv::GetInstance()->passthrough_mem_tracker()->consume(physical_bytes);
-=======
         park_buffered_bytes(_query_mem_tracker, physical_bytes);
->>>>>>> 7e354c6 ([BugFix] Account buffered pass-through chunks in query and process memory (#80910)):be/src/compute_env/data_stream/local_pass_through_buffer.cpp
 
         std::unique_lock lock(_mutex);
         _buffer.emplace_back(std::make_pair(std::move(clone), driver_sequence));
@@ -84,13 +74,7 @@ public:
         std::unique_lock lock(_mutex);
         chunks->swap(_buffer);
         bytes->swap(_bytes);
-<<<<<<< HEAD:be/src/runtime/local_pass_through_buffer.cpp
-        GlobalEnv::GetInstance()->passthrough_mem_tracker()->release(_physical_bytes);
-        // Consume physical bytes in current MemTracker, since later it would be released
-        CurrentThread::current().mem_consume(_physical_bytes);
-=======
         unpark_buffered_bytes(_query_mem_tracker, _physical_bytes);
->>>>>>> 7e354c6 ([BugFix] Account buffered pass-through chunks in query and process memory (#80910)):be/src/compute_env/data_stream/local_pass_through_buffer.cpp
         _total_bytes -= _physical_bytes;
         _physical_bytes = 0;
     }
@@ -102,12 +86,7 @@ public:
     void clear() {
         std::unique_lock lock(_mutex);
         if (_physical_bytes > 0) {
-<<<<<<< HEAD:be/src/runtime/local_pass_through_buffer.cpp
-            CurrentThread::current().mem_consume(_physical_bytes);
-            GlobalEnv::GetInstance()->passthrough_mem_tracker()->release(_physical_bytes);
-=======
             unpark_buffered_bytes(_query_mem_tracker, _physical_bytes);
->>>>>>> 7e354c6 ([BugFix] Account buffered pass-through chunks in query and process memory (#80910)):be/src/compute_env/data_stream/local_pass_through_buffer.cpp
             _total_bytes -= _physical_bytes;
             _physical_bytes = 0;
         }
