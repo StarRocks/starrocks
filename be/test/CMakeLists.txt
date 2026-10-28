@@ -119,6 +119,8 @@ set(EXEC_FILES
         ./formats/parquet/file_writer_test.cpp
         ./formats/parquet/iceberg_schema_evolution_file_reader_test.cpp
         ./formats/parquet/column_converter_test.cpp
+        ./formats/parquet/byte_array_decimal_nested_test.cpp
+        ./formats/parquet/decimal256_parquet_test.cpp
         ./formats/parquet/column_reader_factory_test.cpp
         ./formats/parquet/parquet_file_writer_test.cpp
         ./formats/parquet/parquet_footer_test.cpp

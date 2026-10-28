@@ -49,6 +49,7 @@
 #include "gutil/integral_types.h"
 #include "gutil/strings/substitute.h"
 #include "types/date_value.h"
+#include "types/integer_overflow_arithmetics.h"
 #include "types/logical_type.h"
 #include "types/time_types.h"
 #include "types/timestamp_value.h"
@@ -188,19 +189,17 @@ class PrimitiveToDecimalConverter final : public ColumnConverter {
 public:
     using DestDecimalType = typename RunTimeTypeTraits<DestType>::CppType;
     using DestColumnType = typename RunTimeTypeTraits<DestType>::ColumnType;
-    // Valid decimal data always fits DestDecimalType, so the scaled intermediate only needs to be as
-    // wide as DestDecimalType itself (min int64, since decimal32/64 arithmetic on a plain int64 is much
-    // cheaper than always widening to int128: multiply/divide compile to native instructions instead of
-    // calls to __multi3/__divti3, and the loop is far more friendly to the compiler/CPU pipeline).
+    // Keep DECIMAL32/64 arithmetic in int64 when the scale factor fits. Wider factors are handled
+    // before the loop, and multiplication/narrowing must be checked before storing each value.
     using DestPrimitiveType = std::conditional_t<(sizeof(DestDecimalType) <= sizeof(int64_t)), int64_t, int128_t>;
 
     PrimitiveToDecimalConverter(int32_t src_scale, int32_t dst_scale) {
         if (src_scale < dst_scale) {
             _scale_type = DecimalScaleType::kScaleUp;
-            _scale_factor = get_scale_factor<DestPrimitiveType>(dst_scale - src_scale);
+            _scale_factor = get_scale_factor<int128_t>(dst_scale - src_scale);
         } else if (src_scale > dst_scale) {
             _scale_type = DecimalScaleType::kScaleDown;
-            _scale_factor = get_scale_factor<DestPrimitiveType>(src_scale - dst_scale);
+            _scale_factor = get_scale_factor<int128_t>(src_scale - dst_scale);
         }
     }
 
@@ -208,8 +207,28 @@ public:
     // per-row branch and defeats vectorization/ILP. Dispatch on it once via a template parameter instead,
     // matching the pattern already used by BinaryToDecimalConverter::t_convert below.
     template <DecimalScaleType ST>
-    void t_convert(size_t size, DestDecimalType* dst_data, const SourceType* src_data) {
+    Status t_convert(size_t size, DestDecimalType* dst_data, const SourceType* src_data, const uint8_t* src_null_data) {
+        if constexpr (sizeof(DestPrimitiveType) == sizeof(int64_t) && ST != DecimalScaleType::kNoScale) {
+            if (_scale_factor > std::numeric_limits<int64_t>::max()) {
+                // A larger factor divides every int32/int64 source to zero; multiplying a nonzero
+                // source by it cannot fit DECIMAL32/64 storage.
+                for (size_t i = 0; i < size; ++i) {
+                    if (src_null_data[i]) continue;
+                    if constexpr (ST == DecimalScaleType::kScaleUp) {
+                        if (src_data[i] != 0) {
+                            return Status::InvalidArgument(
+                                    strings::Substitute("Decimal storage overflow at row $0", i));
+                        }
+                    }
+                    dst_data[i] = DestDecimalType(0);
+                }
+                return Status::OK();
+            }
+        }
+        const auto scale_factor = static_cast<DestPrimitiveType>(_scale_factor);
         for (size_t i = 0; i < size; i++) {
+            // A null row's source payload may be uninitialized.
+            if (src_null_data[i]) continue;
             DestPrimitiveType value;
             if constexpr (kSourceUnsigned && std::is_integral_v<SourceType>) {
                 // Reinterpret the source through its unsigned bit pattern so a high-bit
@@ -219,12 +238,21 @@ public:
                 value = src_data[i];
             }
             if constexpr (ST == DecimalScaleType::kScaleUp) {
-                value *= _scale_factor;
+                if (__builtin_mul_overflow(value, scale_factor, &value)) {
+                    return Status::InvalidArgument(strings::Substitute("Decimal scale overflow at row $0", i));
+                }
             } else if constexpr (ST == DecimalScaleType::kScaleDown) {
-                value /= _scale_factor;
+                value /= scale_factor;
+            }
+            if constexpr (DestType == TYPE_DECIMAL32 || DestType == TYPE_DECIMAL64) {
+                if (value < std::numeric_limits<DestDecimalType>::min() ||
+                    value > std::numeric_limits<DestDecimalType>::max()) {
+                    return Status::InvalidArgument(strings::Substitute("Decimal storage overflow at row $0", i));
+                }
             }
             dst_data[i] = DestDecimalType(value);
         }
+        return Status::OK();
     }
 
     Status convert(const Column* src, Column* dst) override {
@@ -246,18 +274,18 @@ public:
         size_t size = src_column->size();
         memcpy(dst_null_data.data(), src_null_data.data(), size);
 
-        // Computing the scaled value for null rows is harmless (the row is masked out by the null flag
-        // regardless), so we no longer branch per-row on nullness either — same tradeoff already made by
-        // NumericToNumericConverter::convert above.
         switch (_scale_type) {
         case DecimalScaleType::kScaleUp:
-            t_convert<DecimalScaleType::kScaleUp>(size, dst_data.data(), src_data.data());
+            RETURN_IF_ERROR(t_convert<DecimalScaleType::kScaleUp>(size, dst_data.data(), src_data.data(),
+                                                                  src_null_data.data()));
             break;
         case DecimalScaleType::kScaleDown:
-            t_convert<DecimalScaleType::kScaleDown>(size, dst_data.data(), src_data.data());
+            RETURN_IF_ERROR(t_convert<DecimalScaleType::kScaleDown>(size, dst_data.data(), src_data.data(),
+                                                                    src_null_data.data()));
             break;
         default:
-            t_convert<DecimalScaleType::kNoScale>(size, dst_data.data(), src_data.data());
+            RETURN_IF_ERROR(t_convert<DecimalScaleType::kNoScale>(size, dst_data.data(), src_data.data(),
+                                                                  src_null_data.data()));
             break;
         }
 
@@ -267,12 +295,19 @@ public:
 
 private:
     DecimalScaleType _scale_type = DecimalScaleType::kNoScale;
-    DestPrimitiveType _scale_factor = 1;
+    int128_t _scale_factor = 1;
 };
 
-// This class is to convert *fixed length* binary to decimal
-// and for fixed length binary in parquet, string data is contiguous,
-// and that's why we can do memcpy 8 bytes without accessing invalid address.
+/*
+Convert Parquet binary decimals from big-endian, two's-complement bytes:
+- FIXED_LEN_BYTE_ARRAY with widths 1-16:
+    - non-null values have one width and are packed together.
+    - t_convert advances through the byte buffer by that width without building slices.
+- BYTE_ARRAY and FIXED_LEN_BYTE_ARRAY wider than 16 bytes:
+    - row lengths can differ or include redundant leading sign bytes.
+    - convert_slices gets each value's start and length from its slice and decodes only those bytes.
+Both paths adjust the unscaled integer from the source scale to the destination scale.
+*/
 template <LogicalType DestType>
 class BinaryToDecimalConverter final : public ColumnConverter {
 public:
@@ -291,8 +326,8 @@ public:
     }
 
     template <int BINSZ, DecimalScaleType scale_type, typename T, bool has_null>
-    void t_convert(size_t size, uint8_t* dst_null_data, uint8_t* src_null_data, DecimalType* dst_data,
-                   const uint8* src_data) {
+    Status t_convert(size_t size, uint8_t* dst_null_data, uint8_t* src_null_data, DecimalType* dst_data,
+                     const uint8* src_data) {
         if constexpr (!has_null) {
             memset(dst_null_data, 0x0, size);
         } else {
@@ -301,21 +336,26 @@ public:
 
         for (size_t i = 0; i < size; i++) {
             if constexpr (has_null) {
+                // Null rows occupy no bytes, so do not advance src_data for them.
                 if (dst_null_data[i]) continue;
             }
-            // When Decimal in parquet is stored in byte arrays, binary and fixed,
-            // the unscaled number must be encoded as two's complement using big-endian byte order.
 
             DestPrimitiveType unscale = 0;
             T value = 0;
             static_assert(BINSZ <= sizeof(value));
 
-            // NOTE(yan): since fixed length binary data is contiguous, with condition check (i+8) < size
-            // we can assure that there is no illegal memory access
-            // UPDATE: bytes are allocated by `RawVectorPad16`, so there will be extra bytes at tail.
-
-            // mempcy 8 bytes to compiler, it's instruction to move 8 bytes from memory to register
-            // and follow actions are all in-register instructions.
+            /*
+            Decode BINSZ bytes with a fixed-size load:
+            - T is int64_t for widths 1-8 and int128_t for widths 9-16.
+            - memcpy has a compile-time byte count. The compiler can replace it with
+              register loads and keep the byte-order conversion and shift in registers.
+            - This path relies on the Parquet decoders' RawVectorPad16 storage:
+              non-null values are contiguous, and the allocation includes 16 extra bytes.
+              Reading sizeof(T) bytes is safe even when BINSZ is smaller, including
+              for the last value in the buffer.
+            - Convert from big-endian byte order, then shift away the extra bytes.
+              T is signed, so the right shift fills the high bits with the sign.
+            */
             memcpy(reinterpret_cast<char*>(&value), src_data, sizeof(value));
             value = BitUtil::big_endian_to_host(value);
             value = value >> ((sizeof(value) - BINSZ) * 8);
@@ -324,13 +364,125 @@ public:
             src_data += BINSZ;
             // hardware branch predicator works well here.
             if constexpr (scale_type == DecimalScaleType::kScaleUp) {
-                unscale *= _scale_factor;
+                if (__builtin_mul_overflow(unscale, _scale_factor, &unscale)) {
+                    return Status::InvalidArgument(strings::Substitute("Binary decimal scale overflow at row $0", i));
+                }
             }
             if constexpr (scale_type == DecimalScaleType::kScaleDown) {
                 unscale /= _scale_factor;
             }
+            if constexpr (DestType == TYPE_DECIMAL32 || DestType == TYPE_DECIMAL64) {
+                if (unscale < std::numeric_limits<DecimalType>::min() ||
+                    unscale > std::numeric_limits<DecimalType>::max()) {
+                    return Status::InvalidArgument(strings::Substitute("Binary decimal storage overflow at row $0", i));
+                }
+            }
             dst_data[i] = DecimalType(unscale);
         }
+        return Status::OK();
+    }
+
+    Status convert_slices(const BinaryColumn* src_column, const NullableColumn* src_nullable_column,
+                          NullableColumn* dst_nullable_column, ColumnType* dst_column) {
+        /*
+        Steps to convert binary decimals to the destination decimal type:
+        1. Preserve null rows and treat empty slices as null:
+            - Copy the source null flag and skip null rows.
+            - Filtered rows can leave empty placeholders, so treat empty slices as null.
+
+        2. Ensure the encoded integer fits in 128 bits:
+            - For values longer than 16 bytes, remove redundant leading sign bytes:
+                - Drop 0x00 only if the next byte's sign bit is zero.
+                - Drop 0xff only if the next byte's sign bit is one.
+            - Return an error if the remaining value still exceeds 128 bits.
+
+        3. Decode the bytes as a signed integer:
+            - Start an unsigned 128-bit word with zeros (for a non-negative value) or ones (for a negative value).
+            - Shift in each byte, starting with the most significant byte.
+            - Reconstruct the signed integer (unused high bytes retain the sign).
+
+        4. Adjust the integer to the destination scale:
+            - Larger destination scale: multiply and check for overflow
+            - Smaller destination scale: divide
+            - Matching scales: do nothing
+
+        5. Check storage bounds:
+            - For DECIMAL32 and DECIMAL64, destination integer's storage range may be insufficient.
+                - Check to make sure it fits, error if not
+
+        6. Empty slices might've added null rows, so update destination's has_null flag after the batch.
+        */
+
+        auto& dst_data = dst_column->get_data();
+        const auto& src_nulls = src_nullable_column->null_column()->get_data();
+        auto& dst_nulls = dst_nullable_column->null_column_raw_ptr()->get_data();
+
+        for (size_t i = 0; i < src_column->size(); ++i) {
+            // Step 1: handle null and empty rows.
+            dst_nulls[i] = src_nulls[i];
+            if (dst_nulls[i]) continue;
+            Slice value = src_column->get_slice(i);
+
+            if (value.empty()) {
+                /*
+                    (shortcut) It's not possible to distinguish between:
+                        - persisted empty decimals
+                        - filtered row defaults
+
+                    So reject them when the decoder exposes selection.
+                */
+                dst_nulls[i] = 1;
+                continue;
+            }
+
+            // Step 2: remove redundant sign bytes and check the 128-bit limit.
+            const auto* bytes = reinterpret_cast<const uint8_t*>(value.data);
+            size_t length = value.size;
+
+            while (length > sizeof(int128_t) &&
+                   ((bytes[0] == 0 && bytes[1] < 0x80) || (bytes[0] == 0xff && bytes[1] >= 0x80))) {
+                ++bytes;
+                --length;
+            }
+
+            if (length > sizeof(int128_t)) {
+                return Status::InvalidArgument(strings::Substitute("Binary decimal exceeds 128 bits at row $0", i));
+            }
+
+            // Step 3: decode and sign-extend the integer.
+            const bool negative = bytes[0] >= 0x80;
+            uint128_t word = negative ? ~uint128_t{0} : uint128_t{0};
+            for (size_t j = 0; j < length; ++j) {
+                word = (word << 8) | bytes[j];
+            }
+
+            int128_t unscaled = negative ? -static_cast<int128_t>(~word) - 1 : static_cast<int128_t>(word);
+
+            // Step 4: adjust the scale.
+            if (_scale_type == DecimalScaleType::kScaleUp) {
+                int128_t scaled;
+                if (__builtin_mul_overflow(unscaled, _scale_factor, &scaled)) {
+                    return Status::InvalidArgument(strings::Substitute("Binary decimal scale overflow at row $0", i));
+                }
+                unscaled = scaled;
+            } else if (_scale_type == DecimalScaleType::kScaleDown) {
+                unscaled /= _scale_factor;
+            }
+
+            // Step 5: check DECIMAL32/64 storage bounds, then store the value.
+            if constexpr (DestType == TYPE_DECIMAL32 || DestType == TYPE_DECIMAL64) {
+                if (unscaled < std::numeric_limits<DecimalType>::min() ||
+                    unscaled > std::numeric_limits<DecimalType>::max()) {
+                    return Status::InvalidArgument(strings::Substitute("Binary decimal storage overflow at row $0", i));
+                }
+            }
+
+            dst_data[i] = DecimalType(unscaled);
+        }
+
+        // Step 6: update the column's has_null flag.
+        dst_nullable_column->update_has_null();
+        return Status::OK();
     }
 
     Status convert(const Column* src, Column* dst) override {
@@ -349,25 +501,23 @@ public:
         auto& dst_null_data = dst_nullable_column->null_column_raw_ptr()->get_data();
 
         size_t size = src_column->size();
-        if (_type_length > sizeof(DestPrimitiveType)) {
-            memset(dst_null_data.data(), 0x1, size);
-            dst_nullable_column->set_has_null(true);
-            return Status::OK();
+        if (parquet_type == tparquet::Type::BYTE_ARRAY || _type_length > sizeof(DestPrimitiveType)) {
+            return convert_slices(src_column, src_nullable_column, dst_nullable_column, dst_column);
         }
 
         bool has_null = src_nullable_column->has_null();
 
-        // For calling `src_data.get_bytes().data()` , we don't need to call `build_slices` underneath.
-        // And notice bytes are allocated by `RawVectorPad16`, there will be extra 16 bytes.
-#define M(SZ, K, T)                                                                                            \
-    case SZ:                                                                                                   \
-        if (has_null) {                                                                                        \
-            t_convert<SZ, K, T, true>(size, dst_null_data.data(), const_cast<uint8_t*>(src_null_data.data()),  \
-                                      dst_data.data(), src_data.data());                                       \
-        } else {                                                                                               \
-            t_convert<SZ, K, T, false>(size, dst_null_data.data(), const_cast<uint8_t*>(src_null_data.data()), \
-                                       dst_data.data(), src_data.data());                                      \
-        }                                                                                                      \
+#define M(SZ, K, T)                                                                                                    \
+    case SZ:                                                                                                           \
+        if (has_null) {                                                                                                \
+            RETURN_IF_ERROR(                                                                                           \
+                    (t_convert<SZ, K, T, true>(size, dst_null_data.data(), const_cast<uint8_t*>(src_null_data.data()), \
+                                               dst_data.data(), src_data.data())));                                    \
+        } else {                                                                                                       \
+            RETURN_IF_ERROR((t_convert<SZ, K, T, false>(size, dst_null_data.data(),                                    \
+                                                        const_cast<uint8_t*>(src_null_data.data()), dst_data.data(),   \
+                                                        src_data.data())));                                            \
+        }                                                                                                              \
         break;
 
 #define MX(T)          \
@@ -410,6 +560,94 @@ private:
     DecimalScaleType _scale_type = DecimalScaleType::kNoScale;
     DestPrimitiveType _scale_factor = 1;
     int32_t _type_length = 0;
+};
+
+template <LogicalType DestType>
+class WideDecimalConverter final : public ColumnConverter {
+public:
+    using DecimalType = typename RunTimeTypeTraits<DestType>::CppType;
+    using ColumnType = typename RunTimeTypeTraits<DestType>::ColumnType;
+
+    WideDecimalConverter(int32_t src_scale, int32_t dst_scale, bool src_unsigned)
+            : _scale_type(src_scale < dst_scale
+                                  ? DecimalScaleType::kScaleUp
+                                  : src_scale > dst_scale ? DecimalScaleType::kScaleDown : DecimalScaleType::kNoScale),
+              _scale_factor(get_scale_factor<int256_t>(src_scale < dst_scale ? dst_scale - src_scale
+                                                                             : src_scale - dst_scale)),
+              _src_unsigned(src_unsigned) {}
+
+    Status convert(const Column* src, Column* dst) override {
+        auto* source = ColumnHelper::as_raw_column<NullableColumn>(src);
+        auto* dest = down_cast<NullableColumn*>(dst);
+        dest->resize_uninitialized(source->size());
+        auto* dest_column = ColumnHelper::as_raw_column<ColumnType>(dest->data_column_raw_ptr());
+        auto& values = dest_column->get_data();
+        const auto& source_nulls = source->null_column()->get_data();
+        auto& dest_nulls = dest->null_column_raw_ptr()->get_data();
+        for (size_t i = 0; i < source->size(); ++i) {
+            dest_nulls[i] = source_nulls[i];
+            if (dest_nulls[i]) continue;
+            int256_t value;
+            if (parquet_type == tparquet::Type::INT32) {
+                auto* column = ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(source->data_column());
+                int32_t raw = column->get_data()[i];
+                value = _src_unsigned ? int256_t(static_cast<uint32_t>(raw)) : int256_t(raw);
+            } else if (parquet_type == tparquet::Type::INT64) {
+                auto* column = ColumnHelper::as_raw_column<FixedLengthColumn<int64_t>>(source->data_column());
+                value = int256_t(column->get_data()[i]);
+            } else {
+                auto* column = ColumnHelper::as_raw_column<BinaryColumn>(source->data_column());
+                Slice slice = column->get_slice(i);
+                if (slice.empty()) {
+                    dest_nulls[i] = 1;
+                    continue;
+                }
+                const auto* bytes = reinterpret_cast<const uint8_t*>(slice.data);
+                size_t length = slice.size;
+                while (length > 32 && ((bytes[0] == 0 && bytes[1] < 0x80) || (bytes[0] == 0xff && bytes[1] >= 0x80))) {
+                    ++bytes;
+                    --length;
+                }
+                if (length > 32) {
+                    return Status::InvalidArgument(strings::Substitute("Binary decimal exceeds 256 bits at row $0", i));
+                }
+                value = bytes[0] >= 0x80 ? int256_t(-1) : int256_t(0);
+                for (size_t j = 0; j < length; ++j) {
+                    value = (value << 8) | int256_t(bytes[j]);
+                }
+            }
+            if (_scale_type == DecimalScaleType::kScaleUp) {
+                int256_t scaled;
+                if (mul_overflow(value, _scale_factor, &scaled)) {
+                    return Status::InvalidArgument(strings::Substitute("Decimal scale overflow at row $0", i));
+                }
+                value = scaled;
+            } else if (_scale_type == DecimalScaleType::kScaleDown) {
+                if (value == INT256_MIN) {
+                    return Status::InvalidArgument(
+                            strings::Substitute("Decimal exceeds supported precision at row $0", i));
+                }
+                value = value / _scale_factor;
+            }
+            if constexpr (DestType != TYPE_DECIMAL256) {
+                using LimitType = std::conditional_t<DestType == TYPE_DECIMALV2, int128_t, DecimalType>;
+                if (value < int256_t(std::numeric_limits<LimitType>::min()) ||
+                    value > int256_t(std::numeric_limits<LimitType>::max())) {
+                    return Status::InvalidArgument(strings::Substitute("Decimal storage overflow at row $0", i));
+                }
+                values[i] = DecimalType(static_cast<int128_t>(value));
+            } else {
+                values[i] = value;
+            }
+        }
+        dest->update_has_null();
+        return Status::OK();
+    }
+
+private:
+    DecimalScaleType _scale_type;
+    int256_t _scale_factor;
+    bool _src_unsigned;
 };
 
 // UUID is stored as 16 raw bytes; the canonical string form is 36 characters:
@@ -504,6 +742,47 @@ Status ColumnConverterFactory::create_converter(const ParquetField& field, const
     bool need_convert = false;
     tparquet::Type::type parquet_type = field.physical_type;
     const auto& schema_element = field.schema_element;
+
+    if ((parquet_type == tparquet::Type::INT32 || parquet_type == tparquet::Type::INT64 ||
+         parquet_type == tparquet::Type::BYTE_ARRAY || parquet_type == tparquet::Type::FIXED_LEN_BYTE_ARRAY) &&
+        (col_type == TYPE_DECIMALV2 || col_type == TYPE_DECIMAL32 || col_type == TYPE_DECIMAL64 ||
+         col_type == TYPE_DECIMAL128 || col_type == TYPE_DECIMAL256)) {
+        const int target_scale = col_type == TYPE_DECIMALV2 ? 9 : typeDescriptor.scale;
+        if (field.precision > 76 || typeDescriptor.precision > 76 || field.scale < 0 || field.scale > 76 ||
+            target_scale < 0 || target_scale > 76 || (field.precision > 0 && field.scale > field.precision) ||
+            (col_type != TYPE_DECIMALV2 && typeDescriptor.precision > 0 && target_scale > typeDescriptor.precision)) {
+            return Status::InvalidArgument("Invalid Parquet decimal precision or scale");
+        }
+        if (col_type == TYPE_DECIMAL256 || field.precision > 38 || field.scale > 38 || target_scale > 38) {
+            const bool src_unsigned = parquet_type == tparquet::Type::INT32 && is_unsigned_integer(schema_element);
+            switch (col_type) {
+            case TYPE_DECIMALV2:
+                *converter =
+                        std::make_unique<WideDecimalConverter<TYPE_DECIMALV2>>(field.scale, target_scale, src_unsigned);
+                break;
+            case TYPE_DECIMAL32:
+                *converter =
+                        std::make_unique<WideDecimalConverter<TYPE_DECIMAL32>>(field.scale, target_scale, src_unsigned);
+                break;
+            case TYPE_DECIMAL64:
+                *converter =
+                        std::make_unique<WideDecimalConverter<TYPE_DECIMAL64>>(field.scale, target_scale, src_unsigned);
+                break;
+            case TYPE_DECIMAL128:
+                *converter = std::make_unique<WideDecimalConverter<TYPE_DECIMAL128>>(field.scale, target_scale,
+                                                                                     src_unsigned);
+                break;
+            case TYPE_DECIMAL256:
+                *converter = std::make_unique<WideDecimalConverter<TYPE_DECIMAL256>>(field.scale, target_scale,
+                                                                                     src_unsigned);
+                break;
+            default:
+                break;
+            }
+            (*converter)->init_info(true, parquet_type);
+            return Status::OK();
+        }
+    }
 
     // the reason why there is down conversion of integer type is
     // assume we create a hive column called `col0` whose type is `tinyint`
@@ -615,13 +894,31 @@ Status ColumnConverterFactory::create_converter(const ParquetField& field, const
         break;
     }
     case tparquet::Type::type::BYTE_ARRAY: {
-        // TODO don't support converter byte_array to decimal
         if (col_type != LogicalType::TYPE_VARCHAR && col_type != LogicalType::TYPE_CHAR &&
             col_type != LogicalType::TYPE_VARBINARY) {
             need_convert = true;
         }
         if (col_type == TYPE_GEOGRAPHY) {
             *converter = std::make_unique<BinaryToGeographyConverter>();
+        } else if (col_type == TYPE_DECIMALV2 || col_type == TYPE_DECIMAL32 || col_type == TYPE_DECIMAL64 ||
+                   col_type == TYPE_DECIMAL128) {
+            const int target_scale = col_type == TYPE_DECIMALV2 ? 9 : typeDescriptor.scale;
+            switch (col_type) {
+            case TYPE_DECIMALV2:
+                *converter = std::make_unique<BinaryToDecimalConverter<TYPE_DECIMALV2>>(field.scale, target_scale, 0);
+                break;
+            case TYPE_DECIMAL32:
+                *converter = std::make_unique<BinaryToDecimalConverter<TYPE_DECIMAL32>>(field.scale, target_scale, 0);
+                break;
+            case TYPE_DECIMAL64:
+                *converter = std::make_unique<BinaryToDecimalConverter<TYPE_DECIMAL64>>(field.scale, target_scale, 0);
+                break;
+            case TYPE_DECIMAL128:
+                *converter = std::make_unique<BinaryToDecimalConverter<TYPE_DECIMAL128>>(field.scale, target_scale, 0);
+                break;
+            default:
+                break;
+            }
         }
         break;
     }

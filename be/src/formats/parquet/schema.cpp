@@ -159,8 +159,13 @@ Status SchemaDescriptor::leaf_to_field(const tparquet::SchemaElement* t_schema, 
     field->is_nullable = is_nullable;
     field->physical_type = t_schema->type;
     field->type_length = t_schema->type_length;
-    field->scale = t_schema->scale;
-    field->precision = t_schema->precision;
+    if (t_schema->__isset.logicalType && t_schema->logicalType.__isset.DECIMAL) {
+        field->scale = t_schema->logicalType.DECIMAL.scale;
+        field->precision = t_schema->logicalType.DECIMAL.precision;
+    } else {
+        field->scale = t_schema->scale;
+        field->precision = t_schema->precision;
+    }
     field->field_id = t_schema->field_id;
     field->level_info = cur_level_info;
 

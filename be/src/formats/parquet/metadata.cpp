@@ -585,6 +585,7 @@ SortOrder sort_order_of_logical_type(LogicalType type) {
     case TYPE_DECIMAL32:
     case TYPE_DECIMAL64:
     case TYPE_DECIMAL128:
+    case TYPE_DECIMAL256:
     case TYPE_DATE:
     case TYPE_DATETIME:
     case TYPE_TIME:

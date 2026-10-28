@@ -67,6 +67,15 @@ static Status get_parquet_node_type(const ::parquet::schema::NodePtr& node, Type
     return get_parquet_type_from_primitive(node, type_desc);
 }
 
+static Status get_parquet_decimal_type(int precision, int scale, TypeDescriptor* type_desc) {
+    if (precision > 76) {
+        return Status::InvalidArgument("Parquet decimal precision exceeds supported maximum of 76");
+    }
+    *type_desc = precision > 38 ? TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL256, precision, scale)
+                                : TypeDescriptor::promote_decimal_type(precision, scale);
+    return Status::OK();
+}
+
 static Status get_parquet_type_from_primitive(const ::parquet::schema::NodePtr& node, TypeDescriptor* type_desc) {
     DCHECK(node->is_primitive());
     auto primitive_node = down_cast<const ::parquet::schema::PrimitiveNode*>(node.get());
@@ -112,8 +121,8 @@ static Status get_parquet_type_from_primitive(const ::parquet::schema::NodePtr& 
             *type_desc = TypeDescriptor(TYPE_TIME);
         } else if (logical_type->is_decimal()) {
             auto decimal_logical_type = std::dynamic_pointer_cast<const parquet::DecimalLogicalType>(logical_type);
-            *type_desc = TypeDescriptor::promote_decimal_type(decimal_logical_type->precision(),
-                                                              decimal_logical_type->scale());
+            return get_parquet_decimal_type(decimal_logical_type->precision(), decimal_logical_type->scale(),
+                                            type_desc);
         } else {
             *type_desc = TypeDescriptor(TYPE_INT);
         }
@@ -127,8 +136,8 @@ static Status get_parquet_type_from_primitive(const ::parquet::schema::NodePtr& 
             *type_desc = TypeDescriptor(TYPE_DATETIME);
         } else if (logical_type->is_decimal()) {
             auto decimal_logical_type = std::dynamic_pointer_cast<const parquet::DecimalLogicalType>(logical_type);
-            *type_desc = TypeDescriptor::promote_decimal_type(decimal_logical_type->precision(),
-                                                              decimal_logical_type->scale());
+            return get_parquet_decimal_type(decimal_logical_type->precision(), decimal_logical_type->scale(),
+                                            type_desc);
         } else {
             *type_desc = TypeDescriptor(TYPE_BIGINT);
         }
@@ -141,8 +150,8 @@ static Status get_parquet_type_from_primitive(const ::parquet::schema::NodePtr& 
             *type_desc = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
         } else if (logical_type->is_decimal()) {
             auto decimal_logical_type = std::dynamic_pointer_cast<const parquet::DecimalLogicalType>(logical_type);
-            *type_desc = TypeDescriptor::promote_decimal_type(decimal_logical_type->precision(),
-                                                              decimal_logical_type->scale());
+            return get_parquet_decimal_type(decimal_logical_type->precision(), decimal_logical_type->scale(),
+                                            type_desc);
         } else if (logical_type->is_JSON()) {
             *type_desc = TypeDescriptor::create_json_type();
         } else {
@@ -152,8 +161,8 @@ static Status get_parquet_type_from_primitive(const ::parquet::schema::NodePtr& 
     case parquet::Type::FIXED_LEN_BYTE_ARRAY: {
         if (logical_type->is_decimal()) {
             auto decimal_logical_type = std::dynamic_pointer_cast<const parquet::DecimalLogicalType>(logical_type);
-            *type_desc = TypeDescriptor::promote_decimal_type(decimal_logical_type->precision(),
-                                                              decimal_logical_type->scale());
+            return get_parquet_decimal_type(decimal_logical_type->precision(), decimal_logical_type->scale(),
+                                            type_desc);
         } else if (logical_type->is_UUID()) {
             // UUID bytes are converted to canonical string form (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
             // by FixedLenByteArrayToUUIDConverter during scan.  Dict filtering is supported for UUID:
@@ -191,8 +200,8 @@ static Status get_parquet_type_from_group(const ::parquet::schema::NodePtr& node
     }
 
     auto st = try_to_infer_struct_type(node, type_desc);
-    if (st.ok()) {
-        return Status::OK();
+    if (st.ok() || st.is_invalid_argument()) {
+        return st;
     }
 
     // Treat unsupported types as VARCHAR.
