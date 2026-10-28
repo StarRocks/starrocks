@@ -1282,20 +1282,10 @@ struct NativeGeoBufferState {
     std::unique_ptr<PreparedGeoBuffer> input;
 };
 
-Status buffer_checkpoint(FunctionContext* context) {
-    if (context != nullptr && context->state() != nullptr) {
-        RETURN_IF_CANCELLED(context->state());
-        RETURN_IF_ERROR(context->state()->check_query_state("ST_Buffer"));
-        RETURN_IF_ERROR(context->state()->check_mem_limit("ST_Buffer"));
-    }
-    return Status::OK();
-}
-
 StatusOr<ColumnPtr> geo_buffer(FunctionContext* context, const Columns& columns) {
     if (context == nullptr || columns.size() != 2) {
         return Status::InvalidArgument("ST_Buffer requires a context and two arguments");
     }
-    RETURN_IF_ERROR(buffer_checkpoint(context));
     const size_t size = columns[0]->size();
     if (columns[1]->size() != size) return Status::InvalidArgument("ST_Buffer argument sizes differ");
     if (columns[0]->only_null() || columns[1]->only_null()) return ColumnHelper::create_const_null_column(size);
@@ -1313,7 +1303,6 @@ StatusOr<ColumnPtr> geo_buffer(FunctionContext* context, const Columns& columns)
     const bool constant = input.constant && columns[1]->is_constant();
     const size_t rows = constant && size != 0 ? 1 : size;
     for (size_t row = 0; row < rows; ++row) {
-        RETURN_IF_ERROR(buffer_checkpoint(context));
         if (input.is_null(row) || distances.is_null(row)) {
             result->append_nulls(1);
             continue;
@@ -1329,8 +1318,7 @@ StatusOr<ColumnPtr> geo_buffer(FunctionContext* context, const Columns& columns)
         } else {
             auto* target = input.constant ? &batch_constant : &varying;
             if (!input.constant || *target == nullptr) {
-                ASSIGN_OR_RETURN(*target, PreparedGeoBuffer::prepare(input.wkb(row),
-                                                                     [&] { return buffer_checkpoint(context); }));
+                ASSIGN_OR_RETURN(*target, PreparedGeoBuffer::prepare(input.wkb(row)));
             }
             model = target->get();
         }
@@ -1338,7 +1326,6 @@ StatusOr<ColumnPtr> geo_buffer(FunctionContext* context, const Columns& columns)
         std::string wkb;
         RETURN_IF_ERROR(WkbCodec::to_wkb(geometry, &wkb, WkbCoordinateSemantics::GEOMETRY_CARTESIAN));
         result->append_datum(Datum(Slice(wkb)));
-        RETURN_IF_ERROR(buffer_checkpoint(context));
     }
     if (constant && size != 0) return ConstColumn::create(std::move(result), size);
     return result;
@@ -2569,7 +2556,6 @@ StatusOr<ColumnPtr> GeoFunctions::st_geometry_transform(FunctionContext* context
 
 Status GeoFunctions::native_geo_buffer_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope != FunctionContext::FRAGMENT_LOCAL || !context->is_constant_column(0)) return Status::OK();
-    RETURN_IF_ERROR(buffer_checkpoint(context));
     auto prepared = std::make_unique<NativeGeoBufferState>();
     const auto& column = context->get_constant_column(0);
     if (!column->only_null() && column->size() != 0) {
@@ -2577,12 +2563,11 @@ Status GeoFunctions::native_geo_buffer_prepare(FunctionContext* context, Functio
         auto input = geo_input<TYPE_GEOMETRY>(column);
         prepared->status = input.status();
         if (prepared->status.ok()) {
-            auto model = PreparedGeoBuffer::prepare(input->wkb(0), [&] { return buffer_checkpoint(context); });
+            auto model = PreparedGeoBuffer::prepare(input->wkb(0));
             prepared->status = model.status();
             if (prepared->status.ok()) prepared->input = std::move(model.value());
         }
     }
-    RETURN_IF_ERROR(buffer_checkpoint(context));
     context->set_function_state(scope, prepared.release());
     return Status::OK();
 }
