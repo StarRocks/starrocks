@@ -602,6 +602,11 @@ SET(DW_TEST_FILES
     ./storage/lake/primary_key_publish_test.cpp
     ./storage/lake/lake_merged_del_op_offset_test.cpp
     ./storage/lake/lake_multi_statement_bundle_mix_test.cpp
+<<<<<<< HEAD
+=======
+    ./storage/lake/lake_multi_statement_publish_test.cpp
+    ./storage/lake/tablet_merger_test.cpp
+>>>>>>> 9d4f071 ([BugFix] Persist the load ids of explicit transactions so their publish finds the txn logs (#81413))
     ./storage/lake/tablet_reshard_helper_test.cpp
     ./storage/lake/tablet_reshard_test.cpp
     ./storage/lake/tablet_splitter_test.cpp
