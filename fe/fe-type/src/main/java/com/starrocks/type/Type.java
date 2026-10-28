@@ -411,6 +411,28 @@ public abstract class Type implements Cloneable {
         return isScalarType(PrimitiveType.GEOGRAPHY) || isScalarType(PrimitiveType.GEOMETRY);
     }
 
+    public boolean hasNestedGeoType() {
+        if (isArrayType()) {
+            Type item = ((ArrayType) this).getItemType();
+            return item.isGeoType() || item.hasNestedGeoType();
+        }
+        if (isMapType()) {
+            MapType map = (MapType) this;
+            return map.getKeyType().isGeoType() || map.getKeyType().hasNestedGeoType()
+                    || map.getValueType().isGeoType() || map.getValueType().hasNestedGeoType();
+        }
+        if (isStructType()) {
+            StructType struct = (StructType) this;
+            for (int i = 0; i < struct.getFields().size(); i++) {
+                Type field = struct.getFields().get(i).getType();
+                if (field.isGeoType() || field.hasNestedGeoType()) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     public boolean isPercentile() {
         return isScalarType(PrimitiveType.PERCENTILE);
     }

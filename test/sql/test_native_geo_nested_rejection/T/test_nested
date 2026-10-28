@@ -1,0 +1,38 @@
+-- name: test_nested_geo_geography
+CREATE TABLE nested_fixture_${uuid0} (id INT, wkt VARCHAR(64)) DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 3 PROPERTIES("replication_num"="1");
+INSERT INTO nested_fixture_${uuid0} VALUES (1, 'POINT (1 2)'), (2, NULL), (3, 'POINT EMPTY');
+function: assert_query_error_contains("select array_agg(g) from (select ST_GeogFromText(wkt) g, id from nested_fixture_${uuid0}) t", "Nested GEOGRAPHY/GEOMETRY types are not supported in ARRAY, MAP or STRUCT")
+function: assert_query_error_contains("select array_agg(distinct g) from (select ST_GeogFromText(wkt) g, id from nested_fixture_${uuid0}) t", "Nested GEOGRAPHY/GEOMETRY types are not supported in ARRAY, MAP or STRUCT")
+function: assert_query_error_contains("select named_struct('a', [g]) from (select ST_GeogFromText(wkt) g, id from nested_fixture_${uuid0}) t", "Nested GEOGRAPHY/GEOMETRY types are not supported in ARRAY, MAP or STRUCT")
+function: assert_query_error_contains("select max_by([g], id) from (select ST_GeogFromText(wkt) g, id from nested_fixture_${uuid0}) t", "Nested GEOGRAPHY/GEOMETRY types are not supported in ARRAY, MAP or STRUCT")
+function: assert_query_error_contains("select map_agg(id, g) from (select ST_GeogFromText(wkt) g, id from nested_fixture_${uuid0}) t", "Nested GEOGRAPHY/GEOMETRY types are not supported in ARRAY, MAP or STRUCT")
+function: assert_query_error_contains("select row(array_filter(x -> false, [g])) from (select ST_GeogFromText(wkt) g, id from nested_fixture_${uuid0}) t", "Nested GEOGRAPHY/GEOMETRY types are not supported in ARRAY, MAP or STRUCT")
+function: assert_query_error_contains("select ST_AsText([g][1]) from (select ST_GeogFromText(wkt) g, id from nested_fixture_${uuid0}) t", "Nested GEOGRAPHY/GEOMETRY types are not supported in ARRAY, MAP or STRUCT")
+function: assert_query_error_contains("select cardinality(array_sortby(x -> g, [1])) from (select ST_GeogFromText(wkt) g, id from nested_fixture_${uuid0}) t", "Nested GEOGRAPHY/GEOMETRY types are not supported in ARRAY, MAP or STRUCT")
+function: assert_query_error_contains("select array_contains([], g) from (select ST_GeogFromText(wkt) g, id from nested_fixture_${uuid0}) t", "Nested GEOGRAPHY/GEOMETRY types are not supported in ARRAY, MAP or STRUCT")
+function: assert_query_error_contains("select array_position([], g) from (select ST_GeogFromText(wkt) g, id from nested_fixture_${uuid0}) t", "Nested GEOGRAPHY/GEOMETRY types are not supported in ARRAY, MAP or STRUCT")
+function: assert_query_error_contains("select array_contains(NULL, g) from (select ST_GeogFromText(wkt) g, id from nested_fixture_${uuid0}) t", "Nested GEOGRAPHY/GEOMETRY types are not supported in ARRAY, MAP or STRUCT")
+SELECT array_contains([ST_AsText(g)], ST_AsText(g)) from (select ST_GeogFromText(wkt) g, id from nested_fixture_${uuid0}) t WHERE id=1;
+SELECT id, ST_AsText(g), g IS NULL from (select ST_GeogFromText(wkt) g, id from nested_fixture_${uuid0}) t ORDER BY id;
+DROP TABLE nested_fixture_${uuid0};
+-- name: test_nested_geo_geometry
+CREATE TABLE nested_fixture_${uuid0} (id INT, wkt VARCHAR(64)) DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 3 PROPERTIES("replication_num"="1");
+INSERT INTO nested_fixture_${uuid0} VALUES (1, 'POINT (1 2)'), (2, NULL), (3, 'POINT EMPTY');
+function: assert_query_error_contains("select array_agg(g) from (select ST_GeomFromText(wkt, 'EPSG:3857') g, id from nested_fixture_${uuid0}) t", "Nested GEOGRAPHY/GEOMETRY types are not supported in ARRAY, MAP or STRUCT")
+function: assert_query_error_contains("select array_agg(distinct g) from (select ST_GeomFromText(wkt, 'EPSG:3857') g, id from nested_fixture_${uuid0}) t", "Nested GEOGRAPHY/GEOMETRY types are not supported in ARRAY, MAP or STRUCT")
+function: assert_query_error_contains("select named_struct('a', [g]) from (select ST_GeomFromText(wkt, 'EPSG:3857') g, id from nested_fixture_${uuid0}) t", "Nested GEOGRAPHY/GEOMETRY types are not supported in ARRAY, MAP or STRUCT")
+function: assert_query_error_contains("select max_by([g], id) from (select ST_GeomFromText(wkt, 'EPSG:3857') g, id from nested_fixture_${uuid0}) t", "Nested GEOGRAPHY/GEOMETRY types are not supported in ARRAY, MAP or STRUCT")
+function: assert_query_error_contains("select map_agg(id, g) from (select ST_GeomFromText(wkt, 'EPSG:3857') g, id from nested_fixture_${uuid0}) t", "Nested GEOGRAPHY/GEOMETRY types are not supported in ARRAY, MAP or STRUCT")
+function: assert_query_error_contains("select row(array_filter(x -> false, [g])) from (select ST_GeomFromText(wkt, 'EPSG:3857') g, id from nested_fixture_${uuid0}) t", "Nested GEOGRAPHY/GEOMETRY types are not supported in ARRAY, MAP or STRUCT")
+function: assert_query_error_contains("select ST_AsText([g][1]) from (select ST_GeomFromText(wkt, 'EPSG:3857') g, id from nested_fixture_${uuid0}) t", "Nested GEOGRAPHY/GEOMETRY types are not supported in ARRAY, MAP or STRUCT")
+function: assert_query_error_contains("select cardinality(array_sortby(x -> g, [1])) from (select ST_GeomFromText(wkt, 'EPSG:3857') g, id from nested_fixture_${uuid0}) t", "Nested GEOGRAPHY/GEOMETRY types are not supported in ARRAY, MAP or STRUCT")
+function: assert_query_error_contains("select array_contains([], g) from (select ST_GeomFromText(wkt, 'EPSG:3857') g, id from nested_fixture_${uuid0}) t", "Nested GEOGRAPHY/GEOMETRY types are not supported in ARRAY, MAP or STRUCT")
+function: assert_query_error_contains("select array_position([], g) from (select ST_GeomFromText(wkt, 'EPSG:3857') g, id from nested_fixture_${uuid0}) t", "Nested GEOGRAPHY/GEOMETRY types are not supported in ARRAY, MAP or STRUCT")
+function: assert_query_error_contains("select array_contains(NULL, g) from (select ST_GeomFromText(wkt, 'EPSG:3857') g, id from nested_fixture_${uuid0}) t", "Nested GEOGRAPHY/GEOMETRY types are not supported in ARRAY, MAP or STRUCT")
+SELECT array_contains([ST_AsText(g)], ST_AsText(g)) from (select ST_GeomFromText(wkt, 'EPSG:3857') g, id from nested_fixture_${uuid0}) t WHERE id=1;
+SELECT id, ST_AsText(g), g IS NULL from (select ST_GeomFromText(wkt, 'EPSG:3857') g, id from nested_fixture_${uuid0}) t ORDER BY id;
+DROP TABLE nested_fixture_${uuid0};
+-- name: test_nested_geo_controls
+SELECT array_length([ST_AsText(ST_GeogFromText('POINT (1 2)'))]);
+SELECT ST_AsText(ST_CoverageSimplify(ST_GeomFromText('MULTIPOLYGON EMPTY', 'EPSG:3857'), 0) OVER ());
+SELECT ST_AsText(ST_GeomFromText('POINT (1 2)'));
