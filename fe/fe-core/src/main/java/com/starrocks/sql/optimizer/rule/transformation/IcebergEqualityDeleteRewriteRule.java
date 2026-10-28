@@ -477,6 +477,13 @@ public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
         if (!context.getSessionVariable().isEnableIcebergEqDeleteRuntimeFilterPruning()) {
             return Set.of();
         }
+        // only the delete scan always takes these columns from partition metadata; with the switch off the data-file
+        // scan reads them from the file, which may not store them (e.g. migrated Hive files), and a NULL never matches,
+        // so match by $partition_key instead, unless a real column of that name leaves no partition match at all
+        if (!context.getSessionVariable().getEnableIcebergIdentityColumnOptimize() &&
+                icebergTable.getNativeTable().schema().caseInsensitiveFindField(PARTITION_KEY) == null) {
+            return Set.of();
+        }
         Set<String> scanColumnNames = scan.getColRefToColumnMetaMap().values().stream()
                 .map(Column::getName)
                 .collect(Collectors.toSet());
