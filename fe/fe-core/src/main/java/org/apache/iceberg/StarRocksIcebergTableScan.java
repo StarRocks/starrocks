@@ -235,6 +235,7 @@ public class StarRocksIcebergTableScan
 
         return builder
                 .specsById(scanSpecsById)
+                .schemasById(table().schemas())
                 .filterData(filter())
                 .caseSensitive(isCaseSensitive())
                 .scanMetrics(scanMetrics())
@@ -381,6 +382,7 @@ public class StarRocksIcebergTableScan
                         .select(shouldReturnColumnStats() ? SCAN_WITH_STATS_COLUMNS : SCAN_COLUMNS)
                         .filterData(filter())
                         .specsById(scanSpecsById)
+                        .schemasById(table().schemas())
                         .scanMetrics(scanMetrics())
                         .ignoreDeleted()
                         .withDataFileCache(dataFileCache)
@@ -498,6 +500,7 @@ public class StarRocksIcebergTableScan
                 builder.planWith(planExecutor());
             }
             builder.specsById(scanSpecsById)
+                    .schemasById(table().schemas())
                     .filterData(filter())
                     .caseSensitive(isCaseSensitive())
                     .scanMetrics(scanMetrics())
