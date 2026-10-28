@@ -47,6 +47,7 @@ import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.InsertAnalyzer;
 import com.starrocks.sql.analyzer.InsertSourceRefresher;
 import com.starrocks.sql.analyzer.PipeAnalyzer;
@@ -96,6 +97,7 @@ import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.RemoteTransactionMgr;
 import com.starrocks.transaction.RunningTxnExceedException;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.type.PrimitiveType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -341,9 +343,21 @@ public class StatementPlanner {
                 refreshRemainingInsertSources(statement, session);
                 takeLock.run();
                 Analyzer.analyze(statement, session);
+                checkQueryOutput(statement);
                 refreshRemainingInsertSources(statement, session);
                 ExplicitTxnStatementValidator.validate(statement, session);
                 return false;
+            }
+        }
+    }
+
+    private static void checkQueryOutput(StatementBase statement) {
+        if (statement instanceof QueryStatement query && !query.hasOutFileClause()) {
+            for (Field field : query.getQueryRelation().getRelationFields().getAllFields()) {
+                if (field.getType().isScalarType(PrimitiveType.GEOMETRY)) {
+                    throw new SemanticException(
+                            "GEOMETRY query results are not supported; use ST_AsText or ST_AsBinary", query.getPos());
+                }
             }
         }
     }
