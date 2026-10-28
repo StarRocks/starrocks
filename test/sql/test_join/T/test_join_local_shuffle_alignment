@@ -1,0 +1,97 @@
+-- name: test_join_local_shuffle_alignment
+-- A hash join partitions its hash table across drivers, so a key has to reach the SAME driver from
+-- both sides. Each side picks its partitioning independently, from its own source
+-- (maybe_interpolate_local_shuffle_exchange, once per side in HashJoinNode::decompose_to_pipeline):
+-- a scan whose bucket key is the join key keeps the driver assignment the FE handed it per driver
+-- sequence and is skipped entirely, because it reports could_local_shuffle() == false, while a side
+-- sitting behind a UNION gets a fresh plain hash shuffle. The two are then numbered by unrelated
+-- schemes and only the rows that coincidentally land on the same driver ever match, so the join
+-- silently loses (1 - 1/DOP) of its result.
+--
+-- The DCHECK_EQ(rhs_source_op->partition_type(), lhs_source_op->partition_type()) next to those two
+-- calls does not catch it: it is compiled out in release, it compares only the partition type and
+-- not the bucket properties, and a side that was skipped altogether still reports whatever type it
+-- always had.
+--
+-- ja holds 1..5000 and jb holds 1..3000, both unique, so every expectation below follows from the
+-- data alone.
+create table ja (id bigint, g bigint) duplicate key(id)
+  distributed by hash(id) buckets 32 properties("replication_num" = "1");
+create table jb (id bigint, g bigint) duplicate key(id)
+  distributed by hash(id) buckets 32 properties("replication_num" = "1");
+insert into ja select s1, s1 % 7 from table(generate_series(1, 5000)) s(s1);
+insert into jb select s1, s1 % 7 from table(generate_series(1, 3000)) s(s1);
+
+-- UNION subtree on the probe side, bucketed scan on the build side: 1..3000 match.
+select count(*) from (select id from ja union select id from ja) z join jb on z.id = jb.id;
+
+-- the same join written as an IN subquery, which is how this shape usually shows up
+select count(*) from jb where jb.id in (select z.id from (select id from ja union select id from ja) z);
+
+-- UNION on both sides
+select count(*) from (select id from ja union select id from ja) y
+  join (select id from jb union select id from jb) z on y.id = z.id;
+
+-- semi and anti forms of the same misalignment
+select count(*) from (select id from ja union select id from ja) z left semi join jb on z.id = jb.id;
+select count(*) from (select id from ja union select id from ja) z left anti join jb on z.id = jb.id;
+
+-- the surviving rows are the right ones, not just the right count
+select count(*), min(id), max(id), sum(id) from
+  (select z.id from (select id from ja union select id from ja) z join jb on z.id = jb.id) x;
+
+-- DOP 1 always worked: no local shuffle is interpolated at all, so the two sides cannot disagree
+set pipeline_dop = 1;
+select count(*) from (select id from ja union select id from ja) z join jb on z.id = jb.id;
+set pipeline_dop = 4;
+select count(*) from (select id from ja union select id from ja) z join jb on z.id = jb.id;
+set pipeline_dop = 16;
+select count(*) from (select id from ja union select id from ja) z join jb on z.id = jb.id;
+set pipeline_dop = 0;
+
+-- control: with the UNION on the build side instead, both sides already agreed
+select count(*) from ja join (select id from jb union select id from jb) z on ja.id = z.id;
+
+-- control: a join key that is not the distribution key, so neither side can claim the bucket
+-- transform and both take the plain hash
+select count(*) from (select g from ja union select g from ja) z join jb on z.g = jb.g;
+
+-- enable_wait_dependent_event makes the probe side wait for the build side to finish. The local
+-- exchange interpolated in front of the build side must be left out of that wait, or the build
+-- side waits on a pipeline that is waiting on it. Off by default, so these are the only coverage.
+set enable_wait_dependent_event = true;
+
+select count(*) from (select id from ja union select id from ja) z join jb on z.id = jb.id;
+
+select count(*) from ja join (select id from jb union select id from jb) z on ja.id = z.id;
+
+select count(*) from ja join jb on ja.id = jb.id;
+
+select count(*) from (select id from ja union select id from ja) z
+  left join (select id from jb union select id from jb) y on z.id = y.id;
+
+set enable_wait_dependent_event = false;
+
+-- enable_runtime_adaptive_dop interpolates a CollectStats pair, and the pipeline holding the join
+-- probe then starts with a CollectStatsSource whose drivers are instantiated later, from an event.
+-- That source has to carry the build pipeline among its group-dependent pipelines, which is what
+-- makes the event wait for the build side (HashJoinerFactory: builders before probers) and clamps
+-- the group's DOP to at least the build side's (prober_dop a multiple of builder_dop). Off by
+-- default, so these are the only coverage.
+set enable_runtime_adaptive_dop = true;
+
+select count(*) from (select id from ja union select id from ja) z join jb on z.id = jb.id;
+
+select count(*) from ja join (select id from jb union select id from jb) z on ja.id = z.id;
+
+select count(*) from ja join jb on ja.id = jb.id;
+
+select count(*), min(z.id), max(z.id) from (select id from ja union select id from ja) z
+  join jb on z.id = jb.id;
+
+-- both knobs at once
+set enable_wait_dependent_event = true;
+select count(*) from (select id from ja union select id from ja) z join jb on z.id = jb.id;
+set enable_wait_dependent_event = false;
+
+set enable_runtime_adaptive_dop = false;

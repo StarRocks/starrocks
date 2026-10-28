@@ -1,0 +1,203 @@
+-- name: test_except_intersect_local_shuffle
+-- EXCEPT/INTERSECT partition their hash set across drivers, so a key must reach the SAME driver from
+-- every child. Each child used to pick its partitioning from its own source: a scan whose bucket key
+-- is exactly the set key keeps the scan's bucket transform, while a child sitting behind a UNION has
+-- no bucket properties and gets the plain shuffle hash. The two children were then hashed by
+-- different functions and never met, so EXCEPT returned every row and INTERSECT returned none --
+-- silently, at any DOP above 1.
+create table t1 (idx bigint, k bigint) duplicate key(idx)
+  distributed by hash(idx) buckets 32 properties("replication_num" = "1");
+insert into t1 select s1, s1 % 3 from table(generate_series(1, 10)) s(s1);
+
+-- t1 EXCEPT (t1 UNION t1) is empty by construction.
+select count(*) from (
+  select idx from t1
+  except
+  select z.idx from (select idx from t1 union select idx from t1) z) x;
+
+-- the same with the UNION on the build side
+select count(*) from (
+  select z.idx from (select idx from t1 union select idx from t1) z
+  except
+  select idx from t1) x;
+
+-- two set keys, both covered by the distribution key
+select count(*) from (
+  select idx, k from t1
+  except
+  select z.idx, z.k from (select idx, k from t1 union select idx, k from t1) z) x;
+
+-- INTERSECT is the mirror image: all 10 rows are common.
+select count(*) from (
+  select idx from t1
+  intersect
+  select z.idx from (select idx from t1 union select idx from t1) z) x;
+
+-- DOP 1 always worked (no local shuffle at all), keep it as a control
+set pipeline_dop = 1;
+select count(*) from (
+  select idx from t1
+  except
+  select z.idx from (select idx from t1 union select idx from t1) z) x;
+set pipeline_dop = 4;
+select count(*) from (
+  select idx from t1
+  except
+  select z.idx from (select idx from t1 union select idx from t1) z) x;
+set pipeline_dop = 8;
+select count(*) from (
+  select idx from t1
+  except
+  select z.idx from (select idx from t1 union select idx from t1) z) x;
+set pipeline_dop = 0;
+
+-- a set key that is NOT the distribution key already worked: neither child could claim the bucket
+-- transform, so both used the plain hash
+select count(*) from (
+  select k from t1
+  except
+  select z.k from (select k from t1 union select k from t1) z) x;
+
+-- and a genuinely non-empty EXCEPT still produces the right rows
+select idx from (
+  select idx from t1
+  except
+  select z.idx from (select idx from t1 where idx <= 7 union select idx from t1 where idx <= 7) z) x
+order by idx;
+
+-- The mismatch is plan-shape dependent, so the same statement can be correct on one table and wrong
+-- on another. These four shapes are the ones that stayed wrong at 5000 rows after the small-table
+-- ones above already passed; each is checked against a count that follows from the data alone.
+create table a (id bigint, g bigint) duplicate key(id)
+  distributed by hash(id) buckets 32 properties("replication_num" = "1");
+create table b (id bigint, g bigint) duplicate key(id)
+  distributed by hash(id) buckets 32 properties("replication_num" = "1");
+create table c (id bigint, g bigint) duplicate key(id)
+  distributed by hash(id) buckets 32 properties("replication_num" = "1");
+insert into a select s1, s1 % 7 from table(generate_series(1, 5000)) s(s1);
+insert into b select s1, s1 % 7 from table(generate_series(1, 3000)) s(s1);
+insert into c select s1, s1 % 7 from table(generate_series(2000, 6000)) s(s1);
+
+-- a INTERSECT (b UNION b) = 1..3000
+select count(*) from (
+  select id from a
+  intersect
+  select z.id from (select id from b union select id from b) z) x;
+
+-- (a UNION a) EXCEPT b = 3001..5000
+select count(*) from (
+  select z.id from (select id from a union select id from a) z
+  except
+  select id from b) x;
+
+-- a INTERSECT (b UNION b) INTERSECT (c UNION c) = 2000..3000
+select count(*) from (
+  select id from a
+  intersect
+  select z.id from (select id from b union select id from b) z
+  intersect
+  select y.id from (select id from c union select id from c) y) x;
+
+-- UNION on both sides = 3001..5000
+select count(*) from (
+  select z.id from (select id from a union select id from a) z
+  except
+  select y.id from (select id from b union select id from b) y) x;
+
+-- and the surviving rows are the right ones, not just the right count
+select count(*), min(id), max(id), sum(id) from (
+  select z.id from (select id from a union select id from a) z
+  except
+  select y.id from (select id from b union select id from b) y) x;
+
+-- A colocate set operation is the case where the children need NO local exchange at all: the FE
+-- hands each driver its own bucket morsels, so every child reports could_local_shuffle() == false
+-- and they are already aligned on that assignment. Forcing a shuffle here would only add cost, so
+-- the children are left alone -- these check that leaving them alone is still correct.
+create table cg1 (k bigint, v bigint) duplicate key(k)
+  distributed by hash(k) buckets 8 properties("replication_num" = "1", "colocate_with" = "grp_setop_align");
+create table cg2 (k bigint, v bigint) duplicate key(k)
+  distributed by hash(k) buckets 8 properties("replication_num" = "1", "colocate_with" = "grp_setop_align");
+insert into cg1 select s1, s1 from table(generate_series(1, 1000)) s(s1);
+insert into cg2 select s1, s1 from table(generate_series(500, 1500)) s(s1);
+
+-- cg1 EXCEPT cg2 = 1..499
+select count(*), min(k), max(k) from (select k from cg1 except select k from cg2) x;
+
+-- cg1 INTERSECT cg2 = 500..1000
+select count(*), min(k), max(k) from (select k from cg1 intersect select k from cg2) x;
+
+-- three-way, still colocate
+select count(*), min(k), max(k) from (
+  select k from cg1
+  intersect
+  select k from cg2
+  intersect
+  select k from cg1 where k >= 600) x;
+
+-- and a colocate child mixed with one that has to be shuffled: now the children DO disagree, so
+-- they all get put on one scheme
+select count(*) from (
+  select k from cg1
+  except
+  select z.k from (select k from cg2 union select k from cg2) z) x;
+
+-- enable_wait_dependent_event makes every pipeline on the probe side wait for the build side to
+-- finish before it starts. Partitioning a child interpolates a local exchange in front of it, and
+-- the pipeline that feeds the build side must not be caught up in that wait -- it has to run for
+-- the build side to be able to finish at all. Off by default, so these are the only coverage.
+set enable_wait_dependent_event = true;
+
+select count(*) from (
+  select idx from t1
+  except
+  select z.idx from (select idx from t1 union select idx from t1) z) x;
+
+-- the mirror shape: the child that is behind the UNION is the one that builds
+select count(*) from (
+  select z.idx from (select idx from t1 union select idx from t1) z
+  except
+  select idx from t1) x;
+
+select count(*) from (
+  select z.id from (select id from a union select id from a) z
+  except
+  select id from b) x;
+
+select count(*) from (
+  select id from a
+  intersect
+  select z.id from (select id from b union select id from b) z) x;
+
+select count(*), min(k), max(k) from (select k from cg1 except select k from cg2) x;
+
+set enable_wait_dependent_event = false;
+
+-- enable_runtime_adaptive_dop: same reason as the join case. A probe child built outside the
+-- build pipeline's dependent-pipeline scope must still hand that pipeline to any CollectStatsSource
+-- interpolated inside it. Off by default, so these are the only coverage.
+set enable_runtime_adaptive_dop = true;
+
+select count(*) from (
+  select idx from t1
+  except
+  select z.idx from (select idx from t1 union select idx from t1) z) x;
+
+select count(*) from (
+  select z.id from (select id from a union select id from a) z
+  except
+  select id from b) x;
+
+select count(*) from (
+  select id from a
+  intersect
+  select z.id from (select id from b union select id from b) z) x;
+
+set enable_wait_dependent_event = true;
+select count(*) from (
+  select z.id from (select id from a union select id from a) z
+  except
+  select id from b) x;
+set enable_wait_dependent_event = false;
+
+set enable_runtime_adaptive_dop = false;
