@@ -163,6 +163,8 @@ import org.apache.iceberg.FileMetadata;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.ManifestContent;
 import org.apache.iceberg.ManifestFile;
+import org.apache.iceberg.MetadataColumns;
+import org.apache.iceberg.Metrics;
 import org.apache.iceberg.MetricsModes;
 import org.apache.iceberg.NullOrder;
 import org.apache.iceberg.PartitionField;
@@ -171,6 +173,7 @@ import org.apache.iceberg.Schema;
 import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.SortOrder;
 import org.apache.iceberg.TableMetadata;
+import org.apache.iceberg.TableMetadataParser;
 import org.apache.iceberg.TableProperties;
 import org.apache.iceberg.TableScan;
 import org.apache.iceberg.Transaction;
@@ -1948,6 +1951,104 @@ public class IcebergMetadataTest extends TableTestBase {
         Assertions.assertEquals(
                 "Filter{databaseName='db', tableName='table', version=Snapshot@(1), predicate=true, enableColumnStats=false}",
                 filter.toString());
+    }
+
+    @Test
+    public void testGetRemoteFileAfterDroppingEqualityDeleteColumn() throws Exception {
+        // An equality delete keyed on k3 whose column was dropped afterwards. The delete index resolves k3 against
+        // all table schemas; the current schema alone no longer has it.
+        Schema schema = new Schema(required(1, "k1", Types.IntegerType.get()),
+                required(2, "k2", Types.IntegerType.get()), required(3, "k3", Types.IntegerType.get()));
+        PartitionSpec spec = PartitionSpec.unpartitioned();
+        TestTables.TestTable table = create(schema, spec, "tbDroppedEqColumn", 2);
+        Function<Integer, Map<Integer, ByteBuffer>> k3Bound =
+                value -> Map.of(3, Conversions.toByteBuffer(Types.IntegerType.get(), value));
+        DataFile dataFile = DataFiles.builder(spec).withPath("/path/to/tbDroppedEqColumn-data.parquet")
+                .withFileSizeInBytes(20)
+                .withMetrics(new Metrics(3L, null, null, null, null, k3Bound.apply(1), k3Bound.apply(5)))
+                .build();
+        DeleteFile eqDelete = FileMetadata.deleteFileBuilder(spec).ofEqualityDeletes(3)
+                .withPath("/path/to/tbDroppedEqColumn-eq.parquet").withFormat(FileFormat.PARQUET)
+                .withFileSizeInBytes(10)
+                .withMetrics(new Metrics(1L, null, null, null, null, k3Bound.apply(2), k3Bound.apply(2)))
+                .build();
+        table.newAppend().appendFile(dataFile).commit();
+        table.newRowDelta().addDeletes(eqDelete).commit();
+        table.updateSchema().deleteColumn("k3").commit();
+        // A loaded table binds every partition spec to the current schema, which has no k3 any more. The in-memory
+        // test metadata still holds the specs bound at creation, so round-trip it through JSON as a load would.
+        TableMetadata current = table.ops().current();
+        table.ops().commit(current, TableMetadataParser.fromJson(TableMetadataParser.toJson(current)));
+        table.refresh();
+        Assertions.assertNull(table.specs().get(spec.specId()).schema().findField(3));
+        // A write after the drop, so the scanned snapshot's schema has no k3 either.
+        DataFile laterFile = DataFiles.builder(spec).withPath("/path/to/tbDroppedEqColumn-later.parquet")
+                .withFileSizeInBytes(20).withRecordCount(1).build();
+        table.newAppend().appendFile(laterFile).commit();
+
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "tbDroppedEqColumn", "", Lists.newArrayList(new Column("k1", INT), new Column("k2", INT)), table,
+                Maps.newHashMap());
+        List<RemoteFileInfo> res = metadata.getRemoteFiles(icebergTable, GetRemoteFilesParams.newBuilder()
+                .setTableVersionRange(TvrTableSnapshot.of(Optional.of(table.currentSnapshot().snapshotId())))
+                .setFieldNames(Lists.newArrayList()).build());
+        Map<String, List<String>> deletesByDataFile = res.stream()
+                .map(f -> ((IcebergRemoteFileInfo) f).getFileScanTask())
+                .collect(Collectors.toMap(task -> task.file().location(),
+                        task -> task.deletes().stream().map(DeleteFile::location).collect(Collectors.toList())));
+        // The equality delete still applies to the file written before it, not to the later one.
+        Assertions.assertEquals(Map.of(dataFile.location(), List.of(eqDelete.location()),
+                laterFile.location(), List.of()), deletesByDataFile);
+    }
+
+    @Test
+    public void testGetRemoteFileKeepsOnlyNeededDeleteFileStats() throws Exception {
+        // Planned delete files are cached; they keep only the stats used to match them to data files: file_path
+        // for position deletes, the equality columns for equality deletes.
+        Schema schema = new Schema(required(1, "k1", Types.IntegerType.get()),
+                required(2, "k2", Types.IntegerType.get()));
+        PartitionSpec spec = PartitionSpec.unpartitioned();
+        TestTables.TestTable table = create(schema, spec, "tbDeleteFileStats", 2);
+        DataFile dataFile = DataFiles.builder(spec).withPath("/path/to/tbDeleteFileStats-data.parquet")
+                .withFileSizeInBytes(20).withRecordCount(3).build();
+        int filePathId = MetadataColumns.DELETE_FILE_PATH.fieldId();
+        int posId = MetadataColumns.DELETE_FILE_POS.fieldId();
+        ByteBuffer path = Conversions.toByteBuffer(Types.StringType.get(), dataFile.location());
+        ByteBuffer pos = Conversions.toByteBuffer(Types.LongType.get(), 0L);
+        DeleteFile posDelete = FileMetadata.deleteFileBuilder(spec).ofPositionDeletes()
+                .withPath("/path/to/tbDeleteFileStats-pos.parquet").withFormat(FileFormat.PARQUET)
+                .withFileSizeInBytes(10)
+                .withMetrics(new Metrics(1L, null, null, null, null,
+                        Map.of(filePathId, path, posId, pos), Map.of(filePathId, path, posId, pos)))
+                .build();
+        ByteBuffer one = Conversions.toByteBuffer(Types.IntegerType.get(), 1);
+        DeleteFile eqDelete = FileMetadata.deleteFileBuilder(spec).ofEqualityDeletes(2)
+                .withPath("/path/to/tbDeleteFileStats-eq.parquet").withFormat(FileFormat.PARQUET)
+                .withFileSizeInBytes(10)
+                .withMetrics(new Metrics(1L, null, null, null, null, Map.of(1, one, 2, one), Map.of(1, one, 2, one)))
+                .build();
+        table.newAppend().appendFile(dataFile).commit();
+        table.newRowDelta().addDeletes(posDelete).addDeletes(eqDelete).commit();
+
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "tbDeleteFileStats", "", Lists.newArrayList(new Column("k1", INT), new Column("k2", INT)), table,
+                Maps.newHashMap());
+        List<RemoteFileInfo> res = metadata.getRemoteFiles(icebergTable, GetRemoteFilesParams.newBuilder()
+                .setTableVersionRange(TvrTableSnapshot.of(Optional.of(table.currentSnapshot().snapshotId())))
+                .setFieldNames(Lists.newArrayList()).build());
+        Assertions.assertEquals(1, res.size());
+        Map<String, DeleteFile> deletes = ((IcebergRemoteFileInfo) res.get(0)).getFileScanTask().deletes().stream()
+                .collect(Collectors.toMap(DeleteFile::location, d -> d));
+        Assertions.assertEquals(Set.of(filePathId), deletes.get(posDelete.location()).lowerBounds().keySet());
+        Assertions.assertEquals(Set.of(filePathId), deletes.get(posDelete.location()).upperBounds().keySet());
+        Assertions.assertEquals(Set.of(2), deletes.get(eqDelete.location()).lowerBounds().keySet());
+        Assertions.assertEquals(Set.of(2), deletes.get(eqDelete.location()).upperBounds().keySet());
     }
 
     @Test
