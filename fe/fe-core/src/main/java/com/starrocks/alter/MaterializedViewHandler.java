@@ -594,14 +594,10 @@ public class MaterializedViewHandler extends AlterHandler {
             if (queryStatement != null) {
                 throw new DdlException(
                     "Synchronous materialized view with range distribution requires a shared-data, " +
-<<<<<<< HEAD
-                    "non-colocate, non-auto-increment, non-primary-key table. " +
+                    "non-colocate, non-primary-key table. " +
                     "Use an asynchronous materialized view instead: declare it with an explicit " +
                     "REFRESH clause (REFRESH ASYNC or REFRESH MANUAL) or a DISTRIBUTED BY clause, " +
                     "e.g. CREATE MATERIALIZED VIEW ... DISTRIBUTED BY HASH(...) REFRESH ASYNC AS SELECT ...");
-=======
-                    "non-colocate, non-primary-key table.");
->>>>>>> d2c05c38bbd... [Enhancement][RB-424] Support rollups, synchronous MVs and sort-key changes on range tables with AUTO_INCREMENT (#67137)
             }
             throw new DdlException(
                 "ADD ROLLUP is not supported on this table with range distribution. A range distribution " +
