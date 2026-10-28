@@ -3271,8 +3271,8 @@ TEST_F(TabletUpdatesTest, create_tablet_from_snapshot_refuses_live_tablet) {
     // create_tablet_from_meta_snapshot() takes the shard from the snapshot path, so lay the snapshot out under the
     // live tablet's shard, outside the data dir.
     auto clone_dir = path_util::join_path_segments(
-            *snapshot_dir, strings::Substitute("clone/$0/$1/$2", tablet0->shard_id(), tablet0->tablet_id(),
-                                               tablet0->schema_hash()));
+            *snapshot_dir,
+            strings::Substitute("clone/$0/$1/$2", tablet0->shard_id(), tablet0->tablet_id(), tablet0->schema_hash()));
     ASSERT_TRUE(std::filesystem::create_directories(clone_dir));
     std::set<std::string> files;
     ASSERT_OK(fs::list_dirs_files(meta_dir, nullptr, &files));
