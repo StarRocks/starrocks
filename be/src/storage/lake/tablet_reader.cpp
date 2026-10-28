@@ -21,6 +21,7 @@
 #include "common/status.h"
 #include "gutil/stl_util.h"
 #include "runtime/exec_env.h"
+#include "runtime/runtime_state.h"
 #include "storage/aggregate_iterator.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
@@ -44,6 +45,16 @@
 #include "util/json_flattener.h"
 
 namespace starrocks::lake {
+
+// The open loops below can run for minutes on a tablet with many segments, so they stop as soon as the
+// query is cancelled instead of opening the rest. A read without a RuntimeState (compaction, publish) is
+// never cancelled here.
+static Status check_cancelled(const TabletReaderParams& params, int64_t tablet_id) {
+    if (params.runtime_state != nullptr && params.runtime_state->is_cancelled()) {
+        return Status::Cancelled(fmt::format("cancelled while opening tablet:{}", tablet_id));
+    }
+    return Status::OK();
+}
 
 using ConjunctivePredicates = starrocks::ConjunctivePredicates;
 using Datum = starrocks::Datum;
@@ -183,6 +194,8 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
         split_morsel_queue->set_tablet_schema(_tablet_schema);
 
         while (true) {
+            // Every split can load a rowset's segments (PhysicalSplitMorselQueue::_init_segment).
+            RETURN_IF_ERROR(check_cancelled(read_params, _tablet_metadata->id()));
             auto split_status_or = split_morsel_queue->try_get();
             if (UNLIKELY(!split_status_or.ok())) {
                 LOG(WARNING) << "failed to get split morsel: " << split_status_or.status()
@@ -396,6 +409,8 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
         }
     });
     for (auto& rowset : _rowsets) {
+        // Stop opening, and submitting, the remaining rowsets. Rowset::read() checks again per segment.
+        RETURN_IF_ERROR(check_cancelled(params, _tablet_metadata->id()));
         if (params.rowid_range_option != nullptr && !params.rowid_range_option->contains_rowset(rowset.get())) {
             continue;
         }
