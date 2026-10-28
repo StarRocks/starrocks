@@ -1724,12 +1724,14 @@ public class IcebergMetadata implements ConnectorMetadata {
     // Raw string partition values for the file, keyed by (identity) partition column name. Returns an empty map
     // under partition-transform evolution, where getIcebergPartitionValues drops non-identity fields and would
     // misalign the value-to-column mapping (residual pruning then conservatively keeps every file).
-    private static Map<String, String> icebergPartitionValues(FileScanTask task, IcebergTable table,
-                                                              boolean existPartitionTransformedEvolution) {
+    @VisibleForTesting
+    static Map<String, String> icebergPartitionValues(FileScanTask task, IcebergTable table,
+                                                      boolean existPartitionTransformedEvolution) {
         if (existPartitionTransformedEvolution) {
             return Collections.emptyMap();
         }
-        PartitionSpec spec = table.getNativeTable().spec();
+        // A partition tuple lines up positionally with the spec its file was written under, not the current one.
+        PartitionSpec spec = task.spec();
         org.apache.iceberg.PartitionData partitionData =
                 (org.apache.iceberg.PartitionData) task.file().partition();
         List<String> values = PartitionUtil.getIcebergPartitionValues(spec, partitionData, false);
@@ -1746,8 +1748,9 @@ public class IcebergMetadata implements ConnectorMetadata {
             if (!field.transform().isIdentity()) {
                 continue;
             }
+            // An older spec can reference a since-dropped column; a null key would NPE in partitionMayMatch.
             String name = table.getPartitionSourceName(table.getNativeTable().schema(), field);
-            if (value != null) {
+            if (name != null && value != null) {
                 result.put(name, value);
             }
         }
