@@ -81,8 +81,9 @@ public final class MVPCTRefreshProcessor extends MVRefreshProcessor {
     // Hybrid fallback to freeze TVR so the pinned state is visible to the plan builder and differ.
     private Runnable afterSyncHook;
 
-    // True when this is a subsequent pinned batch whose pinning owner has been overwritten by
-    // a newer job — we must SKIP to avoid touching the newer job's state.
+    // True when this is a subsequent pinned batch whose job no longer owns the pinning state: a newer
+    // job overwrote the owner, or took over and released it when done. Run unpinned, the batch would
+    // write past the baseline that job left behind.
     //
     // Gate on PINNED_REFRESH_JOB_ID to confirm the current run is actually a pinned batch.
     // Without this, an unrelated partial refresh running while a prior pinning job's owner
@@ -97,7 +98,7 @@ public final class MVPCTRefreshProcessor extends MVRefreshProcessor {
         }
         String owner = mv.getRefreshScheme().getAsyncRefreshContext().getTempTvrOwnerStartTaskRunId();
         String startTaskRunId = getStartTaskRunId();
-        if (owner != null && !owner.equals(startTaskRunId)) {
+        if (owner == null || !owner.equals(startTaskRunId)) {
             logger.warn("Skip stale pinned batch: pinning owner={}, startTaskRunId={}", owner, startTaskRunId);
             return true;
         }
