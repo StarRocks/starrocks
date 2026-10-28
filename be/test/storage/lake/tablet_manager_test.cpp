@@ -46,6 +46,7 @@
 #include "storage/lake/metacache.h"
 #include "storage/lake/options.h"
 #include "storage/lake/primary_key_manager.h"
+#include "storage/lake/scoped_local_disk_cache.h"
 #include "storage/lake/versioned_tablet.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/segment.h"
@@ -196,6 +197,36 @@ TEST_F(LakeTabletManagerTest, tablet_meta_write_and_read) {
     res = _tablet_manager->get_tablet_metadata(tablet_id, 2);
     EXPECT_TRUE(res.status().is_not_found());
 }
+
+#ifdef WITH_STARCACHE
+// partial_meta lives only in this node's local disk cache. It reads back as written; another gtid or another
+// version is a miss; with the cache off nothing is kept.
+TEST_F(LakeTabletManagerTest, partial_meta_in_local_disk_cache) {
+    auto tablet_id = next_id();
+    auto metadata = std::make_shared<TabletMetadataPB>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(3);
+    metadata->set_gtid(77);
+    metadata->add_rowsets()->set_id(5);
+
+    EXPECT_TRUE(_tablet_manager->put_partial_tablet_metadata(metadata).is_not_supported());
+    EXPECT_TRUE(_tablet_manager->get_partial_tablet_metadata(tablet_id, 3, 77).status().is_not_found());
+
+    lake::ScopedLocalDiskCache local_disk_cache(_test_dir + "/partial_meta_cache");
+    EXPECT_TRUE(_tablet_manager->get_partial_tablet_metadata(tablet_id, 3, 77).status().is_not_found());
+    ASSERT_OK(_tablet_manager->put_partial_tablet_metadata(metadata));
+    ASSIGN_OR_ABORT(auto read, _tablet_manager->get_partial_tablet_metadata(tablet_id, 3, 77));
+    EXPECT_EQ(tablet_id, read->id());
+    EXPECT_EQ(3, read->version());
+    ASSERT_EQ(1, read->rowsets_size());
+    EXPECT_EQ(5, read->rowsets(0).id());
+    EXPECT_TRUE(_tablet_manager->get_partial_tablet_metadata(tablet_id, 3, 78).status().is_not_found());
+    EXPECT_TRUE(_tablet_manager->get_partial_tablet_metadata(tablet_id, 4, 77).status().is_not_found());
+    // Written again for the same version, as a later retry that had to apply again does.
+    ASSERT_OK(_tablet_manager->put_partial_tablet_metadata(metadata));
+    ASSERT_OK(_tablet_manager->get_partial_tablet_metadata(tablet_id, 3, 77).status());
+}
+#endif
 
 TEST_F(LakeTabletManagerTest, tablet_meta_read_corrupted_and_recover) {
     starrocks::TabletMetadata metadata;

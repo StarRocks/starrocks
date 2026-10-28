@@ -58,11 +58,15 @@ class PublishTabletInfo;
 // a bundled partition never writes. A preference only -- either order resolves the metadata. Has no
 // effect unless |base_version| is 1. See InitialMetadataOrder.
 // |is_retry_publish| carries PublishVersionRequest::is_retry_publish: on a metacache miss, read
-// |new_version| from storage before applying anything and return it if it is already written.
+// |new_version| from storage (the tablet's partial_meta first under file bundling) before applying anything
+// and return it if it is already written.
+// |applied|, when not null, is set to whether this call applied the txns rather than returning a result that
+// already existed.
 StatusOr<TabletMetadataPtr> publish_version(
         TabletManager* tablet_mgr, const PublishTabletInfo& tablet_info, int64_t base_version, int64_t new_version,
         std::span<const TxnInfoPB> txns, bool skip_write_tablet_metadata, int64_t fe_built_version = 0,
-        InitialMetadataOrder base_version_order = InitialMetadataOrder::kPerTabletFirst, bool is_retry_publish = false);
+        InitialMetadataOrder base_version_order = InitialMetadataOrder::kPerTabletFirst, bool is_retry_publish = false,
+        bool* applied = nullptr);
 
 // Publish a batch new versions of transaction logs.
 //
