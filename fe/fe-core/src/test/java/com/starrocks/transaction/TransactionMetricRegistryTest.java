@@ -187,6 +187,39 @@ public class TransactionMetricRegistryTest {
     }
 
     @Test
+    public void testAbortedTransactionsRecordedUnderOwnStatus(@Mocked GlobalStateMgr globalStateMgr,
+                                                              @Mocked TransactionState visible,
+                                                              @Mocked TransactionState abortedWhileWriting,
+                                                              @Mocked TransactionState abortedAfterCommit) {
+        setLeader(true, globalStateMgr);
+        TransactionMetricRegistry registry = newRegistry();
+        setReportGroups(registry, "stream_load");
+        setupVisibleTxn(visible, TransactionState.LoadJobSourceType.BACKEND_STREAMING, 10, 20, 30, 40, 45, 50);
+        // Timed out while writing: never committed, so only the write and total phases exist and the write
+        // phase ends at the abort.
+        setupTxn(abortedWhileWriting, TransactionStatus.ABORTED, TransactionState.LoadJobSourceType.BACKEND_STREAMING,
+                10, -1, -1, -1, -1, 70);
+        // Aborted after commit: the publish phase ran until the abort, but never got past scheduling.
+        setupTxn(abortedAfterCommit, TransactionStatus.ABORTED, TransactionState.LoadJobSourceType.BACKEND_STREAMING,
+                10, 20, 30, -1, -1, 80);
+        registry.update(visible);
+        registry.update(abortedWhileWriting);
+        registry.update(abortedAfterCommit);
+
+        String out = renderReport(registry);
+        Assertions.assertEquals(1, extractCount(out, "txn_total_latency_ms", "all", "visible", true));
+        Assertions.assertEquals(1, extractCount(out, "txn_publish_latency_ms", "all", "visible", true));
+        Assertions.assertEquals(2, extractCount(out, "txn_total_latency_ms", "all", "aborted", true));
+        Assertions.assertEquals(2, extractCount(out, "txn_write_latency_ms", "all", "aborted", true));
+        Assertions.assertEquals(1, extractCount(out, "txn_publish_latency_ms", "all", "aborted", true));
+        Assertions.assertEquals(1, extractCount(out, "txn_publish_schedule_latency_ms", "all", "aborted", true));
+        Assertions.assertEquals(0, extractCount(out, "txn_publish_execute_latency_ms", "all", "aborted", true));
+        Assertions.assertEquals(0, extractCount(out, "txn_publish_ack_latency_ms", "all", "aborted", true));
+        Assertions.assertEquals(2, extractCount(out, "txn_total_latency_ms", "stream_load", "aborted", true));
+        Assertions.assertEquals(1, extractCount(out, "txn_write_latency_ms", "stream_load", "visible", true));
+    }
+
+    @Test
     public void testLabelsAndLeaderToggle(@Mocked GlobalStateMgr globalStateMgr) {
         setLeader(true, globalStateMgr);
         TransactionMetricRegistry registry = newRegistry();
@@ -195,6 +228,8 @@ public class TransactionMetricRegistryTest {
         Assertions.assertTrue(out1.contains("type=\"insert\""), out1);
         Assertions.assertTrue(out1.contains("type=\"all\""), out1);
         Assertions.assertTrue(out1.contains("is_leader=\"true\""), out1);
+        Assertions.assertTrue(out1.contains("status=\"visible\""), out1);
+        Assertions.assertTrue(out1.contains("status=\"aborted\""), out1);
         setLeader(false, globalStateMgr);
         String out2 = renderReport(registry);
         Assertions.assertTrue(out2.contains("type=\"all\""), out2);
@@ -231,10 +266,17 @@ public class TransactionMetricRegistryTest {
                                  TransactionState.LoadJobSourceType type,
                                  long prepare, long commit, long pub, long pubFinish,
                                  long readyToFinish, long finish) {
+        setupTxn(txn, TransactionStatus.VISIBLE, type, prepare, commit, pub, pubFinish, readyToFinish, finish);
+    }
+
+    private void setupTxn(@Mocked TransactionState txn, TransactionStatus status,
+                          TransactionState.LoadJobSourceType type,
+                          long prepare, long commit, long pub, long pubFinish,
+                          long readyToFinish, long finish) {
         new Expectations() {
             {
                 txn.getTransactionStatus();
-                result = TransactionStatus.VISIBLE;
+                result = status;
                 txn.getPrepareTime();
                 result = prepare;
                 txn.getCommitTime();
@@ -254,14 +296,19 @@ public class TransactionMetricRegistryTest {
     }
 
     private int extractCount(String output, String metric, String typeName, boolean leader) {
+        return extractCount(output, metric, typeName, "visible", leader);
+    }
+
+    private int extractCount(String output, String metric, String typeName, String status, boolean leader) {
         String leaderTag = leader ? "true" : "false";
         String pattern =
-                ".*_(" + Pattern.quote(metric) + ")_count\\{([^}]*type=\"" + Pattern.quote(typeName) + "\"[^}]*)}\\s+(\\d+)";
-        Pattern p = Pattern.compile(pattern, Pattern.DOTALL);
+                "_(" + Pattern.quote(metric) + ")_count\\{([^}]*type=\"" + Pattern.quote(typeName) + "\"[^}]*)}\\s+(\\d+)";
+        Pattern p = Pattern.compile(pattern);
         Matcher m = p.matcher(output);
         int last = -1;
         while (m.find()) {
-            if (m.group(2).contains("is_leader=\"" + leaderTag + "\"")) {
+            if (m.group(2).contains("is_leader=\"" + leaderTag + "\"")
+                    && m.group(2).contains("status=\"" + status + "\"")) {
                 last = Integer.parseInt(m.group(3));
             }
         }

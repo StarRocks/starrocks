@@ -63,12 +63,19 @@ import javax.annotation.Nullable;
  * This allows for monitoring both the overall transaction performance (using "all") and the
  * performance of specific load types like "stream_load", abstracting away the specific
  * submission mechanism.
+ *
+ * <p>Every histogram also carries a 'status' label, {@code visible} or {@code aborted}, so that
+ * transactions which never became visible (a load that timed out while writing, say) still show up
+ * in the latency distributions instead of silently dropping out of them.
  */
 public class TransactionMetricRegistry {
 
     private static final Logger LOG = LoggerFactory.getLogger(TransactionMetricRegistry.class);
 
     private static volatile TransactionMetricRegistry INSTANCE;
+
+    private static final String VISIBLE_STATUS_LABEL = "visible";
+    private static final String ABORTED_STATUS_LABEL = "aborted";
 
     // Aggregated metrics across all source types
     private final TransactionMetricGroup allTxnGroup;
@@ -131,18 +138,20 @@ public class TransactionMetricRegistry {
     }
 
     /**
-     * Updates the relevant latency histograms based on the timing information from a completed transaction.
+     * Updates the relevant latency histograms based on the timing information from a finished transaction.
      *
      * <p>This method only processes transactions that have reached the {@link TransactionStatus#VISIBLE}
-     * status. It calculates latencies for total duration, write phase, and various publish sub-phases
-     * from the transaction state's timestamps. It then updates both the aggregated "all" group and the
-     * specific group corresponding to the transaction's source type.
+     * or {@link TransactionStatus#ABORTED} status, each recorded under its own 'status' label. It
+     * calculates latencies for total duration, write phase, and various publish sub-phases from the
+     * transaction state's timestamps. It then updates both the aggregated "all" group and the specific
+     * group corresponding to the transaction's source type.
      *
      * @param txnState The {@code TransactionState} object of a finished transaction, containing the timing data.
      */
     public void update(TransactionState txnState) {
         try {
-            if (txnState.getTransactionStatus() != TransactionStatus.VISIBLE) {
+            TransactionStatus status = txnState.getTransactionStatus();
+            if (status != TransactionStatus.VISIBLE && status != TransactionStatus.ABORTED) {
                 return;
             }
             long prepareTime = txnState.getPrepareTime();
@@ -151,26 +160,31 @@ public class TransactionMetricRegistry {
             long publishVersionFinishTime = txnState.getPublishVersionFinishTime();
             long readyToFinishTime = txnState.getReadyToFinishTime();
             long finishTime = txnState.getFinishTime();
-            updateLatencyMetrics(allTxnGroup.metrics,
+            updateLatencyMetrics(allTxnGroup.metrics, status,
                     prepareTime, commitTime, publishVersionTime, publishVersionFinishTime, readyToFinishTime, finishTime);
             TransactionState.LoadJobSourceType sourceType = txnState.getSourceType();
             if (sourceType == null || sourceType.ordinal() >= sourceTypeIndexToGroup.length) {
                 return;
             }
-            updateLatencyMetrics(sourceTypeIndexToGroup[sourceType.ordinal()].metrics,
+            updateLatencyMetrics(sourceTypeIndexToGroup[sourceType.ordinal()].metrics, status,
                     prepareTime, commitTime, publishVersionTime, publishVersionFinishTime, readyToFinishTime, finishTime);
         } catch (Exception e) {
             LOG.debug("failed to update transaction metrics, {}", txnState, e);
         }
     }
 
-    private void updateLatencyMetrics(Optional<TransactionMetrics> metricsOptional, long prepareTime, long commitTime,
+    private void updateLatencyMetrics(Optional<StatusMetrics> metricsOptional, TransactionStatus status,
+                                      long prepareTime, long commitTime,
                                       long publishVersionTime, long publishVersionFinishTime,
                                       long readyToFinishTime, long finishTime) {
-        TransactionMetrics metrics = metricsOptional.orElse(null);
-        if (metrics != null) {
+        StatusMetrics statusMetrics = metricsOptional.orElse(null);
+        if (statusMetrics != null) {
+            TransactionMetrics metrics = statusMetrics.forStatus(status);
+            // A transaction aborted before it reached commit spent its whole life in the write phase, so
+            // that phase ends at the abort. The publish phases need a commit time and are skipped without one.
+            long writeEndTime = commitTime > 0 ? commitTime : finishTime;
             recordLatencyIfValid(metrics.totalLatencyMs, prepareTime, finishTime);
-            recordLatencyIfValid(metrics.writeLatencyMs, prepareTime, commitTime);
+            recordLatencyIfValid(metrics.writeLatencyMs, prepareTime, writeEndTime);
             recordLatencyIfValid(metrics.publishLatencyMs, commitTime, finishTime);
             recordLatencyIfValid(metrics.publishScheduleLatencyMs, commitTime, publishVersionTime);
             recordLatencyIfValid(metrics.publishExecuteLatencyMs, publishVersionTime, publishVersionFinishTime);
@@ -210,10 +224,15 @@ public class TransactionMetricRegistry {
 
     /** Report histograms for a single group if enabled. */
     private void reportGroupMetrics(MetricVisitor visitor, TransactionMetricGroup txnGroup) {
-        TransactionMetrics metrics = txnGroup.metrics.orElse(null);
-        if (metrics == null) {
+        StatusMetrics statusMetrics = txnGroup.metrics.orElse(null);
+        if (statusMetrics == null) {
             return;
         }
+        reportStatusMetrics(visitor, statusMetrics.visible);
+        reportStatusMetrics(visitor, statusMetrics.aborted);
+    }
+
+    private void reportStatusMetrics(MetricVisitor visitor, TransactionMetrics metrics) {
         visitor.visitHistogram(metrics.totalLatencyMs);
         visitor.visitHistogram(metrics.writeLatencyMs);
         visitor.visitHistogram(metrics.publishLatencyMs);
@@ -242,24 +261,33 @@ public class TransactionMetricRegistry {
         return groups;
     }
 
-    /** Create latency histograms with a shared type label for a group. */
-    private TransactionMetrics buildLatencyMetrics(String groupName) {
-        LeaderAwareHistogramMetric totalLatencyMs = createHistogram("txn_total_latency_ms", groupName);
-        LeaderAwareHistogramMetric writeLatencyMs = createHistogram("txn_write_latency_ms", groupName);
-        LeaderAwareHistogramMetric publishLatencyMs = createHistogram("txn_publish_latency_ms", groupName);
-        LeaderAwareHistogramMetric publishScheduleLatencyMs = createHistogram("txn_publish_schedule_latency_ms", groupName);
-        LeaderAwareHistogramMetric publishExecuteLatencyMs = createHistogram("txn_publish_execute_latency_ms", groupName);
-        LeaderAwareHistogramMetric publishAckLatencyMs = createHistogram("txn_publish_ack_latency_ms", groupName);
-        LeaderAwareHistogramMetric publishCanFinishLatencyMs = createHistogram("txn_publish_can_finish_latency_ms", groupName);
-        return new TransactionMetrics(totalLatencyMs, writeLatencyMs, publishLatencyMs,
-                publishScheduleLatencyMs, publishExecuteLatencyMs, publishAckLatencyMs, publishCanFinishLatencyMs);
-
+    /** Create the visible and aborted latency histograms, sharing a type label, for a group. */
+    private StatusMetrics buildLatencyMetrics(String groupName) {
+        return new StatusMetrics(buildLatencyMetrics(groupName, VISIBLE_STATUS_LABEL),
+                buildLatencyMetrics(groupName, ABORTED_STATUS_LABEL));
     }
 
-    /** Create a type-labeled leader-aware histogram metric. */
-    private LeaderAwareHistogramMetric createHistogram(String name, String typeLabel) {
+    private TransactionMetrics buildLatencyMetrics(String groupName, String statusLabel) {
+        LeaderAwareHistogramMetric totalLatencyMs = createHistogram("txn_total_latency_ms", groupName, statusLabel);
+        LeaderAwareHistogramMetric writeLatencyMs = createHistogram("txn_write_latency_ms", groupName, statusLabel);
+        LeaderAwareHistogramMetric publishLatencyMs = createHistogram("txn_publish_latency_ms", groupName, statusLabel);
+        LeaderAwareHistogramMetric publishScheduleLatencyMs =
+                createHistogram("txn_publish_schedule_latency_ms", groupName, statusLabel);
+        LeaderAwareHistogramMetric publishExecuteLatencyMs =
+                createHistogram("txn_publish_execute_latency_ms", groupName, statusLabel);
+        LeaderAwareHistogramMetric publishAckLatencyMs =
+                createHistogram("txn_publish_ack_latency_ms", groupName, statusLabel);
+        LeaderAwareHistogramMetric publishCanFinishLatencyMs =
+                createHistogram("txn_publish_can_finish_latency_ms", groupName, statusLabel);
+        return new TransactionMetrics(totalLatencyMs, writeLatencyMs, publishLatencyMs,
+                publishScheduleLatencyMs, publishExecuteLatencyMs, publishAckLatencyMs, publishCanFinishLatencyMs);
+    }
+
+    /** Create a type- and status-labeled leader-aware histogram metric. */
+    private LeaderAwareHistogramMetric createHistogram(String name, String typeLabel, String statusLabel) {
         LeaderAwareHistogramMetric histogram = new LeaderAwareHistogramMetric(name);
         histogram.addLabel(new MetricLabel("type", typeLabel));
+        histogram.addLabel(new MetricLabel("status", statusLabel));
         return histogram;
     }
 
@@ -317,13 +345,28 @@ public class TransactionMetricRegistry {
         /** The set of {@link TransactionState.LoadJobSourceType}s that belong to this group. */
         final EnumSet<TransactionState.LoadJobSourceType> sourceTypes;
         /** Holds the metrics for this group, which is empty if metrics are not enabled. */
-        volatile Optional<TransactionMetrics> metrics;
+        volatile Optional<StatusMetrics> metrics;
 
         public TransactionMetricGroup(String name, TransactionState.LoadJobSourceType... sourceTypes) {
             this.name = name;
             this.sourceTypes = EnumSet.noneOf(TransactionState.LoadJobSourceType.class);
             this.sourceTypes.addAll(Arrays.asList(sourceTypes));
             this.metrics = Optional.empty();
+        }
+    }
+
+    /** The latency histograms of a group, one set per final transaction status. */
+    private static class StatusMetrics {
+        final TransactionMetrics visible;
+        final TransactionMetrics aborted;
+
+        StatusMetrics(TransactionMetrics visible, TransactionMetrics aborted) {
+            this.visible = visible;
+            this.aborted = aborted;
+        }
+
+        TransactionMetrics forStatus(TransactionStatus status) {
+            return status == TransactionStatus.VISIBLE ? visible : aborted;
         }
     }
 
