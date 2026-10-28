@@ -233,6 +233,24 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：控制是否为 Flat Json 数据进行 Compaction。
 - 引入版本：v3.3.3
 
+### enable_compaction_flat_json_mixed_inputs
+
+- 默认值：True
+- 类型：Bool
+- 单位：
+- 是否动态：是
+- 描述：当参与 Compaction 的 segment 中，JSON 列一部分以 Flat JSON 存储、一部分以完整 JSON 存储时，是否把完整 JSON 的 segment 按其他 segment 的 Flat JSON 布局读出，且所有子列都使用 JSON 类型。这样输出可以边读边写，不必把整个 segment 缓存在内存中。JSON 类型的子列会记录其值的类型和范围，之后的 Compaction 可以据此改用能精确保存所有值的类型。仅在 `enable_compaction_flat_json` 为 `true` 且表开启了 Flat JSON 时生效。
+- 引入版本：-
+
+### enable_compaction_flat_json_partial_paths
+
+- 默认值：True
+- 类型：Bool
+- 单位：
+- 是否动态：是
+- 描述：Flat JSON 的 Compaction 中，某个子列只在部分输入 segment 中存在时，如果包含它的行数足够多（`json_flat_sparsity_factor`），是否在输出中保留这个子列。不含该子列的 segment 从其剩余 JSON 中提供对应的值；若这样的 segment 可能在剩余 JSON 中存有该值，该子列使用 JSON 类型。关闭时，Compaction 只保留所有输入 segment 都有的子列，任一输入 segment 未拍平的 key 都存入剩余 JSON。仅在 `enable_compaction_flat_json` 为 `true` 时生效。
+- 引入版本：-
+
 ### enable_default_value_column_zonemap_filter
 
 - 默认值：true
@@ -765,6 +783,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：BufferControlBlock 释放数据的等待时间。
 - 引入版本：-
 
+### runtime_filter_worker_thread_num
+
+- 默认值：4
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：每个 BE 上用于合并和投递 Global Runtime Filter 的线程数。同一个 Runtime Filter 的所有事件由同一个线程处理，不同的 Runtime Filter 分散到各个线程。取值小于或等于 `1` 时只使用一个线程。
+- 引入版本：-
+
 ### scan_context_gc_interval_min
 
 - 默认值：5
@@ -1123,6 +1150,24 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 单位：-
 - 是否动态：是
 - 描述：执行导入 Sink 最终关闭（Close）操作的线程数上限。存算分离集群下，该操作会向对象存储写入合并事务日志；放在这个线程池中执行，可以避免慢写入阻塞 Pipeline 的 Poller 线程和执行线程。线程全部繁忙时，后续的关闭操作在线程池队列中排队。队列长度不受限制，不会丢弃任何关闭操作。取值必须大于 0。支持运行时修改，无需重启 BE 或 CN。降低上限不会中断正在执行的关闭操作。初始化时会预启动一个线程并在空闲时保留；其余线程空闲 500 ms 后可退出。
+- 引入版本：-
+
+### enable_put_combinded_txn_log_parallel
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群下，是否并行写入导入的合并事务日志。导入 Sink 关闭时，会为本次导入涉及的每个分区向对象存储写入一份合并事务日志。设置为 `true` 时，这些写入在专用线程池中并发执行（线程数上限由 `put_combined_txn_log_thread_pool_num_max` 控制，默认为 `64`）；设置为 `false` 时，逐个分区依次写入。两种方式下，导入都会等待所有写入完成，任一写入失败则导入失败。
+- 引入版本：-
+
+### put_combined_txn_log_thread_pool_num_max
+
+- 默认值：64
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群下，向对象存储写入合并事务日志的线程池的线程数上限。`enable_put_combinded_txn_log_parallel` 设置为 `true` 时，一次导入涉及的各分区的合并事务日志在该线程池中并发写入。线程全部繁忙时，后续写入在线程池队列中排队，队列长度不受限制。支持运行时修改，无需重启 BE 或 CN。取值小于或等于 `0` 时按 `1` 处理。降低上限不会中断正在执行的写入。线程空闲 500 ms 后退出。
 - 引入版本：-
 
 ### enable_rejected_record_sync

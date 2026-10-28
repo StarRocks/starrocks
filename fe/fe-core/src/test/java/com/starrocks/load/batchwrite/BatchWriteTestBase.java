@@ -21,6 +21,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.lock.LockTestUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.schema.MTable;
 import com.starrocks.server.GlobalStateMgr;
@@ -29,6 +30,7 @@ import com.starrocks.thrift.TTabletCommitInfo;
 import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 
 import java.util.ArrayList;
@@ -38,6 +40,12 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 public abstract class BatchWriteTestBase {
+
+    // Same G3 check as StarRocksTestBase, which this base does not extend.
+    @AfterEach
+    public void assertNoLockInvariantViolations() {
+        LockTestUtils.assertNoLockInvariantViolations();
+    }
 
     protected static final String DB_NAME_1 = "batch_write_load_db_1";
     protected static final String TABLE_NAME_1_1 = "batch_write_load_tbl_1_1";

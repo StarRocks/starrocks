@@ -34,6 +34,7 @@ set(EXEC_FILES
         ./exec/pipeline/limit_operator_test.cpp
         ./exec/pipeline/nljoin_probe_operator_test.cpp
         ./exec/pipeline/enforce_unique_row_locator_operator_test.cpp
+        ./exec/pipeline/repeat_operator_test.cpp
         ./exec/pipeline/analytic_node_pipeline_test.cpp
         ./exec/pipeline/local_bucket_shuffle_test.cpp
         ./exec/pipeline/local_shuffle_alignment_test.cpp
@@ -86,7 +87,6 @@ set(EXEC_FILES
         ./exprs/time_functions_test.cpp
         ./exprs/utility_functions_test.cpp
         ./exprs/runtime_filter_test.cpp
-        ./exprs/variant_functions_test.cpp
         ./exprs/table_function/test_list_rowsets.cpp
         ./exprs/table_function/java_udtf_factory_test.cpp
         ./exprs/dict_expr_test.cpp

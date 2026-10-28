@@ -453,7 +453,16 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Long
 - 单位: 毫秒
 - 是否可变: Yes
-- 描述: 同一调用点输出锁不变量违规日志的最小间隔。限流按调用点进行而非全局限流，因此高频违规的调用点不会把其他调用点挤出日志。排查问题时可设置为 `0`，输出全部违规记录。仅在 `lock_target_validation_mode` 或 `lock_blocking_call_validation_mode` 为 `warn` 时生效。
+- 描述: 同一调用点输出锁不变量违规日志的最小间隔。限流按调用点进行而非全局限流，因此高频违规的调用点不会把其他调用点挤出日志。排查问题时可设置为 `0`，输出全部违规记录。仅在 `lock_target_validation_mode`、`lock_blocking_call_validation_mode` 或 `lock_snapshot_copy_validation_mode` 为 `warn` 时生效。
+- 引入版本: v26.2
+
+### `lock_snapshot_copy_validation_mode`
+
+- 默认值: warn
+- 类型: String
+- 单位: -
+- 是否可变: Yes
+- 描述: 当某个线程在既未持有表的读锁或写锁、也未持有其所在数据库的读锁或写锁的情况下，为查询规划复制内表或物化视图时，FE 的处理方式。复制会读取该表当前的分区和索引元数据，而 DDL、INSERT OVERWRITE 和元数据回放都会在写锁下原地修改这些元数据，因此不持锁的复制可能导致语句因 `ConcurrentModificationException` 失败，或基于从未完整发布过的元数据生成计划。有效值：`off`（不检查）、`warn`（打印带复制调用方堆栈的违规日志，复制继续执行）、`error`（拒绝该复制）。无法识别的取值按 `warn` 处理。`warn` 模式下每条违规以单行输出，带 `LOCK_INVARIANT_VIOLATION` 标记及 `kind=snapshot_copy_without_lock` 字段；日志量由 `lock_invariant_violation_log_interval_ms` 控制。
 - 引入版本: v26.2
 
 ### `lock_target_validation_mode`

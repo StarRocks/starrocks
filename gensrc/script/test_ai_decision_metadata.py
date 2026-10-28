@@ -24,7 +24,7 @@ import gen_functions
 class DecisionMetadataTest(unittest.TestCase):
     def decision(self, state='VARCHAR'):
         return [200160, 'ai_decide', True, False, 'JSON', [state, 'JSON', 'VARCHAR', 'VARCHAR'],
-                'AIFunctions::ai_decide', {
+                'nullptr', {
                     'named_args': [{'name': 'state'}, {'name': 'questions'},
                                    {'name': 'provider', 'default': ''}, {'name': 'model', 'default': ''}],
                     'ai': functions.ai_metadata('DECISION', 'NONE', 'JSON', inputs=('state', 'questions')),
@@ -77,7 +77,7 @@ class DecisionMetadataTest(unittest.TestCase):
         try:
             decision = self.decision('JSON')
             gen_functions.add_function(decision)
-            chat = next(f for f in functions.vectorized_functions if f[0] == 200001)
+            chat = next(f for f in functions.vectorized_functions if f[0] == 200000)
             gen_functions.add_function(chat)
             with tempfile.TemporaryDirectory() as directory:
                 output = Path(directory) / 'descriptors.inc'

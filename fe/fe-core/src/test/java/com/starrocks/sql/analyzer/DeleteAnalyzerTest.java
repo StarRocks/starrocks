@@ -32,6 +32,8 @@ import java.io.File;
 
 import static com.starrocks.sql.plan.ConnectorPlanTestBase.newFolder;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -91,13 +93,15 @@ public class DeleteAnalyzerTest {
 
     @Test
     public void testIcebergDeleteWithUsingClause() {
-        String sql = "DELETE FROM iceberg0.unpartitioned_db.t0 USING other_table WHERE t0.id = other_table.id";
+        String sql = "DELETE FROM iceberg0.unpartitioned_db.t0 USING iceberg0.unpartitioned_db.t0 AS s " +
+                "WHERE t0.id = s.id";
         DeleteStmt deleteStmt = (DeleteStmt) SqlParser.parse(
                 sql, connectContext.getSessionVariable().getSqlMode()).get(0);
 
-        SemanticException exception = assertThrows(SemanticException.class,
-                () -> DeleteAnalyzer.analyze(deleteStmt, connectContext));
-        assertTrue(exception.getMessage().contains("Delete for Iceberg table do not support `using` clause"));
+        assertDoesNotThrow(() -> DeleteAnalyzer.analyze(deleteStmt, connectContext));
+        // a target row joined to several USING rows is deleted once
+        SelectRelation selectRelation = (SelectRelation) deleteStmt.getQueryStatement().getQueryRelation();
+        assertTrue(selectRelation.getSelectList().isDistinct());
     }
 
     @Test
@@ -107,9 +111,21 @@ public class DeleteAnalyzerTest {
         DeleteStmt deleteStmt = (DeleteStmt) SqlParser.parse(
                 sql, connectContext.getSessionVariable().getSqlMode()).get(0);
 
+        assertDoesNotThrow(() -> DeleteAnalyzer.analyze(deleteStmt, connectContext));
+        SelectRelation selectRelation = (SelectRelation) deleteStmt.getQueryStatement().getQueryRelation();
+        assertFalse(selectRelation.getSelectList().isDistinct());
+    }
+
+    @Test
+    public void testIcebergDeleteOnBranch() {
+        String sql = "DELETE FROM iceberg0.unpartitioned_db.t0 FOR VERSION AS OF no_such_branch WHERE id = 1";
+        DeleteStmt deleteStmt = (DeleteStmt) SqlParser.parse(
+                sql, connectContext.getSessionVariable().getSqlMode()).get(0);
+        assertEquals("no_such_branch", deleteStmt.getTargetBranch());
+
         SemanticException exception = assertThrows(SemanticException.class,
                 () -> DeleteAnalyzer.analyze(deleteStmt, connectContext));
-        assertTrue(exception.getMessage().contains("Delete for Iceberg table do not support `with` clause"));
+        assertTrue(exception.getMessage().contains("Cannot find snapshot with reference name: no_such_branch"));
     }
 
     @Test

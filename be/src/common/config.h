@@ -1545,6 +1545,9 @@ CONF_Int64(send_runtime_filter_via_http_rpc_min_size, "67108864");
 
 // -1: unlimited, 0: limit by memory use, >0: limit by queue_size
 CONF_mInt64(runtime_filter_queue_limit, "-1");
+// number of threads that merge and deliver global runtime filters on a BE. All events of one runtime filter are
+// handled by the same thread. <= 1 means a single thread.
+CONF_Int32(runtime_filter_worker_thread_num, "4");
 
 CONF_Int64(rpc_connect_timeout_ms, "30000");
 
@@ -1848,6 +1851,8 @@ CONF_mBool(lake_enable_protobuf_file_checksum, "true");
 CONF_mBool(lake_clear_corrupted_cache_meta, "true");
 // clear *.data cache for lake table
 CONF_mBool(lake_clear_corrupted_cache_data, "false");
+// clear corrupted datacache for external tables, as lake_clear_corrupted_cache_data does for lake tables
+CONF_mBool(external_table_clear_corrupted_cache_data, "true");
 // The maximum number of files which need to rebuilt in cloud native pk index.
 // If files which need to rebuilt larger than this, we will flush memtable immediately.
 CONF_mInt32(cloud_native_pk_index_rebuild_files_threshold, "50");
@@ -2287,6 +2292,16 @@ CONF_mBool(enable_json_flat, "true");
 // enable compaction is base on flat json, not whole json
 CONF_mBool(enable_compaction_flat_json, "true");
 
+// When some inputs of a compaction have a flat JSON column and others store it as whole JSON, read the whole-JSON
+// inputs into the flat inputs' layout with every path typed JSON, so the output is written as it is read instead
+// of being buffered whole to derive a layout.
+CONF_mBool(enable_compaction_flat_json_mixed_inputs, "true");
+
+// When the inputs of a flat JSON compaction do not all flatten a path, keep the path if enough rows hold it as a
+// sub-column (json_flat_sparsity_factor), reading the other inputs' values from their remain, rather than only the
+// paths every input flattens.
+CONF_mBool(enable_compaction_flat_json_partial_paths, "true");
+
 // direct read flat json
 CONF_mBool(enable_lazy_dynamic_flat_json, "true");
 
@@ -2603,7 +2618,9 @@ CONF_mInt32(put_combined_txn_log_thread_pool_num_max, "64");
 // When all threads are busy, further closes wait in the pool's queue, which is unbounded: no close is dropped.
 // Must be positive. Runtime changes resize the existing pool without interrupting running closes.
 CONF_mInt32(load_sink_close_thread_pool_num_max, "64");
-CONF_mBool(enable_put_combinded_txn_log_parallel, "false");
+// Shared-data only. Write the combined txn logs of a load's partitions to object storage in parallel, on
+// put_combined_txn_log_thread_pool, instead of one partition after another.
+CONF_mBool(enable_put_combinded_txn_log_parallel, "true");
 // Shared-data only. Seconds a node keeps the shard info of a tablet it does not own, so that touching
 // the tablet again within this time does not ask starmgr for it (GetShard RPC). It keeps what it had
 // to ask starmgr for, and what the tablet's owners hand over to the load coordinator along with the
@@ -2654,13 +2671,6 @@ CONF_mInt32(ai_function_rate_limit_qps_chat, "128");
 CONF_mInt32(ai_function_rate_limit_qps_embedding, "128");
 CONF_mInt32(ai_function_rate_limit_qps_decision, "20");
 CONF_mInt32(ai_function_max_inflight, "512");
-
-// Legacy ai_query runtime configuration. It is intentionally independent from the AI function runtime.
-CONF_Int32(llm_max_queue_size, "4096");
-
-CONF_Int32(llm_max_concurrent_queries, "8");
-
-CONF_Int32(llm_cache_size, "131072");
 
 CONF_mBool(enable_pipeline_driver_parallel_prepare, "true");
 // When enabled, ScanExecutor uses LockFreeWorkGroupScanTaskQueue for OLAP and connector scan task scheduling.

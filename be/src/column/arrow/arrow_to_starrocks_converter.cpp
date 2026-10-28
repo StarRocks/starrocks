@@ -26,6 +26,7 @@
 #include "arrow/type_fwd.h"
 #include "arrow/type_traits.h"
 #include "base/decimal_types.h"
+#include "base/time/tz_offset_cache.h"
 #include "base/utility/pred_guard.h"
 #include "column/array_column.h"
 #include "column/arrow/arrow_to_json_converter.h"
@@ -698,13 +699,12 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
         }
     }
 
-    static bool convert_one_datetime(CppType& datum, int64_t second, int64_t microsecond, const cctz::time_zone& ctz) {
+    // offset_cache is bound to the zone the value is shown in.
+    static bool convert_one_datetime(CppType& datum, int64_t second, int64_t microsecond, TzOffsetCache* offset_cache) {
         static_assert(at_is_datetime<AT>, "Invalid arrow type");
 
         DateTimeValue dtv;
-        if (UNLIKELY(!dtv.from_unixtime(second, microsecond, ctz))) {
-            return true;
-        }
+        dtv.from_unixtime_with_offset(second, microsecond, offset_cache->offset_in_bound_zone(second));
         if constexpr (lt_is_date<LT>) {
             datum.from_date(dtv.year(), dtv.month(), dtv.day());
         } else if constexpr (lt_is_datetime<LT>) {
@@ -735,6 +735,8 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
 
     static Status convert_datetime_from_second(CppType* data, const ArrowCppType* arrow_data, int num_elements,
                                                const cctz::time_zone& ctz, [[maybe_unused]] const uint8_t* null_data) {
+        TzOffsetCache offset_cache;
+        offset_cache.bind(ctz);
         for (int i = 0; i < num_elements; ++i) {
             if constexpr (is_nullable) {
                 if (null_data[i] == DATUM_NULL) {
@@ -742,7 +744,7 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
                 }
             }
 
-            if (convert_one_datetime(data[i], arrow_data[i], 0, ctz)) {
+            if (convert_one_datetime(data[i], arrow_data[i], 0, &offset_cache)) {
                 return Status::InternalError(strings::Substitute("Illegal timestamp value($0)", arrow_data[i]));
             }
         }
@@ -752,6 +754,8 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
     static Status convert_datetime_from_milisecond(CppType* data, const ArrowCppType* arrow_data, int num_elements,
                                                    const cctz::time_zone& ctz,
                                                    [[maybe_unused]] const uint8_t* null_data) {
+        TzOffsetCache offset_cache;
+        offset_cache.bind(ctz);
         for (int i = 0; i < num_elements; ++i) {
             if constexpr (is_nullable) {
                 if (null_data[i] == DATUM_NULL) {
@@ -759,7 +763,7 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
                 }
             }
 
-            if (convert_one_datetime(data[i], arrow_data[i] / 1000, arrow_data[i] % 1000 * 1000, ctz)) {
+            if (convert_one_datetime(data[i], arrow_data[i] / 1000, arrow_data[i] % 1000 * 1000, &offset_cache)) {
                 return Status::InternalError(strings::Substitute("Illegal timestamp value($0)", arrow_data[i]));
             }
         }
@@ -769,6 +773,8 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
     static Status convert_datetime_from_microsecond(CppType* data, const ArrowCppType* arrow_data, int num_elements,
                                                     const cctz::time_zone& ctz,
                                                     [[maybe_unused]] const uint8_t* null_data) {
+        TzOffsetCache offset_cache;
+        offset_cache.bind(ctz);
         for (int i = 0; i < num_elements; ++i) {
             if constexpr (is_nullable) {
                 if (null_data[i] == DATUM_NULL) {
@@ -776,7 +782,7 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
                 }
             }
 
-            if (convert_one_datetime(data[i], arrow_data[i] / 1000000, arrow_data[i] % 1000000, ctz)) {
+            if (convert_one_datetime(data[i], arrow_data[i] / 1000000, arrow_data[i] % 1000000, &offset_cache)) {
                 return Status::InternalError(strings::Substitute("Illegal timestamp value($0)", arrow_data[i]));
             }
         }
@@ -786,6 +792,8 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
     static Status convert_datetime_from_nanosecond(CppType* data, const ArrowCppType* arrow_data, int num_elements,
                                                    const cctz::time_zone& ctz,
                                                    [[maybe_unused]] const uint8_t* null_data) {
+        TzOffsetCache offset_cache;
+        offset_cache.bind(ctz);
         for (int i = 0; i < num_elements; ++i) {
             if constexpr (is_nullable) {
                 if (null_data[i] == DATUM_NULL) {
@@ -793,7 +801,8 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
                 }
             }
 
-            if (convert_one_datetime(data[i], arrow_data[i] / 1000000000, arrow_data[i] % 1000000000 / 1000, ctz)) {
+            if (convert_one_datetime(data[i], arrow_data[i] / 1000000000, arrow_data[i] % 1000000000 / 1000,
+                                     &offset_cache)) {
                 return Status::InternalError(strings::Substitute("Illegal timestamp value($0)", arrow_data[i]));
             }
         }

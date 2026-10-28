@@ -401,6 +401,9 @@ struct TIcebergDeleteFile {
     // encrypted table is itself encrypted and carries its OWN per-file key, so it cannot reuse
     // the data file's key in THdfsScanRange.parquet_encryption_info (field 46).
     5: optional TParquetEncryptionInfo parquet_encryption_info
+    // Set for a position delete file whose every row references the data file of this scan
+    // range, so the BE reads only its pos column.
+    6: optional bool references_only_data_file
 }
 
 struct TPaimonDeletionFile {

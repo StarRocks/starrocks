@@ -87,6 +87,8 @@ public class IcebergRowDeltaSink extends DataSink {
     private final TIcebergWriteMode writeMode;
     private CloudConfiguration cloudConfiguration;
     private com.starrocks.connector.iceberg.IcebergMetadata.IcebergSinkExtra sinkExtraInfo;
+    // the branch the commit goes to, or null for the main branch
+    private String targetBranch;
 
     /**
      * Constructor for IcebergRowDeltaSink
@@ -238,6 +240,14 @@ public class IcebergRowDeltaSink extends DataSink {
      */
     public com.starrocks.connector.iceberg.IcebergMetadata.IcebergSinkExtra getSinkExtraInfo() {
         return sinkExtraInfo;
+    }
+
+    public String getTargetBranch() {
+        return targetBranch;
+    }
+
+    public void setTargetBranch(String targetBranch) {
+        this.targetBranch = targetBranch;
     }
 
     public boolean isUnpartitionedTable() {

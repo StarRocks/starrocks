@@ -872,8 +872,8 @@ Timestamp reference_int64_timestamp(int64_t ticks, int64_t second_mask, const cc
 } // namespace
 
 // Every non-null row of INT64 TIMESTAMP(MILLIS/MICROS/NANOS) matches the reference conversion, for a UTC
-// session (fixed-offset path), a DST timezone (per-row lookup) and a non-adjusted (NTZ) column, including
-// pre-epoch ticks with a sub-second part.
+// session (one offset per batch), zones with offset changes (per-row offsets) and a non-adjusted (NTZ) column,
+// including pre-epoch ticks with a sub-second part.
 TEST_F(ColumnConverterTest, Int64TimestampUnitsMatchReference) {
     std::mt19937_64 rng(29);
     std::vector<int64_t> seconds_values;
@@ -901,8 +901,8 @@ TEST_F(ColumnConverterTest, Int64TimestampUnitsMatchReference) {
             int64_t sub = static_cast<int64_t>(rng() % static_cast<uint64_t>(unit.mask));
             ticks.push_back(seconds_values[i] * unit.mask + (i % 2 ? sub : -sub));
         }
-        for (const auto& [timezone, adjusted] :
-             std::vector<std::pair<std::string, bool>>{{"UTC", true}, {"Asia/Shanghai", true}, {"UTC", false}}) {
+        for (const auto& [timezone, adjusted] : std::vector<std::pair<std::string, bool>>{
+                     {"UTC", true}, {"Asia/Shanghai", true}, {"Europe/London", true}, {"UTC", false}}) {
             SCOPED_TRACE(fmt::format("mask={} tz={} adjusted={}", unit.mask, timezone, adjusted));
             ParquetField field;
             field.physical_type = tparquet::Type::INT64;
@@ -932,6 +932,143 @@ TEST_F(ColumnConverterTest, Int64TimestampUnitsMatchReference) {
                               dst_data[i].timestamp())
                             << "row " << i << " ticks " << ticks[i];
                 }
+            }
+        }
+    }
+}
+
+// A DST zone shifts each batch by the offset at its values, whether the batch lies in one offset window (one
+// offset for all rows) or spans a transition, independent of the offset at query time.
+TEST_F(ColumnConverterTest, Int64TimestampDstBatches) {
+    ParquetField field;
+    field.physical_type = tparquet::Type::INT64;
+    field.schema_element.type = tparquet::Type::INT64;
+    tparquet::TimestampType ts;
+    ts.isAdjustedToUTC = true;
+    ts.unit.__set_MICROS(tparquet::MicroSeconds());
+    tparquet::LogicalType logical_type;
+    logical_type.__set_TIMESTAMP(ts);
+    field.schema_element.__set_logicalType(logical_type);
+    const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DATETIME);
+    std::unique_ptr<ColumnConverter> converter;
+    ASSERT_OK(ColumnConverterFactory::create_converter(field, col_type, "Europe/London", &converter));
+
+    const int64_t summer = 1719835200;  // 2024-07-01 12:00:00 UTC
+    const int64_t winter = 1704110400;  // 2024-01-01 12:00:00 UTC
+    const int64_t bst_end = 1729990800; // 2024-10-27 01:00:00 UTC
+    std::vector<std::pair<std::vector<int64_t>, std::vector<std::string>>> batches = {
+            {{summer, summer + 60}, {"2024-07-01 13:00:00", "2024-07-01 13:01:00"}},
+            {{winter, winter + 60}, {"2024-01-01 12:00:00", "2024-01-01 12:01:00"}},
+            {{bst_end - 1800, bst_end + 600, summer, winter},
+             {"2024-10-27 01:30:00", "2024-10-27 01:10:00", "2024-07-01 13:00:00", "2024-01-01 12:00:00"}}};
+    for (const auto& [seconds, want] : batches) {
+        std::vector<int64_t> micros;
+        for (int64_t s : seconds) {
+            micros.push_back(s * 1000000);
+        }
+        auto src = make_nullable_source(micros, std::vector<uint8_t>(micros.size(), 0));
+        auto dst = ColumnHelper::create_column(col_type, true);
+        ASSERT_OK(converter->convert(src.get(), dst.get()));
+        for (size_t i = 0; i < want.size(); i++) {
+            EXPECT_EQ(want[i], dst->debug_item(i)) << seconds[i];
+        }
+    }
+}
+
+// Paired min/max statistics of a zone-adjusted INT64 timestamp convert to bounds that hold every value between them,
+// though local times are not monotonic across a backward shift (2024-10-27 00:30 UTC loads as 01:30 BST, 01:10 UTC
+// as 01:10 GMT).
+TEST_F(ColumnConverterTest, Int64TimestampMinMaxHoldValuesAcrossDst) {
+    ParquetField field;
+    field.physical_type = tparquet::Type::INT64;
+    field.schema_element.type = tparquet::Type::INT64;
+    tparquet::TimestampType ts;
+    ts.isAdjustedToUTC = true;
+    ts.unit.__set_MICROS(tparquet::MicroSeconds());
+    tparquet::LogicalType logical_type;
+    logical_type.__set_TIMESTAMP(ts);
+    field.schema_element.__set_logicalType(logical_type);
+    const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DATETIME);
+
+    std::mt19937_64 rng(43);
+    for (const std::string zone : {"Europe/London", "Antarctica/Casey", "UTC"}) {
+        SCOPED_TRACE(zone);
+        std::unique_ptr<ColumnConverter> converter;
+        ASSERT_OK(ColumnConverterFactory::create_converter(field, col_type, zone, &converter));
+        std::vector<int64_t> lo = {1729989000LL * 1000000, 1520692200LL * 1000000};
+        std::vector<int64_t> hi = {1729991400LL * 1000000, 1520701200LL * 1000000};
+        for (int i = 0; i < 300; i++) {
+            int64_t a = (static_cast<int64_t>(rng() % 4000000000ULL) - 1000000000LL) * 1000000;
+            lo.push_back(a);
+            hi.push_back(a + static_cast<int64_t>(rng() % (86400ULL * 400 * 1000000)));
+        }
+        std::vector<uint8_t> nulls(lo.size(), 0);
+        nulls[5] = 1;
+        auto min_src = make_nullable_source(lo, nulls);
+        auto max_src = make_nullable_source(hi, nulls);
+        auto min_dst = ColumnHelper::create_column(col_type, true);
+        auto max_dst = ColumnHelper::create_column(col_type, true);
+        ASSERT_OK(converter->convert_min_max(min_src.get(), max_src.get(), min_dst.get(), max_dst.get()));
+        ASSERT_TRUE(min_dst->is_null(5));
+        for (size_t i = 0; i < lo.size(); i++) {
+            if (nulls[i]) {
+                continue;
+            }
+            std::vector<int64_t> values;
+            for (int64_t v = lo[i]; v <= hi[i]; v += std::max<int64_t>(1, (hi[i] - lo[i]) / 499)) {
+                values.push_back(v);
+            }
+            values.push_back(hi[i]);
+            auto src = make_nullable_source(values, std::vector<uint8_t>(values.size(), 0));
+            auto dst = ColumnHelper::create_column(col_type, true);
+            ASSERT_OK(converter->convert(src.get(), dst.get()));
+            const TimestampValue min_bound = min_dst->get(i).get_timestamp();
+            const TimestampValue max_bound = max_dst->get(i).get_timestamp();
+            for (size_t j = 0; j < values.size(); j++) {
+                const TimestampValue v = dst->get(j).get_timestamp();
+                ASSERT_LE(min_bound, v) << "pair " << i << " value " << values[j];
+                ASSERT_GE(max_bound, v) << "pair " << i << " value " << values[j];
+            }
+        }
+    }
+}
+
+// INT96 values are shifted by the offset in force at 00:00 UTC of their day, one offset per batch when all days
+// lie in one offset window, else one per row.
+TEST_F(ColumnConverterTest, Int96TimestampDstBatches) {
+    ParquetField field;
+    field.physical_type = tparquet::Type::INT96;
+    const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DATETIME);
+    cctz::time_zone london;
+    ASSERT_TRUE(TimezoneUtils::find_cctz_time_zone("Europe/London", london));
+    std::unique_ptr<ColumnConverter> converter;
+    ASSERT_OK(ColumnConverterFactory::create_converter(field, col_type, "Europe/London", &converter));
+
+    std::mt19937_64 rng(31);
+    for (int64_t span_days : {1, 2000}) {
+        std::vector<int96_t> values;
+        std::vector<Timestamp> packed;
+        std::vector<uint8_t> nulls;
+        for (int i = 0; i < 1000; i++) {
+            Timestamp t = timestamp::from_datetime(2020, 6, 1, 0, 0, 0, 0);
+            t = timestamp::add<TimeUnit::SECOND>(t, static_cast<int64_t>(rng() % (span_days * 86400)));
+            packed.push_back(t);
+            int96_t raw;
+            raw.hi = static_cast<uint32_t>(t >> TIMESTAMP_BITS);
+            raw.lo = (t & ((static_cast<uint64_t>(1) << TIMESTAMP_BITS) - 1)) * 1000;
+            values.push_back(raw);
+            nulls.push_back(i % 9 == 4);
+        }
+        auto src = make_nullable_source(values, nulls);
+        auto dst = ColumnHelper::create_column(col_type, true);
+        ASSERT_OK(converter->convert(src.get(), dst.get()));
+        auto* dst_nullable = down_cast<NullableColumn*>(dst.get());
+        const auto& dst_data = down_cast<TimestampColumn*>(dst_nullable->data_column_raw_ptr())->get_data();
+        for (size_t i = 0; i < packed.size(); i++) {
+            ASSERT_EQ(nulls[i], dst_nullable->is_null(i)) << "row " << i;
+            if (!nulls[i]) {
+                int offset = timestamp::get_timezone_offset_by_timestamp(packed[i], london);
+                ASSERT_EQ(timestamp::add<TimeUnit::SECOND>(packed[i], offset), dst_data[i].timestamp()) << "row " << i;
             }
         }
     }

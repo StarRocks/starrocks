@@ -137,6 +137,9 @@ public class IcebergMetadataColumnValue implements ColumnValue {
 
     @Override
     public LocalDateTime getDateTime(ColumnType.TypeValue type) {
+        if (fieldData instanceof LocalDateTime) {
+            return (LocalDateTime) fieldData;
+        }
         if (type == ColumnType.TypeValue.DATETIME) {
             Instant instant = Instant.ofEpochMilli((long) fieldData);
             return LocalDateTime.ofInstant(instant, ZoneId.of(timezone));

@@ -21,6 +21,7 @@
 
 #include "column/chunk.h"
 #include "column/column_helper.h"
+#include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/config_exec_flow_fwd.h"
 #include "common/logging.h"
@@ -486,6 +487,8 @@ Status Aggregator::prepare(RuntimeState* state, RuntimeProfile* runtime_profile)
     _agg_input_raw_columns.resize(agg_size);
     _agg_states_offsets.resize(agg_size);
     _is_merge_funcs.resize(agg_size);
+    _is_first_value_only_funcs.assign(agg_size, 0);
+    _num_first_value_only_funcs = 0;
     _agg_fn_types = _params->agg_fn_types;
 
     // Save the TFunction objects up front: close() walks _agg_functions/_agg_fn_ctxs and indexes _fns with
@@ -504,6 +507,8 @@ Status Aggregator::prepare(RuntimeState* state, RuntimeProfile* runtime_profile)
         // get function
         bool is_result_nullable = _is_agg_result_nullable(desc, agg_fn_type);
         RETURN_IF_ERROR(_create_aggregate_function(state, fn, is_result_nullable, &_agg_functions[i]));
+        _is_first_value_only_funcs[i] = _agg_functions[i]->is_first_value_only();
+        _num_first_value_only_funcs += _is_first_value_only_funcs[i];
         VLOG_ROW << "agg_fn_name: " << fn.name.function_name << ", has_outer_join_child: " << has_outer_join_child
                  << ", is_result_nullable " << is_result_nullable;
 
@@ -694,6 +699,7 @@ Status Aggregator::_reset_state(RuntimeState* state, bool reset_sink_complete) {
 
     _tmp_agg_states.assign(_tmp_agg_states.size(), nullptr);
     _streaming_selection.assign(_streaming_selection.size(), 0);
+    _new_group_selection_ready = false;
 
     DCHECK(_mem_pool != nullptr);
     // Note: we must free agg_states object before _mem_pool free_all;
@@ -937,17 +943,79 @@ Status Aggregator::compute_single_agg_state(Chunk* chunk, size_t chunk_size) {
     return Status::OK();
 }
 
+// A NULL input never changes the state of a first-value-only function (its nullable wrapper skips it), so a group
+// can still lack a value only if every row of it so far was NULL. Such groups are recorded by state pointer in the
+// bloom filter `_pending_first_value_groups`; a false positive only costs an update that does nothing.
+static constexpr size_t kPendingFirstValueGroupsBits = 23;
+
+static inline size_t pending_first_value_group_bit(AggDataPtr state) {
+    return (reinterpret_cast<uintptr_t>(state) * 0x9E3779B97F4A7C15ULL) >> (64 - kPendingFirstValueGroupsBits);
+}
+
+// The rows a first-value-only function must see: the rows that created a group, plus the non-NULL rows of the groups
+// that may still lack a value.
+const Filter& Aggregator::_first_value_only_selection(size_t i, bool use_intermediate, size_t chunk_size) {
+    const Column* column =
+            (!_is_merge_funcs[i] && !use_intermediate) ? _agg_input_raw_columns[i][0] : _agg_input_columns[i][0].get();
+    const bool all_null = column->only_null();
+    const uint8_t* nulls = nullptr;
+    if (!all_null && column->is_nullable() && column->has_null()) {
+        nulls = down_cast<const NullableColumn*>(column)->null_column_data().data();
+    }
+    if (!all_null && nulls == nullptr && !_has_pending_first_value_groups) {
+        return _new_group_selection;
+    }
+
+    if (_pending_first_value_groups.empty()) {
+        _pending_first_value_groups.assign((1ULL << kPendingFirstValueGroupsBits) / 64, 0);
+    }
+    uint64_t* __restrict pending = _pending_first_value_groups.data();
+    const uint8_t* __restrict new_groups = _new_group_selection.data();
+    _first_value_only_selection_buffer.resize(chunk_size);
+    uint8_t* __restrict selection = _first_value_only_selection_buffer.data();
+    for (size_t row = 0; row < chunk_size; row++) {
+        const bool is_null = all_null || (nulls != nullptr && nulls[row]);
+        const size_t bit = pending_first_value_group_bit(_tmp_agg_states[row]);
+        if (new_groups[row] == 0) {
+            selection[row] = 0;
+            if (is_null) {
+                pending[bit / 64] |= 1ULL << (bit % 64);
+                _has_pending_first_value_groups = true;
+            }
+        } else {
+            selection[row] = is_null || ((pending[bit / 64] >> (bit % 64)) & 1) == 0;
+        }
+    }
+    return _first_value_only_selection_buffer;
+}
+
 Status Aggregator::compute_batch_agg_states(Chunk* chunk, size_t chunk_size) {
     SCOPED_TIMER(_agg_stat->agg_function_compute_timer);
     bool use_intermediate = _use_intermediate_as_input();
     auto& agg_expr_ctxs = use_intermediate ? _intermediate_agg_expr_ctxs : _agg_expr_ctxs;
+    const bool new_group_selection_ready = _new_group_selection_ready;
+    _new_group_selection_ready = false;
 
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
         // evaluate arguments at i-th agg function
         RETURN_IF_ERROR(evaluate_agg_input_column(chunk, agg_expr_ctxs[i], i));
         SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(_allocator.get());
         // batch call update or merge
-        if (!_is_merge_funcs[i] && !use_intermediate) {
+        if (new_group_selection_ready && _is_first_value_only_funcs[i]) {
+            // The states of the other groups already hold their value: skip their rows, never touching the states.
+            DCHECK_EQ(_new_group_selection.size(), chunk_size);
+            const Filter& selection = _first_value_only_selection(i, use_intermediate, chunk_size);
+            if (!_is_merge_funcs[i] && !use_intermediate) {
+                _agg_functions[i]->update_batch_selectively_exception_safe(
+                        _agg_fn_ctxs[i], chunk_size, _agg_states_offsets[i], _agg_input_raw_columns[i].data(),
+                        _tmp_agg_states.data(), selection);
+            } else {
+                DCHECK_GE(_agg_input_columns[i].size(), 1);
+                _agg_functions[i]->merge_batch_selectively_exception_safe(
+                        _agg_fn_ctxs[i], _agg_input_columns[i][0]->size(), _agg_states_offsets[i],
+                        _agg_input_columns[i][0].get(), _tmp_agg_states.data(), selection);
+            }
+        } else if (!_is_merge_funcs[i] && !use_intermediate) {
             _agg_functions[i]->update_batch_exception_safe(_agg_fn_ctxs[i], chunk_size, _agg_states_offsets[i],
                                                            _agg_input_raw_columns[i].data(), _tmp_agg_states.data());
         } else {
@@ -963,6 +1031,7 @@ Status Aggregator::compute_batch_agg_states(Chunk* chunk, size_t chunk_size) {
 
 Status Aggregator::compute_batch_agg_states_with_selection(Chunk* chunk, size_t chunk_size) {
     SCOPED_TIMER(_agg_stat->agg_function_compute_timer);
+    _new_group_selection_ready = false;
     bool use_intermediate = _use_intermediate_as_input();
     auto& agg_expr_ctxs = use_intermediate ? _intermediate_agg_expr_ctxs : _agg_expr_ctxs;
 
@@ -1692,6 +1761,7 @@ void Aggregator::_report_hash_variant(const char* name) {
 }
 
 void Aggregator::build_hash_map(size_t chunk_size, bool agg_group_by_with_limit) {
+    _new_group_selection_ready = false;
     if (agg_group_by_with_limit) {
         if (_hash_map_variant.size() >= _limit) {
             build_hash_map_with_selection(chunk_size);
@@ -1699,6 +1769,22 @@ void Aggregator::build_hash_map(size_t chunk_size, bool agg_group_by_with_limit)
         } else {
             _streaming_selection.assign(chunk_size, 0);
         }
+    }
+
+    if (_num_first_value_only_funcs > 0) {
+        _hash_map_variant.visit([&](auto& hash_map_with_key) {
+            using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
+            hash_map_with_key->build_hash_map_marking_new_groups(chunk_size, _group_by_columns, _mem_pool.get(),
+                                                                 AllocateState<MapType>(this), &_tmp_agg_states,
+                                                                 &_new_group_selection);
+        });
+        // The hash map marks a row that created a group with 1; flip it to the Filter convention (0 = selected).
+        uint8_t* __restrict selection = _new_group_selection.data();
+        for (size_t i = 0; i < chunk_size; i++) {
+            selection[i] ^= 1;
+        }
+        _new_group_selection_ready = true;
+        return;
     }
 
     _hash_map_variant.visit([&](auto& hash_map_with_key) {
@@ -1718,6 +1804,7 @@ void Aggregator::build_hash_map(size_t chunk_size, std::atomic<int64_t>& shared_
 }
 
 void Aggregator::_build_hash_map_with_shared_limit(size_t chunk_size, std::atomic<int64_t>& shared_limit_countdown) {
+    _new_group_selection_ready = false;
     auto start_size = _hash_map_variant.size();
     if (_hash_map_variant.size() >= _limit || shared_limit_countdown.load(std::memory_order_relaxed) <= 0) {
         build_hash_map_with_selection(chunk_size);
@@ -1735,6 +1822,7 @@ void Aggregator::_build_hash_map_with_shared_limit(size_t chunk_size, std::atomi
 }
 
 void Aggregator::build_hash_map_with_selection(size_t chunk_size) {
+    _new_group_selection_ready = false;
     _hash_map_variant.visit([&](auto& hash_map_with_key) {
         using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
         hash_map_with_key->build_hash_map_with_selection(chunk_size, _group_by_columns, _mem_pool.get(),
@@ -1744,6 +1832,7 @@ void Aggregator::build_hash_map_with_selection(size_t chunk_size) {
 }
 
 void Aggregator::build_hash_map_with_topn_runtime_filter(size_t chunk_size) {
+    _new_group_selection_ready = false;
     _streaming_selection.resize(chunk_size);
     _hash_map_variant.visit([&](auto& hash_map_with_key) {
         using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
@@ -1763,6 +1852,7 @@ void Aggregator::build_hash_map_with_topn_runtime_filter(size_t chunk_size) {
 // so the following group keys(same as the first not found group keys) are not marked as non-founded.
 // This can be used for stream mv so no need to find multi times for the same non-found group keys.
 void Aggregator::build_hash_map_with_selection_and_allocation(size_t chunk_size, bool agg_group_by_with_limit) {
+    _new_group_selection_ready = false;
     _hash_map_variant.visit([&](auto& hash_map_with_key) {
         using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
         hash_map_with_key->build_hash_map_with_selection_and_allocation(chunk_size, _group_by_columns, _mem_pool.get(),

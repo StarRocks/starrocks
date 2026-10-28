@@ -104,6 +104,7 @@ const MOVED_DOCS = [
   { from: "/docs/administration/management/FE_parameters/user_query_loading/", to: "/docs/administration/configuration/FE_parameters/user_query_loading/" },
   { from: "/docs/administration/management/configuration/", to: "/docs/administration/configuration/" },
   { from: "/docs/administration/management/monitoring/Monitor_and_Alert/", to: "/docs/administration/management/monitoring/" },
+  { from: "/docs/administration/management/monitoring/metrics/", to: "/docs/administration/management/monitoring/metric_details/" },
   { from: "/docs/cover_pages/batch_loading_integration/", to: "/docs/integrations/batch/" },
   { from: "/docs/cover_pages/bi_tools/", to: "/docs/integrations/BI_integrations/" },
   { from: "/docs/cover_pages/csp_auth/", to: "/docs/integrations/csp_auth/" },

@@ -101,11 +101,11 @@ public class AIFunctionAnalyzerTest {
         Expr defaults = new StringLiteral("");
         Expr options = ((SelectRelation) ((QueryStatement) analyzeSuccess("select json_object('temperature', 0.5)"))
                 .getQueryRelation()).getOutputExpression().get(0);
-        assertTypedFunctionId("ai_complete", 200002, prompt, fileSlot());
-        assertTypedFunctionId("ai_complete", 200002, prompt, fileSlot(), defaults, model, options);
-        assertTypedFunctionId("ai_complete", 200002, prompt, fileSlot(), defaults, model, new NullLiteral());
-        assertTypedFunctionId("ai_embed", 200004, fileSlot());
-        assertTypedFunctionId("ai_embed", 200004, fileSlot(), defaults, model, options);
+        assertTypedFunctionId("ai_complete", 200001, prompt, fileSlot());
+        assertTypedFunctionId("ai_complete", 200001, prompt, fileSlot(), defaults, model, options);
+        assertTypedFunctionId("ai_complete", 200001, prompt, fileSlot(), defaults, model, new NullLiteral());
+        assertTypedFunctionId("ai_embed", 200003, fileSlot());
+        assertTypedFunctionId("ai_embed", 200003, fileSlot(), defaults, model, options);
     }
 
     @Test
@@ -264,11 +264,11 @@ public class AIFunctionAnalyzerTest {
         String[] args = {"'p'", "'p', ['a']", "'p', ['a']", "'p'", "'p', ['a']",
                 "'p', 'en', 'zh'", "'p', 'q'", "'p'", "'p', 'condition'"};
         for (int i = 0; i < names.length; i++) {
-            assertFunctionId("select " + names[i] + "(" + args[i] + ")", 200005 + i);
-            assertFunctionId("select " + names[i] + "(" + args[i] + ", '', 'model')", 200005 + i);
+            assertFunctionId("select " + names[i] + "(" + args[i] + ")", 200004 + i);
+            assertFunctionId("select " + names[i] + "(" + args[i] + ", '', 'model')", 200004 + i);
         }
         for (int i = 0; i < names.length; i++) {
-            assertFunctionId("select " + names[i] + "(" + args[i] + ", 'test_default_chat', 'model')", 200005 + i);
+            assertFunctionId("select " + names[i] + "(" + args[i] + ", 'test_default_chat', 'model')", 200004 + i);
         }
 
     }
@@ -579,8 +579,8 @@ public class AIFunctionAnalyzerTest {
     }
 
     @ParameterizedTest
-    @CsvSource(value = {"ai_complete('p', NULL)|200001", "ai_complete('p', NULL, NULL)|200001",
-            "ai_embed(NULL)|200003"}, delimiter = '|')
+    @CsvSource(value = {"ai_complete('p', NULL)|200000", "ai_complete('p', NULL, NULL)|200000",
+            "ai_embed(NULL)|200002"}, delimiter = '|')
     public void testUntypedNullUsesBuiltinOverloadResolution(String expression, long expectedId) {
         AIProviderTestUtil.setEmbeddingProperty("endpoint", "https://models.example.test/v1/embeddings");
         AIProviderTestUtil.setEmbeddingProperty("model", "embedding-model");
@@ -593,11 +593,11 @@ public class AIFunctionAnalyzerTest {
         AIProviderTestUtil.setEmbeddingProperty("endpoint", "https://models.example.test/v1/embeddings");
         AIProviderTestUtil.setEmbeddingProperty("model", "embedding-model");
         AIProviderTestUtil.setEmbeddingProperty("protocol", "openai");
-        assertFunctionId("select ai_complete('p', '', 'm', cast(NULL as json))", 200001);
-        assertTypedFunctionId("ai_complete", 200002, new StringLiteral("p"), NullLiteral.create(FileType.FILE));
-        assertFunctionId("select ai_embed(cast(NULL as varchar))", 200003);
-        assertFunctionId("select ai_embed('p', '', 'm', cast(NULL as json))", 200003);
-        assertTypedFunctionId("ai_embed", 200004, NullLiteral.create(FileType.FILE));
+        assertFunctionId("select ai_complete('p', '', 'm', cast(NULL as json))", 200000);
+        assertTypedFunctionId("ai_complete", 200001, new StringLiteral("p"), NullLiteral.create(FileType.FILE));
+        assertFunctionId("select ai_embed(cast(NULL as varchar))", 200002);
+        assertFunctionId("select ai_embed('p', '', 'm', cast(NULL as json))", 200002);
+        assertTypedFunctionId("ai_embed", 200003, NullLiteral.create(FileType.FILE));
     }
 
     @ParameterizedTest
@@ -636,7 +636,7 @@ public class AIFunctionAnalyzerTest {
         session.setDisableFunctionFoldConstants(true);
         try {
             analyzeSuccess("select ai_complete(nullif('x', 'x'))");
-            assertFunctionId("select ai_complete('a', NULL)", 200001);
+            assertFunctionId("select ai_complete('a', NULL)", 200000);
             Assertions.assertTrue(session.isDisableFunctionFoldConstants());
         } finally {
             session.setDisableFunctionFoldConstants(previous);

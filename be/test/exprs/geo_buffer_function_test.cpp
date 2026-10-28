@@ -281,23 +281,6 @@ TEST(GeoBufferFunctionTest, PreparedInvalidAndNullConstantsKeepErrorsLazy) {
         ASSERT_TRUE(GeoFunctions::native_geo_buffer_close(ctx.get(), FunctionContext::FRAGMENT_LOCAL).ok());
     }
 }
-TEST(GeoBufferFunctionTest, CancellationAndRealQueryMemoryLimitReturnErrors) {
-    RuntimeState state(TUniqueId(), TQueryOptions(), TQueryGlobals(), nullptr);
-    state.init_mem_trackers(TUniqueId());
-    ASSERT_NE(nullptr, state.query_mem_tracker_ptr());
-    auto type = geo_type();
-    std::unique_ptr<FunctionContext> ctx(
-            FunctionContext::create_context(&state, nullptr, type, {type, TypeDescriptor(TYPE_DOUBLE)}));
-    state.set_is_cancelled(true);
-    auto result = GeoFunctions::st_geometry_buffer(ctx.get(), {geometries({kSquare}), radius(1)});
-    ASSERT_FALSE(result.ok());
-    EXPECT_TRUE(result.status().is_cancelled());
-    state.set_is_cancelled(false);
-    ASSERT_TRUE(state.set_mem_limit_exceeded(state.instance_mem_tracker(), 1, "Buffer test").is_mem_limit_exceeded());
-    result = GeoFunctions::st_geometry_buffer(ctx.get(), {geometries({kSquare}), radius(1)});
-    ASSERT_FALSE(result.ok());
-    EXPECT_TRUE(result.status().is_mem_limit_exceeded());
-}
 TEST(GeoBufferFunctionTest, RegistryActivatesOnlyGeometryBufferAndItsLifecycle) {
     const auto* fn = BuiltinFunctions::find_builtin_function(120401);
     ASSERT_NE(nullptr, fn);

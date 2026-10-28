@@ -639,6 +639,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：Data Cache 磁盘容量自动调整开关，启用后会根据当前磁盘使用率动态调整缓存容量。该参数自 v4.0 起由 `datacache_auto_adjust_enable` 更名为 `enable_datacache_disk_auto_adjust`。
 - 引入版本：v3.3.0
 
+### external_table_clear_corrupted_cache_data
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否允许自动清理外表文件（例如 Hive 表、Iceberg 表）损坏的数据缓存。扫描文件时，如果从数据缓存读到的内容解析失败，系统会删除本次读到的缓存块，下次读取该文件时从远端存储重新读取。对于 Parquet 文件，如果出错前还未返回任何行，系统会先绕过数据缓存重新读取该文件，读取成功后才删除缓存块。该参数不影响存算分离集群的内表，内表由 `lake_clear_corrupted_cache_data` 控制。
+- 引入版本：-
+
 ### jdbc_connection_idle_timeout_ms
 
 - 默认值：600000

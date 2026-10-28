@@ -25,6 +25,7 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.LeaderLease;
 import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.AddPartitionClause;
@@ -291,15 +292,17 @@ public class PreSplitFlowTest {
     }
 
     @Test
-    public void dynamicOverwriteRevokesCleanupExclusionAfterAwait() {
-        // The await is fail-safe, so it can return with the job still pre-CLEANING while the
-        // overwrite transaction is about to start writing. The exclusion must not survive it.
+    public void dynamicOverwriteWaitUsesOriginalAdmissionLease() {
+        // A new leader may already exist by wait start; the dynamic route must carry the
+        // submitted job's original admission lease into the separate layout-ready wait.
         Database database = mock(Database.class);
         when(database.getId()).thenReturn(7L);
         OlapTable table = mockTable(/*partitioned*/ true, /*automatic*/ true);
         PreSplitFlow.Prepared prepared = preparedFor(mock(ScanContext.class));
         SampleSet samples = new SampleSet(List.of(), List.of(), Estimates.ZERO);
         TabletReshardJob combinedJob = mock(TabletReshardJob.class);
+        LeaderLease original = new LeaderLease(7L, 11L);
+        when(combinedJob.getAdmissionLease()).thenReturn(original);
 
         try (MockedStatic<TabletReshardUtils> reshardUtils = PresplitTestSupport.stubComputeNodeCount(1);
                 MockedStatic<PartitionSampleGrouper> grouper = Mockito.mockStatic(PartitionSampleGrouper.class);
@@ -318,9 +321,8 @@ public class PreSplitFlowTest {
             PreSplitFlow.runDynamicOverwriteFlow(database, table, prepared, LoadKind.INSERT_FROM_TABLE,
                     () -> false, mock(ConnectContext.class), 42L);
 
-            coordinator.verify(() -> TabletPreSplitCoordinator.awaitCombinedJobAllowingFallback(
-                    any(), eq(table), eq(combinedJob), any()), times(1));
-            Mockito.verify(combinedJob, times(1)).clearCleanupExcludedTransactionIds();
+            coordinator.verify(() -> TabletPreSplitCoordinator.awaitCombinedJobLayoutReadyAllowingFallback(
+                    any(), eq(table), eq(combinedJob), any(), eq(original)), times(1));
         }
     }
 
