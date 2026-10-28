@@ -157,7 +157,8 @@ public class AnalyzeFunctionTest {
             for (String expr : List.of("[[g]]", "map{'a': g}", "map{g: 'a'}", "row([g])", "named_struct('a', [g])",
                     "array_agg(g)", "array_agg(distinct g)", "max_by([g], id)", "map_agg(id, g)",
                     "array_distinct([g])", "array_sort([g])", "array_contains([g], g)", "[g] = [g]",
-                    "ST_AsText([g][1])", "cardinality([g])")) {
+                    "ST_AsText([g][1])", "cardinality([g])", "array_contains([], g)", "array_position([], g)",
+                    "array_contains(NULL, g)")) {
                 analyzeFail("select " + expr + source, NESTED_GEO_ERROR);
             }
             for (String query : List.of("select [g]" + source + " union all select [g]" + source,
@@ -172,6 +173,7 @@ public class AnalyzeFunctionTest {
                 analyzeFail(query, NESTED_GEO_ERROR);
             }
             analyzeSuccess("select ST_AsText(g), ST_AsBinary(g), g IS NULL" + source);
+            analyzeSuccess("select array_contains([ST_AsText(g)], ST_AsText(g))" + source);
             StarRocksAssert sr = AnalyzeTestUtil.getStarRocksAssert();
             sr.withView("create view nested_geo_view as select " + String.format(constructor, "'POINT (1 2)'") + " g");
             try {
