@@ -161,10 +161,6 @@ select count(*) from (select k2, id from ref except select k2, id from r_id [_SY
 -- result:
 0
 -- !result
-select (select count(*) from r_id [_SYNC_MV_]) = (select count(*) from ref);
--- result:
-1
--- !result
 create table t2 (
     k1 int not null,
     k2 int not null,

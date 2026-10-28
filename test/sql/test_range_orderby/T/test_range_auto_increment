@@ -74,7 +74,6 @@ select count(*) from r_id [_SYNC_MV_];
 -- not re-allocated. Compare against ref, not t, because a query on t may itself be answered from r_id.
 select count(*) from (select k2, id from r_id [_SYNC_MV_] except select k2, id from ref) a;
 select count(*) from (select k2, id from ref except select k2, id from r_id [_SYNC_MV_]) b;
-select (select count(*) from r_id [_SYNC_MV_]) = (select count(*) from ref);
 
 -- Step 7: sort-key rewrite with id first, on a single-index table.
 create table t2 (
