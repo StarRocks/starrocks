@@ -125,6 +125,7 @@ std::ostream& operator<<(std::ostream& os, const std::span<const TxnInfoPB>& txn
 } // namespace
 
 // Move load_txn_log to external namespace for test linking
+<<<<<<< HEAD
 StatusOr<TxnLogVectorPtr> load_txn_log(TabletManager* tablet_mgr, int64_t tablet_id, const TxnInfoPB& txn_info) {
     auto txn_logs = std::make_shared<std::vector<TxnLogPtr>>();
     // multi statement transaction
@@ -138,6 +139,48 @@ StatusOr<TxnLogVectorPtr> load_txn_log(TabletManager* tablet_mgr, int64_t tablet
                 txn_logs->push_back(txn_log.value());
             } else if (txn_log.status().is_not_found()) {
                 VLOG(2) << "Txn log not found for load_id: " << load_id.DebugString() << ", skipping";
+=======
+StatusOr<std::vector<TxnLogVector>> load_txn_log(TabletManager* tablet_mgr, std::vector<int64_t> tablet_ids,
+                                                 const TxnInfoPB& txn_info) {
+    std::vector<TxnLogVector> txn_logs_vector(tablet_ids.size());
+    for (size_t i = 0; i < tablet_ids.size(); ++i) {
+        auto tablet_id = tablet_ids[i];
+        auto& txn_logs = txn_logs_vector[i];
+        // multi statement transaction
+        if (txn_info.load_ids_size() > 0) {
+            for (const auto& load_id : txn_info.load_ids()) {
+                auto log_path = tablet_mgr->txn_log_location(tablet_id, txn_info.txn_id(), load_id);
+                auto txn_log = tablet_mgr->get_txn_log(log_path, false);
+                VLOG(2) << "Loading txn log from path: " << log_path;
+                if (txn_log.ok()) {
+                    VLOG(2) << "Successfully loaded txn log for txn_log: " << *txn_log;
+                    txn_logs.push_back(txn_log.value());
+                } else if (txn_log.status().is_not_found()) {
+                    VLOG(2) << "Txn log not found for load_id: " << load_id.DebugString() << ", skipping";
+                    continue;
+                } else {
+                    return txn_log.status();
+                }
+            }
+            // A statement writes txn logs only for the tablets it loads, so a load id without a log is expected.
+            // A tablet without any log is not: FE commits a partition only after all of its tablets finished
+            // loading. Report it like a missing single txn log rather than let the caller apply no statement.
+            if (txn_logs.empty()) {
+                return Status::NotFound(fmt::format("no txn log of tablet {} for any of the {} load ids of txn {}",
+                                                    tablet_id, txn_info.load_ids_size(), txn_info.txn_id()));
+            }
+            continue;
+        } else if (!txn_info.combined_txn_log()) {
+            auto log_path = tablet_mgr->txn_log_location(tablet_id, txn_info.txn_id());
+            ASSIGN_OR_RETURN(auto txn_log, tablet_mgr->get_txn_log(log_path, false));
+            txn_logs.push_back(txn_log);
+            continue;
+        } else {
+            auto cache_key = tablet_mgr->txn_log_location(tablet_id, txn_info.txn_id());
+            auto ptr = tablet_mgr->metacache()->lookup_txn_log(cache_key);
+            if (ptr) {
+                txn_logs.push_back(ptr);
+>>>>>>> 9d4f071 ([BugFix] Persist the load ids of explicit transactions so their publish finds the txn logs (#81413))
                 continue;
             } else {
                 return txn_log.status();
@@ -490,8 +533,20 @@ Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, std::sp
             auto txn_id = txn_infos[i].txn_id();
             auto log_version = log_versions[i];
             auto expected_count = txn_infos[i].load_ids_size();
+<<<<<<< HEAD
             ASSIGN_OR_RETURN(auto txn_logs_ptr, load_txn_log(tablet_mgr, tablet_id, txn_infos[i]));
             auto& txn_logs = *txn_logs_ptr;
+=======
+            auto txn_logs_or = load_txn_log(tablet_mgr, {tablet_id}, txn_infos[i]);
+            // NotFound means no per-load_id file is left, the fully consumed case of the shortfall below.
+            if (!txn_logs_or.ok() && !txn_logs_or.status().is_not_found()) {
+                return txn_logs_or.status();
+            }
+            TxnLogVector txn_logs;
+            if (txn_logs_or.ok()) {
+                txn_logs = std::move(txn_logs_or.value()[0]);
+            }
+>>>>>>> 9d4f071 ([BugFix] Persist the load ids of explicit transactions so their publish finds the txn logs (#81413))
 
             if (static_cast<int>(txn_logs.size()) < expected_count) {
                 // load_txn_log silently skips per-load_id files that are NotFound, so any
