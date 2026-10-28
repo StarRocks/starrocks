@@ -732,7 +732,7 @@ public class IcebergMetadataTest extends TableTestBase {
     public void testDropViewKeepsFailingWhenMetadataFileIsMissing() {
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
-                Executors.newSingleThreadExecutor(), null);
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
 
         new Expectations(icebergHiveCatalog) {
             {
@@ -748,8 +748,7 @@ public class IcebergMetadataTest extends TableTestBase {
 
         Assertions.assertThrows(StarRocksConnectorException.class, () ->
                 metadata.dropTable(connectContext, new DropTableStmt(true,
-                        new TableRef(QualifiedName.of(Lists.newArrayList(CATALOG_NAME,
-                                "iceberg_db", "table1")), null, NodePosition.ZERO), true, false)));
+                        new TableName(CATALOG_NAME, "iceberg_db", "table1"), true, false)));
     }
 
     @Test
