@@ -78,6 +78,7 @@ set(EXEC_FILES
         ./exprs/agg/data_sketch/ds_theta_test.cpp
         ./exprs/agg/json_each_test.cpp
         ./exprs/agg/aggregate_test.cpp
+        ./exprs/agg/decimal_sum_overflow_test.cpp
         ./exprs/agg/window_test.cpp
         ./exprs/agg/agg_compressed_key_test.cpp
         ./exprs/agg/distinct_two_level_test.cpp
