@@ -14,7 +14,6 @@
 
 package com.starrocks.service.arrow.flight.sql.auth2;
 
-import com.starrocks.qe.GlobalVariable;
 import com.starrocks.service.arrow.flight.sql.session.ArrowFlightSqlSessionManager;
 import org.apache.arrow.flight.CallHeaders;
 import org.apache.arrow.flight.CallStatus;
@@ -63,21 +62,16 @@ public class ArrowFlightSqlAuthenticator implements CallHeaderAuthenticator {
         try {
             sessionManager.validateToken(token);
         } catch (IllegalArgumentException e) {
-            // Token not found locally - if proxy is enabled and token is from a valid FE, allow through.
-            if (isProxyEnabled()) {
-                String feHost = ArrowFlightSqlSessionManager.extractFeHost(token);
-                if (feHost != null && ArrowFlightSqlSessionManager.isValidFeHost(feHost)) {
-                    return createAuthResult(token);
-                }
-            }
+            // The token is not present in this FE's local session cache. Note that even with
+            // proxy mode enabled, the "FE_HOST|UUID" prefix embedded in the token is caller-supplied
+            // and unauthenticated — it must never be trusted as proof that the token is valid on the
+            // named host. Accepting it here would let anyone forge a token for any known FE hostname
+            // and be authenticated as an arbitrary session. Cross-FE token forwarding must be verified
+            // against the owning FE's session store before being accepted, which is not implemented here.
             throw CallStatus.UNAUTHENTICATED.withCause(e).withDescription(e.getMessage()).toRuntimeException();
         }
 
         return createAuthResult(token);
-    }
-
-    private boolean isProxyEnabled() {
-        return GlobalVariable.isArrowFlightProxyEnabled();
     }
 
     private AuthResult createAuthResult(String token) {
