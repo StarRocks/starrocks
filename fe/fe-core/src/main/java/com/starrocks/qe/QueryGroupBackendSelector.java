@@ -95,9 +95,8 @@ public class QueryGroupBackendSelector implements BackendSelector {
                     .map(location -> location.getBackend_id()).collect(Collectors.toSet()) : Set.of());
         });
         List<QueryGroupManifest.Group> groups = new ArrayList<>(manifest.getGroups());
+        // The builder assigns group IDs in canonical interval order.
         groups.sort(Comparator.comparingLong(QueryGroupManifest.Group::estimatedWeight).reversed()
-                .thenComparing(g -> g.interval().getLowerBound(), Comparator.nullsFirst(Comparator.naturalOrder()))
-                .thenComparing(g -> g.interval().getUpperBound(), Comparator.nullsLast(Comparator.naturalOrder()))
                 .thenComparingInt(QueryGroupManifest.Group::groupId));
         for (var group : groups) {
             Range<Tuple> interval = group.interval();
