@@ -22,11 +22,6 @@
 #include <functional>
 #include <limits>
 #include <memory>
-<<<<<<< HEAD
-=======
-#include <numeric>
-#include <optional>
->>>>>>> 353afbb4d6f... [Enhancement][RB-225] Skip deleted Iceberg data before IO and cut the BE cost of position deletes (#67208)
 #include <vector>
 
 #include "base/testutil/assert.h"
@@ -53,13 +48,9 @@
 #include "exprs/expr_factory.h"
 #include "formats/column_evaluator.h"
 #include "formats/csv/csv_defaults.h"
-<<<<<<< HEAD
 #include "formats/iceberg/iceberg_delete_builder.h"
 #include "formats/parquet/file_writer.h"
 #include "formats/parquet/parquet_file_writer.h"
-=======
-#include "formats/puffin/deletion_vector_blob.h"
->>>>>>> 353afbb4d6f... [Enhancement][RB-225] Skip deleted Iceberg data before IO and cut the BE cost of position deletes (#67208)
 #include "runtime/chunk_helper.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/runtime_filter_builder.h"
@@ -303,14 +294,6 @@ TEST_F(HdfsScannerTest, TestParquetSkipFileWithAllRowsDeleted) {
 
 // Scans iceberg_three_row_groups.parquet (c1 = 0..11, 3 row groups of 4 rows) with Iceberg deletes.
 class HdfsParquetDeletedSkipTest : public HdfsScannerTest {
-public:
-    void TearDown() override {
-        for (const auto& path : _dv_files) {
-            std::filesystem::remove(path);
-        }
-        HdfsScannerTest::TearDown();
-    }
-
 protected:
     static constexpr const char* kDataFile =
             "./be/test/exec/test_data/parquet_scanner/iceberg_three_row_groups.parquet";
@@ -322,34 +305,6 @@ protected:
         df->__set_file_content(TIcebergFileContent::POSITION_DELETES);
         ASSIGN_OR_ABORT(const int64_t size, FileSystem::Default()->get_file_size(path));
         df->__set_length(size);
-        return df;
-    }
-
-    // A V3 deletion vector of kDataFile, written to a puffin file holding just the blob.
-    const TIcebergDeleteFile* _deletion_vector(const std::vector<uint64_t>& positions) {
-        roaring64_bitmap_t* bitmap = roaring64_bitmap_create();
-        for (uint64_t pos : positions) {
-            roaring64_bitmap_add(bitmap, pos);
-        }
-        auto blob = formats::build_deletion_vector_blob(bitmap);
-        roaring64_bitmap_free(bitmap);
-        CHECK(blob.ok()) << blob.status();
-        const std::string path = "./hdfs_scanner_test_dv_" + std::to_string(_dv_files.size()) + ".puffin";
-        ASSIGN_OR_ABORT(auto wf, FileSystem::Default()->new_writable_file(path));
-        CHECK_OK(wf->append(Slice(blob.value())));
-        CHECK_OK(wf->close());
-        _dv_files.emplace_back(path);
-
-        auto* df = _pool.add(new TIcebergDeleteFile());
-        df->__set_full_path(path);
-        df->__set_file_content(TIcebergFileContent::POSITION_DELETES);
-        df->__set_length(static_cast<int64_t>(blob.value().size()));
-        TIcebergDeletionVectorBlob dv;
-        dv.__set_content_offset(0);
-        dv.__set_content_size_in_bytes(static_cast<int64_t>(blob.value().size()));
-        dv.__set_record_count(static_cast<int64_t>(positions.size()));
-        dv.__set_referenced_data_file(kDataFile);
-        df->__set_deletion_vector(dv);
         return df;
     }
 
@@ -411,7 +366,6 @@ protected:
 
     // Rows left when row 0 and all of row group 1 (rows 4..7) are deleted.
     const std::vector<std::string> _rows_without_group1{"[1]", "[2]", "[3]", "[8]", "[9]", "[10]", "[11]"};
-    std::vector<std::string> _dv_files;
 };
 
 // Row group 1 is fully deleted (position 6 repeated) and is skipped before any IO; row 0 of row
@@ -434,18 +388,6 @@ TEST_F(HdfsParquetDeletedSkipTest, SkipOnUnionOfDeleteFiles) {
     ASSERT_EQ(0, _counter("DeletedFilesSkipped"));
 
     ASSERT_TRUE(_scan({a, b, c}).empty());
-    ASSERT_EQ(1, _counter("DeletedFilesSkipped"));
-}
-
-// A V3 deletion vector takes the same skips.
-TEST_F(HdfsParquetDeletedSkipTest, SkipWithDeletionVector) {
-    ASSERT_EQ(_rows_without_group1, _scan({_deletion_vector({0, 4, 5, 6, 7})}));
-    ASSERT_EQ(1, _counter("DeletedRowGroupsSkipped"));
-    ASSERT_EQ(0, _counter("DeletedFilesSkipped"));
-
-    std::vector<uint64_t> all(12);
-    std::iota(all.begin(), all.end(), 0);
-    ASSERT_TRUE(_scan({_deletion_vector(all)}).empty());
     ASSERT_EQ(1, _counter("DeletedFilesSkipped"));
 }
 
@@ -2342,10 +2284,6 @@ TEST_F(HdfsScannerTest, TestOrcSplitTasksShareDeletes) {
     split_scanner->close();
 }
 
-<<<<<<< HEAD
-=======
-// A scan that reads only _row_id reads no column from the file.
-
 // Stripes whose rows are all deleted are skipped: no IO, no split task; a scan range left with no
 // stripe returns nothing.
 TEST_F(HdfsScannerTest, TestOrcSkipStripesWithAllRowsDeleted) {
@@ -2530,67 +2468,6 @@ TEST_F(HdfsScannerTest, TestOrcSkipDeletedStripeKeepsTinyStripeDecision) {
     scanner->close();
 }
 
-TEST_F(HdfsScannerTest, TestOrcIcebergRowIdOnly) {
-    const std::string file = "orc_iceberg_row_id_only.orc";
-    write_iceberg_lineage_orc_file(file, false, 3);
-    DeferOp remove_file([&]() { std::filesystem::remove(file); });
-
-    SlotDesc row_id_descs[] = {{"_row_id", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)}, {""}};
-    auto scanner = std::make_shared<HdfsOrcScanner>();
-    auto* range = _create_scan_range(file, 0, 0);
-    range->__set_first_row_id(50);
-    auto* tuple_desc = _create_tuple_desc(row_id_descs);
-    auto* ctx = _create_ctx(file, range, tuple_desc);
-
-    Status status = scanner->init(_runtime_state, ctx);
-    ASSERT_OK(status);
-    status = scanner->open(_runtime_state);
-    ASSERT_OK(status);
-    _debug_rows_per_call = 10;
-    READ_SCANNER_ROWS(scanner, 3);
-    EXPECT_EQ("[50]\n[51]\n[52]\n", _debug_row_output);
-    scanner->close();
-}
-
-// Without a stored column, _row_id is first_row_id + _pos and the sequence number is the file's; without either
-// value from FE, both are NULL.
-TEST_F(HdfsScannerTest, TestOrcIcebergInheritedRowLineage) {
-    const std::string file = "orc_iceberg_inherited_row_lineage.orc";
-    write_iceberg_lineage_orc_file(file, false, 3);
-    DeferOp remove_file([&]() { std::filesystem::remove(file); });
-
-    for (bool has_values : {true, false}) {
-        auto scanner = std::make_shared<HdfsOrcScanner>();
-        auto* range = _create_scan_range(file, 0, 0);
-        if (has_values) {
-            range->__set_first_row_id(50);
-            range->__set_extended_columns({{2, create_bigint_literal_texpr(3)}});
-        }
-        auto* tuple_desc = _create_tuple_desc(iceberg_lineage_orc_descs);
-        auto* ctx = _create_ctx(file, range, tuple_desc);
-        TIcebergSchema schema;
-        TIcebergSchemaField id_field;
-        id_field.__set_field_id(1);
-        id_field.__set_name("id");
-        schema.__set_fields({id_field});
-        ctx->format_scan_context.lake_schema = &schema;
-
-        Status status = scanner->init(_runtime_state, ctx);
-        ASSERT_OK(status);
-        status = scanner->open(_runtime_state);
-        ASSERT_OK(status);
-        _debug_rows_per_call = 10;
-        READ_SCANNER_ROWS(scanner, 3);
-        if (has_values) {
-            EXPECT_EQ("[0, 50, 3, 0]\n[1, 51, 3, 1]\n[2, 52, 3, 2]\n", _debug_row_output);
-        } else {
-            EXPECT_EQ("[0, NULL, NULL, 0]\n[1, NULL, NULL, 1]\n[2, NULL, NULL, 2]\n", _debug_row_output);
-        }
-        scanner->close();
-    }
-}
-
->>>>>>> 353afbb4d6f... [Enhancement][RB-225] Skip deleted Iceberg data before IO and cut the BE cost of position deletes (#67208)
 // =============================================================================
 
 /*

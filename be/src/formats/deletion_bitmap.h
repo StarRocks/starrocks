@@ -37,12 +37,7 @@ public:
     StatusOr<bool> fill_filter(uint64_t start, uint64_t end, Filter& filter);
     uint64_t get_range_cardinality(uint64_t start, uint64_t end) const;
     void add_value(uint64_t val);
-<<<<<<< HEAD
-=======
     void add_values(const uint64_t* vals, size_t n);
-    // OR all positions of `other` into this bitmap. Does NOT take ownership of `other`.
-    void merge(const roaring64_bitmap_t* other);
->>>>>>> 353afbb4d6f... [Enhancement][RB-225] Skip deleted Iceberg data before IO and cut the BE cost of position deletes (#67208)
     uint64_t get_cardinality() const;
     void to_array(std::vector<uint64_t>& array) const;
 

@@ -223,9 +223,6 @@ Status read_position_delete_file(RandomAccessFile* file, const std::string& path
     return Status::NotSupported(strings::Substitute("unsupported iceberg position-delete file format: $0", format));
 }
 
-<<<<<<< HEAD
-StatusOr<std::unique_ptr<RandomAccessFile>> IcebergDeleteBuilder::open_random_access_file(
-=======
 } // namespace
 
 Status IcebergPositionDeleteReader::read_rows(RandomAccessFile* file, const std::string& path, int64_t length,
@@ -255,8 +252,7 @@ Status IcebergPositionDeleteReader::read_positions(RandomAccessFile* file, const
                                      [&cb](const Slice&, const int64_t* pos, size_t num_rows) { cb(pos, num_rows); });
 }
 
-StatusOr<std::unique_ptr<RandomAccessFile>> IcebergDeleteBuilder::open_cached_file(
->>>>>>> 353afbb4d6f... [Enhancement][RB-225] Skip deleted Iceberg data before IO and cut the BE cost of position deletes (#67208)
+StatusOr<std::unique_ptr<RandomAccessFile>> IcebergDeleteBuilder::open_random_access_file(
         const TIcebergDeleteFile& delete_file, FormatScannerStats& fs_stats, FormatScannerStats& app_stats,
         std::shared_ptr<SharedBufferedInputStream>& shared_buffered_input_stream,
         std::shared_ptr<CacheInputStream>& cache_input_stream) const {
@@ -289,26 +285,6 @@ Status IcebergDeleteBuilder::build(const TIcebergDeleteFile& delete_file, const 
     ASSIGN_OR_RETURN(auto file, open_random_access_file(delete_file, fs_stats, app_stats, shared_buffered_input_stream,
                                                         cache_input_stream));
 
-<<<<<<< HEAD
-    RETURN_IF_ERROR(IcebergPositionDeleteReader::read_rows(
-            file.get(), delete_file.full_path, delete_file.length, format, _ctx.chunk_size, _ctx.scan_context->timezone,
-            _ctx.scan_context->options, &app_stats, [this](const Slice& file_path, int64_t pos) {
-                if (file_path == _ctx.data_file_path) {
-                    _deletion_bitmap->add_value(pos);
-                }
-            }));
-    update_delete_file_io_counter(_ctx.runtime_profile, app_stats, fs_stats, cache_input_stream,
-                                  shared_buffered_input_stream);
-=======
-    // The delete file is open but not a single row has been applied to the bitmap yet. Failing
-    // here is the "delete file went away / turned unreadable between planning and reading"
-    // case: the scan must surface an error, never return the data file with its deletes
-    // silently skipped.
-    FAIL_POINT_TRIGGER_RETURN_ERROR(iceberg_delete_file_read_failed);
-    // Widens the window in which a data file is readable but its deletes are not applied yet,
-    // so a concurrent expire/rewrite can land inside it.
-    FAIL_POINT_TRIGGER_EXECUTE(iceberg_delete_file_read_slow, { sleep(2); });
-
     if (delete_file.__isset.references_only_data_file && delete_file.references_only_data_file) {
         // Every row references this data file: the file_path column is not read at all.
         RETURN_IF_ERROR(IcebergPositionDeleteReader::read_positions(
@@ -329,7 +305,6 @@ Status IcebergDeleteBuilder::build(const TIcebergDeleteFile& delete_file, const 
                         })));
     }
     accumulate_position_delete_io(app_stats, fs_stats, cache_input_stream, shared_buffered_input_stream);
->>>>>>> 353afbb4d6f... [Enhancement][RB-225] Skip deleted Iceberg data before IO and cut the BE cost of position deletes (#67208)
     return Status::OK();
 }
 

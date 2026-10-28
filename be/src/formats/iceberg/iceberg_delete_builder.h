@@ -99,22 +99,11 @@ private:
             std::shared_ptr<SharedBufferedInputStream>& shared_buffered_input_stream,
             std::shared_ptr<CacheInputStream>& cache_input_stream) const;
 
-<<<<<<< HEAD
-    static void update_delete_file_io_counter(
-            RuntimeProfile* parent_profile, const FormatScannerStats& app_stats, const FormatScannerStats& fs_stats,
-=======
-    // V3 deletion vectors publish their own IcebergDeletionVector section rather than the
-    // ICEBERG_V2_MOR one, so a pure-V3 table never looks like it carries v2 merge-on-read load.
-    // The section name matches the write path (IcebergDvSink::update_write_counters).
-    static void update_dv_counter(RuntimeProfile* parent_profile, const IcebergDVBuildStats& stats,
-                                  const std::shared_ptr<CacheInputStream>& cache_input_stream);
-
     // IO of the position delete files read so far. Publishing counters per delete file costs a
     // few percent of the scan when a data file carries many small delete files.
     struct PositionDeleteIoStats;
     void accumulate_position_delete_io(
             const FormatScannerStats& app_stats, const FormatScannerStats& fs_stats,
->>>>>>> 353afbb4d6f... [Enhancement][RB-225] Skip deleted Iceberg data before IO and cut the BE cost of position deletes (#67208)
             const std::shared_ptr<CacheInputStream>& cache_input_stream,
             const std::shared_ptr<SharedBufferedInputStream>& shared_buffered_input_stream) const;
     static void update_delete_file_io_counter(RuntimeProfile* parent_profile, const PositionDeleteIoStats& stats);

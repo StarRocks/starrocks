@@ -64,15 +64,8 @@ void DeletionBitmap::add_value(uint64_t val) {
     roaring64_bitmap_add(_bitmap, val);
 }
 
-<<<<<<< HEAD
-=======
 void DeletionBitmap::add_values(const uint64_t* vals, size_t n) {
     roaring64_bitmap_add_many(_bitmap, n, vals);
 }
 
-void DeletionBitmap::merge(const roaring64_bitmap_t* other) {
-    roaring64_bitmap_or_inplace(_bitmap, other);
-}
-
->>>>>>> 353afbb4d6f... [Enhancement][RB-225] Skip deleted Iceberg data before IO and cut the BE cost of position deletes (#67208)
 } // namespace starrocks

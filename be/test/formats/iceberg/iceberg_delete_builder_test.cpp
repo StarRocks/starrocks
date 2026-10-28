@@ -206,10 +206,31 @@ TEST_F(IcebergDeleteBuilderTest, TestBuildPositionDeleteUsesDeleteFileFormat) {
     const std::string delete_path = _tmp_dir + "/iceberg_position_delete_mixed.orc";
     write_orc_delete_file(delete_path, {{data_path, 3}, {"another_data_file.parquet", 4}, {data_path, 8}});
 
-<<<<<<< HEAD
     FormatScanContext scan_context;
     scan_context.timezone = "UTC";
-=======
+
+    ASSIGN_OR_ABORT(const int64_t delete_file_size, FileSystem::Default()->get_file_size(delete_path));
+    TIcebergDeleteFile delete_file;
+    delete_file.__set_full_path(delete_path);
+    delete_file.__set_length(delete_file_size);
+    delete_file.__set_file_format(THdfsFileFormat::ORC);
+
+    IcebergDeleteBuilder builder(IcebergDeleteBuilderContext{
+            .scan_context = &scan_context,
+            .fs = FileSystem::Default(),
+            .data_file_path = data_path,
+            .runtime_profile = &runtime_profile,
+            .chunk_size = 4096,
+    });
+
+    ASSERT_OK(builder.build_position_delete(delete_file, THdfsFileFormat::PARQUET));
+    auto deletion_bitmap = builder.deletion_bitmap();
+    ASSERT_NE(nullptr, deletion_bitmap);
+    std::vector<uint64_t> deleted_rowids(deletion_bitmap->get_cardinality());
+    deletion_bitmap->to_array(deleted_rowids);
+    EXPECT_EQ((std::vector<uint64_t>{3, 8}), deleted_rowids);
+}
+
 // Ranges are cut at every file_path change and at chunk boundaries (chunk size 2 here).
 TEST_F(IcebergDeleteBuilderTest, TestReadRowsVisitsRuns) {
     write_parquet_delete_file(_fs, _parquet_delete_path,
@@ -324,41 +345,6 @@ TEST_F(IcebergDeleteBuilderTest, TestBuilderReadsOnlyPositionsWhenFileScoped) {
         builder.deletion_bitmap()->to_array(deleted);
         EXPECT_EQ((std::vector<uint64_t>{7, 11}), deleted) << file_scoped;
     }
-}
-
-TEST_F(IcebergDeleteBuilderTest, TestReadRowsRejectsUnknownFormat) {
-    write_parquet_delete_file(_fs, _parquet_delete_path, {{"dataA", 1}});
-
-    ASSIGN_OR_ABORT(const int64_t delete_file_size, _fs.get_file_size(_parquet_delete_path));
-    ASSIGN_OR_ABORT(auto file, _fs.new_random_access_file(_parquet_delete_path));
-
-    auto status = IcebergPositionDeleteReader::read_rows(file.get(), _parquet_delete_path, delete_file_size, "avro",
-                                                         4096, "UTC", FormatScannerOptions{}, nullptr,
-                                                         [](const Slice&, int64_t) {});
-    EXPECT_FALSE(status.ok());
-}
->>>>>>> 353afbb4d6f... [Enhancement][RB-225] Skip deleted Iceberg data before IO and cut the BE cost of position deletes (#67208)
-
-    ASSIGN_OR_ABORT(const int64_t delete_file_size, FileSystem::Default()->get_file_size(delete_path));
-    TIcebergDeleteFile delete_file;
-    delete_file.__set_full_path(delete_path);
-    delete_file.__set_length(delete_file_size);
-    delete_file.__set_file_format(THdfsFileFormat::ORC);
-
-    IcebergDeleteBuilder builder(IcebergDeleteBuilderContext{
-            .scan_context = &scan_context,
-            .fs = FileSystem::Default(),
-            .data_file_path = data_path,
-            .runtime_profile = &runtime_profile,
-            .chunk_size = 4096,
-    });
-
-    ASSERT_OK(builder.build_position_delete(delete_file, THdfsFileFormat::PARQUET));
-    auto deletion_bitmap = builder.deletion_bitmap();
-    ASSERT_NE(nullptr, deletion_bitmap);
-    std::vector<uint64_t> deleted_rowids(deletion_bitmap->get_cardinality());
-    deletion_bitmap->to_array(deleted_rowids);
-    EXPECT_EQ((std::vector<uint64_t>{3, 8}), deleted_rowids);
 }
 
 // Without a format from the FE, the delete file is read in the data file's format.
