@@ -42,6 +42,9 @@ public class EliminateGroupByConstantRule extends TransformationRule {
 
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
+        if (context.getSessionVariable().isGroupedRangeScan()) {
+            return false;
+        }
         if (!context.getSessionVariable().isEnableConstantExecuteInFE()) {
             return false;
         }

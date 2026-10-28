@@ -288,6 +288,9 @@ public:
 
     [[nodiscard]] std::vector<SegmentSharedPtr> get_segments() override;
     [[nodiscard]] StatusOr<std::vector<SegmentSharedPtr>> get_segments_checked() override;
+    [[nodiscard]] StatusOr<std::vector<SegmentSharedPtr>> get_segments_checked(const LakeIOOptions& lake_io_opts,
+                                                                               OlapReaderStatistics* stats,
+                                                                               const std::atomic<bool>* is_cancelled);
 
     StatusOr<std::vector<SegmentPtr>> segments(bool fill_cache);
 

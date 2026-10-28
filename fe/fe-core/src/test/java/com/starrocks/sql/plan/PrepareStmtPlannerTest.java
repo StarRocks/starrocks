@@ -223,6 +223,58 @@ public class PrepareStmtPlannerTest extends PlanTestBase {
                 () -> Assertions.assertEquals(2, scanPredicateValue(second)));
     }
 
+    @Test
+    public void testCachedPointQueryRejectsParallelMode() throws Exception {
+        SessionVariable saved = connectContext.getSessionVariable().clone();
+        try {
+            connectContext.getSessionVariable().setRangeScanExecutionMode("colocate");
+            PreparedQuery prepared = prepare("select v1 from tprimary where pk = ?");
+            ExecPlan cached = execute(prepared, bigint(1));
+            Assertions.assertSame(cached.getPhysicalPlan(), execute(prepared, bigint(2)).getPhysicalPlan());
+            Assertions.assertTrue(prepared.context().isCached());
+
+            connectContext.getSessionVariable().setRangeScanExecutionMode("parallel");
+            SemanticException failure = Assertions.assertThrows(SemanticException.class,
+                    () -> execute(prepared, bigint(3)));
+            Assertions.assertTrue(failure.getMessage().contains("range_scan_execution_mode=parallel"));
+            Assertions.assertTrue(failure.getMessage().contains("an aggregate is required"));
+            Assertions.assertEquals(2, scanPredicateValue(cached));
+            Assertions.assertTrue(connectContext.getSessionVariable().isParallelRangeScan());
+
+            connectContext.getSessionVariable().setRangeScanExecutionMode("colocate");
+            Assertions.assertSame(cached.getPhysicalPlan(), execute(prepared, bigint(4)).getPhysicalPlan());
+            Assertions.assertEquals(4, scanPredicateValue(cached));
+        } finally {
+            connectContext.setSessionVariable(saved);
+        }
+    }
+
+    @Test
+    public void testCachedPointQueryRejectsGroupedMode() throws Exception {
+        SessionVariable saved = connectContext.getSessionVariable().clone();
+        try {
+            connectContext.getSessionVariable().setRangeScanExecutionMode("colocate");
+            PreparedQuery prepared = prepare("select v1 from tprimary where pk = ?");
+            ExecPlan cached = execute(prepared, bigint(1));
+            Assertions.assertSame(cached.getPhysicalPlan(), execute(prepared, bigint(2)).getPhysicalPlan());
+            Assertions.assertTrue(prepared.context().isCached());
+
+            connectContext.getSessionVariable().setRangeScanExecutionMode("grouped");
+            SemanticException failure = Assertions.assertThrows(SemanticException.class,
+                    () -> execute(prepared, bigint(3)));
+            Assertions.assertTrue(failure.getMessage().contains("range_scan_execution_mode=grouped"));
+            Assertions.assertTrue(failure.getMessage().contains("an aggregate is required"));
+            Assertions.assertEquals(2, scanPredicateValue(cached));
+            Assertions.assertTrue(connectContext.getSessionVariable().isGroupedRangeScan());
+
+            connectContext.getSessionVariable().setRangeScanExecutionMode("colocate");
+            Assertions.assertSame(cached.getPhysicalPlan(), execute(prepared, bigint(4)).getPhysicalPlan());
+            Assertions.assertEquals(4, scanPredicateValue(cached));
+        } finally {
+            connectContext.setSessionVariable(saved);
+        }
+    }
+
     /**
      * A hit re-prunes partitions and tablets on the table the cached scan is bound to, without the meta lock. That
      * is fine for the private copy planning off snapshots binds it to, but cbo_use_lock_db plans on the live table

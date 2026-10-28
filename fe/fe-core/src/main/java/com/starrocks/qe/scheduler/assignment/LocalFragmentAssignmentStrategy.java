@@ -18,13 +18,16 @@ import com.google.common.collect.Sets;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.ListUtil;
+import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.qe.BackendSelector;
 import com.starrocks.qe.ColocatedBackendSelector;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.FragmentScanRangeAssignment;
+import com.starrocks.qe.QueryGroupAssignment;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.scheduler.NonRecoverableException;
 import com.starrocks.qe.scheduler.WorkerProvider;
 import com.starrocks.qe.scheduler.dag.ExecutionFragment;
 import com.starrocks.qe.scheduler.dag.FragmentInstance;
@@ -71,6 +74,19 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
 
     @Override
     public void assignFragmentToWorker(ExecutionFragment execFragment) throws StarRocksException {
+        if (hasGroupedRangeScan(execFragment)
+                && (!usePipeline || useIncrementalScanRanges || isLoadType || execFragment.getScanNodes().size() != 1
+                || execFragment.getPlanFragment().getParallelExecNum() != 1
+                || execFragment.getPlanFragment().isUseRuntimeAdaptiveDop()
+                || execFragment.getPlanFragment().isWithLocalShuffle())) {
+            throw new NonRecoverableException(
+                    "range_scan_execution_mode=grouped requires fixed pipeline execution and one instance per owner");
+        }
+        if (hasParallelRangeScan(execFragment)
+                && (!usePipeline || execFragment.getPlanFragment().getParallelExecNum() != 1)) {
+            throw new NonRecoverableException(
+                    "range_scan_execution_mode=parallel requires pipeline execution and one instance per owner");
+        }
         for (ScanNode scanNode : execFragment.getScanNodes()) {
             assignScanRangesToWorker(execFragment, scanNode);
         }
@@ -99,6 +115,14 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
     }
 
     private void assignScanRangesToFragmentInstancePerWorker(ExecutionFragment execFragment) {
+        if (hasGroupedRangeScan(execFragment)) {
+            assignGroupedScanRanges(execFragment);
+            return;
+        }
+        if (hasParallelRangeScan(execFragment)) {
+            assignScanRangesToNormalFragmentInstancePerWorker(execFragment);
+            return;
+        }
         ColocatedBackendSelector.Assignment colocatedAssignment = execFragment.getColocatedAssignment();
         boolean hasColocate = execFragment.isColocated()
                 && colocatedAssignment != null && !colocatedAssignment.getSeqToWorkerId().isEmpty();
@@ -111,6 +135,45 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
         } else {
             assignScanRangesToNormalFragmentInstancePerWorker(execFragment);
         }
+    }
+
+    private static boolean hasGroupedRangeScan(ExecutionFragment fragment) {
+        return fragment.getScanNodes().stream()
+                .anyMatch(scan -> scan instanceof OlapScanNode nativeScan && nativeScan.isGroupedRangeScan());
+    }
+
+    private void assignGroupedScanRanges(ExecutionFragment fragment) {
+        QueryGroupAssignment assignment = fragment.getQueryGroupAssignment();
+        if (assignment == null || !fragment.getInstances().isEmpty()) {
+            throw new IllegalStateException("range_scan_execution_mode=grouped: missing or reused group assignment");
+        }
+        assignment.validatePlan(fragment.getPlanFragment().toThrift());
+        int requestedDop = fragment.getPlanFragment().getPipelineDop();
+        int capacity = QueryGroupAssignment.ownerCapacity(connectContext.getSessionVariable(), requestedDop);
+        // Construct the complete layout privately; a rejected group must never leave a partially deployed layout.
+        List<FragmentInstance> instances = new ArrayList<>();
+        assignment.getWorkerToGroups().entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(owner -> {
+            List<Integer> groups = owner.getValue();
+            int logical = QueryGroupAssignment.logicalDop(groups.size(), requestedDop);
+            if (logical > capacity) {
+                throw new IllegalStateException("range_scan_execution_mode=grouped: padded driver capacity exceeded");
+            }
+            FragmentInstance instance = new FragmentInstance(workerProvider.getWorkerById(owner.getKey()), fragment);
+            instance.setPipelineDop(QueryGroupAssignment.physicalDop(groups.size(), requestedDop));
+            instance.setGroupExecutionScanDop(logical);
+            instance.recordDeployedScanRangesPerDriverSeq(assignment.getScanNodeId(), logical);
+            for (int driver = 0; driver < groups.size(); driver++) {
+                int group = groups.get(driver);
+                instance.addBucketSeqAndDriverSeq(group, driver);
+                instance.addScanRanges(assignment.getScanNodeId(), driver, assignment.getManifest().getGroups().get(group)
+                        .tasks().stream().map(task -> new TScanRangeParams(assignment.getManifest().toScanRange(task))
+                                .setHas_more(false)).toList());
+            }
+            instance.paddingScanRanges();
+            instances.add(instance);
+        });
+        instances.forEach(fragment::addInstance);
+        assignment.validateLayout(fragment, connectContext.getSessionVariable());
     }
 
     /**
@@ -130,8 +193,9 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
         return !enableTabletInternalParallel || scanRanges.size() > pipelineDop / 2;
     }
 
-    private boolean enableAssignScanRangesPerDriverSeq(PlanFragment fragment, List<TScanRangeParams> scanRanges) {
-        if (!usePipeline) {
+    private boolean enableAssignScanRangesPerDriverSeq(ExecutionFragment execFragment, List<TScanRangeParams> scanRanges) {
+        PlanFragment fragment = execFragment.getPlanFragment();
+        if (!usePipeline || hasParallelRangeScan(execFragment)) {
             return false;
         }
 
@@ -141,6 +205,11 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
 
         return fragment.isAssignScanRangesPerDriverSeq() &&
                 enableAssignScanRangesPerDriverSeq(scanRanges, fragment.getPipelineDop());
+    }
+
+    private static boolean hasParallelRangeScan(ExecutionFragment fragment) {
+        return fragment.getScanNodes().stream()
+                .anyMatch(scan -> scan instanceof OlapScanNode nativeScan && nativeScan.isParallelRangeScan());
     }
 
     private boolean needAddScanRanges(Set<Integer> visitedReplicatedScanIds, Integer scanId) {
@@ -326,7 +395,7 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
                     }
                     if (reuse) {
                         assignIncrementalScanRangesToDeployedLayout(fragment, instance, scanId, scanRanges);
-                    } else if (!enableAssignScanRangesPerDriverSeq(fragment, scanRanges)) {
+                    } else if (!enableAssignScanRangesPerDriverSeq(execFragment, scanRanges)) {
                         instance.addScanRanges(scanId, scanRanges);
                         instance.recordDeployedScanRangesWithoutDriverSeq(scanId);
                         fragment.disablePhysicalPropertyOptimize();

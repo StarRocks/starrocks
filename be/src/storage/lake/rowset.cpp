@@ -57,6 +57,9 @@
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
 
+// Query-local range task validation.
+#include "storage/query/range_group_task.h"
+
 namespace starrocks::lake {
 
 static bool cancel_requested(const std::atomic<bool>* flag) {
@@ -378,6 +381,15 @@ Status Rowset::init_segment_read_options(const RowsetReadOptions& options, const
     segment_options->lake_io_opts.fs = segment_options->fs;
     segment_options->stats = stats;
     segment_options->ranges = options.ranges;
+    segment_options->task_range.reset();
+    if (options.grouped_range_task != nullptr) {
+        if (options.short_key_ranges_option != nullptr) {
+            return Status::NotSupported("grouped range task does not support logical split rowset readers");
+        }
+        // Decode positional seek tuples against this rowset's archived schema, not the current schema.
+        ASSIGN_OR_RETURN(segment_options->task_range,
+                         decode_range_group_seek(*options.grouped_range_task, _tablet_schema));
+    }
     segment_options->pred_tree = options.pred_tree;
     segment_options->pred_tree_for_zone_map = options.pred_tree_for_zone_map;
     segment_options->runtime_filter_preds = options.runtime_filter_preds;
@@ -519,6 +531,11 @@ Schema Rowset::build_segment_schema(const Schema& schema, const RowsetReadOption
 
 StatusOr<std::vector<ChunkIteratorPtr>> Rowset::do_read(const Schema& schema, const RowsetReadOptions& options,
                                                         const ReadContext& context) {
+    if (options.grouped_range_task != nullptr &&
+        (context.target_segment_idx.has_value() || context.prepared_segment_state != nullptr ||
+         context.reusable_segment_iterators != nullptr)) {
+        return Status::NotSupported("grouped range task does not support prepared rowset readers");
+    }
     if (context.target_segment_idx.has_value() && *context.target_segment_idx >= static_cast<size_t>(num_segments())) {
         return Status::InvalidArgument("target segment index exceeds rowset segment count");
     }
@@ -596,6 +613,9 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::do_read(const Schema& schema, co
         // Skip segments that were filtered by metadata filter (nullptr placeholders)
         if (seg_ptr == nullptr) {
             continue;
+        }
+        if (options.grouped_range_task != nullptr) {
+            RETURN_IF_ERROR(validate_range_group_schema(*options.grouped_range_task, seg_ptr->tablet_schema()));
         }
         if (seg_ptr->num_rows() == 0) {
             continue;
@@ -899,6 +919,13 @@ RowsetId Rowset::rowset_id() const {
 }
 
 StatusOr<std::vector<SegmentSharedPtr>> Rowset::get_segments_checked() {
+    LakeIOOptions lake_io_opts{.fill_data_cache = true, .fill_metadata_cache = true};
+    return get_segments_checked(lake_io_opts, nullptr, nullptr);
+}
+
+StatusOr<std::vector<SegmentSharedPtr>> Rowset::get_segments_checked(const LakeIOOptions& lake_io_opts,
+                                                                     OlapReaderStatistics* stats,
+                                                                     const std::atomic<bool>* is_cancelled) {
     // Lazy init guarded by _held_segments_mutex: range-split parallel compaction runs several
     // subtasks over one shared Rowset instance, and each of them reaches here through
     // TabletReader::init_compaction_column_paths. Not std::call_once -- that marks init done even on
@@ -907,12 +934,15 @@ StatusOr<std::vector<SegmentSharedPtr>> Rowset::get_segments_checked() {
     // mutex.
     {
         std::lock_guard<std::mutex> l(_held_segments_mutex);
+        if (cancel_requested(is_cancelled)) {
+            return Status::Cancelled(
+                    fmt::format("cancelled while opening segments, tablet:{} rowset:{}", _tablet_id, metadata().id()));
+        }
         if (_segments_loaded) {
             return _segments;
         }
         // Reuse the task-held input segments when the compaction read path already loaded them.
-        // Otherwise this path loads a second full copy of every input segment AND pushes it into
-        // the shared metadata cache (segments(true)), which is exactly what hold_segments avoids.
+        // Reuse preserves the held set's ownership and avoids a second copy of every input segment.
         if (!_held_segments.empty()) {
             _segments = _held_segments;
             _segments_loaded = true;
@@ -922,8 +952,13 @@ StatusOr<std::vector<SegmentSharedPtr>> Rowset::get_segments_checked() {
     }
     // Propagate a transient load failure as its real (retryable) Status instead of swallowing it;
     // _segments_loaded stays false so a later call retries.
-    ASSIGN_OR_RETURN(auto segs, segments(true));
+    ASSIGN_OR_RETURN(auto segs, segments(lake_io_opts, stats, is_cancelled));
     std::lock_guard<std::mutex> l(_held_segments_mutex);
+    // A cancel during the last footer read must not publish a new memo for a later caller.
+    if (cancel_requested(is_cancelled)) {
+        return Status::Cancelled(
+                fmt::format("cancelled while opening segments, tablet:{} rowset:{}", _tablet_id, metadata().id()));
+    }
     if (!_segments_loaded) {
         _segments = std::move(segs);
         _segments_loaded = true;

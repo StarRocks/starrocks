@@ -91,6 +91,8 @@ public class DistributionProperty implements PhysicalProperty {
         // required property of a distribution enforcer. Convert to a hash
         // shuffle spec (see ChildOutputPropertyGuarantor.convertRangeToHashShuffle
         // in PR-3) before attempting to enforce.
+        Preconditions.checkState(!(spec instanceof QueryGroupDistributionSpec),
+                "QueryGroupDistributionSpec must not be used as a distribution enforcer required property");
         Preconditions.checkState(!(spec instanceof RangeDistributionSpec),
                 "RangeDistributionSpec must not be used as a distribution enforcer required property");
         return new GroupExpression(new PhysicalDistributionOperator(spec), Lists.newArrayList(child));
