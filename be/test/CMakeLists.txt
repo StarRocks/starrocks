@@ -361,6 +361,7 @@ set(EXEC_FILES
         ./runtime/memory/counting_allocator_test.cpp
         ./runtime/memory/jemalloc_conf_updater_test.cpp
         ./runtime/mem_pool_test.cpp
+        ./runtime/current_thread_test.cpp
         ./runtime/mem_tracker_test.cpp
         ./runtime/result_queue_mgr_test.cpp
         ./runtime/batch_write/batch_write_mgr_test.cpp
