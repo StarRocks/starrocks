@@ -157,6 +157,26 @@ public class FoldConstantsRuleTest {
     }
 
     @Test
+    public void applyCastToDecimalPastPrecision() {
+        Type decimal3 = TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL32, 3, 0);
+        Type decimal5 = TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL32, 5, 2);
+        // A DECIMAL holds as many digits as its precision: an explicit cast of a value with more is NULL, as in
+        // the BE, though the type's storage (DECIMAL32) holds more
+        assertEquals(ConstantOperator.createNull(decimal3),
+                rule.apply(new CastOperator(decimal3, ConstantOperator.createVarchar("99999")), null));
+        assertEquals(ConstantOperator.createNull(decimal5),
+                rule.apply(new CastOperator(decimal5, ConstantOperator.createInt(100003)), null));
+        // 999.995 rounds to 1000.00
+        assertEquals(ConstantOperator.createNull(decimal5),
+                rule.apply(new CastOperator(decimal5, ConstantOperator.createVarchar("999.995")), null));
+        assertEquals(ConstantOperator.createDecimal(new BigDecimal("999.99"), decimal5),
+                rule.apply(new CastOperator(decimal5, ConstantOperator.createVarchar("999.994")), null));
+        // An implicit cast keeps the value, for the sink to check
+        assertEquals(ConstantOperator.createDecimal(new BigDecimal("99999"), decimal3),
+                rule.apply(new CastOperator(decimal3, ConstantOperator.createVarchar("99999"), true), null));
+    }
+
+    @Test
     public void applyCast() {
         CastOperator cast1 = new CastOperator(BooleanType.BOOLEAN, ConstantOperator.createNull(NullType.NULL));
         assertEquals(OB_NULL, rule.apply(cast1, null));

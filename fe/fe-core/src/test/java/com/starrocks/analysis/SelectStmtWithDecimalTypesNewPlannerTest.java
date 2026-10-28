@@ -408,9 +408,10 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
         Assertions.assertTrue(plan.contains(
                 "cast([2: dec_18_0, DECIMAL64(18,0), false] as DECIMAL128(37,0)) + cast([3: dec_18_18, DECIMAL64(18,18), false] as DECIMAL128(37,18))"));
         // const decimal64(18, 0) + decimal64(18, 18) = decimal128(37, 18) literal
-        sql = "select cast(1000000000000000000 as decimal(18, 0)) + cast(0.000000000000000001 as decimal(18, 18))";
+        // (18 digits: 1000000000000000000 has more than decimal(18, 0) holds, and is NULL)
+        sql = "select cast(999999999999999999 as decimal(18, 0)) + cast(0.000000000000000001 as decimal(18, 18))";
         plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
-        Assertions.assertTrue(plan.contains(" 2 <-> 1000000000000000000.000000000000000001"));
+        Assertions.assertTrue(plan.contains(" 2 <-> 999999999999999999.000000000000000001"));
 
         sql = "select dec_2_1 + dec_2_1 from test_decimal_type6";
         plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
