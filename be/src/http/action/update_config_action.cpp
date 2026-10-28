@@ -288,6 +288,13 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             }
             return Status::OK();
         });
+        _config_callback.emplace("put_combined_txn_log_thread_pool_num_max", [&]() -> Status {
+            if (_exec_env->put_combined_txn_log_thread_pool() != nullptr) {
+                return _exec_env->put_combined_txn_log_thread_pool()->update_max_threads(
+                        std::max(1, config::put_combined_txn_log_thread_pool_num_max));
+            }
+            return Status::OK();
+        });
         _config_callback.emplace("parallel_clone_task_per_path", [&]() -> Status {
             _exec_env->agent_server()->update_max_thread_by_type(TTaskType::CLONE,
                                                                  config::parallel_clone_task_per_path);
