@@ -16,6 +16,7 @@ package com.starrocks.authorization;
 
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
@@ -136,7 +137,7 @@ public class ColumnPrivilege {
             if (tableUsedExternalAccessController.contains(tableName)) {
                 if (table instanceof View view) {
                     checkViewPrivilege(context, tableName, view);
-                } else if (table.isMaterializedView()) {
+                } else if (table.isMaterializedView() || HiveTable.isHiveMaterializedView(table)) {
                     try {
                         Authorizer.checkMaterializedViewAction(context, tableName, PrivilegeType.SELECT);
                     } catch (AccessDeniedException e) {
@@ -162,13 +163,16 @@ public class ColumnPrivilege {
             } else {
                 if (table instanceof View view) {
                     checkViewPrivilege(context, tableName, view);
-                } else if (table.isMaterializedView()) {
+                } else if (table.isMaterializedView() || HiveTable.isHiveMaterializedView(table)) {
                     try {
                         Authorizer.checkMaterializedViewAction(context,
                                 tableName, PrivilegeType.SELECT);
                     } catch (AccessDeniedException e) {
+                        // Native OLAP MVs report the internal catalog. A Hive MV lives in its own catalog.
+                        String catalog = HiveTable.isHiveMaterializedView(table) ? tableName.getCatalog() :
+                                InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
                         AccessDeniedException.reportAccessDenied(
-                                InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                                catalog,
                                 context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                                 PrivilegeType.SELECT.name(), ObjectType.MATERIALIZED_VIEW.name(), tableName.getTbl());
                     }

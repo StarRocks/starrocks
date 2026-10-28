@@ -30,6 +30,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
@@ -281,6 +282,18 @@ public class Authorizer {
     private static void doCheckTableLikeObject(ConnectContext context, String dbName,
                                                BasicTable tbl, PrivilegeType privilegeType) throws AccessDeniedException {
         if (tbl == null) {
+            return;
+        }
+
+        // Hive MATERIALIZED_VIEW is still TableType.HIVE. Route it with StarRocks MVs so a
+        // GRANT ON MATERIALIZED VIEW authorizes the object. Do not use Table.isMaterializedView().
+        if (HiveTable.isHiveMaterializedView(tbl)) {
+            TableName tableName = new TableName(tbl.getCatalogName(), dbName, tbl.getName());
+            if (privilegeType == null) {
+                checkAnyActionOnMaterializedView(context, tableName);
+            } else {
+                checkMaterializedViewAction(context, tableName, privilegeType);
+            }
             return;
         }
 

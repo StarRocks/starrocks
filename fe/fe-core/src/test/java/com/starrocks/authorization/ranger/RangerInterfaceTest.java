@@ -431,6 +431,9 @@ public class RangerInterfaceTest {
         // throwing default. They must now succeed via the table path when the policy allows access.
         Assertions.assertDoesNotThrow(() -> controller.checkViewAction(ctx, hiveView, PrivilegeType.SELECT));
         Assertions.assertDoesNotThrow(() -> controller.checkAnyActionOnView(ctx, hiveView));
+        Assertions.assertDoesNotThrow(() ->
+                controller.checkMaterializedViewAction(ctx, hiveView, PrivilegeType.SELECT));
+        Assertions.assertDoesNotThrow(() -> controller.checkAnyActionOnMaterializedView(ctx, hiveView));
 
         new MockUp<RangerBasePlugin>() {
             @Mock
@@ -445,6 +448,10 @@ public class RangerInterfaceTest {
                 () -> controller.checkViewAction(ctx, hiveView, PrivilegeType.SELECT));
         Assertions.assertThrows(AccessDeniedException.class,
                 () -> controller.checkAnyActionOnView(ctx, hiveView));
+        Assertions.assertThrows(AccessDeniedException.class,
+                () -> controller.checkMaterializedViewAction(ctx, hiveView, PrivilegeType.SELECT));
+        Assertions.assertThrows(AccessDeniedException.class,
+                () -> controller.checkAnyActionOnMaterializedView(ctx, hiveView));
     }
 
     @Test
