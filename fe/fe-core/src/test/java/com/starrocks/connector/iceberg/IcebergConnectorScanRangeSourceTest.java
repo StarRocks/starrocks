@@ -49,6 +49,7 @@ import org.apache.iceberg.types.Types;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -229,6 +230,40 @@ public class IcebergConnectorScanRangeSourceTest extends TableTestBase {
         Assertions.assertNotSame(valueByFile.get(k2Is1Bucket0.location()), valueByFile.get(k2Is2Bucket0.location()));
         // the partition count still counts every (k2, bucket) combination
         Assertions.assertEquals(3, scanRangeSource.selectedPartitionCount());
+    }
+
+    @Test
+    public void testTaskSpecIsParsedOncePerSpecId() throws Exception {
+        PartitionSpec spec = PartitionSpec.builderFor(SCHEMA_B).identity("k2").build();
+        TestTables.TestTable nativeTable = create(SCHEMA_B, spec, "t_spec_parse", 2);
+        nativeTable.newFastAppend().appendFile(DataFiles.builder(spec).withPath("/path/to/k2=1/a.parquet")
+                .withFileSizeInBytes(10).withPartitionPath("k2=1").withRecordCount(1).build())
+                .appendFile(DataFiles.builder(spec).withPath("/path/to/k2=2/b.parquet")
+                .withFileSizeInBytes(10).withPartitionPath("k2=2").withRecordCount(1).build()).commit();
+
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(5));
+        SlotDescriptor k2Slot = new SlotDescriptor(new SlotId(2), desc);
+        k2Slot.setType(INT);
+        k2Slot.setColumn(new Column("k2", INT));
+        desc.addSlot(k2Slot);
+        IcebergTable icebergTable = new IcebergTable(1, "iceberg_table", "iceberg_catalog", "resource", "db",
+                "table", "", Lists.newArrayList(new Column("k1", INT), new Column("k2", INT)), nativeTable,
+                Maps.newHashMap());
+        IcebergConnectorScanRangeSource scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable,
+                RemoteFileInfoDefaultSource.EMPTY, IcebergMORParams.EMPTY, desc, Optional.empty(),
+                PartitionIdGenerator.of(), false, false);
+
+        List<FileScanTask> tasks = Lists.newArrayList(nativeTable.newScan().planFiles());
+        Assertions.assertEquals(2, tasks.size());
+        long firstId = scanRangeSource.addPartition(tasks.get(0));
+        // task.spec() parses the spec per task, hashing the whole schema; a later file of the spec, in another
+        // partition or the same one, must not need it
+        FileScanTask otherPartition = Mockito.spy(tasks.get(1));
+        Assertions.assertNotEquals(firstId, scanRangeSource.addPartition(otherPartition));
+        FileScanTask samePartition = Mockito.spy(tasks.get(0));
+        Assertions.assertEquals(firstId, scanRangeSource.addPartition(samePartition));
+        Mockito.verify(otherPartition, Mockito.never()).spec();
+        Mockito.verify(samePartition, Mockito.never()).spec();
     }
 
     @Test
