@@ -503,6 +503,15 @@ This topic introduces the following types of BE configurations:
 - Description: The maximum number of threads that run the final close of load sinks. In a shared-data cluster this close writes the combined transaction log to object storage; running it in this pool keeps a slow write from blocking the pipeline poller and the pipeline execution threads. When all threads are busy, further closes wait in the queue of the pool, which has no size limit, so no close is dropped. Values must be greater than 0. This limit can be changed at runtime without restarting the BE or CN. Lowering the limit does not interrupt closes already running. One worker is prestarted and retained while idle; additional workers can exit after 500 ms of idle time.
 - Introduced in: -
 
+### put_combined_txn_log_thread_pool_num_max
+
+- Default: 64
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of threads in the thread pool that writes combined transaction logs to object storage in a shared-data cluster. When `enable_put_combinded_txn_log_parallel` is set to `true`, the combined transaction logs of the partitions that a load touched are written concurrently in this pool. When all threads are busy, further writes wait in the queue of the pool, which has no size limit. This limit can be changed at runtime without restarting the BE or CN. A value less than or equal to `0` is treated as `1`. Lowering the limit does not interrupt writes already running. Idle threads exit after 500 ms.
+- Introduced in: -
+
 ### pipeline_prepare_thread_pool_queue_size
 
 - Default: 102400
