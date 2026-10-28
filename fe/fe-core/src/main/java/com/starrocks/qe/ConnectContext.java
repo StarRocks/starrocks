@@ -272,10 +272,6 @@ public class ConnectContext {
 
     protected StatementBase.ExplainLevel explainLevel;
 
-    // Set while the finished query's plan is rendered into its profile; scan nodes skip explain lines that read
-    // remote metadata, since nothing bounds that read after the query has ended.
-    protected boolean explainForProfile = false;
-
     protected TWorkGroup resourceGroup;
 
     protected volatile boolean isPending = false;
@@ -1061,14 +1057,6 @@ public class ConnectContext {
 
     public void setExplainLevel(StatementBase.ExplainLevel explainLevel) {
         this.explainLevel = explainLevel;
-    }
-
-    public boolean isExplainForProfile() {
-        return explainForProfile;
-    }
-
-    public void setExplainForProfile(boolean explainForProfile) {
-        this.explainForProfile = explainForProfile;
     }
 
     public TWorkGroup getResourceGroup() {
