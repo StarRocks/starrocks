@@ -35,25 +35,19 @@
 package com.starrocks.qe;
 
 import com.google.common.collect.Lists;
-<<<<<<< HEAD
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.VariableExpr;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
-=======
-import com.google.gson.annotations.SerializedName;
->>>>>>> 6e56c29 ([BugFix] Skip rejected session variable values on image load (#81655))
 import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.GlobalVarPersistInfo;
-<<<<<<< HEAD
-import com.starrocks.server.GlobalStateMgr;
-=======
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
->>>>>>> 6e56c29 ([BugFix] Skip rejected session variable values on image load (#81655))
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.SetStmtAnalyzer;
