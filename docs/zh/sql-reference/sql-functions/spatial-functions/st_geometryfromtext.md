@@ -27,6 +27,8 @@ VARCHAR ST_GeometryFromText(VARCHAR wkt)
 
 双参数签名返回原生 `GEOMETRY`。单参数签名返回旧版 `VARCHAR` 表示。
 
+原生 `GEOGRAPHY` 和 `GEOMETRY` 值不能嵌套在 `ARRAY`、`MAP` 或 `STRUCT` 中。即使外层表达式返回标量，或地理空间值为 `NULL`，分析阶段也会拒绝这些类型。
+
 ## 示例
 
 ```Plain Text
