@@ -35,16 +35,25 @@
 package com.starrocks.qe;
 
 import com.google.common.collect.Lists;
+<<<<<<< HEAD
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.VariableExpr;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
+=======
+import com.google.gson.annotations.SerializedName;
+>>>>>>> 6e56c29 ([BugFix] Skip rejected session variable values on image load (#81655))
 import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.GlobalVarPersistInfo;
+<<<<<<< HEAD
 import com.starrocks.server.GlobalStateMgr;
+=======
+import com.starrocks.persist.metablock.SRMetaBlockID;
+import com.starrocks.persist.metablock.SRMetaBlockWriter;
+>>>>>>> 6e56c29 ([BugFix] Skip rejected session variable values on image load (#81655))
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.SetStmtAnalyzer;
@@ -353,6 +362,53 @@ public class VariableMgrTest {
         mgr2.load(image.getMetaBlockReader());
 
         Assertions.assertEquals(100, mgr2.getDefaultSessionVariable().getQueryTimeoutS());
+    }
+
+    // Same layout as VariableMgr.VariableInfo, used to write an image as a newer build would.
+    private static class PersistedVariable {
+        @SerializedName(value = "n")
+        private String name;
+        @SerializedName(value = "v")
+        private String variable;
+
+        PersistedVariable(String name, String variable) {
+            this.name = name;
+            this.variable = variable;
+        }
+    }
+
+    @Test
+    public void testImageLoadKeepsCurrentValueOfRejectedVariable() throws Exception {
+        int globalConcurrencyLimit = GlobalVariable.getQueryQueueConcurrencyLimit();
+
+        PseudoImage image = new PseudoImage();
+        SRMetaBlockWriter writer = image.getImageWriter().getBlockWriter(SRMetaBlockID.VARIABLE_MGR, 1 + 2 + 1 + 1);
+        writer.writeInt(2);
+        writer.writeJson(new PersistedVariable(SessionVariable.LARGE_DECIMAL_UNDERLYING_TYPE, "future_type"));
+        writer.writeJson(new PersistedVariable(SessionVariable.QUERY_TIMEOUT, "100"));
+        writer.writeInt(1);
+        writer.writeJson(new PersistedVariable(GlobalVariable.QUERY_QUEUE_CONCURRENCY_LIMIT, "not_a_number"));
+        writer.close();
+
+        VariableMgr mgr = new VariableMgr();
+        mgr.load(image.getMetaBlockReader());
+
+        SessionVariable sv = mgr.newSessionVariable();
+        Assertions.assertEquals(SessionVariableConstants.PANIC, sv.getLargeDecimalUnderlyingType());
+        Assertions.assertEquals(100, sv.getQueryTimeoutS());
+        Assertions.assertEquals(globalConcurrencyLimit, GlobalVariable.getQueryQueueConcurrencyLimit());
+    }
+
+    @Test
+    public void testReplayKeepsCurrentValueOfRejectedVariable() throws Exception {
+        VariableMgr mgr = new VariableMgr();
+        GlobalVarPersistInfo info = new GlobalVarPersistInfo();
+        info.setPersistJsonString("{\"large_decimal_underlying_type\":\"future_type\",\"query_timeout\":100}");
+        mgr.replayGlobalVariableV2(info);
+
+        SessionVariable sv = mgr.newSessionVariable();
+        Assertions.assertEquals(SessionVariableConstants.PANIC, sv.getLargeDecimalUnderlyingType());
+        Assertions.assertEquals(100, sv.getQueryTimeoutS());
     }
 
     @Test
