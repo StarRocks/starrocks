@@ -107,6 +107,37 @@ This topic introduces the following types of BE configurations:
 - Description: Whether to enable compaction for Flat JSON data.
 - Introduced in: v3.3.3
 
+<<<<<<< HEAD
+=======
+### enable_compaction_flat_json_mixed_inputs
+
+- Default: True
+- Type: Boolean
+- Unit:
+- Is mutable: Yes
+- Description: Whether a compaction whose input segments store a JSON column partly as Flat JSON and partly as whole JSON reads the whole-JSON segments into the Flat JSON layout of the other segments, with every sub-column typed JSON. The output is then written while it is read instead of being held in memory as a whole segment. The JSON-typed sub-columns record the types and ranges of their values, so a later compaction can store them with the type that holds every value exactly. It takes effect only when `enable_compaction_flat_json` is `true` and the table flattens JSON.
+- Introduced in: -
+
+### enable_compaction_flat_json_partial_paths
+
+- Default: True
+- Type: Boolean
+- Unit:
+- Is mutable: Yes
+- Description: Whether a compaction of Flat JSON segments keeps a sub-column that only some input segments have, when enough rows hold it (`json_flat_sparsity_factor`). Segments without the sub-column contribute the values in their remaining JSON, and the sub-column is typed JSON when such a segment may hold values there. When disabled, a compaction keeps only the sub-columns that every input segment has, and a key that any input segment does not flatten is stored in the remaining JSON. It takes effect only when `enable_compaction_flat_json` is `true`.
+- Introduced in: -
+
+### enable_default_value_column_zonemap_filter
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Valid values: `true`, `false`
+- Is mutable: Yes
+- Description: Whether to prune data by constant-folding the value of a column that is physically absent from a segment. A column added by fast schema evolution (`ALTER TABLE ... ADD COLUMN`) is not written into pre-existing segments, so every row of it holds the column default (or `NULL`). When this is `true`, a predicate on such a column is evaluated against that constant and the segment is skipped entirely when nothing can match. When set to `false`, those segments are read in full and every batch is re-checked against the delete condition, which is the behavior before this option existed. Set it to `false` to roll back if a query returns unexpected results on a table that has had columns added. This option is deliberately separate from `enable_index_page_level_zonemap_filter`, which does not cover the runtime filter path.
+- Introduced in: -
+
+>>>>>>> cf33ef6 ([Enhancement] Stream flat JSON compaction of mixed flat and whole-JSON inputs (#81425))
 ### enable_json_flat
 
 - Default: false

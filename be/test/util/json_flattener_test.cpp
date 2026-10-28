@@ -21,6 +21,7 @@
 
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <memory>
 #include <ostream>
 #include <random>
@@ -28,6 +29,13 @@
 #include <string>
 #include <vector>
 
+<<<<<<< HEAD
+=======
+#include "base/compression/block_compression.h"
+#include "base/string/slice.h"
+#include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
+>>>>>>> cf33ef6 ([Enhancement] Stream flat JSON compaction of mixed flat and whole-JSON inputs (#81425))
 #include "column/column.h"
 #include "column/column_helper.h"
 #include "column/const_column.h"
@@ -625,8 +633,118 @@ TEST_F(JsonFlattenerTest, testPathTreeBoundedWithinASingleWideRow) {
     EXPECT_EQ(0, a.compare(b));
 }
 
+<<<<<<< HEAD
 // Flattens json_column with the layout jf derived for it and expects every row back exactly.
 static void expect_flatten_round_trip(const JsonColumn& json_column, const JsonPathDeriver& jf) {
+=======
+// The keys below an object the deriver prunes from the path tree go to the remain, so the remain filter must report
+// them too: a reader probes it with the last component of the path it extracts and skips the remain on a miss. Both
+// prunes are covered: a path too sparse to be flattened (checked every vector_chunk_size rows) and a singleton dropped
+// when the tree reaches its node budget.
+TEST_F(JsonFlattenerTest, testRemainFilterReportsKeysBelowAPrunedObject) {
+    config::json_flat_sparsity_factor = 0.3;
+    const int32_t saved_chunk_size = config::vector_chunk_size;
+    DeferOp restore([&]() { config::vector_chunk_size = saved_chunk_size; });
+
+    auto derive = [](const std::vector<std::string>& docs) {
+        auto json_column = JsonColumn::create();
+        for (const auto& doc : docs) {
+            ASSIGN_OR_ABORT(auto jv, JsonValue::parse(doc));
+            json_column->append(&jv);
+        }
+        auto jf = std::make_unique<JsonPathDeriver>();
+        jf->set_generate_filter(true);
+        std::vector<const Column*> columns{json_column.get()};
+        jf->derived(columns);
+        return jf;
+    };
+
+    {
+        // Sparse: "s" is in 1 of 200 rows, and is pruned at the first check past the rows that could still reach 30%;
+        // it never comes back, so only the prune can have reported its keys.
+        config::vector_chunk_size = 16;
+        std::vector<std::string> docs;
+        for (int row = 0; row < 200; row++) {
+            docs.emplace_back(row == 0 ? fmt::format(R"({{"id": {}, "s": {{"leaf1": 1, "leaf2": 2}}}})", row)
+                                       : fmt::format(R"({{"id": {}}})", row));
+        }
+        auto jf = derive(docs);
+        ASSERT_TRUE(jf->has_remain_json());
+        ASSERT_NE(nullptr, jf->remain_fitler());
+        for (const char* key : {"s", "leaf1", "leaf2"}) {
+            EXPECT_TRUE(jf->remain_fitler()->test_bytes(key, strlen(key))) << key;
+        }
+    }
+    {
+        // Singleton: "single" is seen once, then two rows fill the node budget and the shrink drops it.
+        config::vector_chunk_size = saved_chunk_size;
+        std::string wide = R"({"0id": 0)";
+        for (int i = 0; i < 80; i++) {
+            wide += ", \"a" + std::to_string(i) + "\": {";
+            for (int j = 0; j < 80; j++) {
+                wide += (j ? ", " : "") + std::string("\"b") + std::to_string(j) + "\": " + std::to_string(j);
+            }
+            wide += "}";
+        }
+        wide += "}";
+        auto jf = derive({R"({"0id": 0, "single": {"leafA": 1, "leafB": 2}})", wide, wide});
+        ASSERT_TRUE(jf->has_remain_json());
+        ASSERT_NE(nullptr, jf->remain_fitler());
+        for (const char* key : {"single", "leafA", "leafB"}) {
+            EXPECT_TRUE(jf->remain_fitler()->test_bytes(key, strlen(key))) << key;
+        }
+    }
+}
+
+TEST_F(JsonFlattenerTest, testRemainFilterReportsKeysNestedUnderASkippedKey) {
+    config::json_flat_sparsity_factor = 0.3;
+    // Two rows fill the trie with paths seen twice (so shrinking cannot free them) using few distinct names,
+    // which keeps the remain filter under its key cap. Every later row then carries "x", which no longer
+    // fits in the trie and goes to the remain column whole.
+    std::string wide = R"({"0id": 0)";
+    for (int i = 0; i < 80; i++) {
+        wide += ", \"a" + std::to_string(i) + "\": {";
+        for (int j = 0; j < 80; j++) {
+            wide += (j ? ", " : "") + std::string("\"b") + std::to_string(j) + "\": " + std::to_string(j);
+        }
+        wide += "}";
+    }
+    wide += "}";
+    auto json_column = JsonColumn::create();
+    for (int row = 0; row < 200; row++) {
+        std::string json;
+        if (row < 2) {
+            json = wide;
+        } else {
+            json = R"({"0id": )" + std::to_string(row) + R"(, "x": {)";
+            for (int k = 0; k < 20; k++) {
+                json += (k ? ", " : "") + std::string("\"leaf") + std::to_string(k) + "\": " + std::to_string(row);
+            }
+            json += "}}";
+        }
+        ASSIGN_OR_ABORT(auto jv, JsonValue::parse(json));
+        json_column->append(&jv);
+    }
+
+    std::vector<const Column*> columns{json_column.get()};
+    JsonPathDeriver jf;
+    jf.set_generate_filter(true);
+    jf.derived(columns);
+
+    ASSERT_TRUE(jf._path_tree_full);
+    ASSERT_TRUE(jf.has_remain_json());
+    ASSERT_NE(jf.flat_paths().end(), std::find(jf.flat_paths().begin(), jf.flat_paths().end(), "0id"));
+    ASSERT_TRUE(nullptr != jf.remain_fitler());
+    // A reader probes the filter with the last component of the path it extracts (x.leafN -> "leafN") and
+    // returns NULL without reading the remain column on a miss. A bloom filter has no false negatives, so
+    // every key under "x" must test positive.
+    EXPECT_TRUE(jf.remain_fitler()->test_bytes("x", 1));
+    for (int k = 0; k < 20; k++) {
+        std::string leaf = "leaf" + std::to_string(k);
+        EXPECT_TRUE(jf.remain_fitler()->test_bytes(leaf.data(), leaf.size())) << leaf;
+    }
+
+>>>>>>> cf33ef6 ([Enhancement] Stream flat JSON compaction of mixed flat and whole-JSON inputs (#81425))
     JsonFlattener flattener(jf.flat_paths(), jf.flat_types(), jf.has_remain_json());
     flattener.flatten(&json_column);
     Columns flat_columns;
