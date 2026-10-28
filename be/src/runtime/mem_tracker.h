@@ -158,12 +158,22 @@ public:
         }
     }
 
+    void consume_without_root(int64_t bytes) {
+        if (bytes == 0) return;
+        for (size_t i = 0; i + 1 < _all_trackers.size(); ++i) {
+            _all_trackers[i]->_consumption->add(bytes);
+        }
+    }
+
     void release_without_root() {
         int64_t bytes = consumption();
-        if (bytes != 0) {
-            for (size_t i = 0; i < _all_trackers.size() - 1; i++) {
-                _all_trackers[i]->_consumption->add(-bytes);
-            }
+        release_without_root(bytes);
+    }
+
+    void release_without_root(int64_t bytes) {
+        if (bytes == 0) return;
+        for (size_t i = 0; i + 1 < _all_trackers.size(); ++i) {
+            _all_trackers[i]->_consumption->add(-bytes);
         }
     }
 
