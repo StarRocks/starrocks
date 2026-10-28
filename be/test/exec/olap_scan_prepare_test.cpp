@@ -503,6 +503,36 @@ TEST_F(ChunkPredicateBuilderTest, varchar_rt_has_null) {
               "NULL)\"},{\"and\":[{\"pred\":\"(columnId(1)>=111)\"},{\"pred\":\"(columnId(1)<=222)\"}]}]}]}");
 }
 
+TEST_F(ChunkPredicateBuilderTest, varchar_large_in_pred_with_global_dict) {
+    SlotId slot_id = 1;
+    parquet::Utils::SlotDesc slot_descs[] = {{"c1", TYPE_VARCHAR_DESC, 1}, {"c2", TYPE_VARCHAR_DESC, 2}, {""}};
+    _opts.tuple_desc = parquet::Utils::create_tuple_descriptor(&_runtime_state, &_pool, slot_descs);
+
+    GlobalDictMap forward;
+    RGlobalDictMap reverse;
+    forward.emplace(Slice("k1"), 1);
+    reverse.emplace(1, Slice("k1"));
+    _fragment_dict_state->mutable_query_global_dicts()->emplace(slot_id,
+                                                                 std::make_pair(std::move(forward), std::move(reverse)));
+
+    auto ret1 = _gen_varchar_runtime_filter_collector(slot_id, false);
+    ASSERT_TRUE(ret1.ok());
+    _opts.runtime_filters = ret1.value();
+
+    std::vector<std::string> values;
+    for (int32_t i = 0; i < 2048; i++) {
+        values.emplace_back("k" + std::to_string(i));
+    }
+    _texprs.emplace_back(ExprsTestHelper::create_in_pred_texpr<TYPE_VARCHAR, std::string>(slot_id, values, true));
+    ASSERT_OK(ExprsTestHelper::create_and_open_conjunct_ctxs(&_pool, &_runtime_state, &_texprs, &_expr_ctxs));
+    _expr_containers.emplace_back(BoxedExprContext(_expr_ctxs[0]));
+
+    ChunkPredicateBuilder<BoxedExprContext, CompoundNodeType::AND> builder(_opts, _expr_containers, true);
+    auto ret2 = builder.parse_conjuncts();
+    ASSERT_TRUE(ret2.ok());
+    ASSERT_TRUE(ret2.value());
+}
+
 TEST_F(ChunkPredicateBuilderTest, range_rt_has_null_min) {
     SlotId slot_id = 1;
     parquet::Utils::SlotDesc slot_descs[] = {{"c1", TYPE_INT_DESC, 1}, {"c2", TYPE_INT_DESC, 2}, {""}};
