@@ -321,7 +321,7 @@ public class MaterializedViewHandler extends AlterHandler {
                 if (rangeRoutable) {
                     // Shared-data range table: build the additive K-tablet range-rollup job directly.
                     // Any range table that is NOT routable (shared-nothing, colocate,
-                    // auto-increment, primary-key) keeps the existing rejection in createMaterializedViewJob.
+                    // primary-key) keeps the existing rejection in createMaterializedViewJob.
                     alterJobV2 = createRangeRollupJob(addRollupClause, olapTable, db, baseIndexMetaId,
                             rollupIndexName, rollupSchema);
                 } else {
@@ -364,10 +364,10 @@ public class MaterializedViewHandler extends AlterHandler {
     /**
      * Whether an {@code ADD ROLLUP} or synchronous MV on a range-distribution table is routed to the additive
      * {@link LakeRangeRollupJob} (instead of being rejected by {@code createMaterializedViewJob}).
-     * Only a shared-data, non-colocate, non-auto-increment, non-primary-key range table qualifies.
+     * Only a shared-data, non-colocate, non-primary-key range table qualifies.
      */
     public static boolean isRangeRollupRoutable(OlapTable olapTable) {
-        // A cloud-native, non-colocate, non-auto-increment, non-primary-key range-distribution table
+        // A cloud-native, non-colocate, non-primary-key range-distribution table
         // admits an additive rollup. A table that already carries one or more rollups is still routable:
         // each additive job is serialized by the table's OlapTableState (a new ADD ROLLUP requires the
         // table to be NORMAL) and operates only on its own shadow index meta id, so a completed rollup
@@ -375,7 +375,6 @@ public class MaterializedViewHandler extends AlterHandler {
         return olapTable.isRangeDistribution()
                 && olapTable.isCloudNativeTable()
                 && !olapTable.hasColocateGroup()
-                && !olapTable.hasAutoIncrementColumn()
                 && olapTable.getKeysType() != KeysType.PRIMARY_KEYS;
     }
 
@@ -590,20 +589,19 @@ public class MaterializedViewHandler extends AlterHandler {
         if (olapTable.isRangeDistribution()) {
             // A shared-data range-distribution rollup that satisfies isRangeRollupRoutable is
             // intercepted in processBatchAddRollup and routed to LakeRangeRollupJob before reaching
-            // this method. Ineligible shared-nothing, colocate, auto-increment and primary-key
-            // range tables are rejected here.
+            // this method. Ineligible shared-nothing, colocate and primary-key range tables are
+            // rejected here.
             if (queryStatement != null) {
                 throw new DdlException(
                     "Synchronous materialized view with range distribution requires a shared-data, " +
-                    "non-colocate, non-auto-increment, non-primary-key table. " +
+                    "non-colocate, non-primary-key table. " +
                     "Use an asynchronous materialized view instead: declare it with an explicit " +
                     "REFRESH clause (REFRESH ASYNC or REFRESH MANUAL) or a DISTRIBUTED BY clause, " +
                     "e.g. CREATE MATERIALIZED VIEW ... DISTRIBUTED BY HASH(...) REFRESH ASYNC AS SELECT ...");
             }
             throw new DdlException(
                 "ADD ROLLUP is not supported on this table with range distribution. A range distribution " +
-                "rollup is supported only on a shared-data, non-colocate, non-auto-increment, " +
-                "non-primary-key range table.");
+                "rollup is supported only on a shared-data, non-colocate, non-primary-key range table.");
         }
         if (mvKeysType == null) {
             // assign rollup index's key type, same as base index's
@@ -723,6 +721,20 @@ public class MaterializedViewHandler extends AlterHandler {
                         !item.getName().equalsIgnoreCase(((SlotRef) expr).getColumnName())) {
                     throw new DdlException("Generated column[" + item.getName() + "] of range synchronous materialized "
                             + "view[" + mvName + "] conflicts with base column[" + item.getName() + "]");
+                }
+            }
+            // A computed column is evaluated in the load plan before the sink assigns the AUTO_INCREMENT
+            // value, so a load that omits the AUTO_INCREMENT column would compute the view column from NULL.
+            String autoIncrementColumnName = olapTable.getBaseSchema().stream()
+                    .filter(Column::isAutoIncrement).map(Column::getName).findFirst().orElse(null);
+            if (autoIncrementColumnName != null) {
+                for (MVColumnItem item : mvColumnItemList) {
+                    if (olapTable.getBaseColumn(item.getName()) == null
+                            && item.getBaseColumnNames().stream().anyMatch(autoIncrementColumnName::equalsIgnoreCase)) {
+                        throw new DdlException("Column[" + item.getName() + "] of range synchronous materialized view["
+                                + mvName + "] cannot be computed from AUTO_INCREMENT column[" + autoIncrementColumnName
+                                + "]");
+                    }
                 }
             }
         }
