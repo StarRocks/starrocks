@@ -59,13 +59,8 @@ public:
 private:
     std::mutex _mutex;
     const TUniqueId _query_id;
-<<<<<<< HEAD:be/src/runtime/local_pass_through_buffer.h
-    std::unordered_map<Key, PassThroughChannel*, KeyHash> _key_to_channel;
-    int _ref_count;
-=======
     std::unordered_map<Key, PassThroughChannelPtr, KeyHash> _key_to_channel;
-    int _ref_count{1};
->>>>>>> fc1352f ([BugFix] Share ownership of PassThroughChannel with its sink and receiver (#77088)):be/src/compute_env/data_stream/local_pass_through_buffer.h
+    int _ref_count;
 };
 
 class PassThroughContext {

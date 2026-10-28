@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "compute_env/data_stream/local_pass_through_buffer.h"
+#include "runtime/local_pass_through_buffer.h"
 
 #include <gtest/gtest.h>
 
