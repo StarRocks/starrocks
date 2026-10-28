@@ -1603,6 +1603,45 @@ TEST_F(ParquetSchemaTest, ParquetLegacyLists) {
     check_flat_parquet_field(expected_fields, desc.get_parquet_fields());
 }
 
+TEST_F(ParquetSchemaTest, DecimalMetadata) {
+    auto logical_only = PrimitiveNode::make("logical_only", FieldRepetitionType::OPTIONAL, Type::BYTE_ARRAY);
+    tparquet::DecimalType decimal;
+    decimal.__set_precision(9);
+    decimal.__set_scale(2);
+    tparquet::LogicalType logical_type;
+    logical_type.__set_DECIMAL(decimal);
+    logical_only.__set_logicalType(logical_type);
+
+    auto matching = logical_only;
+    matching.__set_name("matching");
+    matching.__set_converted_type(ConvertedType::DECIMAL);
+    matching.__set_precision(9);
+    matching.__set_scale(2);
+
+    auto legacy =
+            PrimitiveNode::make("legacy", FieldRepetitionType::OPTIONAL, Type::BYTE_ARRAY, ConvertedType::DECIMAL);
+    legacy.__set_precision(6);
+    legacy.__set_scale(3);
+
+    auto string = PrimitiveNode::make("string", FieldRepetitionType::OPTIONAL, Type::BYTE_ARRAY, ConvertedType::UTF8);
+    tparquet::LogicalType string_type;
+    string_type.__set_STRING(tparquet::StringType());
+    string.__set_logicalType(string_type);
+
+    SchemaDescriptor desc;
+    ASSERT_OK(desc.from_thrift({GroupNode::make_root(4), logical_only, matching, legacy, string}, true));
+    const auto& fields = desc.get_parquet_fields();
+    ASSERT_EQ(4, fields.size());
+    ASSERT_EQ(9, fields[0].precision);
+    ASSERT_EQ(2, fields[0].scale);
+    ASSERT_EQ(9, fields[1].precision);
+    ASSERT_EQ(2, fields[1].scale);
+    ASSERT_EQ(6, fields[2].precision);
+    ASSERT_EQ(3, fields[2].scale);
+    ASSERT_EQ(0, fields[3].precision);
+    ASSERT_EQ(0, fields[3].scale);
+}
+
 // Writers are expected to set both converted_type and logicalType, but some only set logicalType.
 TEST_F(ParquetSchemaTest, LogicalTypeOnlyListAndMap) {
     std::vector<SchemaElement> t_schemas;

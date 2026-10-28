@@ -167,6 +167,11 @@ Status StatisticsHelper::decode_value_into_column(const MutableColumnPtr& column
                 if (null_pages[i]) {
                     ret &= src_column->append_nulls(1);
                 } else {
+                    if (field->physical_type == tparquet::Type::BYTE_ARRAY && values[i].empty() &&
+                        (type.type == TYPE_DECIMALV2 || type.type == TYPE_DECIMAL32 || type.type == TYPE_DECIMAL64 ||
+                         type.type == TYPE_DECIMAL128 || type.type == TYPE_DECIMAL256)) {
+                        return Status::Corruption("Empty BYTE_ARRAY decimal min/max value");
+                    }
                     RETURN_IF_ERROR(PlainDecoder<Slice>::decode(values[i], &decode_value));
                     ret &= src_column->append_strings(std::vector<Slice>{decode_value});
                 }

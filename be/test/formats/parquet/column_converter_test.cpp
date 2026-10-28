@@ -14,8 +14,12 @@
 
 #include "formats/parquet/column_converter.h"
 
+#include <arrow/io/memory.h>
 #include <gtest/gtest.h>
+#include <parquet/api/reader.h>
+#include <parquet/api/writer.h>
 
+#include <algorithm>
 #include <filesystem>
 #include <limits>
 #include <random>
@@ -23,19 +27,27 @@
 #include "base/testutil/assert.h"
 #include "base/time/timezone_utils.h"
 #include "base/types/int96.h"
+#include "base/utility/defer_op.h"
 #include "column/binary_column.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
+#include "column/struct_column.h"
 #include "common/config_exec_fwd.h"
+#include "common/config_scan_io_fwd.h"
+#include "compute_env/global_dict/fragment_dict_state.h"
+#include "formats/parquet/column_materializer.h"
 #include "formats/parquet/encoding_dict.h"
 #include "formats/parquet/encoding_plain.h"
 #include "formats/parquet/file_reader.h"
 #include "formats/parquet/metadata.h"
 #include "formats/parquet/statistics_helper.h"
 #include "fs/fs.h"
+#include "io/string_input_stream.h"
 #include "parquet_test_util/util.h"
+#include "parquet_ut_base.h"
 #include "runtime/descriptor_helper.h"
+#include "runtime/runtime_state.h"
 #include "types/time_types.h"
 #include "types/timestamp_value.h"
 
@@ -146,6 +158,60 @@ protected:
     HdfsScannerContext _scanner_ctx;
 };
 
+TEST_F(ColumnConverterTest, InspectByteArrayDecimalFixture) {
+    auto reader = ::parquet::ParquetFileReader::OpenFile(
+            "./be/test/formats/parquet/test_data/column_converter/byte_array.parquet");
+    auto metadata = reader->metadata();
+    int index = metadata->schema()->ColumnIndex("decimal_binary");
+    ASSERT_GE(index, 0);
+    const auto* descriptor = metadata->schema()->Column(index);
+    ASSERT_EQ(::parquet::Type::BYTE_ARRAY, descriptor->physical_type());
+    ASSERT_EQ(1, metadata->num_row_groups());
+    ASSERT_EQ(5, metadata->num_rows());
+    EXPECT_EQ(5, descriptor->type_precision());
+    EXPECT_EQ(1, descriptor->type_scale());
+    ASSERT_NE(nullptr, descriptor->logical_type());
+    EXPECT_EQ("Decimal(precision=5, scale=1)", descriptor->logical_type()->ToString());
+    for (int group = 0; group < metadata->num_row_groups(); ++group) {
+        auto row_group = reader->RowGroup(group);
+        auto column = row_group->Column(index);
+        auto* binary = static_cast<::parquet::ByteArrayReader*>(column.get());
+        int16_t defs[16];
+        ::parquet::ByteArray values[16];
+        int64_t count = 0;
+        int64_t levels = binary->ReadBatch(16, defs, nullptr, values, &count);
+        ASSERT_EQ(metadata->num_rows(), levels);
+        ASSERT_EQ(4, count);
+        const int16_t expected_defs[] = {1, 1, 0, 1, 1};
+        for (int64_t i = 0; i < levels; ++i) EXPECT_EQ(expected_defs[i], defs[i]);
+        for (int64_t i = 0; i < count; ++i) {
+            ASSERT_EQ(1, values[i].len);
+            EXPECT_EQ(0x43, values[i].ptr[0]);
+        }
+    }
+    auto file = _create_file("./be/test/formats/parquet/test_data/column_converter/byte_array.parquet");
+    auto sr_reader = std::make_shared<FileReader>(2, file.get(), std::filesystem::file_size(file->filename()));
+    auto* ctx = _create_scan_context();
+    Utils::SlotDesc slots[] = {{"string", TypeDescriptor::from_logical_type(TYPE_VARCHAR), 0}, {""}};
+    auto* tuple = Utils::create_tuple_descriptor(_runtime_state, &_pool, slots);
+    Utils::make_column_info_vector(tuple, &ctx->format_scan_context.materialized_columns);
+    ctx->slot_descs = tuple->slots();
+    ctx->format_scan_context.scan_range_offset = 0;
+    ctx->format_scan_context.scan_range_length = std::filesystem::file_size(file->filename());
+    ASSERT_OK(sr_reader->init(&ctx->format_scan_context));
+    bool found = false;
+    for (const auto& element : sr_reader->get_file_metadata()->t_metadata().schema) {
+        if (element.name != "decimal_binary") continue;
+        EXPECT_TRUE(element.__isset.precision);
+        EXPECT_EQ(5, element.precision);
+        EXPECT_TRUE(element.__isset.scale);
+        EXPECT_EQ(1, element.scale);
+        EXPECT_TRUE(element.__isset.logicalType && element.logicalType.__isset.DECIMAL);
+        found = true;
+    }
+    ASSERT_TRUE(found);
+}
+
 TEST_F(ColumnConverterTest, TestByteArrayTest) {
     const std::string file_path = "./be/test/formats/parquet/test_data/column_converter/byte_array.parquet";
     const size_t expected_rows = 5;
@@ -185,20 +251,20 @@ TEST_F(ColumnConverterTest, TestByteArrayTest) {
             check(file_path, col_type, col_name, "[6.7]", expected_rows, true);
         }
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL32);
-            check(file_path, col_type, col_name, "[6.7]", expected_rows, true);
+            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL32, -1, 5, 1);
+            check(file_path, col_type, col_name, "[6.7]", expected_rows);
         }
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL64);
-            check(file_path, col_type, col_name, "[6.7]", expected_rows, true);
+            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL64, -1, 5, 1);
+            check(file_path, col_type, col_name, "[6.7]", expected_rows);
         }
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL128);
-            check(file_path, col_type, col_name, "[6.7]", expected_rows, true);
+            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL128, -1, 5, 1);
+            check(file_path, col_type, col_name, "[6.7]", expected_rows);
         }
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMALV2);
-            check(file_path, col_type, col_name, "[6.7]", expected_rows, true);
+            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMALV2, -1, 27, 9);
+            check(file_path, col_type, col_name, "[6.7]", expected_rows);
         }
     }
 
@@ -855,6 +921,17 @@ ColumnPtr make_nullable_source(const std::vector<T>& values, const std::vector<u
     return NullableColumn::create(std::move(data), std::move(null_column));
 }
 
+ColumnPtr make_byte_array_decimal_source(const std::vector<std::string>& values,
+                                         const std::vector<uint8_t>& null_bits) {
+    auto data = BinaryColumn::create();
+    for (const auto& value : values) {
+        data->append_string(value);
+    }
+    auto nulls = NullColumn::create();
+    nulls->get_data().assign(null_bits.begin(), null_bits.end());
+    return NullableColumn::create(std::move(data), std::move(nulls));
+}
+
 // The INT64 timestamp conversion the converter implements, with a runtime tick unit.
 Timestamp reference_int64_timestamp(int64_t ticks, int64_t second_mask, const cctz::time_zone* ctz) {
     int64_t seconds = ticks / second_mask;
@@ -1102,6 +1179,818 @@ TEST_F(ColumnConverterTest, Int32DaysToDateTimeMatchesReference) {
             TimestampValue expected;
             expected.from_unix_second(static_cast<int64_t>(days[i]) * 24 * 60 * 60, 0);
             ASSERT_EQ(expected.timestamp(), dst_data[i].timestamp()) << "row " << i << " day " << days[i];
+        }
+    }
+}
+
+TEST_F(ColumnConverterTest, ByteArrayDecimalValues) {
+    ParquetField field;
+    field.physical_column_index = 0;
+    field.physical_type = tparquet::Type::BYTE_ARRAY;
+    field.precision = 18;
+    field.scale = 8;
+    const TypeDescriptor type = TypeDescriptor::from_logical_type(TYPE_DECIMAL64, -1, 18, 8);
+    std::unique_ptr<ColumnConverter> converter;
+    ASSERT_OK(ColumnConverterFactory::create_converter(field, type, "UTC", &converter));
+
+    auto src = make_byte_array_decimal_source(
+            {std::string("\x07\x5b\xcd\x15", 4), std::string("\xff\x7f", 2), std::string("\x00", 1),
+             std::string("\x00\x80", 2), std::string("\x55", 1), ""},
+            {0, 0, 0, 0, 1, 0});
+    auto dst = ColumnHelper::create_column(type, true);
+    ASSERT_OK(converter->convert(src.get(), dst.get()));
+    ASSERT_EQ(6, dst->size());
+    EXPECT_TRUE(dst->has_null());
+    EXPECT_EQ(123456789, dst->get(0).get_int64());
+    EXPECT_EQ(-129, dst->get(1).get_int64());
+    EXPECT_EQ(0, dst->get(2).get_int64());
+    EXPECT_EQ(128, dst->get(3).get_int64());
+    EXPECT_TRUE(dst->is_null(4));
+    EXPECT_TRUE(dst->is_null(5));
+
+    auto all_null = make_byte_array_decimal_source({std::string("\x42", 1)}, {1});
+    ASSERT_OK(converter->convert(all_null.get(), dst.get()));
+    ASSERT_EQ(1, dst->size());
+    EXPECT_TRUE(dst->is_null(0));
+    auto no_null = make_byte_array_decimal_source({std::string("\x2a", 1)}, {0});
+    ASSERT_OK(converter->convert(no_null.get(), dst.get()));
+    ASSERT_EQ(1, dst->size());
+    EXPECT_FALSE(dst->has_null());
+    EXPECT_EQ(42, dst->get(0).get_int64());
+
+    const TypeDescriptor wide_type = TypeDescriptor::from_logical_type(TYPE_DECIMAL128, -1, 38, 8);
+    ASSERT_OK(ColumnConverterFactory::create_converter(field, wide_type, "UTC", &converter));
+    auto wide_src = make_byte_array_decimal_source(
+            {std::string("\x00\x80\x00\x00\x00\x00\x00\x00\x00", 9), std::string("\x7f", 1) + std::string(15, '\xff')},
+            {0, 0});
+    auto wide_dst = ColumnHelper::create_column(wide_type, true);
+    ASSERT_OK(converter->convert(wide_src.get(), wide_dst.get()));
+    EXPECT_EQ(static_cast<int128_t>(1) << 63, wide_dst->get(0).get_int128());
+    EXPECT_EQ(std::numeric_limits<int128_t>::max(), wide_dst->get(1).get_int128());
+}
+
+TEST_F(ColumnConverterTest, ByteArrayDecimalScaleAndTargets) {
+    ParquetField field;
+    field.physical_column_index = 0;
+    field.physical_type = tparquet::Type::BYTE_ARRAY;
+    field.precision = 18;
+    field.scale = 2;
+    auto src = make_byte_array_decimal_source({std::string("\xfb\x2e", 2)}, {0});
+
+    for (LogicalType target : {TYPE_DECIMALV2, TYPE_DECIMAL32, TYPE_DECIMAL64, TYPE_DECIMAL128}) {
+        const int precision =
+                target == TYPE_DECIMAL32 ? 9 : target == TYPE_DECIMAL64 ? 18 : target == TYPE_DECIMALV2 ? 27 : 38;
+        const int scale = target == TYPE_DECIMALV2 ? 9 : 2;
+        const TypeDescriptor type = TypeDescriptor::from_logical_type(target, -1, precision, scale);
+        std::unique_ptr<ColumnConverter> converter;
+        ASSERT_OK(ColumnConverterFactory::create_converter(field, type, "UTC", &converter));
+        auto dst = ColumnHelper::create_column(type, true);
+        ASSERT_OK(converter->convert(src.get(), dst.get()));
+        ASSERT_EQ(1, dst->size());
+        EXPECT_FALSE(dst->has_null());
+        switch (target) {
+        case TYPE_DECIMALV2:
+            EXPECT_EQ(-12340000000LL, dst->get(0).get_decimal().value());
+            break;
+        case TYPE_DECIMAL32:
+            EXPECT_EQ(-1234, dst->get(0).get_int32());
+            break;
+        case TYPE_DECIMAL64:
+            EXPECT_EQ(-1234, dst->get(0).get_int64());
+            break;
+        case TYPE_DECIMAL128:
+            EXPECT_EQ(-1234, dst->get(0).get_int128());
+            break;
+        default:
+            FAIL();
+        }
+    }
+
+    for (int dst_scale : {1, 3}) {
+        const TypeDescriptor type = TypeDescriptor::from_logical_type(TYPE_DECIMAL64, -1, 18, dst_scale);
+        std::unique_ptr<ColumnConverter> converter;
+        ASSERT_OK(ColumnConverterFactory::create_converter(field, type, "UTC", &converter));
+        auto dst = ColumnHelper::create_column(type, true);
+        ASSERT_OK(converter->convert(src.get(), dst.get()));
+        EXPECT_EQ(dst_scale == 1 ? -123 : -12340, dst->get(0).get_int64());
+    }
+}
+
+TEST_F(ColumnConverterTest, ByteArrayDecimalBounds) {
+    ParquetField field;
+    field.physical_column_index = 0;
+    field.physical_type = tparquet::Type::BYTE_ARRAY;
+    field.precision = 38;
+    field.scale = 0;
+    const TypeDescriptor wide_type = TypeDescriptor::from_logical_type(TYPE_DECIMAL128, -1, 38, 0);
+    std::unique_ptr<ColumnConverter> converter;
+    ASSERT_OK(ColumnConverterFactory::create_converter(field, wide_type, "UTC", &converter));
+
+    auto src = make_byte_array_decimal_source(
+            {std::string(16, '\x00') + std::string("\x01", 1), std::string(16, '\xff') + std::string("\xfe", 1),
+             std::string("\x7f", 1) + std::string(15, '\xff'), std::string("\x80", 1) + std::string(15, '\x00')},
+            {0, 0, 0, 0});
+    auto dst = ColumnHelper::create_column(wide_type, true);
+    ASSERT_OK(converter->convert(src.get(), dst.get()));
+    EXPECT_EQ(1, dst->get(0).get_int128());
+    EXPECT_EQ(-2, dst->get(1).get_int128());
+    EXPECT_EQ(std::numeric_limits<int128_t>::max(), dst->get(2).get_int128());
+    EXPECT_EQ(std::numeric_limits<int128_t>::min(), dst->get(3).get_int128());
+
+    src = make_byte_array_decimal_source(
+            {std::string("\x01", 1), std::string("\x01", 1) + std::string(16, '\x00'), std::string("\x02", 1)},
+            {0, 0, 0});
+    Status st = converter->convert(src.get(), dst.get());
+    EXPECT_TRUE(st.is_invalid_argument()) << st.to_string();
+    EXPECT_NE(std::string::npos, st.message().find("row 1"));
+
+    for (auto [target, payload] : {std::pair{TYPE_DECIMAL32, std::string("\x00\x80\x00\x00\x00", 5)},
+                                   std::pair{TYPE_DECIMAL64, std::string("\x00\x80\x00\x00\x00\x00\x00\x00\x00", 9)}}) {
+        const int precision = target == TYPE_DECIMAL32 ? 9 : 18;
+        const TypeDescriptor type = TypeDescriptor::from_logical_type(target, -1, precision, 0);
+        ASSERT_OK(ColumnConverterFactory::create_converter(field, type, "UTC", &converter));
+        src = make_byte_array_decimal_source({payload}, {0});
+        dst = ColumnHelper::create_column(type, true);
+        EXPECT_TRUE(converter->convert(src.get(), dst.get()).is_invalid_argument());
+    }
+
+    const TypeDescriptor scale_up_type = TypeDescriptor::from_logical_type(TYPE_DECIMAL128, -1, 38, 38);
+    ASSERT_OK(ColumnConverterFactory::create_converter(field, scale_up_type, "UTC", &converter));
+    src = make_byte_array_decimal_source({std::string("\x02", 1)}, {0});
+    dst = ColumnHelper::create_column(scale_up_type, true);
+    EXPECT_TRUE(converter->convert(src.get(), dst.get()).is_invalid_argument());
+
+    for (int bad_scale : {-1, 39}) {
+        field.scale = bad_scale;
+        EXPECT_TRUE(
+                ColumnConverterFactory::create_converter(field, wide_type, "UTC", &converter).is_invalid_argument());
+        field.scale = 0;
+        TypeDescriptor invalid_target = wide_type;
+        invalid_target.scale = bad_scale;
+        EXPECT_TRUE(ColumnConverterFactory::create_converter(field, invalid_target, "UTC", &converter)
+                            .is_invalid_argument());
+    }
+}
+
+TEST_F(ColumnConverterTest, DecimalScaleAndStorageBounds) {
+    struct Case {
+        int precision;
+        int source_scale;
+        LogicalType target;
+        int target_scale;
+        int128_t value;
+        int128_t expected;
+        bool overflow;
+    };
+    const int128_t ten37 = get_scale_factor<int128_t>(37);
+    const int128_t max38 = get_scale_factor<int128_t>(38) - 1;
+    const std::vector<Case> cases = {
+            {9, 0, TYPE_DECIMAL32, 1, 999999999, 0, true},
+            {9, 0, TYPE_DECIMAL32, 1, 99999999, 999999990, false},
+            {18, 0, TYPE_DECIMAL32, 0, 3000000000LL, 0, true},
+            {18, 0, TYPE_DECIMAL32, 0, 2147483647LL, 2147483647LL, false},
+            {18, 0, TYPE_DECIMAL32, 0, 2147483649LL, 0, true},
+            {18, 0, TYPE_DECIMAL64, 1, 999999999999999999LL, 0, true},
+            {18, 0, TYPE_DECIMAL64, 1, 922337203685477580LL, 9223372036854775800LL, false},
+            {18, 0, TYPE_DECIMAL64, 1, 922337203685477581LL, 0, true},
+            {18, 1, TYPE_DECIMAL64, 18, 1, 100000000000000000LL, false},
+            {9, 2, TYPE_DECIMAL32, 1, 1234, 123, false},
+            {9, 2, TYPE_DECIMALV2, 9, 1234, 12340000000LL, false},
+            {9, 1, TYPE_DECIMAL128, 38, 1, ten37, false},
+            {9, 0, TYPE_DECIMAL128, 38, 2, 0, true},
+            {38, 38, TYPE_DECIMAL64, 18, max38, 999999999999999999LL, false},
+            {38, 38, TYPE_DECIMAL32, 0, max38, 0, false},
+    };
+    for (auto physical : {tparquet::Type::INT32, tparquet::Type::INT64, tparquet::Type::FIXED_LEN_BYTE_ARRAY,
+                          tparquet::Type::BYTE_ARRAY}) {
+        for (const auto& test : cases) {
+            if (physical == tparquet::Type::INT32 && test.precision > 9) continue;
+            if (physical == tparquet::Type::INT64 && test.precision > 18) continue;
+            for (int sign : {1, -1}) {
+                SCOPED_TRACE(
+                        fmt::format("physical={}, precision={}, source_scale={}, target={}, target_scale={}, "
+                                    "sign={}, overflow={}",
+                                    static_cast<int>(physical), test.precision, test.source_scale,
+                                    static_cast<int>(test.target), test.target_scale, sign, test.overflow));
+                const int128_t value = sign * test.value;
+                const int128_t expected = sign * test.expected;
+                const int width = test.precision <= 9 ? 4 : test.precision <= 18 ? 8 : 16;
+                const int target_precision =
+                        test.target == TYPE_DECIMAL32
+                                ? 9
+                                : test.target == TYPE_DECIMAL64 ? 18 : test.target == TYPE_DECIMALV2 ? 27 : 38;
+                const auto type =
+                        TypeDescriptor::from_logical_type(test.target, -1, target_precision, test.target_scale);
+                ParquetField field;
+                field.physical_column_index = 0;
+                field.physical_type = physical;
+                field.type_length = width;
+                field.precision = test.precision;
+                field.scale = test.source_scale;
+                std::unique_ptr<ColumnConverter> converter;
+                ASSERT_OK(ColumnConverterFactory::create_converter(field, type, "UTC", &converter));
+                auto src = converter->create_src_column();
+                ASSERT_TRUE(src->append_nulls(1));
+                auto* src_nullable = down_cast<NullableColumn*>(src.get());
+                const int32_t value32 = static_cast<int32_t>(value);
+                const int64_t value64 = static_cast<int64_t>(value);
+                std::string bytes(width, '\0');
+                uint128_t bits = static_cast<uint128_t>(value);
+                for (int i = width - 1; i >= 0; --i) {
+                    bytes[i] = static_cast<char>(bits & 0xff);
+                    bits >>= 8;
+                }
+                if (physical == tparquet::Type::BYTE_ARRAY) {
+                    while (bytes.size() > 1 &&
+                           ((static_cast<uint8_t>(bytes[0]) == 0 && static_cast<uint8_t>(bytes[1]) < 0x80) ||
+                            (static_cast<uint8_t>(bytes[0]) == 0xff && static_cast<uint8_t>(bytes[1]) >= 0x80))) {
+                        bytes.erase(0, 1);
+                    }
+                }
+                if (physical == tparquet::Type::INT32) {
+                    auto* data = down_cast<FixedLengthColumn<int32_t>*>(src_nullable->data_column_raw_ptr());
+                    data->get_data()[0] = std::numeric_limits<int32_t>::max();
+                    ASSERT_EQ(1, src->append_numbers(&value32, sizeof(value32)));
+                } else if (physical == tparquet::Type::INT64) {
+                    auto* data = down_cast<FixedLengthColumn<int64_t>*>(src_nullable->data_column_raw_ptr());
+                    data->get_data()[0] = std::numeric_limits<int64_t>::max();
+                    ASSERT_EQ(1, src->append_numbers(&value64, sizeof(value64)));
+                } else {
+                    ASSERT_TRUE(src->append_strings(std::vector<Slice>{Slice(bytes)}));
+                }
+
+                auto check_values = [&](const Column* column) {
+                    ASSERT_EQ(2, column->size());
+                    ASSERT_TRUE(column->is_null(0));
+                    ASSERT_FALSE(column->is_null(1));
+                    switch (test.target) {
+                    case TYPE_DECIMAL32:
+                        EXPECT_EQ(expected, column->get(1).get_int32());
+                        break;
+                    case TYPE_DECIMAL64:
+                        EXPECT_EQ(expected, column->get(1).get_int64());
+                        break;
+                    case TYPE_DECIMAL128:
+                        EXPECT_EQ(expected, column->get(1).get_int128());
+                        break;
+                    case TYPE_DECIMALV2:
+                        EXPECT_EQ(expected, column->get(1).get_decimal().value());
+                        break;
+                    default:
+                        FAIL();
+                    }
+                };
+                auto dst = ColumnHelper::create_column(type, true);
+                Status status = converter->convert(src.get(), dst.get());
+                if (test.overflow) {
+                    ASSERT_TRUE(status.is_invalid_argument()) << status.to_string();
+                } else {
+                    ASSERT_OK(status);
+                    check_values(dst.get());
+                }
+                src->resize(1);
+                ASSERT_OK(converter->convert(src.get(), dst.get()));
+                ASSERT_EQ(1, dst->size());
+                EXPECT_TRUE(dst->has_null());
+                EXPECT_TRUE(dst->is_null(0));
+
+                auto node = ::parquet::schema::PrimitiveNode::Make(
+                        "value", ::parquet::Repetition::OPTIONAL,
+                        ::parquet::LogicalType::Decimal(test.precision, test.source_scale),
+                        static_cast<::parquet::Type::type>(physical), width);
+                auto schema = std::static_pointer_cast<::parquet::schema::GroupNode>(
+                        ::parquet::schema::GroupNode::Make("root", ::parquet::Repetition::REQUIRED, {node}));
+                auto sink_result = arrow::io::BufferOutputStream::Create();
+                ASSERT_TRUE(sink_result.ok());
+                auto sink = sink_result.ValueOrDie();
+                ::parquet::WriterProperties::Builder properties;
+                auto writer =
+                        ::parquet::ParquetFileWriter::Open(sink, schema, properties.disable_dictionary()->build());
+                auto* writer_column = writer->AppendRowGroup()->NextColumn();
+                const int16_t levels[] = {0, 1};
+                if (physical == tparquet::Type::INT32) {
+                    static_cast<::parquet::Int32Writer*>(writer_column)->WriteBatch(2, levels, nullptr, &value32);
+                } else if (physical == tparquet::Type::INT64) {
+                    static_cast<::parquet::Int64Writer*>(writer_column)->WriteBatch(2, levels, nullptr, &value64);
+                } else if (physical == tparquet::Type::BYTE_ARRAY) {
+                    const ::parquet::ByteArray encoded(bytes.size(), reinterpret_cast<const uint8_t*>(bytes.data()));
+                    static_cast<::parquet::ByteArrayWriter*>(writer_column)->WriteBatch(2, levels, nullptr, &encoded);
+                } else {
+                    const ::parquet::FixedLenByteArray encoded(reinterpret_cast<const uint8_t*>(bytes.data()));
+                    static_cast<::parquet::FixedLenByteArrayWriter*>(writer_column)
+                            ->WriteBatch(2, levels, nullptr, &encoded);
+                }
+                writer->Close();
+                auto buffer_result = sink->Finish();
+                ASSERT_TRUE(buffer_result.ok());
+                auto buffer = buffer_result.ValueOrDie();
+                auto file = std::make_shared<RandomAccessFile>(
+                        std::make_shared<io::StringInputStream>(buffer->ToString()), "decimal-overflow.parquet");
+                FileReader reader(8, file.get(), buffer->size());
+                auto* ctx = _create_scan_context();
+                Utils::SlotDesc slots[] = {{"value", type, 0}, {""}};
+                auto* tuple = Utils::create_tuple_descriptor(nullptr, &_pool, slots);
+                Utils::make_column_info_vector(tuple, &ctx->format_scan_context.materialized_columns);
+                ctx->slot_descs = tuple->slots();
+                ctx->format_scan_context.scan_range_offset = 0;
+                ctx->format_scan_context.scan_range_length = buffer->size();
+                ASSERT_OK(reader.init(&ctx->format_scan_context));
+                auto chunk = std::make_shared<Chunk>();
+                chunk->append_column(ColumnHelper::create_column(type, true), 0);
+                status = reader.get_next(&chunk);
+                if (test.overflow) {
+                    ASSERT_TRUE(status.is_invalid_argument()) << status.to_string();
+                } else {
+                    ASSERT_OK(status);
+                    check_values(chunk->get_column_by_index(0).get());
+                }
+            }
+        }
+    }
+}
+
+TEST_F(ColumnConverterTest, DecimalInvalidScales) {
+    const auto type = TypeDescriptor::from_logical_type(TYPE_DECIMAL128, -1, 38, 0);
+    for (auto physical : {tparquet::Type::INT32, tparquet::Type::INT64, tparquet::Type::FIXED_LEN_BYTE_ARRAY,
+                          tparquet::Type::BYTE_ARRAY}) {
+        ParquetField field;
+        field.physical_type = physical;
+        field.type_length = 8;
+        field.precision = physical == tparquet::Type::INT32 ? 9 : 18;
+        std::unique_ptr<ColumnConverter> converter;
+        for (int scale : {-1, 39, std::numeric_limits<int32_t>::min(), std::numeric_limits<int32_t>::max()}) {
+            field.scale = scale;
+            EXPECT_TRUE(ColumnConverterFactory::create_converter(field, type, "UTC", &converter).is_invalid_argument());
+            field.scale = 0;
+            auto invalid_type = type;
+            invalid_type.scale = scale;
+            EXPECT_TRUE(ColumnConverterFactory::create_converter(field, invalid_type, "UTC", &converter)
+                                .is_invalid_argument());
+        }
+    }
+}
+
+TEST_F(ColumnConverterTest, WideFixedByteArrayDecimalValues) {
+    struct Target {
+        LogicalType type;
+        int precision;
+        int scale;
+        int64_t negative;
+        int64_t positive;
+    };
+    const std::vector<Target> targets = {
+            {TYPE_DECIMALV2, 27, 9, -12340000000LL, 1280000000LL},
+            {TYPE_DECIMAL32, 9, 1, -123, 12},
+            {TYPE_DECIMAL32, 9, 2, -1234, 128},
+            {TYPE_DECIMAL32, 9, 3, -12340, 1280},
+            {TYPE_DECIMAL64, 18, 1, -123, 12},
+            {TYPE_DECIMAL64, 18, 2, -1234, 128},
+            {TYPE_DECIMAL64, 18, 3, -12340, 1280},
+            {TYPE_DECIMAL128, 38, 1, -123, 12},
+            {TYPE_DECIMAL128, 38, 2, -1234, 128},
+            {TYPE_DECIMAL128, 38, 3, -12340, 1280},
+    };
+    for (int width : {17, 20}) {
+        SCOPED_TRACE(width);
+        ParquetField field;
+        field.physical_column_index = 0;
+        field.physical_type = tparquet::Type::FIXED_LEN_BYTE_ARRAY;
+        field.type_length = width;
+        field.precision = 18;
+        field.scale = 2;
+        const std::string negative = std::string(width - 2, '\xff') + std::string("\xfb\x2e", 2);
+        const std::string positive = std::string(width - 2, '\0') + std::string("\x00\x80", 2);
+        // Include a null row and an empty non-null placeholder left by filtering.
+        auto src =
+                make_byte_array_decimal_source({negative, positive, std::string(width, '\0'), "", ""}, {0, 0, 0, 1, 0});
+        for (const auto& target : targets) {
+            SCOPED_TRACE(target.type);
+            SCOPED_TRACE(target.scale);
+            const auto type = TypeDescriptor::from_logical_type(target.type, -1, target.precision, target.scale);
+            std::unique_ptr<ColumnConverter> converter;
+            ASSERT_OK(ColumnConverterFactory::create_converter(field, type, "UTC", &converter));
+            auto dst = ColumnHelper::create_column(type, true);
+            ASSERT_OK(converter->convert(src.get(), dst.get()));
+            ASSERT_EQ(5, dst->size());
+            EXPECT_TRUE(dst->is_null(3));
+            EXPECT_TRUE(dst->is_null(4));
+            for (size_t row = 0; row < 3; ++row) {
+                ASSERT_FALSE(dst->is_null(row));
+                const int64_t expected = row == 0 ? target.negative : row == 1 ? target.positive : 0;
+                switch (target.type) {
+                case TYPE_DECIMALV2:
+                    EXPECT_EQ(expected, dst->get(row).get_decimal().value());
+                    break;
+                case TYPE_DECIMAL32:
+                    EXPECT_EQ(expected, dst->get(row).get_int32());
+                    break;
+                case TYPE_DECIMAL64:
+                    EXPECT_EQ(expected, dst->get(row).get_int64());
+                    break;
+                case TYPE_DECIMAL128:
+                    EXPECT_EQ(expected, dst->get(row).get_int128());
+                    break;
+                default:
+                    FAIL();
+                }
+            }
+            auto no_null = make_byte_array_decimal_source({positive}, {0});
+            ASSERT_OK(converter->convert(no_null.get(), dst.get()));
+            ASSERT_EQ(1, dst->size());
+            EXPECT_FALSE(dst->has_null());
+        }
+
+        const auto type = TypeDescriptor::from_logical_type(TYPE_DECIMAL64, -1, 18, 2);
+        auto min_column = ColumnHelper::create_column(type, true);
+        auto max_column = ColumnHelper::create_column(type, true);
+        ASSERT_OK(StatisticsHelper::decode_min_max_into_columns(min_column, max_column, {negative, ""}, {positive, ""},
+                                                                {false, true}, type, &field, "UTC"));
+        ASSERT_EQ(2, min_column->size());
+        ASSERT_EQ(2, max_column->size());
+        ASSERT_FALSE(min_column->is_null(0));
+        ASSERT_FALSE(max_column->is_null(0));
+        EXPECT_EQ(-1234, min_column->get(0).get_int64());
+        EXPECT_EQ(128, max_column->get(0).get_int64());
+        EXPECT_TRUE(min_column->is_null(1));
+        EXPECT_TRUE(max_column->is_null(1));
+    }
+}
+
+TEST_F(ColumnConverterTest, WideFixedByteArrayDecimalBounds) {
+    for (int width : {17, 20}) {
+        SCOPED_TRACE(width);
+        ParquetField field;
+        field.physical_column_index = 0;
+        field.physical_type = tparquet::Type::FIXED_LEN_BYTE_ARRAY;
+        field.type_length = width;
+        field.precision = 38;
+        field.scale = 0;
+        const auto type = TypeDescriptor::from_logical_type(TYPE_DECIMAL128, -1, 38, 0);
+        std::unique_ptr<ColumnConverter> converter;
+        ASSERT_OK(ColumnConverterFactory::create_converter(field, type, "UTC", &converter));
+        auto dst = ColumnHelper::create_column(type, true);
+        for (const auto& payload :
+             {std::string(width - 16, '\0') + std::string("\x80", 1) + std::string(15, '\0'),
+              std::string(width - 16, '\xff') + std::string("\x7f", 1) + std::string(15, '\xff')}) {
+            auto src = make_byte_array_decimal_source({payload}, {0});
+            EXPECT_TRUE(converter->convert(src.get(), dst.get()).is_invalid_argument());
+        }
+
+        for (LogicalType target : {TYPE_DECIMAL32, TYPE_DECIMAL64}) {
+            const int precision = target == TYPE_DECIMAL32 ? 9 : 18;
+            const int value_bytes = target == TYPE_DECIMAL32 ? 4 : 8;
+            const auto narrow_type = TypeDescriptor::from_logical_type(target, -1, precision, 0);
+            ASSERT_OK(ColumnConverterFactory::create_converter(field, narrow_type, "UTC", &converter));
+            dst = ColumnHelper::create_column(narrow_type, true);
+            const std::string payload = std::string(width - value_bytes, '\0') + std::string("\x80", 1) +
+                                        std::string(value_bytes - 1, '\0');
+            auto src = make_byte_array_decimal_source({payload}, {0});
+            EXPECT_TRUE(converter->convert(src.get(), dst.get()).is_invalid_argument());
+        }
+
+        const auto scale_up_type = TypeDescriptor::from_logical_type(TYPE_DECIMAL128, -1, 38, 38);
+        ASSERT_OK(ColumnConverterFactory::create_converter(field, scale_up_type, "UTC", &converter));
+        auto src = make_byte_array_decimal_source({std::string(width - 1, '\0') + std::string("\x02", 1)}, {0});
+        dst = ColumnHelper::create_column(scale_up_type, true);
+        EXPECT_TRUE(converter->convert(src.get(), dst.get()).is_invalid_argument());
+
+        for (int scale : {-1, 39}) {
+            field.scale = scale;
+            EXPECT_TRUE(ColumnConverterFactory::create_converter(field, type, "UTC", &converter).is_invalid_argument());
+            field.scale = 0;
+            auto invalid_type = type;
+            invalid_type.scale = scale;
+            EXPECT_TRUE(ColumnConverterFactory::create_converter(field, invalid_type, "UTC", &converter)
+                                .is_invalid_argument());
+        }
+    }
+}
+
+TEST_F(ColumnConverterTest, ByteArrayDecimalFilteredPlaceholders) {
+    std::string page;
+    for (const std::string& value : {std::string("\x01", 1), std::string("\x7f", 1), std::string("\xff", 1)}) {
+        const uint32_t length = value.size();
+        for (int i = 0; i < 4; ++i) {
+            page.push_back(static_cast<char>(length >> (8 * i)));
+        }
+        page += value;
+    }
+    PlainDecoder<Slice> decoder;
+    ASSERT_OK(decoder.set_data(Slice(page.data(), page.size())));
+    auto src = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    Filter filter{1, 0, 1};
+    ASSERT_OK(decoder.next_batch(filter.size(), ColumnContentType::VALUE, src.get(), filter.data()));
+    ASSERT_EQ(3, src->size());
+    EXPECT_FALSE(src->is_null(1));
+    EXPECT_TRUE(down_cast<BinaryColumn*>(src->data_column_raw_ptr())->get_slice(1).empty());
+
+    ParquetField field;
+    field.physical_column_index = 0;
+    field.physical_type = tparquet::Type::BYTE_ARRAY;
+    field.precision = 18;
+    field.scale = 8;
+    const TypeDescriptor type = TypeDescriptor::from_logical_type(TYPE_DECIMAL64, -1, 18, 8);
+    std::unique_ptr<ColumnConverter> converter;
+    ASSERT_OK(ColumnConverterFactory::create_converter(field, type, "UTC", &converter));
+    auto dst = ColumnHelper::create_column(type, true);
+    ASSERT_OK(converter->convert(src.get(), dst.get()));
+    EXPECT_EQ(1, dst->get(0).get_int64());
+    EXPECT_TRUE(dst->is_null(1));
+    EXPECT_EQ(-1, dst->get(2).get_int64());
+    dst->filter(filter);
+    ASSERT_EQ(2, dst->size());
+    EXPECT_FALSE(dst->has_null());
+    EXPECT_EQ(1, dst->get(0).get_int64());
+    EXPECT_EQ(-1, dst->get(1).get_int64());
+}
+
+TEST_F(ColumnConverterTest, ByteArrayDecimalNested) {
+    const bool old_late = config::parquet_late_materialization_enable;
+    config::parquet_late_materialization_enable = true;
+    DeferOp restore([&] { config::parquet_late_materialization_enable = old_late; });
+    auto* runtime_state = _pool.add(new RuntimeState(TQueryGlobals()));
+    auto fragment_dict_state = std::make_unique<FragmentDictState>();
+    runtime_state->set_fragment_dict_state(fragment_dict_state.get());
+    const auto decimal_type = TypeDescriptor::from_logical_type(TYPE_DECIMAL64, -1, 18, 8);
+    const auto struct_type = TypeDescriptor::create_struct_type({"price"}, {decimal_type});
+    const auto int_type = TypeDescriptor::from_logical_type(TYPE_INT);
+
+    for (bool dictionary : {false, true}) {
+        auto id = ::parquet::schema::PrimitiveNode::Make("id", ::parquet::Repetition::REQUIRED, ::parquet::Type::INT32);
+        auto price = ::parquet::schema::PrimitiveNode::Make("price", ::parquet::Repetition::OPTIONAL,
+                                                            ::parquet::LogicalType::Decimal(18, 8),
+                                                            ::parquet::Type::BYTE_ARRAY);
+        auto payload = ::parquet::schema::GroupNode::Make("payload", ::parquet::Repetition::OPTIONAL, {price});
+        auto schema = std::static_pointer_cast<::parquet::schema::GroupNode>(
+                ::parquet::schema::GroupNode::Make("root", ::parquet::Repetition::REQUIRED, {id, payload}));
+        auto sink_result = arrow::io::BufferOutputStream::Create();
+        ASSERT_TRUE(sink_result.ok());
+        auto sink = sink_result.ValueOrDie();
+        ::parquet::WriterProperties::Builder properties;
+        if (dictionary)
+            properties.enable_dictionary();
+        else
+            properties.disable_dictionary();
+        auto writer = ::parquet::ParquetFileWriter::Open(sink, schema, properties.build());
+        auto* group = writer->AppendRowGroup();
+        const int32_t ids[] = {1, 2, 3, 4, 5};
+        static_cast<::parquet::Int32Writer*>(group->NextColumn())->WriteBatch(5, nullptr, nullptr, ids);
+        const int16_t levels[] = {2, 2, 2, 0, 1};
+        const uint8_t raw[] = {1, 255, 0};
+        const ::parquet::ByteArray values[] = {::parquet::ByteArray(1, &raw[0]), ::parquet::ByteArray(1, &raw[1]),
+                                               ::parquet::ByteArray(1, &raw[2])};
+        static_cast<::parquet::ByteArrayWriter*>(group->NextColumn())->WriteBatch(5, levels, nullptr, values);
+        writer->Close();
+        auto result = sink->Finish();
+        ASSERT_TRUE(result.ok());
+        auto buffer = result.ValueOrDie();
+
+        auto apache_reader = ::parquet::ParquetFileReader::Open(std::make_shared<arrow::io::BufferReader>(buffer));
+        auto row_metadata = apache_reader->metadata()->RowGroup(0);
+        auto meta = row_metadata->ColumnChunk(1);
+        ASSERT_EQ(::parquet::Type::BYTE_ARRAY, meta->type());
+        bool data_encoding_seen = false;
+        for (const auto& stat : meta->encoding_stats()) {
+            if (stat.page_type == ::parquet::PageType::DATA_PAGE ||
+                stat.page_type == ::parquet::PageType::DATA_PAGE_V2) {
+                EXPECT_EQ(dictionary ? ::parquet::Encoding::RLE_DICTIONARY : ::parquet::Encoding::PLAIN, stat.encoding);
+                data_encoding_seen = true;
+            }
+        }
+        ASSERT_TRUE(data_encoding_seen);
+        auto row_group = apache_reader->RowGroup(0);
+        auto column = row_group->Column(1);
+        auto* byte_reader = static_cast<::parquet::ByteArrayReader*>(column.get());
+        int16_t actual_levels[5];
+        ::parquet::ByteArray actual_values[5];
+        int64_t values_read = 0;
+        ASSERT_EQ(5, byte_reader->ReadBatch(5, actual_levels, nullptr, actual_values, &values_read));
+        ASSERT_EQ(3, values_read);
+        for (int i = 0; i < 5; ++i) EXPECT_EQ(levels[i], actual_levels[i]);
+        for (int i = 0; i < 3; ++i) {
+            ASSERT_EQ(1, actual_values[i].len);
+            EXPECT_EQ(raw[i], actual_values[i].ptr[0]);
+        }
+
+        for (int projection = 0; projection < 3; ++projection) {
+            auto file = std::make_shared<RandomAccessFile>(std::make_shared<io::StringInputStream>(buffer->ToString()),
+                                                           "nested-decimal.parquet");
+            auto reader = std::make_shared<FileReader>(2, file.get(), buffer->size());
+            auto* ctx = _create_scan_context();
+            Utils::SlotDesc id_only[] = {{"id", int_type, 0}, {""}};
+            Utils::SlotDesc both[] = {{"id", int_type, 0}, {"payload", struct_type, 1}, {""}};
+            auto* tuple = Utils::create_tuple_descriptor(runtime_state, &_pool, projection == 0 ? id_only : both);
+            Utils::make_column_info_vector(tuple, &ctx->format_scan_context.materialized_columns);
+            ctx->slot_descs = tuple->slots();
+            ctx->format_scan_context.scan_range_offset = 0;
+            ctx->format_scan_context.scan_range_length = buffer->size();
+            if (projection == 2) {
+                std::vector<TExpr> conjuncts;
+                ParquetUTBase::append_int_conjunct(TExprOpcode::GT, 0, 1, &conjuncts);
+                auto& exprs = ctx->format_scan_context.conjunct_ctxs_by_slot[0];
+                ParquetUTBase::create_conjunct_ctxs(&_pool, runtime_state, &conjuncts, &exprs);
+                ParquetUTBase::setup_conjuncts_manager(exprs, nullptr, tuple, runtime_state, ctx);
+            }
+            ASSERT_OK(reader->init(&ctx->format_scan_context));
+            const auto& footer = reader->get_file_metadata()->t_metadata();
+            ASSERT_EQ(4, footer.schema.size());
+            EXPECT_EQ(tparquet::Type::BYTE_ARRAY, footer.schema[3].type);
+            EXPECT_TRUE(footer.schema[3].__isset.precision);
+            EXPECT_TRUE(footer.schema[3].__isset.scale);
+            EXPECT_EQ(18, footer.schema[3].precision);
+            EXPECT_EQ(8, footer.schema[3].scale);
+            EXPECT_TRUE(footer.schema[3].__isset.logicalType);
+            EXPECT_TRUE(footer.schema[3].logicalType.__isset.DECIMAL);
+            if (projection == 2) {
+                const auto& lazy = reader->group_readers()[0]->_column_materializer->lazy_slot_ids();
+                EXPECT_NE(lazy.end(), std::find(lazy.begin(), lazy.end(), 1));
+            }
+            auto chunk = std::make_shared<Chunk>();
+            chunk->append_column(ColumnHelper::create_column(int_type, true), 0);
+            if (projection != 0) chunk->append_column(ColumnHelper::create_column(struct_type, true), 1);
+            std::vector<int32_t> observed;
+            for (;;) {
+                chunk->reset();
+                Status status = reader->get_next(&chunk);
+                if (status.is_end_of_file()) break;
+                ASSERT_OK(status);
+                for (size_t row = 0; row < chunk->num_rows(); ++row) {
+                    const int32_t current_id = chunk->get_column_by_index(0)->get(row).get_int32();
+                    observed.push_back(current_id);
+                    if (projection == 0) continue;
+                    const auto& parent = chunk->get_column_by_index(1);
+                    EXPECT_EQ(current_id == 4, parent->is_null(row));
+                    if (current_id == 4) continue;
+                    auto* structure = down_cast<const StructColumn*>(ColumnHelper::get_data_column(parent.get()));
+                    auto field = structure->field_column("price");
+                    ASSERT_TRUE(field.ok());
+                    EXPECT_EQ(current_id == 5, field.value()->is_null(row));
+                    if (current_id <= 3) {
+                        EXPECT_EQ(current_id == 1 ? 1 : current_id == 2 ? -1 : 0, field.value()->get(row).get_int64());
+                    }
+                }
+            }
+            EXPECT_EQ(projection == 2 ? std::vector<int32_t>({2, 3, 4, 5}) : std::vector<int32_t>({1, 2, 3, 4, 5}),
+                      observed);
+        }
+    }
+}
+
+TEST_F(ColumnConverterTest, ByteArrayDecimalNullability) {
+    auto* runtime_state = _pool.add(new RuntimeState(TQueryGlobals()));
+    auto fragment_dict_state = std::make_unique<FragmentDictState>();
+    runtime_state->set_fragment_dict_state(fragment_dict_state.get());
+    const auto int_type = TypeDescriptor::from_logical_type(TYPE_INT);
+    const int16_t nested_levels[] = {0, 1, 0, 1, 0, 1, 2, 0, 1, 2, 1, 2};
+    const int16_t scalar_levels[] = {0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 0};
+    const int32_t ids[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
+    const uint8_t raw[] = {0, 255, 1};
+    const ::parquet::ByteArray values[] = {::parquet::ByteArray(1, &raw[0]), ::parquet::ByteArray(1, &raw[1]),
+                                           ::parquet::ByteArray(1, &raw[2])};
+
+    for (bool dictionary : {false, true}) {
+        for (int groups : {1, 2}) {
+            SCOPED_TRACE(::testing::Message() << "dictionary=" << dictionary << " groups=" << groups);
+            auto id = ::parquet::schema::PrimitiveNode::Make("id", ::parquet::Repetition::REQUIRED,
+                                                             ::parquet::Type::INT32);
+            auto scalar = ::parquet::schema::PrimitiveNode::Make("scalar", ::parquet::Repetition::OPTIONAL,
+                                                                 ::parquet::LogicalType::Decimal(18, 8),
+                                                                 ::parquet::Type::BYTE_ARRAY);
+            auto price = ::parquet::schema::PrimitiveNode::Make("price", ::parquet::Repetition::OPTIONAL,
+                                                                ::parquet::LogicalType::Decimal(18, 8),
+                                                                ::parquet::Type::BYTE_ARRAY);
+            auto payload = ::parquet::schema::GroupNode::Make("payload", ::parquet::Repetition::OPTIONAL, {price});
+            auto schema = std::static_pointer_cast<::parquet::schema::GroupNode>(
+                    ::parquet::schema::GroupNode::Make("root", ::parquet::Repetition::REQUIRED, {id, scalar, payload}));
+            auto sink_result = arrow::io::BufferOutputStream::Create();
+            ASSERT_TRUE(sink_result.ok());
+            auto sink = sink_result.ValueOrDie();
+            ::parquet::WriterProperties::Builder properties;
+            if (dictionary)
+                properties.enable_dictionary();
+            else
+                properties.disable_dictionary();
+            auto writer = ::parquet::ParquetFileWriter::Open(sink, schema, properties.build());
+            for (int group_index = 0; group_index < groups; ++group_index) {
+                auto* group = writer->AppendRowGroup();
+                static_cast<::parquet::Int32Writer*>(group->NextColumn())
+                        ->WriteBatch(6, nullptr, nullptr, ids + 6 * group_index);
+                static_cast<::parquet::ByteArrayWriter*>(group->NextColumn())
+                        ->WriteBatch(6, scalar_levels + 6 * group_index, nullptr, values);
+                static_cast<::parquet::ByteArrayWriter*>(group->NextColumn())
+                        ->WriteBatch(6, nested_levels + 6 * group_index, nullptr, values);
+            }
+            writer->Close();
+            auto result = sink->Finish();
+            ASSERT_TRUE(result.ok());
+            auto buffer = result.ValueOrDie();
+
+            auto apache_reader = ::parquet::ParquetFileReader::Open(std::make_shared<arrow::io::BufferReader>(buffer));
+            ASSERT_EQ(groups, apache_reader->metadata()->num_row_groups());
+            for (int group_index = 0; group_index < groups; ++group_index) {
+                for (int column_index : {1, 2}) {
+                    if (group_index == 1) {
+                        bool data_encoding_seen = false;
+                        auto row_metadata = apache_reader->metadata()->RowGroup(group_index);
+                        auto column_metadata = row_metadata->ColumnChunk(column_index);
+                        for (const auto& stat : column_metadata->encoding_stats()) {
+                            if (stat.page_type == ::parquet::PageType::DATA_PAGE ||
+                                stat.page_type == ::parquet::PageType::DATA_PAGE_V2) {
+                                EXPECT_EQ(dictionary ? ::parquet::Encoding::RLE_DICTIONARY : ::parquet::Encoding::PLAIN,
+                                          stat.encoding);
+                                data_encoding_seen = true;
+                            }
+                        }
+                        ASSERT_TRUE(data_encoding_seen);
+                    }
+                    auto group = apache_reader->RowGroup(group_index);
+                    auto column = group->Column(column_index);
+                    auto* byte_reader = static_cast<::parquet::ByteArrayReader*>(column.get());
+                    int16_t actual_levels[6];
+                    ::parquet::ByteArray actual_values[6];
+                    int64_t values_read = 0;
+                    ASSERT_EQ(6, byte_reader->ReadBatch(6, actual_levels, nullptr, actual_values, &values_read));
+                    ASSERT_EQ(group_index == 0 ? 0 : 3, values_read);
+                    const int16_t* expected = column_index == 1 ? scalar_levels : nested_levels;
+                    for (int i = 0; i < 6; ++i) EXPECT_EQ(expected[6 * group_index + i], actual_levels[i]);
+                    for (int i = 0; i < values_read; ++i) {
+                        ASSERT_EQ(1, actual_values[i].len);
+                        EXPECT_EQ(raw[i], actual_values[i].ptr[0]);
+                    }
+                }
+            }
+
+            for (LogicalType target : {TYPE_DECIMALV2, TYPE_DECIMAL32, TYPE_DECIMAL64, TYPE_DECIMAL128}) {
+                SCOPED_TRACE(target);
+                int precision = target == TYPE_DECIMAL32
+                                        ? 9
+                                        : target == TYPE_DECIMAL64 ? 18 : target == TYPE_DECIMALV2 ? 27 : 38;
+                int scale = target == TYPE_DECIMALV2 ? 9 : 8;
+                auto decimal_type = TypeDescriptor::from_logical_type(target, -1, precision, scale);
+                auto struct_type = TypeDescriptor::create_struct_type({"price"}, {decimal_type});
+                auto file = std::make_shared<RandomAccessFile>(
+                        std::make_shared<io::StringInputStream>(buffer->ToString()), "nullable-decimal.parquet");
+                auto reader = std::make_shared<FileReader>(2, file.get(), buffer->size());
+                auto* ctx = _create_scan_context();
+                Utils::SlotDesc slots[] = {
+                        {"id", int_type, 0}, {"scalar", decimal_type, 1}, {"payload", struct_type, 2}, {""}};
+                auto* tuple = Utils::create_tuple_descriptor(runtime_state, &_pool, slots);
+                Utils::make_column_info_vector(tuple, &ctx->format_scan_context.materialized_columns);
+                ctx->slot_descs = tuple->slots();
+                ctx->format_scan_context.scan_range_offset = 0;
+                ctx->format_scan_context.scan_range_length = buffer->size();
+                ASSERT_OK(reader->init(&ctx->format_scan_context));
+                auto chunk = std::make_shared<Chunk>();
+                chunk->append_column(ColumnHelper::create_column(int_type, true), 0);
+                chunk->append_column(ColumnHelper::create_column(decimal_type, true), 1);
+                chunk->append_column(ColumnHelper::create_column(struct_type, true), 2);
+                int observed = 0;
+                for (;;) {
+                    chunk->reset();
+                    Status status = reader->get_next(&chunk);
+                    if (status.is_end_of_file()) break;
+                    ASSERT_OK(status);
+                    for (size_t row = 0; row < chunk->num_rows(); ++row) {
+                        ASSERT_LT(observed, groups * 6);
+                        EXPECT_EQ(observed, chunk->get_column_by_index(0)->get(row).get_int32());
+                        auto scalar_column = chunk->get_column_by_index(1);
+                        auto parent = chunk->get_column_by_index(2);
+                        EXPECT_EQ(scalar_levels[observed] == 0, scalar_column->is_null(row));
+                        EXPECT_EQ(nested_levels[observed] == 0, parent->is_null(row));
+                        auto* structure = down_cast<const StructColumn*>(ColumnHelper::get_data_column(parent.get()));
+                        auto field = structure->field_column("price");
+                        ASSERT_TRUE(field.ok());
+                        if (nested_levels[observed] != 0) {
+                            EXPECT_EQ(nested_levels[observed] == 1, field.value()->is_null(row));
+                        }
+                        auto check_value = [&](const ColumnPtr& column, int64_t expected) {
+                            ASSERT_FALSE(column->is_null(row));
+                            switch (target) {
+                            case TYPE_DECIMALV2:
+                                EXPECT_EQ(expected * 10, column->get(row).get_decimal().value());
+                                break;
+                            case TYPE_DECIMAL32:
+                                EXPECT_EQ(expected, column->get(row).get_int32());
+                                break;
+                            case TYPE_DECIMAL64:
+                                EXPECT_EQ(expected, column->get(row).get_int64());
+                                break;
+                            case TYPE_DECIMAL128:
+                                EXPECT_EQ(expected, column->get(row).get_int128());
+                                break;
+                            default:
+                                FAIL();
+                            }
+                        };
+                        if (scalar_levels[observed] == 1)
+                            check_value(scalar_column, observed == 6 ? 0 : observed == 8 ? -1 : 1);
+                        if (nested_levels[observed] == 2)
+                            check_value(field.value(), observed == 6 ? 0 : observed == 9 ? -1 : 1);
+                        ++observed;
+                    }
+                }
+                EXPECT_EQ(groups * 6, observed);
+            }
         }
     }
 }
