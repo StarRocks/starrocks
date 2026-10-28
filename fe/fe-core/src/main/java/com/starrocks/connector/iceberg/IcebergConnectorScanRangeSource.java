@@ -62,6 +62,7 @@ import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.FileContent;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.FileScanTask;
+import org.apache.iceberg.MetadataColumns;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
@@ -75,6 +76,7 @@ import org.apache.iceberg.util.StructLikeWrapper;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.nio.ByteBuffer;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -333,6 +335,9 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
             if (deleteFile.format() == FileFormat.PARQUET || deleteFile.format() == FileFormat.ORC) {
                 // a position delete file may have another format than its data file (write.delete.format.default)
                 target.setFile_format(IcebergApiConverter.getHdfsFileFormat(deleteFile.format()).toThrift());
+                if (referencesOnlyDataFile(deleteFile, task.file())) {
+                    target.setReferences_only_data_file(true);
+                }
             }
             posDeleteFiles.add(target);
         }
@@ -342,6 +347,27 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
         }
 
         return Lists.newArrayList(buildTScanRangeLocations(hdfsScanRange));
+    }
+
+    // True when every row of a position delete file references dataFile: the file says so
+    // (referenced_data_file), or the lower and upper bounds of its file_path column are both
+    // dataFile's path. A truncated bound never equals the full path.
+    @VisibleForTesting
+    static boolean referencesOnlyDataFile(DeleteFile deleteFile, DataFile dataFile) {
+        String dataFilePath = dataFile.path().toString();
+        if (deleteFile.referencedDataFile() != null) {
+            return deleteFile.referencedDataFile().equals(dataFilePath);
+        }
+        if (deleteFile.lowerBounds() == null || deleteFile.upperBounds() == null) {
+            return false;
+        }
+        int filePathId = MetadataColumns.DELETE_FILE_PATH.fieldId();
+        ByteBuffer lower = deleteFile.lowerBounds().get(filePathId);
+        ByteBuffer upper = deleteFile.upperBounds().get(filePathId);
+        if (lower == null || !lower.equals(upper)) {
+            return false;
+        }
+        return dataFilePath.equals(Conversions.fromByteBuffer(Types.StringType.get(), lower.duplicate()).toString());
     }
 
     private List<TScanRangeLocations> buildDeleteFileScanRanges(FileScanTask task, Long partitionId) throws AnalysisException {
