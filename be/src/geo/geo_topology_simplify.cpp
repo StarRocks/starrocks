@@ -74,7 +74,7 @@ struct Stop {
 };
 class Budget {
 public:
-    Budget(size_t limit, size_t used = 0) : _limit(limit), _used(used) {}
+    explicit Budget(size_t limit, size_t used = 0) : _limit(limit), _used(used) {}
     void charge(size_t count = 1) {
         if (_used > _limit || count > _limit - _used) {
             throw Stop{Status::InvalidArgument("ST_SimplifyPreserveTopology exceeds work limit")};

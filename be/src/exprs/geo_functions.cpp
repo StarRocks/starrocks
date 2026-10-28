@@ -2568,7 +2568,7 @@ Status GeoFunctions::native_geo_simplify_prepare(FunctionContext* context, Funct
         if (prepared->status.ok()) {
             auto model = PreparedGeoTopologySimplify::prepare(input->wkb(0));
             prepared->status = model.status();
-            if (prepared->status.is_cancelled() || prepared->status.is_mem_limit_exceeded()) return prepared->status;
+            if (prepared->status.is_mem_limit_exceeded()) return prepared->status;
             if (prepared->status.ok()) prepared->input = std::move(model.value());
         }
     }
