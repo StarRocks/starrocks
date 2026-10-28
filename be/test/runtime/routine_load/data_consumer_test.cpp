@@ -22,7 +22,6 @@
 
 #include "librdkafka/rdkafka.h"
 #include "librdkafka/rdkafka_mock.h"
-
 #include "runtime/exec_env.h"
 #include "testutil/assert.h"
 
