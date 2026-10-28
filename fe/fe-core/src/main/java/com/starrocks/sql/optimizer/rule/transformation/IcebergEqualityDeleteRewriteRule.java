@@ -173,8 +173,11 @@ public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
         scanOperator.setFromEqDeleteRewriteRule(true);
 
         ImmutableMap.Builder<ColumnRefOperator, ScalarOperator> projectForUnion = ImmutableMap.builder();
+        Set<String> allPruningColumns = pruningColumnsByIds.values().stream()
+                .flatMap(Set::stream)
+                .collect(Collectors.toSet());
         LogicalIcebergScanOperator icebergDataFileWithDeleteScanOp = buildNewScanOperatorWithUnselectedAndExtendedField(
-                deleteSchemas, scanOperator, columnRefFactory, projectForUnion, hasPartitionEvolution,
+                deleteSchemas, allPruningColumns, scanOperator, columnRefFactory, projectForUnion, hasPartitionEvolution,
                 !idsNeedingPartitionMatch.isEmpty());
         icebergDataFileWithDeleteScanOp.setMORParam(IcebergMORParams.DATA_FILE_WITH_EQ_DELETE);
         icebergDataFileWithDeleteScanOp.setTableFullMORParams(icebergTableFullMorParams);
@@ -346,6 +349,7 @@ public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
 
     private LogicalIcebergScanOperator buildNewScanOperatorWithUnselectedAndExtendedField(
             Set<IcebergDeleteSchema> deleteSchemas,
+            Set<String> pruningColumns,
             LogicalIcebergScanOperator scanOperator,
             ColumnRefFactory columnRefFactory,
             ImmutableMap.Builder<ColumnRefOperator, ScalarOperator> projectForUnion,
@@ -363,11 +367,14 @@ public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
         Map<ColumnRefOperator, Column> colRefToColumnMetaMap = scanOperator.getColRefToColumnMetaMap();
         Map<Column, ColumnRefOperator> columnMetaToColRefMap = scanOperator.getColumnMetaToColRefMap();
 
-        Map<ColumnRefOperator, Column> deleteColumns = deleteSchemas.stream()
+        // the pruning columns stand in for $partition_key in the anti join, so the data side reads them even when
+        // the query does not
+        Stream<String> keyColumnNames = deleteSchemas.stream()
                 .map(IcebergDeleteSchema::equalityIds)
                 .flatMap(List::stream)
+                .map(fieldId -> findEqualityColumnName(noDeleteTable, fieldId));
+        Map<ColumnRefOperator, Column> deleteColumns = Stream.concat(keyColumnNames, pruningColumns.stream())
                 .distinct()
-                .map(fieldId -> findEqualityColumnName(noDeleteTable, fieldId))
                 .map(withDeleteIcebergTable::getColumn)
                 .collect(Collectors.toMap(columnMetaToColRefMap::get, column -> column));
 
@@ -477,25 +484,30 @@ public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
                 icebergTable.getNativeTable().schema().caseInsensitiveFindField(PARTITION_KEY) == null) {
             return Set.of();
         }
-        Map<String, Column> scanColumns = scan.getColRefToColumnMetaMap().values().stream()
-                .collect(Collectors.toMap(Column::getName, column -> column, (a, b) -> a));
+        Set<String> scanColumnNames = scan.getColRefToColumnMetaMap().values().stream()
+                .map(Column::getName)
+                .collect(Collectors.toSet());
         // DELETE, UPDATE and MERGE read row locators; keep every delete for them
-        if (scanColumns.containsKey(IcebergTable.FILE_PATH) || scanColumns.containsKey(IcebergTable.ROW_POSITION)) {
+        if (scanColumnNames.contains(IcebergTable.FILE_PATH) || scanColumnNames.contains(IcebergTable.ROW_POSITION)) {
             return Set.of();
         }
+        // the full schema follows the read schema, so it has every column a partition field resolves to
+        Map<String, Column> tableColumns = icebergTable.getFullSchema().stream()
+                .collect(Collectors.toMap(Column::getName, column -> column, (a, b) -> a));
         return runtimeFilterPruningColumns(icebergTable.getNativeTable(), icebergTable.getReadSchema(), deleteSchemas,
-                equalityIds, scanColumns);
+                equalityIds, tableColumns);
     }
 
     // The identity partition columns that replace the $partition_key match of a key, so a runtime filter on them
     // may skip the delete files of the partitions it rejects. The table must never have changed its spec and every
-    // partition field must be an identity of a scanned column: a data row and a delete then share a partition
-    // exactly when `data.c <=> delete.c` holds for all of them, so the match needs no wider hash key. A filter that
+    // partition field must be an identity of a column: a data row and a delete then share a partition exactly when
+    // `data.c <=> delete.c` holds for all of them, so the match needs no wider hash key. The columns are read even
+    // when the query does not select them, as a fixed-width key is much cheaper than $partition_key. A filter that
     // rejects v on data.c may drop the deletes of partition v: the join that built it drops the data rows with
     // c = v anyway (JoinNode pushes such filters into the delete scan).
     static Set<String> runtimeFilterPruningColumns(Table table, Schema readSchema,
                                                    Set<IcebergDeleteSchema> deleteSchemas, List<Integer> equalityIds,
-                                                   Map<String, Column> scanColumns) {
+                                                   Map<String, Column> tableColumns) {
         if (table.specs().size() != 1 || table.spec().isUnpartitioned()) {
             return Set.of();
         }
@@ -514,7 +526,7 @@ public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
             // a real column named like an extended column would be matched as that column by buildOnPredicate
             if (!field.transform().isIdentity() || name == null || !field.name().equals(name) ||
                     EXTENDED_COLUMN_NAMES.stream().anyMatch(name::equalsIgnoreCase) ||
-                    !isRuntimeFilterPruningType(scanColumns.get(name))) {
+                    !isRuntimeFilterPruningType(tableColumns.get(name))) {
                 return Set.of();
             }
             columns.add(name);

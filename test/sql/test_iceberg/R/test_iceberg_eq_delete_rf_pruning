@@ -149,6 +149,82 @@ select count(*) from iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact;
 set enable_profile = false;
 -- result:
 -- !result
+function: assert_explain_not_contains('select count(*) from iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact', '$partition_key')
+-- result:
+None
+-- !result
+function: assert_explain_contains('select sum(length(v)) from iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact', 'Runtime filter pruning columns: [p]')
+-- result:
+None
+-- !result
+select sum(length(v)), count(*) from iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact;
+-- result:
+6	3
+-- !result
+function: assert_explain_matches('select v from iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact where id = 2', 'fact_eq_delete_id((?!TABLE:).)*PREDICATES: [0-9]+: id = 2')
+-- result:
+None
+-- !result
+select v, p from iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact where id = 2 order by p;
+-- result:
+a2	1
+c2	3
+-- !result
+select v, p from iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact where id in (1, 3) order by p;
+-- result:
+b1	2
+-- !result
+function: assert_explain_matches('select v from iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact where array_contains([id], cast(floor(rand() * 2) as int))', 'fact_eq_delete_id(?:(?!TABLE:|rand).)*(?:TABLE:|$)')
+-- result:
+None
+-- !result
+create table iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact_null(
+    id int,
+    v string,
+    p int
+) partition by(p) properties ("format-version" = "2");
+-- result:
+-- !result
+insert into iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact_null values (NULL, 'n1', 1), (NULL, 'n2', 2), (1, 'x1', 1), (2, 'x2', 2);
+-- result:
+-- !result
+create table hive_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact_null_deletes(
+    id int,
+    p int
+) partition by(p) properties ("location" = "oss://${oss_bucket}/eq_rf_db_${uuid0}/fact_null_deletes");
+-- result:
+-- !result
+insert into hive_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact_null_deletes values (NULL, 1), (2, 2);
+-- result:
+-- !result
+alter table iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact_null execute add_equality_delete_files(location="oss://${oss_bucket}/eq_rf_db_${uuid0}/fact_null_deletes", file_format="parquet", equality_columns="id");
+-- result:
+-- !result
+function: assert_explain_not_contains('select count(*) from iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact_null', '$partition_key')
+-- result:
+None
+-- !result
+select count(*) from iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact_null;
+-- result:
+2
+-- !result
+select v, p from iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact_null order by v;
+-- result:
+n2	2
+x1	1
+-- !result
+select v, p from iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact_null where id is null order by v;
+-- result:
+n2	2
+-- !result
+select v, p from iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact_null where id = 2 order by v;
+-- result:
+-- !result
+select v, p from iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact_null where id is null or id = 1 order by v;
+-- result:
+n2	2
+x1	1
+-- !result
 create table iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact_dt(
     id int,
     v string,
@@ -324,6 +400,12 @@ drop table hive_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact_dt_deletes force;
 -- result:
 -- !result
 drop table hive_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact_deletes force;
+-- result:
+-- !result
+drop table iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact_null force;
+-- result:
+-- !result
+drop table hive_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact_null_deletes force;
 -- result:
 -- !result
 drop table hive_eq_rf_${uuid0}.eq_rf_db_${uuid0}.mixed_global_deletes force;

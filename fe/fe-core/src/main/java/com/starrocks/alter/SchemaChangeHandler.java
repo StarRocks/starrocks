@@ -1374,6 +1374,12 @@ public class SchemaChangeHandler extends AlterHandler {
         // (the caller builds the job); compute the new sort key here and skip the reject. Every other
         // range table keeps the existing rejection -- the sort key defines tablet boundaries.
         if (olapTable.isRangeDistribution() && !needsRangeRewriteSchemaChange(olapTable, alterClause)) {
+            if (hasNonKeyAutoIncrementColumnOnPrimaryKey(olapTable)) {
+                throw new DdlException(
+                    "Modifying sort key (ALTER TABLE ... ORDER BY) is not supported on a range-distribution " +
+                    "PRIMARY KEY table with a non-key AUTO_INCREMENT column, because a partial update during " +
+                    "the rewrite could give a new row a different AUTO_INCREMENT value in the rewritten data.");
+            }
             throw new DdlException(
                 "Modifying sort key (ALTER TABLE ... ORDER BY) is not " +
                 "supported on tables with range distribution, because the " +
@@ -5269,13 +5275,16 @@ public class SchemaChangeHandler extends AlterHandler {
         if (!table.isCloudNativeTable() || !table.isRangeDistribution()) {
             return false;
         }
-        // Range-colocate and AUTO_INCREMENT-key tables stay rejected (returning false here keeps the
-        // existing range-distribution rejection on both the reorder and keyness-flip paths). A colocate
-        // table's tablets must stay range-aligned with its ColocateRangeMgr expected ranges; the rewrite
-        // samples a fresh K-tablet layout independently, which would desync colocate scan/join routing
-        // after the flip. AUTO_INCREMENT columns are likewise out of scope for the re-route.
-        if (table.hasColocateGroup()
-                || table.hasAutoIncrementColumn()) {
+        // Range-colocate tables stay rejected (returning false here keeps the existing range-distribution
+        // rejection on both the reorder and keyness-flip paths). A colocate table's tablets must stay
+        // range-aligned with its ColocateRangeMgr expected ranges; the rewrite samples a fresh K-tablet
+        // layout independently, which would desync colocate scan/join routing after the flip.
+        // AUTO_INCREMENT is rejected only for a PRIMARY KEY table whose AUTO_INCREMENT column is a non-key
+        // column: a partial update that omits it allocates ids per tablet, so during the job a new key
+        // would get one id in the base index and another in the shadow index, and the row's id would change
+        // at the flip. Other AUTO_INCREMENT tables are safe: the sink fills the value once per row before
+        // fan-out, and the rewrite copies existing values verbatim.
+        if (table.hasColocateGroup() || hasNonKeyAutoIncrementColumnOnPrimaryKey(table)) {
             return false;
         }
         // Tables with user rollup / synchronous-MV indexes beyond the base index are not eligible:
@@ -5639,6 +5648,11 @@ public class SchemaChangeHandler extends AlterHandler {
         return columnDef.isKey();
     }
 
+    private static boolean hasNonKeyAutoIncrementColumnOnPrimaryKey(OlapTable table) {
+        return table.getKeysType() == KeysType.PRIMARY_KEYS
+                && table.getBaseSchema().stream().anyMatch(c -> c.isAutoIncrement() && !c.isKey());
+    }
+
     /**
      * Whether {@code resolved} -- the {@link SchemaChangeData} produced by {@link #finalAnalyze} --
      * describes a metadata-only trailing key-column add on a shared-data range-distribution table: the
@@ -5651,8 +5665,7 @@ public class SchemaChangeHandler extends AlterHandler {
      * <ul>
      *   <li>the table is a shared-data (cloud-native) range-distribution table;</li>
      *   <li>the table has exactly one index meta (no rollup / synchronous MV);</li>
-     *   <li>the table is not a colocate table, has no AUTO_INCREMENT column, and has no temp
-     *       partitions;</li>
+     *   <li>the table is not a colocate table and has no temp partitions;</li>
      *   <li>the table's keysType is DUP_KEYS, AGG_KEYS, or UNIQUE_KEYS (not PRIMARY_KEYS);</li>
      *   <li>the base index's resolved schema adds one or more brand-new key columns (unique ids not
      *       present in the current live schema -- excludes promoting an existing value column to key),
@@ -5674,7 +5687,7 @@ public class SchemaChangeHandler extends AlterHandler {
             return false;
         }
         if (GlobalStateMgr.getCurrentState().getColocateTableIndex().isColocateTable(table.getId())
-                || table.hasAutoIncrementColumn() || table.existTempPartitions()) {
+                || table.existTempPartitions()) {
             return false;
         }
         KeysType keysType = table.getKeysType();
