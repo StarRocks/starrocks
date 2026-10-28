@@ -1134,6 +1134,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：存算分离集群下，是否并行写入导入的合并事务日志。导入 Sink 关闭时，会为本次导入涉及的每个分区向对象存储写入一份合并事务日志。设置为 `true` 时，这些写入在专用线程池中并发执行（线程数上限由 `put_combined_txn_log_thread_pool_num_max` 控制，默认为 `64`）；设置为 `false` 时，逐个分区依次写入。两种方式下，导入都会等待所有写入完成，任一写入失败则导入失败。
 - 引入版本：-
 
+### put_combined_txn_log_thread_pool_num_max
+
+- 默认值：64
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群下，向对象存储写入合并事务日志的线程池的线程数上限。`enable_put_combinded_txn_log_parallel` 设置为 `true` 时，一次导入涉及的各分区的合并事务日志在该线程池中并发写入。线程全部繁忙时，后续写入在线程池队列中排队，队列长度不受限制。支持运行时修改，无需重启 BE 或 CN。取值小于或等于 `0` 时按 `1` 处理。降低上限不会中断正在执行的写入。线程空闲 500 ms 后退出。
+- 引入版本：-
+
 ### enable_rejected_record_sync
 
 - 默认值：false
