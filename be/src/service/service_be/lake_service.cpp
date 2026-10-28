@@ -20,6 +20,7 @@
 #include <butil/time.h> // NOLINT
 
 #include <set>
+#include <thread>
 
 #include "agent/agent_server.h"
 #include "base/brpc/brpc.h"
@@ -148,6 +149,11 @@ bvar::LatencyRecorder g_aggregate_publish_version_wait_resp_latency("lake_aggreg
 bvar::LatencyRecorder g_aggregate_publish_version_write_meta_latency("lake_aggregate_publish_version_write_meta");
 bvar::Adder<int64_t> g_aggregate_compaction_failed_tasks("lake_aggregate_compaction_failed_tasks");
 bvar::Adder<int64_t> g_aggregate_compaction_total_tasks("lake_aggregate_compaction_total_tasks");
+// partial_meta entries written to this node's local disk cache, see lake_enable_publish_partial_meta.
+bvar::Adder<int64_t> g_publish_partial_meta_written("lake_publish_partial_meta_written");
+// A tablet that finishes this long after its request arrived cannot have been waited for by the aggregator,
+// whose deadline started before it sent the request. The margin absorbs timing error between the two.
+constexpr int64_t kPartialMetaTimeoutMarginMs = 3000;
 bvar::LatencyRecorder g_aggregate_compaction_wait_resp_latency("lake_aggregate_compaction_wait_resp");
 bvar::LatencyRecorder g_aggregate_compaction_write_meta_latency("lake_aggregate_compaction_write_meta");
 
@@ -247,6 +253,10 @@ LakeServiceImpl::~LakeServiceImpl() = default;
 // in the txn-log apply path (OSS read of txn_log, broken segment, ...),
 // which no_op_publish=true bypasses entirely (transactions.cpp:320).
 DEFINE_FAIL_POINT(lake_publish_version_rpc_fail);
+// Makes each tablet publish of this node that actually applied last until its request's timeout plus a few seconds
+// has passed, so a test can make a slow tablet finish after the aggregator stopped waiting for it while a retry that
+// finds the result already there stays fast (see lake_enable_publish_partial_meta).
+DEFINE_FAIL_POINT(lake_publish_tablet_delay_past_timeout);
 // Forces the query-side parent alias back to the pre-fix behaviour (merge the primary-index
 // sstables too), so the cost of that merge can be measured against the same data.
 
@@ -355,6 +365,7 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
     auto timeout_ms = request->has_timeout_ms() ? request->timeout_ms() : kDefaultTimeoutForPublishVersion;
     auto timeout_deadline = std::chrono::system_clock::now() + std::chrono::milliseconds(timeout_ms);
     auto start_ts = butil::gettimeofday_us();
+    const int64_t start_monotonic_us = MonotonicMicros();
     auto thread_pool = publish_version_thread_pool(_env);
     CHECK(thread_pool != nullptr);
     auto thread_pool_token = ConcurrencyLimitedThreadPoolToken(thread_pool, thread_pool->max_threads() * 2);
@@ -436,16 +447,42 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                     }
 
                     StatusOr<TabletMetadataPtr> res;
+                    bool applied = false;
                     if (std::chrono::system_clock::now() < timeout_deadline) {
                         res = lake::publish_version(_tablet_mgr, tablet_info, base_version, new_version, txns,
                                                     skip_write_tablet_metadata, fe_built_version, base_version_order,
-                                                    request->is_retry_publish());
+                                                    request->is_retry_publish(), &applied);
+                        FAIL_POINT_TRIGGER_EXECUTE(lake_publish_tablet_delay_past_timeout, {
+                            if (applied) {
+                                std::this_thread::sleep_for(
+                                        std::chrono::milliseconds(timeout_ms + kPartialMetaTimeoutMarginMs + 2000));
+                            }
+                        });
                     } else {
                         auto t = MilliSecondsSinceEpochFromTimePoint(timeout_deadline);
                         res = Status::TimedOut(fmt::format("reached deadline={}/timeout={}", t, timeout_ms));
                     }
                     if (res.ok()) {
                         auto metadata = std::move(res).value();
+                        // Under file bundling this result reaches storage only inside the version's bundle,
+                        // which the aggregator writes once every tablet of the partition succeeded. Keep a copy in
+                        // this node's local disk cache when it may never get there: the aggregator has stopped
+                        // waiting for it, or this retry had to apply again because an earlier result was lost. A
+                        // retry on this node reads it back.
+                        if (skip_write_tablet_metadata && applied && config::lake_enable_publish_partial_meta &&
+                            request->resharding_tablet_infos_size() == 0 &&
+                            (request->is_retry_publish() ||
+                             MonotonicMicros() - start_monotonic_us >
+                                     (timeout_ms + kPartialMetaTimeoutMarginMs) * 1000)) {
+                            auto st = _tablet_mgr->put_partial_tablet_metadata(metadata);
+                            if (st.ok()) {
+                                g_publish_partial_meta_written << 1;
+                            } else if (!st.is_not_supported()) {
+                                // Best effort: the publish itself succeeded, a retry just re-applies.
+                                LOG(WARNING) << "Fail to write partial_meta of tablet " << metadata->id() << " version "
+                                             << metadata->version() << ": " << st;
+                            }
+                        }
                         auto score = compaction_score(_tablet_mgr, metadata);
                         // Per-tablet stats returned to FE: for range-distribution tablets (every
                         // publish) to drive real-time split/merge, and on first import (base_version==1)
@@ -979,8 +1016,11 @@ void LakeServiceImpl::aggregate_publish_version(::google::protobuf::RpcControlle
                                            get_txn_ids_string(&req), JoinInts(req.tablet_ids(), ",")));
     }
 
+    // With partial_meta on, every node is still asked to publish after one sub-request failed: what the others
+    // finish now is kept for the retry instead of being redone (see lake_enable_publish_partial_meta).
+    const bool keep_dispatching_on_failure = config::lake_enable_publish_partial_meta;
     for (int i = 0; i < request->publish_reqs_size(); ++i) {
-        if (ctx.has_failure) {
+        if (ctx.has_failure && !keep_dispatching_on_failure) {
             ctx.count_down();
             continue;
         }
