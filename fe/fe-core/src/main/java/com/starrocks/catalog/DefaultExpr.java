@@ -43,13 +43,16 @@ import java.util.regex.Pattern;
 public class DefaultExpr implements GsonPreProcessable, GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(DefaultExpr.class);
 
+    // Captures the fractional-second scale from a time-function default, e.g. "now(3)" -> 3.
+    private static final Pattern TIME_FUNCTION_SCALE_PATTERN = Pattern.compile("\\(\\s*(\\d+)\\s*\\)");
+
     @SerializedName("expr")
     private String expr;
 
     // StarRocks Gson skips fields without @SerializedName (see HiddenAnnotationExclusionStrategy).
-    // Without persistence this flag flipped to false after FE restart / edit-log replay, which made
-    // isEmptyDefaultTimeFunction misclassify "current_timestamp(N)" as the empty form and silently
-    // dropped its precision argument.
+    // Without persistence this flag flipped to false after FE restart / edit-log replay, which lost
+    // the distinction between the bare now() / current_timestamp() form and the precision-bearing
+    // now(N) form when rendering the default back to SQL (toSql / SHOW CREATE TABLE).
     @SerializedName("hasArguments")
     private boolean hasArguments;
 
@@ -150,9 +153,24 @@ public class DefaultExpr implements GsonPreProcessable, GsonPostProcessable {
         return matcher.matches();
     }
 
-    public static boolean isEmptyDefaultTimeFunction(DefaultExpr expr) {
-        return expr.getExprObject() == null && expr.getExpr() != null &&
-                isValidDefaultTimeFunction(expr.getExpr()) && !expr.hasArgs();
+    // A stable time-function default: now() / now(N) / current_timestamp() / current_timestamp(N).
+    // These are constant within a statement, so they materialize to a single value at a given time
+    // (with fractional-second scale N). They are NOT volatile - unlike uuid(), every row of one
+    // statement sees the same value. Classification is by function identity, not by whether the
+    // precision argument is present.
+    public boolean isTimeFunction() {
+        return !hasExprObject() && expr != null && isValidDefaultTimeFunction(expr);
+    }
+
+    // Fractional-second scale of a time-function default (e.g. now(3) -> 3); 0 for the bare
+    // now() / current_timestamp() form. Read straight from the canonical expr string so it never
+    // depends on the historically-fragile hasArguments flag.
+    public int getTimeFunctionScale() {
+        if (!isTimeFunction()) {
+            return 0;
+        }
+        Matcher matcher = TIME_FUNCTION_SCALE_PATTERN.matcher(expr);
+        return matcher.find() ? Integer.parseInt(matcher.group(1)) : 0;
     }
 
     public Expr obtainExpr() {
