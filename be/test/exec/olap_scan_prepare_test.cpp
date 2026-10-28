@@ -513,7 +513,7 @@ TEST_F(ChunkPredicateBuilderTest, varchar_large_in_pred_with_global_dict) {
     forward.emplace(Slice("k1"), 1);
     reverse.emplace(1, Slice("k1"));
     _fragment_dict_state->mutable_query_global_dicts()->emplace(slot_id,
-                                                                 std::make_pair(std::move(forward), std::move(reverse)));
+                                                                std::make_pair(std::move(forward), std::move(reverse)));
 
     auto ret1 = _gen_varchar_runtime_filter_collector(slot_id, false);
     ASSERT_TRUE(ret1.ok());
