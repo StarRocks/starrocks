@@ -1,0 +1,14 @@
+-- name: test_sd_async_vector_index_query_before_build @cloud
+-- An async index leaves the .vi to a later build task, so an ANN query that arrives first must fall back to
+-- brute force. On shared-data the .vi open is lazy and the missing file used to fail the query instead.
+create database db_sd_async_vidx_${uuid0};
+use db_sd_async_vidx_${uuid0};
+CREATE TABLE t (
+    id BIGINT NOT NULL,
+    v ARRAY<FLOAT> NOT NULL,
+    INDEX idx_v (v) USING VECTOR ("index_type" = "hnsw", "dim" = "4", "metric_type" = "l2_distance", "is_vector_normed" = "false", "M" = "16", "efconstruction" = "40", "index_build_mode" = "async", "index_build_threshold" = "1")
+) DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1");
+insert into t values (1, [1,0,0,0]), (2, [0,1,0,0]), (3, [0,0,1,0]), (4, [0,0,0,1]);
+select id from t order by approx_l2_distance([1,0,0,0], v) limit 1;
+select id from t order by approx_l2_distance([0,0,1,0], v) limit 1;
+drop database db_sd_async_vidx_${uuid0} force;
