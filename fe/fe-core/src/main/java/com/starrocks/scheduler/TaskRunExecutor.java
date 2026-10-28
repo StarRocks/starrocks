@@ -51,9 +51,28 @@ public class TaskRunExecutor {
             return false;
         }
 
+<<<<<<< HEAD
         // Synchronously update the status, to make sure they can be persisted
         status.setState(Constants.TaskRunState.RUNNING);
         status.setProcessStartTime(System.currentTimeMillis());
+=======
+        if (taskRunPool.isShutdown()) {
+            // Leader demotion already stopped the pool; do not journal a PENDING -> RUNNING transition
+            // for a run that can never start here. The re-elected leader re-drives it from PENDING.
+            LOG.warn("taskRunPool is shut down (leader demoting), refuse task run {}", status.getTaskName());
+            return false;
+        }
+
+        // Persist state change
+        TaskRunStatusChange statusChange = new TaskRunStatusChange(taskRun.getTaskId(), taskRun.getStatus(),
+                Constants.TaskRunState.PENDING, Constants.TaskRunState.RUNNING);
+        final long processStartTime = System.currentTimeMillis();
+        statusChange.setProcessStartTime(processStartTime);
+        GlobalStateMgr.getCurrentState().getEditLog().logUpdateTaskRun(statusChange, wal -> {
+            taskRun.getStatus().setState(Constants.TaskRunState.RUNNING);
+            taskRun.getStatus().setProcessStartTime(processStartTime);
+        });
+>>>>>>> 41a8e03 ([BugFix] Replay task run process start time on followers (#81433))
 
         CompletableFuture<Constants.TaskRunState> future = CompletableFuture.supplyAsync(() -> {
             try {
