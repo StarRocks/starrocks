@@ -114,6 +114,8 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
     private final Map<Pair<Integer, StructLikeWrapper>, Long> partitionKeyToId = Maps.newHashMap();
     // spec_id -> wrapper whose comparator is reused by copyFor(); forType() builds a new comparator on each call
     private final Map<Integer, StructLikeWrapper> partitionWrapperCache = Maps.newHashMap();
+    // spec id -> the spec the scan's tasks are bound to
+    private final Map<Integer, PartitionSpec> specCache = Maps.newHashMap();
     // partitionId -> partition value sent with the scan ranges, shared by every file of the partition
     private final Map<Long, THdfsPartition> partitionValues = Maps.newHashMap();
 
@@ -578,10 +580,12 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
 
     @VisibleForTesting
     public long addPartition(FileScanTask task) throws AnalysisException {
-        PartitionSpec spec = task.spec();
-
         // Look up before building the PartitionKey: this runs once per data file, and with a non-identity
         // transform such as bucket(N) the cache below sees N keys per identity partition.
+        // task.spec() parses the spec once per task, and the parse's cache lookup hashes the whole table schema. All
+        // tasks of a scan share the schema and, per spec id, the spec, so parse it once per spec id; the file carries
+        // the id of the spec its task was planned with.
+        PartitionSpec spec = specCache.computeIfAbsent(task.file().specId(), ignore -> task.spec());
         StructLikeWrapper wrappedPartition = partitionWrapperCache
                 .computeIfAbsent(spec.specId(), ignore -> StructLikeWrapper.forType(spec.partitionType()))
                 .copyFor(task.file().partition());
@@ -593,17 +597,17 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
         }
 
         if (!partitionSlotIdsCache.containsKey(spec.specId())) {
-            partitionSlotIdsCache.put(spec.specId(), buildPartitionSlotIds(task.spec()));
+            partitionSlotIdsCache.put(spec.specId(), buildPartitionSlotIds(spec));
         }
 
         BiMap<Integer, PartitionField> indexToPartitionField = indexToFieldCache.computeIfAbsent(spec.specId(),
-                ignore -> getIdentityPartitions(task.spec()));
+                ignore -> getIdentityPartitions(spec));
 
         List<Integer> partitionFieldIndexes = indexesCache.computeIfAbsent(spec.specId(),
                 ignore -> getPartitionFieldIndexes(spec, indexToPartitionField));
 
         StructLike origPartition = task.partition();
-        PartitionKey partitionKey = getPartitionKey(origPartition, task.spec(), partitionFieldIndexes, indexToPartitionField);
+        PartitionKey partitionKey = getPartitionKey(origPartition, spec, partitionFieldIndexes, indexToPartitionField);
         long partitionId = partitionIdGenerator.getOrGenerate(partitionKey);
         partitionKeyToId.put(cacheKey, partitionId);
 
