@@ -1377,7 +1377,8 @@ public class LakePublishBatchTest {
                                            Map<Long, TabletRange> tabletRanges, ComputeResource computeResource,
                                            Map<Long, TabletStatPB> tabletStats, boolean useAggregatePublish,
                                            List<VectorIndexBuildInfoPB> vectorIndexBuildInfos,
-                                           boolean preferSharedInitialMetadata) throws RpcException {
+                                           boolean preferSharedInitialMetadata, boolean isRetryPublish)
+                        throws RpcException {
                     if (failPublish.get()) {
                         throw new RpcException("injected publish failure");
                     }
