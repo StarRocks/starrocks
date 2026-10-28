@@ -26,6 +26,8 @@
 
 namespace starrocks {
 
+class MemTracker;
+
 // To manage pass through chunks between sink/sources in the same process.
 using ChunkUniquePtrVector = std::vector<std::pair<ChunkUniquePtr, int32_t>>;
 class PassThroughChannel;
@@ -69,7 +71,11 @@ class PassThroughContext {
 public:
     PassThroughContext(PassThroughChunkBuffer* chunk_buffer, const TUniqueId& fragment_instance_id, PlanNodeId node_id)
             : _chunk_buffer(chunk_buffer), _fragment_instance_id(fragment_instance_id), _node_id(node_id) {}
-    void init();
+    // `query_mem_tracker` is the query tracker shared by the sender and receiver instances (they always
+    // belong to the same query on this BE). Buffered chunks are parked on it while they wait in the
+    // channel, so they stay inside the query, resource group and process budgets. Without it the
+    // chunks are only tracked by the global passthrough tracker, outside the process tree.
+    void init(std::shared_ptr<MemTracker> query_mem_tracker = nullptr);
     void append_chunk(int sender_id, const Chunk* chunk, size_t chunk_size, int32_t driver_sequence);
     void pull_chunks(int sender_id, ChunkUniquePtrVector* chunks, std::vector<size_t>* bytes);
     int64_t total_bytes() const;
