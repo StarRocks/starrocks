@@ -56,6 +56,7 @@ set(STORAGE_FILES
     query/olap_dynamic_morsel_queue.cpp
     query/olap_fixed_morsel_queue.cpp
     query/olap_morsel_queue.cpp
+    query/range_group_task.cpp
     query/split_morsel_queue.cpp
     query/split_scan_morsel.cpp
     protobuf_file.cpp

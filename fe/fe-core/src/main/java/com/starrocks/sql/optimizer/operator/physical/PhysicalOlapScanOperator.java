@@ -47,6 +47,8 @@ import java.util.Set;
 public class PhysicalOlapScanOperator extends PhysicalScanOperator {
     private DistributionSpec distributionSpec;
     private boolean parallelRangeScan;
+    private boolean groupedRangeScan;
+    private List<Integer> orderedPhysicalCUniqueIds = List.of();
     private long selectedIndexMetaId;
     private List<Long> selectedTabletId;
     private List<Long> hintsReplicaId;
@@ -103,6 +105,8 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
         super(OperatorType.PHYSICAL_OLAP_SCAN, scanOperator);
         this.distributionSpec = scanOperator.getDistributionSpec();
         this.parallelRangeScan = scanOperator.isParallelRangeScan();
+        this.groupedRangeScan = scanOperator.isGroupedRangeScan();
+        this.orderedPhysicalCUniqueIds = scanOperator.getOrderedPhysicalCUniqueIds();
         this.selectedIndexMetaId = scanOperator.getSelectedIndexMetaId();
         this.gtid = scanOperator.getGtid();
         this.selectedPartitionId = scanOperator.getSelectedPartitionId();
@@ -253,7 +257,8 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), parallelRangeScan, selectedIndexMetaId, selectedPartitionId,
+        return Objects.hash(super.hashCode(), parallelRangeScan, groupedRangeScan, orderedPhysicalCUniqueIds,
+                selectedIndexMetaId, selectedPartitionId,
                 selectedTabletId, sample);
     }
 
@@ -269,7 +274,9 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
             return false;
         }
         PhysicalOlapScanOperator that = (PhysicalOlapScanOperator) o;
-        return parallelRangeScan == that.parallelRangeScan &&
+        return groupedRangeScan == that.groupedRangeScan
+                && orderedPhysicalCUniqueIds.equals(that.orderedPhysicalCUniqueIds)
+                && parallelRangeScan == that.parallelRangeScan &&
                 selectedIndexMetaId == that.selectedIndexMetaId &&
                 gtid == that.gtid &&
                 Objects.equals(distributionSpec, that.distributionSpec) &&
@@ -279,8 +286,24 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
     }
 
     // Only for construction/copy before memo insertion; never switch a memo implementation's mode.
+    public void setGroupedRangeScan(boolean groupedRangeScan) {
+        this.groupedRangeScan = groupedRangeScan;
+    }
+
+    public void setOrderedPhysicalCUniqueIds(List<Integer> ids) {
+        this.orderedPhysicalCUniqueIds = List.copyOf(ids);
+    }
+
     public void setParallelRangeScan(boolean parallelRangeScan) {
         this.parallelRangeScan = parallelRangeScan;
+    }
+
+    public boolean isGroupedRangeScan() {
+        return groupedRangeScan;
+    }
+
+    public List<Integer> getOrderedPhysicalCUniqueIds() {
+        return orderedPhysicalCUniqueIds;
     }
 
     public boolean isParallelRangeScan() {
@@ -320,6 +343,8 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
             super.withOperator(operator);
             builder.distributionSpec = operator.distributionSpec;
             builder.parallelRangeScan = operator.parallelRangeScan;
+            builder.groupedRangeScan = operator.groupedRangeScan;
+            builder.orderedPhysicalCUniqueIds = operator.orderedPhysicalCUniqueIds;
             builder.selectedIndexMetaId = operator.selectedIndexMetaId;
             builder.gtid = operator.gtid;
             builder.selectedTabletId = operator.selectedTabletId;

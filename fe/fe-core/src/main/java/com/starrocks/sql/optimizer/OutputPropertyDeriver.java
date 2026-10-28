@@ -41,6 +41,7 @@ import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.HashDistributionDescBP;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
+import com.starrocks.sql.optimizer.base.QueryGroupDistributionSpec;
 import com.starrocks.sql.optimizer.base.RangeDistributionSpec;
 import com.starrocks.sql.optimizer.base.SortProperty;
 import com.starrocks.sql.optimizer.operator.Operator;
@@ -571,7 +572,12 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
     public PhysicalPropertySet visitPhysicalOlapScan(PhysicalOlapScanOperator node, ExpressionContext context) {
         DistributionSpec olapDistributionSpec = node.getDistributionSpec();
 
-        if (olapDistributionSpec instanceof HashDistributionSpec) {
+        if (olapDistributionSpec instanceof QueryGroupDistributionSpec grouped) {
+            EquivalentDescriptor descriptor = new EquivalentDescriptor(node.getTable().getId(), node.getSelectedPartitionId());
+            descriptor.initDistributionUnionFind(grouped.getOrderedCColumns());
+            return createPropertySetByDistribution(new QueryGroupDistributionSpec(grouped.getTableId(),
+                    grouped.getOrderedCColumns(), grouped.getOrderedPhysicalCUniqueIds(), descriptor));
+        } else if (olapDistributionSpec instanceof HashDistributionSpec) {
             EquivalentDescriptor equivDesc = new EquivalentDescriptor(node.getTable().getId(), node.getSelectedPartitionId());
             return createPropertySetByDistribution(new HashDistributionSpec(
                     new HashDistributionDesc(((HashDistributionSpec) olapDistributionSpec).getShuffleColumns(),
@@ -797,6 +803,9 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
             RangeDistributionSpec rangeSpec = (RangeDistributionSpec) spec;
             distributionCols = rangeSpec.getColocateColumns();
             equivDesc = rangeSpec.getEquivalentDescriptor();
+        } else if (spec instanceof QueryGroupDistributionSpec grouped) {
+            distributionCols = grouped.getOrderedCColumns();
+            equivDesc = grouped.getEquivalentDescriptor();
         } else {
             return;
         }
@@ -805,6 +814,9 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
         distributionCols.forEach(e -> idToDistributionCol.put(e.getColId(), e));
 
         for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : projection.getColumnRefMap().entrySet()) {
+            if (spec instanceof QueryGroupDistributionSpec && !entry.getValue().isColumnRef()) {
+                continue;
+            }
             ColumnRefSet usedCols = entry.getValue().getUsedColumns();
 
             Optional<Boolean> nullStrictInfo = remainDistributionFunc(entry.getValue(), idToDistributionCol);

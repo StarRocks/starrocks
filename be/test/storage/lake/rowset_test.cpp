@@ -2741,6 +2741,110 @@ TEST_F(LakeRowsetTest, test_segments_stops_after_cancel) {
     ASSERT_EQ(3, segments.size());
 }
 
+// The checked memo is shared with ordinary physical split planning. A query prepass must
+// populate that same memo with its cache policy and account for the actual footer reads.
+TEST_F(LakeRowsetTest, test_checked_segments_preserves_query_options_stats_and_memo) {
+    create_rowsets_for_testing();
+    _tablet_mgr->prune_metacache();
+    auto rowset = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0);
+    LakeIOOptions opts{.fill_data_cache = false, .fill_metadata_cache = false};
+    OlapReaderStatistics stats;
+    std::atomic<bool> cancelled{false};
+    ASSIGN_OR_ABORT(auto segments, rowset->get_segments_checked(opts, &stats, &cancelled));
+    ASSERT_EQ(3, segments.size());
+    EXPECT_EQ(3, stats.segments_opened);
+    EXPECT_GT(stats.io_ns, 0);
+    for (const auto& sm : _tablet_metadata->rowsets(0).segment_metas()) {
+        EXPECT_EQ(nullptr, _tablet_mgr->metacache()->lookup_segment(
+                                   _tablet_mgr->segment_location(_tablet_metadata->id(), sm.filename())));
+    }
+    ASSIGN_OR_ABORT(auto planned_segments, rowset->get_segments_checked());
+    EXPECT_EQ(segments, planned_segments);
+    OlapReaderStatistics reused;
+    ASSIGN_OR_ABORT(auto repeated, rowset->get_segments_checked(opts, &reused, &cancelled));
+    EXPECT_EQ(segments, repeated);
+    EXPECT_EQ(0, reused.segments_opened);
+    EXPECT_EQ(0, reused.io_count);
+    EXPECT_EQ(0, reused.io_ns);
+}
+
+TEST_F(LakeRowsetTest, test_checked_segments_cancels_cold_and_prewarmed_memo) {
+    create_rowsets_for_testing();
+    _tablet_mgr->prune_metacache();
+    auto rowset = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0);
+    LakeIOOptions opts{.fill_data_cache = false, .fill_metadata_cache = false};
+    OlapReaderStatistics stats;
+    std::atomic<bool> cancelled{true};
+    auto cold = rowset->get_segments_checked(opts, &stats, &cancelled);
+    ASSERT_TRUE(cold.status().is_cancelled()) << cold.status();
+    EXPECT_EQ(0, stats.segments_opened);
+    cancelled.store(false);
+    ASSIGN_OR_ABORT(auto segments, rowset->get_segments_checked(opts, &stats, &cancelled));
+    ASSERT_EQ(3, segments.size());
+    cancelled.store(true);
+    auto warm = rowset->get_segments_checked(opts, &stats, &cancelled);
+    EXPECT_TRUE(warm.status().is_cancelled()) << warm.status();
+    ASSIGN_OR_ABORT(auto legacy, rowset->get_segments_checked());
+    EXPECT_EQ(segments, legacy);
+}
+
+TEST_F(LakeRowsetTest, test_checked_segments_cancel_after_first_footer_stops_fanout) {
+    create_rowsets_for_testing();
+    ConfigResetGuard<bool> guard(&config::enable_load_segment_parallel, false);
+    _tablet_mgr->prune_metacache();
+    auto rowset = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0);
+    std::atomic<bool> cancelled{false};
+    int loaded = 0;
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp cleanup([] {
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    SyncPoint::GetInstance()->SetCallBack("Rowset::load_segments::serial_loaded", [&](void*) {
+        ++loaded;
+        cancelled.store(true);
+    });
+    LakeIOOptions opts{.fill_data_cache = false, .fill_metadata_cache = false};
+    OlapReaderStatistics stats;
+    auto result = rowset->get_segments_checked(opts, &stats, &cancelled);
+    ASSERT_TRUE(result.status().is_cancelled()) << result.status();
+    EXPECT_EQ(1, loaded);
+    EXPECT_EQ(1, stats.segments_opened);
+    EXPECT_FALSE(rowset->_segments_loaded);
+    SyncPoint::GetInstance()->ClearCallBack("Rowset::load_segments::serial_loaded");
+    cancelled.store(false);
+    ASSIGN_OR_ABORT(auto retried, rowset->get_segments_checked(opts, &stats, &cancelled));
+    EXPECT_EQ(3, retried.size());
+    EXPECT_EQ(4, stats.segments_opened);
+}
+
+TEST_F(LakeRowsetTest, test_checked_segments_cancel_during_final_footer_does_not_publish_memo) {
+    create_rowsets_for_testing();
+    ConfigResetGuard<bool> guard(&config::enable_load_segment_parallel, false);
+    _tablet_mgr->prune_metacache();
+    auto rowset = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0);
+    std::atomic<bool> cancelled{false};
+    int loaded = 0;
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp cleanup([] {
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    SyncPoint::GetInstance()->SetCallBack("Rowset::load_segments::serial_loaded", [&](void*) {
+        if (++loaded == 3) cancelled.store(true);
+    });
+    LakeIOOptions opts{.fill_data_cache = false, .fill_metadata_cache = false};
+    OlapReaderStatistics stats;
+    auto result = rowset->get_segments_checked(opts, &stats, &cancelled);
+    EXPECT_TRUE(result.status().is_cancelled()) << result.status();
+    EXPECT_EQ(3, stats.segments_opened);
+    EXPECT_FALSE(rowset->_segments_loaded);
+    cancelled.store(false);
+    ASSIGN_OR_ABORT(auto retried, rowset->get_segments_checked(opts, &stats, &cancelled));
+    EXPECT_EQ(3, retried.size());
+    EXPECT_EQ(6, stats.segments_opened);
+}
+
 // A query that is not cancelled reads exactly what it read before.
 TEST_F(LakeRowsetTest, test_read_with_runtime_state_not_cancelled) {
     create_rowsets_for_testing();

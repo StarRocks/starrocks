@@ -1587,11 +1587,19 @@ FROM test;
 * 作用域：Session
 * 默认值：`colocate`
 * 数据类型：String
-* 有效值：`colocate`、`parallel`
+* 有效值：`colocate`、`parallel`、`grouped`
 
 非空并行扫描必须选中至少两个逻辑分区和两个真实 Tablet，所选计算资源中必须至少有两个可用 CN。使用 DISTINCT 修饰符的聚合目前仅支持 `COUNT DISTINCT`。必须启用 Pipeline 执行，且 `parallel_fragment_exec_instance_num = 1`。并行模式会增加网络及聚合状态传输开销，并可能增加非归属节点的远程读取；不保证加速或使用全部计算节点。分区及 Tablet 裁剪保持不变。
 
 并行模式不支持写入/刷新、JOIN、集合运算、CTE、子查询、窗口函数、Grouping Sets、特殊/历史/元数据/缓存统计扫描、采样或扫描 Hint、MV/Rollup 源替换、多个最终扫描、Query Cache、分阶段调度、预备物理分片扫描、单节点计划和非 Pipeline 执行。输入完全裁剪时保留普通空输入聚合语义。不支持的请求会明确报错，不会修改其他会话设置。
+
+`grouped` 是仅限会话的实验性显式选项，适用于原生存算分离 DUPLICATE KEY 表，要求基索引恰有三个排序及 Colocate 列，两者顺序和列标识一致，且均为 BIGINT NOT NULL。GROUP BY 必须恰好包含这三个直接列（顺序不限），聚合仅支持一个 `COUNT(DISTINCT <直接 BIGINT 列>)`。DISTINCT 参数为 NULL 时保留普通 COUNT 语义。保留完整分组证明时，支持分组列上的字面量谓词、输出别名、HAVING 和最终 ORDER BY/LIMIT。
+
+Grouped 执行一次性捕获源版本和 Tablet 范围，在所有选中物理分区上构造完整键范围分组。至少需要两个选中物理分区和两个非空键范围分组。每个分组交给一个阻塞式 HASH 聚合，仅汇总已最终计算的标量结果。必须启用 Pipeline 和 Group Execution，且 `parallel_fragment_exec_instance_num = 1`。并行模式的限制同样适用；不支持强制多阶段聚合及不兼容的全局延迟物化。此路径禁用排序聚合和逐桶聚合。完全裁剪的输入保留普通空输入语义。PREPARE/EXECUTE 按当前模式重新规划聚合，不复用完整物理计划。
+
+当 `enable_lake_tablet_internal_parallel` 开启时，grouped 扫描支持普通的非 prepared 物理行号拆分。每个完整键分组仍由一个 CN 上的一个聚合逻辑 driver 处理；新增 I/O 任务直接向同一个 driver 提供数据，不引入按键 Shuffle。关闭 `enable_lake_tablet_internal_parallel` 时保留不拆分路径。默认的 16 个 I/O 槽位限制同时活跃的 I/O 数量，并非生成子任务的数量上限。
+
+每次扫描最多支持 1,024 个分组和 8,192 个根裁剪任务；这两个限制不约束生成的 I/O 子任务数量。Group Execution 容量限制仍然适用。EXPLAIN 显示 grouped 执行以及唯一源、分组和根任务数量。`RangeClipTasks` 对成功打开的根裁剪任务计数一次，不包含子任务；`MorselsCount` 包含根任务和子任务。结合 `PeakIOTasks`、扫描时间、行数和远端读取字节数评估 I/O 并发。普通 Tablet 和 Segment 计数可能包含重复任务读取，不代表全局唯一源数量。此模式不保证加速，也不保证 DISTINCT 聚合使用恒定内存。默认模式仍为 `colocate`。
 
 ### resource_group
 

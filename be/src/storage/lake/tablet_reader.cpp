@@ -43,6 +43,7 @@
 #include "storage/lake/utils.h"
 #include "storage/lake/versioned_tablet.h"
 #include "storage/predicate_parser.h"
+#include "storage/query/range_group_task.h"
 #include "storage/query/split_morsel_queue.h"
 #include "storage/query/split_scan_morsel.h"
 #include "storage/rowset/rowid_range_option.h"
@@ -420,6 +421,18 @@ Status TabletReader::prepare() {
 }
 
 Status TabletReader::open(const TabletReaderParams& read_params) {
+    if (read_params.grouped_range_task != nullptr) {
+        // Grouped roots may plan ordinary physical splits; children retain independent rowid and C clips.
+        // Prepared/reusable state and logical ranges cannot prove the same ownership contract.
+        if ((_need_split && (!_could_split_physically || read_params.rowid_range_option != nullptr)) ||
+            read_params.enable_prepared_physical_split_scan || read_params.prepared_tablet_read_state != nullptr ||
+            read_params.prepared_segment_read_state != nullptr ||
+            read_params.refine_initial_coarse_split_and_append_refined_tasks ||
+            read_params.short_key_ranges_option != nullptr) {
+            return Status::NotSupported("grouped range task does not support prepared or logical split readers");
+        }
+        RETURN_IF_ERROR(validate_range_group_schema(*read_params.grouped_range_task, *_tablet_schema));
+    }
     if (read_params.reader_type != ReaderType::READER_QUERY && read_params.reader_type != ReaderType::READER_CHECKSUM &&
         read_params.reader_type != ReaderType::READER_ALTER_TABLE && !is_compaction(read_params.reader_type) &&
         read_params.reader_type != ReaderType::READER_BYPASS_QUERY) {
@@ -472,6 +485,23 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
             // otherwise, iterator will return empty.
             _need_split = false;
             return init_collector(read_params);
+        }
+
+        if (read_params.grouped_range_task != nullptr) {
+            // Validate the same memoized source segments consumed by physical split planning.
+            const std::atomic<bool>* is_cancelled =
+                    read_params.runtime_state != nullptr ? &read_params.runtime_state->cancelled_ref() : nullptr;
+            for (const auto& rowset : _rowsets) {
+                RETURN_IF_ERROR(validate_range_group_schema(*read_params.grouped_range_task, *rowset->tablet_schema()));
+                ASSIGN_OR_RETURN(auto segments,
+                                 rowset->get_segments_checked(read_params.lake_io_opts, &_stats, is_cancelled));
+                for (const auto& segment : segments) {
+                    if (segment != nullptr) {
+                        RETURN_IF_ERROR(
+                                validate_range_group_schema(*read_params.grouped_range_task, segment->tablet_schema()));
+                    }
+                }
+            }
         }
 
         if (_could_split_physically && read_params.enable_prepared_physical_split_scan) {
@@ -784,6 +814,7 @@ Status TabletReader::init_rowset_read_options(const TabletReaderParams& params, 
         _cached_seek_ranges = std::move(ranges);
     }
     options->ranges = *_cached_seek_ranges;
+    options->grouped_range_task = params.grouped_range_task;
     options->pred_tree = params.pred_tree;
     options->runtime_filter_preds = params.runtime_filter_preds;
     RETURN_IF_ERROR(ZonemapPredicatesRewriter::rewrite_predicate_tree(&_obj_pool, options->pred_tree,

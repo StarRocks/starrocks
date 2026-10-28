@@ -14,12 +14,17 @@
 
 #include <gtest/gtest.h>
 
+#include <cstdlib>
 #include <memory>
 #include <utility>
 
+#include "base/testutil/assert.h"
+#include "common/object_pool.h"
 #include "exec/pipeline/scan/morsel_queue_factory.h"
+#include "exec/scan_node.h"
 #include "exec_primitive/pipeline/scan/dynamic_morsel_queue_builder.h"
 #include "exec_primitive/pipeline/scan/fixed_morsel_queue_builder.h"
+#include "runtime/descriptors.h"
 #include "storage/query/olap_dynamic_morsel_queue_builder.h"
 #include "storage/query/olap_fixed_morsel_queue_builder.h"
 #include "storage/query/olap_morsel_queue.h"
@@ -279,6 +284,143 @@ TEST_F(MorselQueueBuilderTest, individual_factory_split_source_morsel_lifecycle)
         factory.add_split_source_morsels(-5);
         EXPECT_EQ(initial, factory._remaining_split_source_morsels.load());
     }
+}
+
+namespace {
+class GroupedQueueScanNode final : public ScanNode {
+public:
+    GroupedQueueScanNode(ObjectPool* pool, const TPlanNode& node, const DescriptorTbl& desc)
+            : ScanNode(pool, node, desc) {}
+    Status set_scan_ranges(const std::vector<TScanRangeParams>&) override { return Status::OK(); }
+    StatusOr<MorselQueueBuilderPtr> convert_scan_range_to_morsel_queue_builder(
+            const std::vector<TScanRangeParams>& ranges, int node_id, int32_t dop, bool parallel,
+            TTabletInternalParallelMode::type mode, size_t total) override {
+        Morsels morsels;
+        bool has_more = false;
+        ScanMorsel::build_scan_morsels(node_id, ranges, true, &morsels, &has_more);
+        if (parallel) return make_dynamic_morsel_queue_builder(std::move(morsels), false, dop);
+        return make_olap_fixed_morsel_queue_builder(std::move(morsels));
+    }
+};
+
+TScanRangeParams grouped_queue_task(int group, int tablet = 77) {
+    TScanRangeParams result;
+    TInternalScanRange internal;
+    internal.__set_tablet_id(tablet);
+    internal.__set_version("42");
+    internal.__set_bucket_sequence(group);
+    result.scan_range.__set_internal_scan_range(internal);
+    TGroupedRangeTask task;
+    task.__set_group_id(group);
+    task.__set_key_range(TTabletRange{});
+    task.__set_sort_key_unique_ids({100, 101, 102});
+    result.scan_range.__set_grouped_range_task(task);
+    return result;
+}
+} // namespace
+
+TEST_F(MorselQueueBuilderTest, grouped_queues_are_independent_fixed_and_padding_terminates) {
+    ObjectPool pool;
+    DescriptorTbl desc;
+    TPlanNode plan;
+    plan.__set_node_type(TPlanNodeType::LAKE_GROUPED_SCAN_NODE);
+    GroupedQueueScanNode node(&pool, plan, desc);
+    TScanRangeParams padding;
+    padding.__set_empty(true);
+    std::map<int32_t, std::vector<TScanRangeParams>> ranges{{0, {grouped_queue_task(0), grouped_queue_task(0, 78)}},
+                                                            {1, {grouped_queue_task(1)}},
+                                                            {2, {padding}},
+                                                            {3, {}}};
+    ASSIGN_OR_ABORT(auto factory,
+                    node.convert_scan_range_to_morsel_queue_factory({}, ranges, 1, 4, true, false,
+                                                                    TTabletInternalParallelMode::FORCE_SPLIT, true));
+    ASSERT_FALSE(factory->is_shared());
+    EXPECT_FALSE(factory->could_local_shuffle());
+    ASSERT_EQ(4, factory->size());
+    EXPECT_NE(factory->create(0), factory->create(1));
+    for (int i = 0; i < 4; ++i) {
+        auto* queue = factory->create(i);
+        EXPECT_EQ(MorselQueue::FIXED, queue->type());
+        EXPECT_FALSE(queue->has_more());
+        int count = 0;
+        while (!queue->empty()) {
+            ASSIGN_OR_ABORT(auto morsel, queue->try_get());
+            ASSERT_NE(nullptr, morsel);
+            EXPECT_EQ(i, morsel->get_scan_range()->grouped_range_task.group_id);
+            ++count;
+        }
+        EXPECT_EQ(i == 0 ? 2 : i == 1 ? 1 : 0, count);
+    }
+}
+
+TEST_F(MorselQueueBuilderTest, GroupedChildrenAppendOnlyToOwningQueue) {
+    ObjectPool pool;
+    DescriptorTbl desc;
+    TPlanNode plan;
+    plan.__set_node_type(TPlanNodeType::LAKE_GROUPED_SCAN_NODE);
+    GroupedQueueScanNode node(&pool, plan, desc);
+    std::map<int32_t, std::vector<TScanRangeParams>> ranges{
+            {0, {grouped_queue_task(0)}}, {1, {grouped_queue_task(1)}}, {2, {}}};
+    ASSIGN_OR_ABORT(auto factory, node.convert_scan_range_to_morsel_queue_factory(
+                                          {}, ranges, 1, 3, true, true, TTabletInternalParallelMode::AUTO, true));
+    EXPECT_FALSE(factory->is_shared());
+    EXPECT_FALSE(factory->could_local_shuffle());
+    const auto old_death_style = ::testing::FLAGS_gtest_death_test_style;
+    ::testing::FLAGS_gtest_death_test_style = "threadsafe";
+    EXPECT_EXIT(
+            { std::_Exit(factory->enable_random_append_split_morsel() ? 1 : 0); }, ::testing::ExitedWithCode(0), "");
+    ::testing::FLAGS_gtest_death_test_style = old_death_style;
+    for (int driver = 0; driver < 2; ++driver) {
+        auto* queue = factory->create(driver);
+        ASSERT_EQ(MorselQueue::DYNAMIC, queue->type());
+        EXPECT_FALSE(queue->has_more_scan_ranges());
+        EXPECT_FALSE(queue->has_more_from_split());
+        ASSIGN_OR_ABORT(auto root, queue->try_get());
+        ASSERT_NE(nullptr, root);
+        Morsels children;
+        for (int child = 0; child < 4; ++child) {
+            children.emplace_back(std::make_unique<ScanMorsel>(1, *root->get_scan_range()));
+        }
+        ASSERT_OK(factory->append_morsels(driver, std::move(children)));
+        EXPECT_TRUE(factory->create(2)->empty());
+        for (int child = 0; child < 4; ++child) {
+            ASSIGN_OR_ABORT(auto next, queue->try_get());
+            ASSERT_NE(nullptr, next);
+            EXPECT_EQ(*root->get_scan_range(), *next->get_scan_range());
+        }
+        EXPECT_TRUE(queue->empty());
+        EXPECT_FALSE(queue->has_more());
+    }
+}
+
+TEST_F(MorselQueueBuilderTest, grouped_requests_reject_global_unowned_or_cross_driver_groups) {
+    ObjectPool pool;
+    DescriptorTbl desc;
+    TPlanNode plan;
+    plan.__set_node_type(TPlanNodeType::LAKE_GROUPED_SCAN_NODE);
+    GroupedQueueScanNode node(&pool, plan, desc);
+    auto check = [&](const std::vector<TScanRangeParams>& global,
+                     const std::map<int32_t, std::vector<TScanRangeParams>>& drivers, bool colocate = true) {
+        auto result = node.convert_scan_range_to_morsel_queue_factory(global, drivers, 1, 2, colocate, false,
+                                                                      TTabletInternalParallelMode::AUTO, true);
+        EXPECT_FALSE(result.ok());
+    };
+    check({grouped_queue_task(0)}, {});
+    check({grouped_queue_task(0)}, {{0, {grouped_queue_task(0)}}});
+    check({}, {});
+    check({}, {{0, {grouped_queue_task(0)}}}, false);
+    check({}, {{0, {grouped_queue_task(0), grouped_queue_task(1)}}});
+    check({}, {{0, {grouped_queue_task(0)}}, {1, {grouped_queue_task(0)}}});
+    auto missing = grouped_queue_task(0);
+    missing.scan_range.__isset.grouped_range_task = false;
+    check({}, {{0, {missing}}});
+    auto mismatch = grouped_queue_task(0);
+    mismatch.scan_range.internal_scan_range.__set_bucket_sequence(1);
+    check({}, {{0, {mismatch}}});
+    auto streaming = grouped_queue_task(0);
+    streaming.__set_has_more(true);
+    check({}, {{0, {streaming}}});
+    check({}, {{2, {grouped_queue_task(0)}}});
 }
 
 } // namespace starrocks::pipeline

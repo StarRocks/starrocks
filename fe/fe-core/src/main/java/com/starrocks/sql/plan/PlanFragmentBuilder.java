@@ -462,6 +462,7 @@ public class PlanFragmentBuilder {
             }
         }
 
+        RangeScanExecutionValidator.validateFragments(execPlan);
         return execPlan;
     }
 
@@ -1100,13 +1101,18 @@ public class PlanFragmentBuilder {
             OlapScanNode scanNode = new OlapScanNode(context.getNextNodeId(), tupleDescriptor, "OlapScanNode",
                     node.getSelectedIndexMetaId(), context.getConnectContext().getCurrentComputeResource());
             scanNode.setParallelRangeScan(node.isParallelRangeScan());
+            scanNode.setGroupedRangeScan(node.isGroupedRangeScan());
+            scanNode.setOrderedPhysicalCUniqueIds(node.getOrderedPhysicalCUniqueIds());
             scanNode.setLimit(node.getLimit());
             scanNode.computeStatistics(optExpr.getStatistics());
             scanNode.setScanOptimizeOption(node.getScanOptimizeOption());
-            scanNode.setIsSortedByKeyPerTablet(!node.isParallelRangeScan() && node.needSortedByKeyPerTablet());
-            scanNode.setIsOutputChunkByBucket(!node.isParallelRangeScan() && node.needOutputChunkByBucket());
+            scanNode.setIsSortedByKeyPerTablet(!node.isParallelRangeScan() && !node.isGroupedRangeScan()
+                    && node.needSortedByKeyPerTablet());
+            scanNode.setIsOutputChunkByBucket(!node.isParallelRangeScan() && !node.isGroupedRangeScan()
+                    && node.needOutputChunkByBucket());
             scanNode.setEnableGlobalLateMaterialization(node.isEnableGlobalLateMaterialization());
-            scanNode.setWithoutColocateRequirement(!node.isParallelRangeScan() && node.isWithoutColocateRequirement());
+            scanNode.setWithoutColocateRequirement(!node.isParallelRangeScan() && !node.isGroupedRangeScan()
+                    && node.isWithoutColocateRequirement());
             scanNode.setGtid(node.getGtid());
             scanNode.setVectorSearchOptions(node.getVectorSearchOptions());
             scanNode.setSample(node.getSample());
@@ -1187,7 +1193,7 @@ public class PlanFragmentBuilder {
                             .getBackendIdByHost(FrontendOptions.getLocalHostAddress());
                 }
 
-                RangeColocateScanDispatch dispatch = node.isParallelRangeScan() ? null
+                RangeColocateScanDispatch dispatch = (node.isParallelRangeScan() || node.isGroupedRangeScan()) ? null
                         : RangeColocateScanDispatch.forTable(referenceTable);
 
                 // Filter out logical partitions that have no non-empty physical sub-partition. The result
@@ -1227,7 +1233,7 @@ public class PlanFragmentBuilder {
                         Preconditions.checkState(selectTabletIds != null && !selectTabletIds.isEmpty());
                         final MaterializedIndex selectedIndex = physicalPartition.getQueryableIndex(selectedIndexMetaId);
                         totalTabletsNum += selectedIndex.getTablets().size();
-                        if (!node.isParallelRangeScan()) {
+                        if (!node.isParallelRangeScan() && !node.isGroupedRangeScan()) {
                             OlapScanNode.fillTabletId2BucketSeq(
                                     dispatch, selectedIndex, selectedIndex.getTabletIdsInOrder(), tabletId2BucketSeq);
                         }
@@ -1239,9 +1245,13 @@ public class PlanFragmentBuilder {
                 }
                 scanNode.setSelectedPartitionIds(Lists.newArrayList(selectedNonEmptyPartitionIds));
                 scanNode.setTotalTabletsNum(totalTabletsNum);
+                if (node.isGroupedRangeScan()) {
+                    scanNode.finalizeQueryGroupManifest();
+                    scanNode.disablePhysicalPropertyOptimize();
+                }
             } catch (StarRocksException e) {
                 throw new StarRocksPlannerException(
-                        "Build Exec OlapScanNode fail, scan info is invalid", INTERNAL_ERROR, e);
+                        "Build Exec OlapScanNode fail, scan info is invalid: " + e.getMessage(), INTERNAL_ERROR, e);
             }
 
             // set unused output columns; it may add a row carrier slot, so lay out memory afterwards
@@ -3044,8 +3054,14 @@ public class PlanFragmentBuilder {
                 throw unsupportedException("Not support aggregate type : " + node.getType());
             }
 
-            aggregationNode.setUseSortAgg(node.isUseSortAgg());
-            aggregationNode.setUsePerBucketOptimize(node.isUsePerBucketOptmize());
+            boolean groupedRangeScan = containsGroupedRangeScan(inputFragment.getPlanRoot());
+            aggregationNode.setUseSortAgg(!groupedRangeScan && node.isUseSortAgg());
+            aggregationNode.setUsePerBucketOptimize(!groupedRangeScan && node.isUsePerBucketOptmize());
+            if (groupedRangeScan) {
+                aggregationNode.disablePhysicalPropertyOptimize();
+                aggregationNode.setIsPreagg(false);
+                aggregationNode.setColocate(true);
+            }
             aggregationNode.setLocalLimit(node.getLocalLimit());
             aggregationNode.setStreamingPreaggregationMode(node.getNeededPreaggregationMode());
             aggregationNode.setHasNullableGenerateChild();
@@ -3113,6 +3129,16 @@ public class PlanFragmentBuilder {
         // Check whether colocate Table exists in the same Fragment
         public boolean hasColocateScanChildInFragment(PlanNode node) {
             return !containsParallelRangeScan(node) && hasColocateScanChild(node);
+        }
+
+        private boolean containsGroupedRangeScan(PlanNode node) {
+            if (node instanceof OlapScanNode scan && scan.isGroupedRangeScan()) {
+                return true;
+            }
+            if (node instanceof ExchangeNode) {
+                return false;
+            }
+            return node.getChildren().stream().anyMatch(this::containsGroupedRangeScan);
         }
 
         private boolean containsParallelRangeScan(PlanNode node) {
