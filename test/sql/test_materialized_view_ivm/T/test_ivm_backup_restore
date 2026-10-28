@@ -1,0 +1,53 @@
+-- name: test_ivm_backup_restore @native
+create external catalog mv_iceberg_${uuid0}
+properties
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+create database mv_iceberg_${uuid0}.mv_ice_db_${uuid0};
+create table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 (k int, v int);
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values (1, 10), (2, 20), (1, 30);
+
+create database db_${uuid0};
+use db_${uuid0};
+create table t2 (k int, v int) distributed by hash(k) buckets 2;
+insert into t2 values (1, 10), (2, 20), (1, 30);
+create materialized view ivm_mv refresh deferred manual properties ("refresh_mode" = "incremental")
+as select k, sum(v) as s from mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 group by k;
+create materialized view pct_mv refresh deferred manual
+as select k, sum(v) as s from t2 group by k;
+refresh materialized view pct_mv with sync mode;
+
+create repository repo_${uuid0} with broker on location "oss://${oss_bucket}/test_ivm_backup_restore/repo_${uuid0}"
+properties ("aws.s3.access_key" = "${oss_ak}", "aws.s3.secret_key" = "${oss_sk}", "aws.s3.endpoint" = "${oss_endpoint}");
+
+backup snapshot db_${uuid0}.snap_ivm_${uuid0} to repo_${uuid0} on (materialized view ivm_mv);
+
+backup snapshot db_${uuid0}.snap_${uuid0} to repo_${uuid0} on (materialized view pct_mv);
+LOOP {
+  PROPERTY: {"timeout": 300, "interval": 5, "desc": "wait for the backup of pct_mv"}
+  result=show backup from db_${uuid0};
+  CHECK: "FINISHED" in ${result}
+} END LOOP
+[UC]snap=show snapshot on repo_${uuid0} where snapshot = 'snap_${uuid0}';
+drop materialized view pct_mv;
+restore snapshot db_${uuid0}.snap_${uuid0} from repo_${uuid0} on (materialized view pct_mv)
+properties ("backup_timestamp" = "${snap.split()[1]}");
+LOOP {
+  PROPERTY: {"timeout": 300, "interval": 5, "desc": "wait for the restore of pct_mv"}
+  result=show restore from db_${uuid0};
+  CHECK: "FINISHED" in ${result}
+} END LOOP
+select is_active from information_schema.materialized_views where table_schema = 'db_${uuid0}' and table_name = 'pct_mv';
+insert into t2 values (2, 5);
+refresh materialized view pct_mv with sync mode;
+select * from pct_mv order by k;
+
+drop snapshot snap_${uuid0} on repo_${uuid0};
+drop repository repo_${uuid0};
+drop database db_${uuid0} force;
+drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 force;
+drop database mv_iceberg_${uuid0}.mv_ice_db_${uuid0};
+drop catalog mv_iceberg_${uuid0};
