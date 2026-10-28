@@ -93,6 +93,7 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
@@ -554,7 +555,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
                     continue;
                 }
                 publishingTransactions.add(txnId);
-                CompletableFuture<Void> future = publishLakeTransactionAsync(txnState);
+                CompletableFuture<Void> future = publishLakeTransactionAsync(txnState, false);
                 future.thenRun(() -> publishingTransactions.remove(txnId));
             }
         }
@@ -595,7 +596,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
                         continue;
                     }
                     publishingLakeTransactionsBatchTableId.addAll(tableIdList);
-                    CompletableFuture<Void> future = publishLakeTransactionAsync(state);
+                    CompletableFuture<Void> future = publishLakeTransactionAsync(state, true);
                     future.thenRun(() -> tableIdList.forEach(publishingLakeTransactionsBatchTableId::remove));
                 }
             } else {
@@ -641,8 +642,12 @@ public class PublishVersionDaemon extends LeaderDaemon {
         }
     }
 
+    // freezeBatchOnFailure: this txn is a one-txn batch of batch publish, whose retry must stay a one-txn batch
+    // (see GlobalTransactionMgr#freezePublishBatch). Unlike the multi-txn path this also freezes a txn that is
+    // only waiting for its predecessor or has a partition still backing off, which merely keeps it unbatched
+    // until it publishes.
     @VisibleForTesting
-    CompletableFuture<Void> publishLakeTransactionAsync(TransactionState txnState) {
+    CompletableFuture<Void> publishLakeTransactionAsync(TransactionState txnState, boolean freezeBatchOnFailure) {
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         long txnId = txnState.getTransactionId();
         long dbId = txnState.getDbId();
@@ -686,6 +691,8 @@ public class PublishVersionDaemon extends LeaderDaemon {
                 } catch (StarRocksException e) {
                     throw new RuntimeException(e);
                 }
+            } else if (freezeBatchOnFailure) {
+                globalTransactionMgr.freezePublishBatch(dbId, List.of(txnId));
             }
         }).exceptionally(ex -> {
             LOG.error("Fail to finish transaction " + txnId, ex);
@@ -1183,6 +1190,8 @@ public class PublishVersionDaemon extends LeaderDaemon {
         }
 
         List<CompletableFuture<Boolean>> futureList = new ArrayList<>();
+        // Set only by a partition that really failed, not by one that is NOT_READY or still backing off.
+        AtomicBoolean anyPartitionFailed = new AtomicBoolean(false);
 
         long submitTime = System.currentTimeMillis();
         for (PartitionPublishVersionData publishVersionData : publishVersionDataMap.values()) {
@@ -1217,9 +1226,13 @@ public class PublishVersionDaemon extends LeaderDaemon {
                         }
                     }
                 }
+                if (result == BatchPublishResult.FAILED) {
+                    anyPartitionFailed.set(true);
+                }
                 return result == BatchPublishResult.SUCCESS;
             }, getTaskExecutor()).exceptionally(ex -> {
                 recordPublishFailure(commitInfos, "Fail to publish txn batch", ex);
+                anyPartitionFailed.set(true);
                 return false;
             });
             futureList.add(future);
@@ -1244,6 +1257,10 @@ public class PublishVersionDaemon extends LeaderDaemon {
                 } catch (StarRocksException e) {
                     throw new RuntimeException(e);
                 }
+            } else if (anyPartitionFailed.get()) {
+                // Batches are rebuilt every round and would take in the txns committed since, moving
+                // every partition's new version and wasting the work the failed attempt finished.
+                globalTransactionMgr.freezePublishBatch(dbId, txnStateBatch.getTxnIds());
             }
         }).exceptionally(ex -> {
             LOG.error("Fail to finish transaction batch");

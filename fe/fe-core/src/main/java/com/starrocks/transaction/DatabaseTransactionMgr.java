@@ -99,6 +99,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
@@ -151,6 +152,12 @@ public class DatabaseTransactionMgr {
 
     // store committed transactions' dependency relationships
     private final TransactionGraph transactionGraph = new TransactionGraph();
+
+    // head txn id -> txn ids of a lake publish batch that failed. The retry from that head publishes
+    // exactly these txns, so every partition keeps the new version of the failed attempt instead of
+    // growing with txns committed since. Written by publish executor threads without transactionLock.
+    // In memory only: losing it on failover just lets the retry batch grow again.
+    private final Map<Long, List<Long>> frozenPublishBatches = new ConcurrentHashMap<>();
 
     /*
      * `labelToTxnIds` is used for checking if label already used. map label to transaction id
@@ -1024,16 +1031,31 @@ public class DatabaseTransactionMgr {
         readLock();
 
         try {
+            // A frozen batch whose head txn is no longer running (finished by another path, or its db
+            // dropped) will never be retried.
+            frozenPublishBatches.keySet().removeIf(headTxnId -> !idToRunningTransactionState.containsKey(headTxnId));
             List<Long> txnIds = transactionGraph.getTxnsWithoutDependency();
             for (long txnId : txnIds) {
-                List<Long> txnsWithDependency;
-                if (Config.lake_enable_batch_publish_multi_table) {
-                    txnsWithDependency = transactionGraph.getTxnsWithTxnDependencyBatchMultiTable(
-                            Config.lake_batch_publish_min_version_num,
-                            Config.lake_batch_publish_max_version_num, txnId);
-                } else {
-                    txnsWithDependency = transactionGraph.getTxnsWithTxnDependencyBatch(
-                            Config.lake_batch_publish_min_version_num,
+                List<Long> txnsWithDependency = null;
+                List<Long> frozenTxnIds = frozenPublishBatches.get(txnId);
+                if (frozenTxnIds != null) {
+                    // Retry a failed batch with exactly its txns: rebuild at most that many and use the
+                    // result only if it is the same list. Anything else means the graph has changed.
+                    int maxBatchSize = Math.min(frozenTxnIds.size(), Config.lake_batch_publish_max_version_num);
+                    txnsWithDependency = getTxnsWithTxnDependencyBatch(
+                            Math.min(Config.lake_batch_publish_min_version_num, maxBatchSize), maxBatchSize, txnId);
+                    if (txnsWithDependency.equals(frozenTxnIds)) {
+                        LOG.debug("retry frozen lake publish batch db:{} head txn:{} txns:{}",
+                                dbId, txnId, frozenTxnIds);
+                    } else {
+                        frozenPublishBatches.remove(txnId, frozenTxnIds);
+                        LOG.info("drop frozen lake publish batch db:{} head txn:{} size:{} txns:{}, graph now gives {}",
+                                dbId, txnId, frozenTxnIds.size(), frozenTxnIds, txnsWithDependency);
+                        txnsWithDependency = null;
+                    }
+                }
+                if (txnsWithDependency == null) {
+                    txnsWithDependency = getTxnsWithTxnDependencyBatch(Config.lake_batch_publish_min_version_num,
                             Config.lake_batch_publish_max_version_num, txnId);
                 }
                 List<TransactionState> states = txnsWithDependency.stream().map(idToRunningTransactionState::get)
@@ -1114,6 +1136,29 @@ public class DatabaseTransactionMgr {
             readUnlock();
         }
         return result;
+    }
+
+    private List<Long> getTxnsWithTxnDependencyBatch(int minBatchSize, int maxBatchSize, long txnId) {
+        if (Config.lake_enable_batch_publish_multi_table) {
+            return transactionGraph.getTxnsWithTxnDependencyBatchMultiTable(minBatchSize, maxBatchSize, txnId);
+        }
+        return transactionGraph.getTxnsWithTxnDependencyBatch(minBatchSize, maxBatchSize, txnId);
+    }
+
+    // Called when a lake publish batch failed: its retry must cover the same txns so that every
+    // partition's new version stays the same. See frozenPublishBatches.
+    public void freezePublishBatch(List<Long> txnIds) {
+        long headTxnId = txnIds.get(0);
+        List<Long> previous = frozenPublishBatches.put(headTxnId, txnIds);
+        if (!txnIds.equals(previous)) {
+            LOG.info("freeze lake publish batch db:{} head txn:{} size:{} txns:{}",
+                    dbId, headTxnId, txnIds.size(), txnIds);
+        }
+    }
+
+    @VisibleForTesting
+    List<Long> getFrozenPublishBatch(long headTxnId) {
+        return frozenPublishBatches.get(headTxnId);
     }
 
     private static boolean canCommitEmptyKafkaRoutineLoad(TransactionState transactionState,
@@ -2660,6 +2705,7 @@ public class DatabaseTransactionMgr {
         }
 
         LOG.info("finish transaction {} batch successfully", copiedStateBatch);
+        frozenPublishBatches.remove(copiedStateBatch.getTransactionStates().get(0).getTransactionId());
         for (TransactionState transactionState : copiedStateBatch.getTransactionStates()) {
             updateTransactionMetrics(transactionState);
         }
