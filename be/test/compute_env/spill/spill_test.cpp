@@ -339,12 +339,20 @@ struct SpillerCaller {
         return _spiller->_reader->restore<TaskExecutor>(state, std::forward<MemGuard>(guard));
     }
 
-    template <class TaskExecutor, class MemGuard>
-    Status trigger_restore(RuntimeState* state, MemGuard&& guard) {
+    // Exposes the stream acquisition on its own, so a test can put the reader into the state a
+    // finished-but-not-EOF restore task leaves behind: stream attached, buffer drained, no task in
+    // flight. Triggering a restore would immediately refill the buffer and hide that state.
+    Status acquire_input_stream(RuntimeState* state) {
         if (!acquire_once) {
             acquire_once = true;
-            RETURN_IF_ERROR(_spiller->_acquire_input_stream(state));
+            return _spiller->_acquire_input_stream(state);
         }
+        return Status::OK();
+    }
+
+    template <class TaskExecutor, class MemGuard>
+    Status trigger_restore(RuntimeState* state, MemGuard&& guard) {
+        RETURN_IF_ERROR(acquire_input_stream(state));
         return _spiller->_reader->trigger_restore<TaskExecutor>(state, std::forward<MemGuard>(guard));
     }
 
@@ -1684,6 +1692,102 @@ TEST_F(SpillCompactSkewChunksCheckTest, null_chunk_in_frequency_pass_aborts) {
 
 TEST_F(SpillCompactSkewChunksCheckTest, empty_chunk_in_frequency_pass_aborts) {
     EXPECT_DEATH(invoke({make_chunk_with_n_rows(50), make_empty_chunk()}, 50), "empty chunk in frequency pass");
+}
+
+// A restore task is only re-armed from SpillerReader::restore(), i.e. after a chunk has been pulled
+// out of the stream. When a task finishes with the read stream not at EOF and the chunk buffer
+// already drained, nothing re-arms it: has_output_data() stays false, the source that gates on it is
+// never scheduled again, and the query hangs with no error. The spillable sources therefore call
+// rearm_if_stalled() right before reporting "no output".
+//
+// These cases pin that decision itself: a drained reader with no task in flight must get a task
+// back, and a reader that still has something to pull must be left alone.
+TEST_F(SpillTest, reader_rearm_if_stalled_revives_drained_reader) {
+    ObjectPool pool;
+    TExprBuilder order_by_slots_builder;
+    order_by_slots_builder << TYPE_INT;
+    auto order_by_slots = order_by_slots_builder.get_res();
+    std::vector<bool> nullables = {false, false};
+    TExprBuilder tuple_slots_builder;
+    tuple_slots_builder << TYPE_INT << TYPE_SMALLINT;
+    auto tuple_slots = tuple_slots_builder.get_res();
+
+    auto ctx_st = no_partition_context(&pool, &dummy_rt_st, order_by_slots, tuple_slots);
+    ASSERT_OK(ctx_st.status());
+    auto ctx = ctx_st.value();
+    auto& tuple = ctx->sort_exprs.sort_tuple_slot_expr_ctxs();
+
+    RandomChunkBuilder chunk_builder;
+    auto factory = spill::make_spilled_factory();
+    SpilledOptions spill_options(&ctx->sort_exprs, &ctx->sort_descs);
+    spill_options.mem_table_pool_size = 2;
+    spill_options.spill_mem_table_bytes_size = 1 * 1024 * 1024;
+    spill_options.spill_type = spill::SpillFormaterType::SPILL_BY_COLUMN;
+    spill_options.block_manager = dummy_block_mgr.get();
+
+    auto spiller = factory->create(spill_options);
+    spiller->set_metrics(metrics);
+    SpillerCaller<spill::RawSpillerWriter*, spill::SpillerReader*> caller(spiller.get());
+    ASSERT_OK(spiller->prepare(&dummy_rt_st));
+
+    for (size_t i = 0; i < 256; ++i) {
+        auto chunk = chunk_builder.gen(tuple, nullables);
+        ASSERT_OK(caller.spill<SyncExecutor>(&dummy_rt_st, chunk, EmptyMemGuard{}));
+    }
+    ASSERT_OK(caller.flush<SyncExecutor>(&dummy_rt_st, EmptyMemGuard{}));
+
+    // Attach the stream without pulling anything: stream present, buffer drained, no task in
+    // flight. This is exactly the state a restore task leaves behind when it stops without
+    // reaching EOF.
+    ASSERT_OK(caller.acquire_input_stream(&dummy_rt_st));
+    const auto& reader = spiller->reader();
+    ASSERT_FALSE(reader->has_output_data());
+    ASSERT_FALSE(reader->has_restore_task());
+
+    // The guard must put the chain back on its feet. SyncExecutor runs the task inline, so the
+    // restored chunk becomes visible immediately; before the fix nothing was left to schedule and
+    // has_output_data() stayed false forever.
+    ASSERT_OK(reader->rearm_if_stalled<SyncExecutor>(&dummy_rt_st, EmptyMemGuard{}));
+    ASSERT_TRUE(reader->has_output_data());
+
+    // With a chunk already buffered there is nothing to rescue, so a second call must not submit
+    // another task.
+    ASSERT_OK(reader->rearm_if_stalled<SyncExecutor>(&dummy_rt_st, EmptyMemGuard{}));
+    ASSERT_TRUE(reader->has_output_data());
+}
+
+// Before the first flush completes the reader has no stream at all. Sources can reach the guard in
+// that window, so it has to stay a no-op instead of dereferencing a null stream.
+TEST_F(SpillTest, reader_rearm_if_stalled_without_stream_is_noop) {
+    ObjectPool pool;
+    TExprBuilder order_by_slots_builder;
+    order_by_slots_builder << TYPE_INT;
+    auto order_by_slots = order_by_slots_builder.get_res();
+    TExprBuilder tuple_slots_builder;
+    tuple_slots_builder << TYPE_INT << TYPE_SMALLINT;
+    auto tuple_slots = tuple_slots_builder.get_res();
+
+    auto ctx_st = no_partition_context(&pool, &dummy_rt_st, order_by_slots, tuple_slots);
+    ASSERT_OK(ctx_st.status());
+    auto ctx = ctx_st.value();
+
+    auto factory = spill::make_spilled_factory();
+    SpilledOptions spill_options(&ctx->sort_exprs, &ctx->sort_descs);
+    spill_options.mem_table_pool_size = 1;
+    spill_options.spill_mem_table_bytes_size = 1 * 1024 * 1024;
+    spill_options.spill_type = spill::SpillFormaterType::SPILL_BY_COLUMN;
+    spill_options.block_manager = dummy_block_mgr.get();
+
+    auto spiller = factory->create(spill_options);
+    spiller->set_metrics(metrics);
+    ASSERT_OK(spiller->prepare(&dummy_rt_st));
+
+    const auto& reader = spiller->reader();
+    ASSERT_FALSE(reader->has_output_data());
+    ASSERT_FALSE(reader->has_restore_task());
+    ASSERT_OK(reader->rearm_if_stalled<SyncExecutor>(&dummy_rt_st, EmptyMemGuard{}));
+    ASSERT_FALSE(reader->has_output_data());
+    ASSERT_FALSE(reader->has_restore_task());
 }
 
 } // namespace starrocks::vectorized
