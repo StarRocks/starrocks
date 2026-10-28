@@ -200,6 +200,18 @@ description: "Alphabetical s"
 - Type: Cumulative
 - Description: Total time spent casting flat JSON sub-column values during scan.
 
+## `starrocks_be_flat_json_compaction_mixed_inputs_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Number of times a compaction read a JSON column whose input segments are partly Flat JSON and partly whole JSON with the Flat JSON layout of the flat segments, every sub-column typed JSON. See `enable_compaction_flat_json_mixed_inputs`.
+
+## `starrocks_be_flat_json_compaction_plain_fallback_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Number of flat JSON compaction outputs written as whole JSON because the buffered input exceeded one eighth of `compaction_memory_limit_per_worker`, divided among the JSON columns written together, without one flat layout to write it with.
+
 ## `starrocks_be_flat_json_compaction_schema_change_total`
 
 - Unit: Count
@@ -210,7 +222,7 @@ description: "Alphabetical s"
 
 - Unit: Count
 - Type: Cumulative
-- Description: Number of flat JSON compactions, counted in `starrocks_be_flat_json_compaction_total`, that wrote their output as it arrived instead of buffering the whole output segment. It happens when the buffered input exceeds one eighth of `compaction_memory_limit_per_worker` and all of it shares one flat layout.
+- Description: Number of flat JSON compactions, counted in `starrocks_be_flat_json_compaction_total`, that wrote their output as it arrived instead of buffering the whole output segment. It happens when the buffered input exceeds one eighth of `compaction_memory_limit_per_worker`, divided among the JSON columns written together, and all of it shares one flat layout.
 
 ## `starrocks_be_flat_json_compaction_total`
 

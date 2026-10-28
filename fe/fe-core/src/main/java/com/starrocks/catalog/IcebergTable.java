@@ -454,7 +454,8 @@ public class IcebergTable extends Table {
     }
 
     // Immutable read view a time-travel query pins on its per-query IcebergTable copy: the targeted
-    // snapshot's schema and the partition specs its manifests reference, keyed by spec id.
+    // snapshot's schema and the partition specs its manifests reference, keyed by spec id. A branch read
+    // pins the current schema and no specs, so it keeps the current spec.
     private static class SnapshotReadView {
         private final Schema schema;
         private final Map<Integer, PartitionSpec> specsById;
@@ -477,6 +478,13 @@ public class IcebergTable extends Table {
         table.setForeignKeyConstraints(getForeignKeyConstraints());
         table.metricsReporter = metricsReporter;
         return table;
+    }
+
+    // Pin the source table's read view on a table the planner derives from it over the same native table
+    // (the equality-delete rewrite builds such tables), so a time-travel read keeps the snapshot schema in
+    // the derived scans and their descriptors. Only for a freshly built, not yet shared table.
+    public void inheritReadView(IcebergTable source) {
+        this.readView = source.readView;
     }
 
     /**

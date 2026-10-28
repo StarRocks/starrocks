@@ -123,8 +123,18 @@ Status VariantRowConverter::cast_to_string(const VariantRowRef& variant, const c
     }
 }
 
+// A TIMESTAMP_TZ instant shown in `zone`; offset_cache, when given, is bound to `zone`.
+static void instant_to_timestamp(TimestampValue* tsv, int64_t seconds, int64_t microseconds,
+                                 const cctz::time_zone& zone, TzOffsetCache* offset_cache) {
+    if (offset_cache != nullptr) {
+        tsv->from_unixtime_with_offset(seconds, microseconds, offset_cache->offset_in_bound_zone(seconds));
+    } else {
+        tsv->from_unixtime(seconds, microseconds, zone);
+    }
+}
+
 Status VariantRowConverter::cast_to_date(const VariantRowRef& row, const cctz::time_zone& zone,
-                                         ColumnBuilder<TYPE_DATE>& result) {
+                                         ColumnBuilder<TYPE_DATE>& result, TzOffsetCache* offset_cache) {
     const VariantValue& variant = row.get_value();
     switch (const VariantType type = variant.type()) {
     case VariantType::NULL_TYPE:
@@ -139,7 +149,7 @@ Status VariantRowConverter::cast_to_date(const VariantRowRef& row, const cctz::t
         ASSIGN_OR_RETURN(int64_t micros, variant.get_timestamp_micros());
         auto [seconds, microseconds] = split_micros_to_seconds(micros);
         TimestampValue tsv{};
-        tsv.from_unixtime(seconds, microseconds, zone);
+        instant_to_timestamp(&tsv, seconds, microseconds, zone, offset_cache);
         int year, month, day;
         timestamp::to_date(tsv.timestamp(), &year, &month, &day);
         result.append(DateValue::create(year, month, day));
@@ -160,7 +170,7 @@ Status VariantRowConverter::cast_to_date(const VariantRowRef& row, const cctz::t
 }
 
 Status VariantRowConverter::cast_to_time(const VariantRowRef& row, const cctz::time_zone& zone,
-                                         ColumnBuilder<TYPE_TIME>& result) {
+                                         ColumnBuilder<TYPE_TIME>& result, TzOffsetCache* offset_cache) {
     const VariantValue& variant = row.get_value();
     switch (const VariantType type = variant.type()) {
     case VariantType::NULL_TYPE:
@@ -175,7 +185,7 @@ Status VariantRowConverter::cast_to_time(const VariantRowRef& row, const cctz::t
         ASSIGN_OR_RETURN(int64_t micros, variant.get_timestamp_micros());
         auto [seconds, microseconds] = split_micros_to_seconds(micros);
         TimestampValue tsv{};
-        tsv.from_unixtime(seconds, microseconds, zone);
+        instant_to_timestamp(&tsv, seconds, microseconds, zone, offset_cache);
         int hour, minute, second, microsecond;
         tsv.to_time(&hour, &minute, &second, &microsecond);
         int64_t total_micros = (static_cast<int64_t>(hour) * 3600 + minute * 60 + second) * USECS_PER_SEC + microsecond;
@@ -220,7 +230,7 @@ Status VariantRowConverter::cast_to_time(const VariantRowRef& row, const cctz::t
 }
 
 Status VariantRowConverter::cast_to_datetime(const VariantRowRef& row, const cctz::time_zone& zone,
-                                             ColumnBuilder<TYPE_DATETIME>& result) {
+                                             ColumnBuilder<TYPE_DATETIME>& result, TzOffsetCache* offset_cache) {
     const VariantValue& variant = row.get_value();
     switch (const VariantType type = variant.type()) {
     case VariantType::NULL_TYPE:
@@ -238,7 +248,7 @@ Status VariantRowConverter::cast_to_datetime(const VariantRowRef& row, const cct
         ASSIGN_OR_RETURN(int64_t micros, variant.get_timestamp_micros());
         auto [seconds, microseconds] = split_micros_to_seconds(micros);
         TimestampValue tsv{};
-        tsv.from_unixtime(seconds, microseconds, zone);
+        instant_to_timestamp(&tsv, seconds, microseconds, zone, offset_cache);
         result.append(tsv);
         return Status::OK();
     }

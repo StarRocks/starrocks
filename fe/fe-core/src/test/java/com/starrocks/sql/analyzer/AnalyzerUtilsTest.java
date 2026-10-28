@@ -15,14 +15,18 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Sets;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
+import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.lake.LakeMaterializedView;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
@@ -158,13 +162,22 @@ public class AnalyzerUtilsTest {
         }
     }
 
+    /** The planner copies under the tables' read lock; copying without it trips snapshot_copy_without_lock. */
+    private static void copyOlapTableUnderReadLock(StatementBase stmt, String tableName, Set<OlapTable> tables) {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        long tableId = starRocksAssert.getTable("test", tableName).getId();
+        try (AutoCloseableLock ignored = new AutoCloseableLock(db.getId(), tableId, LockType.READ)) {
+            AnalyzerUtils.copyOlapTable(stmt, tables);
+        }
+    }
+
     @Test
     public void testCopyOlapTable() throws Exception {
         {
             String sql = "select count(*) from bill_detail;";
             StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
             Set<OlapTable> tables = Sets.newHashSet();
-            AnalyzerUtils.copyOlapTable(stmt, tables);
+            copyOlapTableUnderReadLock(stmt, "bill_detail", tables);
             Assertions.assertEquals(1, tables.size());
             Assertions.assertInstanceOf(LakeTable.class, tables.iterator().next());
             Assertions.assertSame(starRocksAssert.getTable("test", "bill_detail"), tables.iterator().next());
@@ -175,7 +188,7 @@ public class AnalyzerUtilsTest {
             String sql = "select count(*) from mv1;";
             StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
             Set<OlapTable> tables = Sets.newHashSet();
-            AnalyzerUtils.copyOlapTable(stmt, tables);
+            copyOlapTableUnderReadLock(stmt, "mv1", tables);
             Assertions.assertEquals(1, tables.size());
             Assertions.assertInstanceOf(LakeMaterializedView.class, tables.iterator().next());
             Assertions.assertSame(starRocksAssert.getTable("test", "mv1"), tables.iterator().next());

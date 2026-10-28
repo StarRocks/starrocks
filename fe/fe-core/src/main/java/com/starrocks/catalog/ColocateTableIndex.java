@@ -329,7 +329,7 @@ public class ColocateTableIndex implements Writable {
                     if (!(tbl instanceof ExternalOlapTable)) {
                         // Colocate table should keep the same bucket number across the partitions
                         if (hashDistInfo.getBucketNum() == 0) {
-                            int bucketNum = CatalogUtils.calBucketNumAccordingToBackends(tbl.isLightWeightTabletCreation());
+                            int bucketNum = CatalogUtils.calBucketNumAccordingToBackends(tbl);
                             hashDistInfo.setBucketNum(bucketNum);
                         }
                     }

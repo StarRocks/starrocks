@@ -16,11 +16,13 @@
 
 #include <sys/types.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <memory>
 #include <vector>
 
 #include "column/column.h"
+#include "column/column_helper.h"
 #include "column/flat_json/json_flat_path.h"
 #include "column/flat_json/json_flattener.h"
 #include "column/flat_json/json_merger.h"
@@ -35,6 +37,7 @@
 #include "storage/json_path_deriver.h"
 #include "storage/rowset/column_writer.h"
 #include "types/constexpr.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 
@@ -52,15 +55,19 @@ const JsonColumn* json_data_of(const Column& column) {
     return down_cast<const JsonColumn*>(&column);
 }
 
-// Buffered input past which a uniformly laid out flat segment is written as it arrives. Small segments
-// keep the full re-derivation; large ones must not hold their whole input in memory.
-int64_t streaming_threshold_bytes() {
+// Buffered input past which a segment's chunks are written as they arrive (see _start_streaming() and
+// _start_plain_streaming()). Small segments keep the full re-derivation; large ones must not hold their whole input in
+// memory. The budget is shared by the JSON columns the segment writer writes together.
+int64_t streaming_threshold_bytes(size_t json_columns) {
     const int64_t mem_limit = config::compaction_memory_limit_per_worker;
-    return mem_limit > 0 ? mem_limit / 8 : -1;
+    return mem_limit > 0 ? mem_limit / 8 / static_cast<int64_t>(std::max<size_t>(1, json_columns)) : -1;
 }
 } // namespace
 
 Status FlatJsonColumnCompactor::append(const Column& column) {
+    if (_plain_streaming) {
+        return _write_plain(column);
+    }
     if (_streaming) {
         const JsonColumn* json_col = json_data_of(column);
         if (json_col == nullptr) {
@@ -72,6 +79,9 @@ Status FlatJsonColumnCompactor::append(const Column& column) {
     // compaction will reuse the column, must copy in there.
     _json_datas.emplace_back(column.clone());
     _estimate_size += column.byte_size();
+    // byte_size() counts the serialized JSON only; each value also costs a JsonValue, which outweighs the small
+    // values of JSON-typed sub-columns many times over.
+    _buffered_memory += _json_datas.back()->memory_usage();
 
     const JsonColumn* json_col = json_data_of(column);
     // A flat layout with no named path (only a remain column) is never streamed: the buffered path writes
@@ -79,11 +89,47 @@ Status FlatJsonColumnCompactor::append(const Column& column) {
     _uniform_flat_layout = _uniform_flat_layout && json_col != nullptr && json_col->is_flat_json() &&
                            !json_col->flat_column_paths().empty() &&
                            check_is_same_schema(json_data_of(*_json_datas.front()), json_col);
-    const int64_t threshold = streaming_threshold_bytes();
-    if (_uniform_flat_layout && threshold > 0 && _estimate_size > static_cast<size_t>(threshold)) {
-        return _start_streaming();
+    const int64_t threshold = streaming_threshold_bytes(_json_columns_in_segment);
+    if (threshold > 0 && _buffered_memory > static_cast<size_t>(threshold)) {
+        return _uniform_flat_layout ? _start_streaming() : _start_plain_streaming();
     }
     return Status::OK();
+}
+
+Status FlatJsonColumnCompactor::_start_plain_streaming() {
+    FlatJsonMetrics::instance()->flat_json_compaction_plain_fallback_total.increment(1);
+    VLOG(2) << "FlatJsonColumnCompactor writes whole json after " << _json_datas.size() << " chunks, "
+            << _buffered_memory << " bytes without one flat layout";
+    _plain_streaming = true;
+    MutableColumns buffered = std::move(_json_datas);
+    _json_datas.clear();
+    _estimate_size = 0;
+    _buffered_memory = 0;
+    for (auto& col : buffered) {
+        RETURN_IF_ERROR(_write_plain(*col));
+        col.reset(); // release as soon as written
+    }
+    return Status::OK();
+}
+
+Status FlatJsonColumnCompactor::_write_plain(const Column& column) {
+    const JsonColumn* json_col = json_data_of(column);
+    if (json_col == nullptr) {
+        auto nulls = ColumnHelper::create_column(TypeDescriptor(LogicalType::TYPE_JSON), true);
+        nulls->append_nulls(column.size());
+        return _json_writer->append(*nulls);
+    }
+    if (!json_col->is_flat_json()) {
+        return _json_writer->append(column);
+    }
+    JsonMerger merger(json_col->flat_column_paths(), json_col->flat_column_types(), json_col->has_remain());
+    auto merged = merger.merge(json_col->get_flat_fields());
+    if (column.is_nullable()) {
+        ColumnPtr nullable = NullableColumn::create(merged, down_cast<const NullableColumn&>(column).null_column());
+        down_cast<NullableColumn*>(nullable->as_mutable_raw_ptr())->set_has_null(column.has_null());
+        return _json_writer->append(*nullable);
+    }
+    return _json_writer->append(*merged);
 }
 
 Status FlatJsonColumnCompactor::_start_streaming() {
@@ -148,12 +194,17 @@ Status FlatJsonColumnCompactor::_stream_write(const Column& column, const JsonCo
         RETURN_IF_ERROR(_flat_writers[0]->append(*nulls));
     }
     for (size_t i = first_field; i < _flat_writers.size(); i++) {
-        RETURN_IF_ERROR(_flat_writers[i]->append(*json_col.get_flat_field(static_cast<int>(i - first_field))));
+        const auto& field = *json_col.get_flat_field(static_cast<int>(i - first_field));
+        _update_value_stats(i, field);
+        RETURN_IF_ERROR(_flat_writers[i]->append(field));
     }
     return Status::OK();
 }
 
 uint64_t FlatJsonColumnCompactor::estimate_buffer_size() {
+    if (_plain_streaming) {
+        return _json_writer->estimate_buffer_size();
+    }
     if (!_streaming) {
         return FlatJsonColumnWriter::estimate_buffer_size();
     }
@@ -236,9 +287,12 @@ Status FlatJsonColumnCompactor::_merge_columns(MutableColumns& json_datas) {
             auto j = merger->merge(json_col->get_flat_fields());
 
             if (col->is_nullable()) {
-                auto n_ptr = NullableColumn::create(j, null_col)->as_mutable_raw_ptr();
-                auto* n = down_cast<NullableColumn*>(n_ptr);
-                n->set_has_null(col->has_null());
+                // Hold the column while it is written. as_mutable_raw_ptr() hands back a raw
+                // pointer without taking a reference, so taking it off the temporary that create()
+                // returns left it dangling at the semicolon: set_has_null() wrote into freed memory
+                // and append() read it back out.
+                ColumnPtr n = NullableColumn::create(j, null_col);
+                down_cast<NullableColumn*>(n->as_mutable_raw_ptr())->set_has_null(col->has_null());
                 RETURN_IF_ERROR(_json_writer->append(*n));
             } else {
                 RETURN_IF_ERROR(_json_writer->append(*j));
@@ -312,7 +366,7 @@ Status FlatJsonColumnCompactor::_flatten_columns(MutableColumns& json_datas) {
 }
 
 Status FlatJsonColumnCompactor::finish() {
-    if (!_streaming) {
+    if (!_streaming && !_plain_streaming) {
         RETURN_IF_ERROR(_compact_columns(_json_datas));
         _json_datas.clear(); // release after write
     }
@@ -330,6 +384,7 @@ Status FlatJsonColumnCompactor::finish() {
         std::string sub_column_key = _column_name + "." + _flat_paths[i];
         _subcolumn_dict_valid[sub_column_key] = sub_dict_valid;
     }
+    _save_value_stats();
 
     _json_meta->set_total_mem_footprint(total_mem_footprint());
     return Status::OK();

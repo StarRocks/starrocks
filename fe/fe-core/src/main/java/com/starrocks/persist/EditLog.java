@@ -303,6 +303,11 @@ public class EditLog {
                     globalStateMgr.getAlterJobMgr().replayModifyPartition(info);
                     break;
                 }
+                case OperationType.OP_MODIFY_PARTITION_VACUUM_STATE: {
+                    PartitionVacuumStateInfo info = (PartitionVacuumStateInfo) journal.data();
+                    globalStateMgr.getLocalMetastore().replayModifyPartitionVacuumState(info);
+                    break;
+                }
                 case OperationType.OP_BATCH_MODIFY_PARTITION: {
                     BatchModifyPartitionsInfo info = (BatchModifyPartitionsInfo) journal.data();
                     for (ModifyPartitionInfo modifyPartitionInfo : info.getModifyPartitionInfos()) {
@@ -1453,6 +1458,27 @@ public class EditLog {
         }
     }
 
+    /** Keeps provisional metadata changes and their commit/rollback inside the existing WAL fence. */
+    public final class WalScope implements AutoCloseable {
+        private boolean closed;
+
+        private WalScope() {
+            enterGate();
+        }
+
+        @Override
+        public void close() {
+            if (!closed) {
+                closed = true;
+                exitGate();
+            }
+        }
+    }
+
+    public WalScope openWalScope() {
+        return new WalScope();
+    }
+
     private void exitGate() {
         synchronized (editLogFenceLock) {
             if (inFlight <= 0) {
@@ -1767,6 +1793,10 @@ public class EditLog {
 
     public void logModifyPartition(ModifyPartitionInfo info, WALApplier walApplier) {
         logJsonObject(OperationType.OP_MODIFY_PARTITION_V2, info, walApplier);
+    }
+
+    public void logModifyPartitionVacuumState(PartitionVacuumStateInfo info) {
+        logJsonObject(OperationType.OP_MODIFY_PARTITION_VACUUM_STATE, info);
     }
 
     public void logBatchModifyPartition(BatchModifyPartitionsInfo info, WALApplier walApplier) {
@@ -2491,6 +2521,10 @@ public class EditLog {
 
     public void logUpdateTabletReshardJob(TabletReshardJob job) {
         logJsonObject(OperationType.OP_UPDATE_TABLET_RESHARD_JOB_LOG, job);
+    }
+
+    public void logUpdateTabletReshardJob(TabletReshardJob snapshot, WALApplier applier) {
+        logJsonObject(OperationType.OP_UPDATE_TABLET_RESHARD_JOB_LOG, snapshot, applier);
     }
 
     public void logRemoveTabletReshardJob(long jobId, WALApplier walApplier) {

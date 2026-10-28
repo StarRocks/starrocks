@@ -625,22 +625,11 @@ struct Occurrence {
 };
 template <class Integer>
 struct NumericRing {
-    uint32_t first, count, component;
-    bool hole;
+    uint32_t first, count;
     Integer area;
 };
 struct Component {
-    uint32_t row, first, count;
-};
-struct EdgeInterval {
-    uint32_t occurrence, ymin, ymax;
-};
-struct RingIndex {
-    uint32_t first, xmin, xmax, ymin, ymax;
-};
-struct LocationIndex {
-    std::vector<EdgeInterval> edges;
-    std::vector<RingIndex> rings;
+    uint32_t first, count;
 };
 template <class Integer>
 struct NumericNode {
@@ -806,7 +795,6 @@ struct Kernel {
     void run(double tolerance, bool boundary) {
         decode();
         graph();
-        validate();
         if (tolerance > 0 && !nodes.empty()) simplify(tolerance, boundary);
         output(tolerance == 0);
     }
@@ -818,9 +806,10 @@ struct Kernel {
         }
         return it->second;
     }
-    void polygon(Reader& reader, uint32_t row, bool little) {
-        uint32_t n = reader.number<uint32_t>(little), component = index(components.size());
-        components.push_back({row, uint32_t(rings.size()), n});
+    void polygon(Reader& reader, bool little) {
+        uint32_t n = reader.number<uint32_t>(little);
+        index(components.size());
+        components.push_back({uint32_t(rings.size()), n});
         for (uint32_t r = 0; r < n; ++r) {
             const uint32_t positions = reader.number<uint32_t>(little), ring = index(rings.size());
             if (positions < 4) invalid("ST_CoverageSimplify degenerate polygon ring");
@@ -856,7 +845,7 @@ struct Kernel {
             }
             occurrences[first].previous = previous;
             occurrences[previous].next = first;
-            rings.push_back({first, uint32_t(occurrences.size() - first), component, r != 0, Integer(0)});
+            rings.push_back({first, uint32_t(occurrences.size() - first), Integer(0)});
             if (rings.back().count < 3) invalid("ST_CoverageSimplify degenerate polygon ring");
             uint32_t o = first;
             do {
@@ -886,12 +875,12 @@ struct Kernel {
             auto [little, type] = reader.header();
             row.multi = type == 6;
             if (!row.multi)
-                polygon(reader, r, little);
+                polygon(reader, little);
             else {
                 uint32_t n = reader.number<uint32_t>(little);
                 for (uint32_t i = 0; i < n; ++i) {
                     auto [order, child] = reader.header();
-                    polygon(reader, r, order);
+                    polygon(reader, order);
                 }
             }
             row.count = components.size() - row.first;
@@ -958,211 +947,6 @@ struct Kernel {
         }
         for (size_t i = 0; i < nodes.size(); ++i) {
             nodes[i].fixed = degree[i] != 2;
-        }
-    }
-    LocationIndex prepare_locations() {
-        LocationIndex result;
-        size_t count = 0;
-        for (const auto& ring : rings) {
-            count += ring.count;
-        }
-        result.edges.reserve(count);
-        result.rings.reserve(rings.size());
-        for (const auto& ring : rings) {
-            uint32_t o = ring.first, n = occurrences[o].node;
-            RingIndex entry{index(result.edges.size()), n, n, n, n};
-            do {
-                uint32_t a = occurrences[o].node, b = occurrences[occurrences[o].next].node;
-                const auto& p = nodes[a].point;
-                if (p.x < nodes[entry.xmin].point.x) entry.xmin = a;
-                if (p.x > nodes[entry.xmax].point.x) entry.xmax = a;
-                if (p.y < nodes[entry.ymin].point.y) entry.ymin = a;
-                if (p.y > nodes[entry.ymax].point.y) entry.ymax = a;
-                result.edges.push_back({o, p.y <= nodes[b].point.y ? a : b, p.y >= nodes[b].point.y ? a : b});
-                o = occurrences[o].next;
-            } while (o != ring.first);
-            auto first = result.edges.begin() + entry.first;
-            std::sort(first, result.edges.end(), [&](const EdgeInterval& a, const EdgeInterval& b) {
-                double ay = nodes[a.ymin].point.y, by = nodes[b.ymin].point.y;
-                return ay != by ? ay < by : a.occurrence < b.occurrence;
-            });
-            uint32_t ymax = first->ymax;
-            for (auto it = first; it != result.edges.end(); ++it) {
-                if (nodes[it->ymax].point.y > nodes[ymax].point.y) ymax = it->ymax;
-                it->ymax = ymax; // Prefix maximum, not this edge's upper endpoint.
-            }
-            result.rings.push_back(entry);
-        }
-        return result;
-    }
-    // Exact doubled edge-midpoint classification; no rounded sample or epsilon.
-    int location(const Integer& x, const Integer& y, const Ring& ring, const LocationIndex& locations) {
-        const auto& box = locations.rings[&ring - rings.data()];
-        if (x < 2 * nodes[box.xmin].point.ex || x > 2 * nodes[box.xmax].point.ex || y < 2 * nodes[box.ymin].point.ey ||
-            y > 2 * nodes[box.ymax].point.ey)
-            return -1;
-        auto first = locations.edges.begin() + box.first, last = first + ring.count;
-        first = std::lower_bound(first, last, y, [&](const EdgeInterval& edge, const Integer& value) {
-            return 2 * nodes[edge.ymax].point.ey < value;
-        });
-        last = std::upper_bound(first, last, y, [&](const Integer& value, const EdgeInterval& edge) {
-            return value < 2 * nodes[edge.ymin].point.ey;
-        });
-        bool inside = false;
-        for (auto it = first; it != last; ++it) {
-            uint32_t o = it->occurrence;
-            const auto& a = nodes[occurrences[o].node].point;
-            const auto& b = nodes[occurrences[occurrences[o].next].node].point;
-            const Integer ay = 2 * a.ey, by = 2 * b.ey;
-            // Closed ranges retain boundary hits; the half-open test retains vertex parity.
-            if (y < std::min(ay, by) || y > std::max(ay, by)) continue;
-            const Integer ax = 2 * a.ex, bx = 2 * b.ex;
-            if (x > std::max(ax, bx)) continue;
-            const bool crosses = (ay > y) != (by > y);
-            if (x < std::min(ax, bx)) {
-                if (crosses) inside = !inside;
-                continue;
-            }
-            Integer side = (b.ex - a.ex) * (y - ay) - (b.ey - a.ey) * (x - ax);
-            if (side == 0) return 0; // Both coordinates are within the closed edge bounds.
-            if (crosses && sign(side) == sign(b.ey - a.ey)) inside = !inside;
-        }
-        return inside ? 1 : -1;
-    }
-    int location(const Integer& x, const Integer& y, const Component& component, const LocationIndex& locations) {
-        if (component.count == 0) return -1;
-        int outer = location(x, y, rings[component.first], locations);
-        if (outer != 1) return outer;
-        for (uint32_t r = 1; r < component.count; ++r) {
-            int hole = location(x, y, rings[component.first + r], locations);
-            if (hole >= 0) return -hole;
-        }
-        return 1;
-    }
-    template <class Region>
-    int relation(const Ring& ring, const Region& region, const LocationIndex& locations) {
-        int relation = 0;
-        uint32_t o = ring.first;
-        do {
-            const auto& a = nodes[occurrences[o].node].point;
-            const auto& b = nodes[occurrences[occurrences[o].next].node].point;
-            int next = location(a.ex + b.ex, a.ey + b.ey, region, locations);
-            if (next != 0) {
-                if (relation != 0 && relation != next) invalid("ST_CoverageSimplify crossing polygon interiors");
-                relation = next;
-            }
-            o = occurrences[o].next;
-        } while (o != ring.first);
-        return relation;
-    }
-    int side(uint32_t owner, const Edge& edge) const {
-        const auto& occurrence = occurrences[owner];
-        const auto& ring = rings[occurrence.ring];
-        return sign(ring.area) * (ring.hole ? -1 : 1) * (occurrence.node == edge.a ? 1 : -1);
-    }
-    void validate() {
-        try {
-            validate_index(edge_tree);
-        } catch (const Stop& error) {
-            if (!error.status.is_invalid_argument()) throw;
-            // Packing changes traversal order. On invalid input replay the old
-            // insertion order to retain the first diagnostic of the old index.
-            Tree original;
-            for (uint32_t i = 0; i < edges.size(); ++i) {
-                original.insert({bounds(nodes[edges[i].a].point, nodes[edges[i].b].point), i});
-            }
-            validate_index(original);
-            throw;
-        }
-    }
-    template <class SpatialIndex>
-    void validate_index(SpatialIndex& spatial_edges) {
-        // Contact incidence forest detects disconnected interiors (e.g. a hole
-        // touching its shell twice) without a quadratic ring-pair allocation.
-        std::vector<uint32_t> parent(rings.size());
-        std::iota(parent.begin(), parent.end(), 0);
-        Map<Key, uint32_t> contacts;
-        Map<Key, bool> links;
-        auto root = [&](uint32_t id) {
-            while (parent[id] != id) {
-                parent[id] = parent[parent[id]];
-                id = parent[id];
-            }
-            return id;
-        };
-        auto link = [&](uint32_t ring, uint32_t node) {
-            uint32_t component = rings[ring].component;
-            auto [it, fresh] = contacts.emplace(Key{component, node}, 0);
-            if (fresh) {
-                it->second = index(parent.size());
-                parent.push_back(it->second);
-            }
-            if (!links.emplace(Key{ring, it->second}, true).second) return;
-            uint32_t a = root(ring), b = root(it->second);
-            if (a == b) invalid("ST_CoverageSimplify disconnected polygon interior");
-            parent[a] = b;
-        };
-        for (uint32_t i = 0; i < edges.size(); ++i) {
-            auto& edge = edges[i];
-            if (!edge.active) continue;
-            if (edge.count == 2) {
-                const auto& a = rings[occurrences[edge.owners[0]].ring];
-                const auto& b = rings[occurrences[edge.owners[1]].ring];
-                if (a.component == b.component || components[a.component].row == components[b.component].row ||
-                    side(edge.owners[0], edge) == side(edge.owners[1], edge))
-                    invalid("ST_CoverageSimplify overlapping polygon boundary owners");
-            }
-            query(spatial_edges, bounds(nodes[edge.a].point, nodes[edge.b].point), [&](uint32_t j) {
-                if (j <= i || !edges[j].active) return;
-                const auto& other = edges[j];
-                Contact c =
-                        contact(nodes[edge.a].point, nodes[edge.b].point, nodes[other.a].point, nodes[other.b].point);
-                if (c == Contact::NONE) return;
-                if (c != Contact::ENDPOINT)
-                    invalid("ST_CoverageSimplify invalid coverage crossing or mismatched subdivision");
-                uint32_t node = (edge.a == other.a || edge.a == other.b) ? edge.a : edge.b;
-                for (unsigned a = 0; a < edge.count; ++a)
-                    for (unsigned b = 0; b < other.count; ++b) {
-                        uint32_t x = edge.owners[a], y = other.owners[b];
-                        const auto& ox = occurrences[x];
-                        const auto& oy = occurrences[y];
-                        if (ox.ring == oy.ring) {
-                            if (ox.next != y && oy.next != x) invalid("ST_CoverageSimplify self-touching polygon ring");
-                        } else if (rings[ox.ring].component == rings[oy.ring].component) {
-                            link(ox.ring, node);
-                            link(oy.ring, node);
-                        }
-                    }
-            });
-        }
-        const auto locations = prepare_locations();
-        Tree polygons;
-        for (uint32_t c = 0; c < components.size(); ++c) {
-            const auto& component = components[c];
-            if (component.count == 0) continue;
-            const auto& outer = rings[component.first];
-            for (uint32_t h = 1; h < component.count; ++h) {
-                const auto& hole = rings[component.first + h];
-                if (relation(hole, outer, locations) != 1 || relation(outer, hole, locations) >= 0)
-                    invalid("ST_CoverageSimplify hole outside its shell");
-                for (uint32_t k = 1; k < h; ++k)
-                    if (relation(hole, rings[component.first + k], locations) >= 0 ||
-                        relation(rings[component.first + k], hole, locations) >= 0)
-                        invalid("ST_CoverageSimplify overlapping holes");
-            }
-            const auto& bounds = locations.rings[component.first];
-            Box box{{nodes[bounds.xmin].point.x, nodes[bounds.ymin].point.y},
-                    {nodes[bounds.xmax].point.x, nodes[bounds.ymax].point.y}};
-            query(polygons, box, [&](uint32_t other_id) {
-                const auto& other = components[other_id];
-                for (uint32_t r = 0; r < component.count; ++r)
-                    if (relation(rings[component.first + r], other, locations) > 0)
-                        invalid("ST_CoverageSimplify overlapping coverage interiors");
-                for (uint32_t r = 0; r < other.count; ++r)
-                    if (relation(rings[other.first + r], component, locations) > 0)
-                        invalid("ST_CoverageSimplify overlapping coverage interiors");
-            });
-            polygons.insert({box, c});
         }
     }
     std::span<const uint32_t> node_occurrences(uint32_t n) const {
@@ -1277,7 +1061,6 @@ struct Kernel {
             enqueue(a, boundary, floor);
             enqueue(c, boundary, floor);
         }
-        validate();
     }
     void emit_polygon(std::vector<uint8_t>& output, const Component& component) {
         write<uint8_t>(output, 1);

@@ -19,6 +19,8 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.util.concurrent.lock.BlockingCallValidator;
+import com.starrocks.common.util.concurrent.lock.LockInvariantViolationException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergCatalog;
 import com.starrocks.connector.iceberg.IcebergCatalogType;
@@ -59,9 +61,11 @@ public class IcebergHadoopCatalog implements IcebergCatalog {
 
     private final Configuration conf;
     private final HadoopCatalog delegate;
+    private final String catalogName;
 
     public IcebergHadoopCatalog(String name, Configuration conf, Map<String, String> properties) {
         this.conf = conf;
+        this.catalogName = name;
         Map<String, String> copiedProperties = Maps.newHashMap(properties);
 
         properties.forEach((key, value) -> {
@@ -81,7 +85,30 @@ public class IcebergHadoopCatalog implements IcebergCatalog {
                     ICEBERG_CUSTOM_PROPERTIES_PREFIX + WAREHOUSE_LOCATION));
         }
 
+        // A hadoop catalog is a directory tree: loading it opens the warehouse file system, and every
+        // method below is a listing or a metadata.json read against it.
+        BlockingCallValidator.validateNotUnderLock(IcebergCatalogType.HADOOP_CATALOG.transportTag(), name);
         delegate = (HadoopCatalog) CatalogUtil.loadCatalog(HadoopCatalog.class.getName(), name, copiedProperties, conf);
+    }
+
+    /**
+     * One request to the system this catalog wraps is about to be made; report it if this thread
+     * holds an FE metadata lock. The third-party catalog has no FE-owned wrapper to guard, so the
+     * guard goes on the methods that call it -- the same shape as {@code KuduMetadata}.
+     *
+     * <p><b>Why each catalog keeps its own copy of this one-liner instead of sharing one.</b> The
+     * report names the first frame belonging to a class other than the one that called the guard, so
+     * a private method here makes it name whoever called <em>this catalog</em> -- the caching layer
+     * or the metadata facade, i.e. the code that decided to go remote. Moving the body to a shared
+     * class or an interface default method would make every report point at this class's own method
+     * instead, which is never the code that has to change. The tag itself is shared, on
+     * {@link IcebergCatalogType#transportTag()}.
+     *
+     * <p>It carries the guard's own name on purpose: the point of these doors is that they can be
+     * enumerated, and one grep for {@code validateNotUnderLock} has to find all of them.
+     */
+    private void validateNotUnderLock() {
+        BlockingCallValidator.validateNotUnderLock(getIcebergCatalogType().transportTag(), catalogName);
     }
 
     @Override
@@ -91,16 +118,19 @@ public class IcebergHadoopCatalog implements IcebergCatalog {
 
     @Override
     public Table getTable(ConnectContext context, String dbName, String tableName) throws StarRocksConnectorException {
+        validateNotUnderLock();
         return delegate.loadTable(TableIdentifier.of(dbName, tableName));
     }
 
     @Override
     public boolean tableExists(ConnectContext context, String dbName, String tableName) throws StarRocksConnectorException {
+        validateNotUnderLock();
         return delegate.tableExists(TableIdentifier.of(dbName, tableName));
     }
 
     @Override
     public List<String> listAllDatabases(ConnectContext context) {
+        validateNotUnderLock();
         return delegate.listNamespaces().stream()
                 .map(ns -> ns.level(0))
                 .collect(Collectors.toList());
@@ -109,10 +139,15 @@ public class IcebergHadoopCatalog implements IcebergCatalog {
     @Override
     public void createDB(ConnectContext context, String dbName, Map<String, String> properties) {
         properties = properties == null ? new HashMap<>() : properties;
+        // The door sits inside the location branch and before the try: a property map with nothing but
+        // an unrecognized key waits on nothing and must not be reported, and in error mode the catch
+        // below would rewrite the refusal into "Invalid location URI". Everything else about this loop is
+        // as it was -- which value wins and which exception a mixed map raises must not change here.
         for (Map.Entry<String, String> entry : properties.entrySet()) {
             String key = entry.getKey();
             String value = entry.getValue();
             if (key.equalsIgnoreCase(LOCATION_PROPERTY)) {
+                BlockingCallValidator.validateNotUnderLock("remote-storage");
                 try {
                     URI uri = new Path(value).toUri();
                     FileSystem fileSystem = FileSystem.get(uri, conf);
@@ -126,6 +161,7 @@ public class IcebergHadoopCatalog implements IcebergCatalog {
             }
         }
         Namespace ns = Namespace.of(dbName);
+        validateNotUnderLock();
         delegate.createNamespace(ns, properties);
     }
 
@@ -135,6 +171,9 @@ public class IcebergHadoopCatalog implements IcebergCatalog {
         try {
             database = getDB(context, dbName);
         } catch (Exception e) {
+            // getDB has a door, and in error mode it refuses rather than returns; rewritten as a
+            // connector error the refusal would read as an unreachable catalog.
+            LockInvariantViolationException.rethrowIfRefusal(e);
             LOG.error("Failed to access database {}", dbName, e);
             throw new MetaNotFoundException("Failed to access database " + dbName);
         }
@@ -148,11 +187,13 @@ public class IcebergHadoopCatalog implements IcebergCatalog {
             throw new MetaNotFoundException("Database location is empty");
         }
 
+        validateNotUnderLock();
         delegate.dropNamespace(Namespace.of(dbName));
     }
 
     @Override
     public Database getDB(ConnectContext context, String dbName) {
+        validateNotUnderLock();
         Map<String, String> dbMeta = delegate.loadNamespaceMetadata(Namespace.of(dbName));
         Preconditions.checkNotNull(dbMeta.get(LOCATION_PROPERTY), "Database " + dbName + " doesn't exist location");
         return new Database(CONNECTOR_ID_GENERATOR.getNextId().asLong(), dbName, dbMeta.get(LOCATION_PROPERTY));
@@ -160,6 +201,7 @@ public class IcebergHadoopCatalog implements IcebergCatalog {
 
     @Override
     public List<String> listTables(ConnectContext context, String dbName) {
+        validateNotUnderLock();
         List<TableIdentifier> tableIdentifiers = delegate.listTables(Namespace.of(dbName));
         return tableIdentifiers.stream().map(TableIdentifier::name).collect(Collectors.toCollection(ArrayList::new));
     }
@@ -174,6 +216,7 @@ public class IcebergHadoopCatalog implements IcebergCatalog {
             String location,
             SortOrder sortOrder,
             Map<String, String> properties) {
+        validateNotUnderLock();
         Table nativeTable = delegate.buildTable(TableIdentifier.of(dbName, tableName), schema)
                 .withLocation(location)
                 .withPartitionSpec(partitionSpec)
@@ -186,12 +229,14 @@ public class IcebergHadoopCatalog implements IcebergCatalog {
 
     @Override
     public boolean dropTable(ConnectContext context, String dbName, String tableName, boolean purge) {
+        validateNotUnderLock();
         return delegate.dropTable(TableIdentifier.of(dbName, tableName), purge);
     }
 
     @Override
     public void renameTable(ConnectContext context, String dbName, String tblName, String newTblName)
             throws StarRocksConnectorException {
+        validateNotUnderLock();
         delegate.renameTable(TableIdentifier.of(dbName, tblName), TableIdentifier.of(dbName, newTblName));
     }
 
@@ -201,6 +246,8 @@ public class IcebergHadoopCatalog implements IcebergCatalog {
             return;
         }
 
+        // Storage, not the catalog: deleting the files a failed commit left behind.
+        BlockingCallValidator.validateNotUnderLock("remote-storage", catalogName);
         URI uri = new Path(fileLocations.get(0)).toUri();
         try {
             FileSystem fileSystem = FileSystem.get(uri, conf);
@@ -216,6 +263,9 @@ public class IcebergHadoopCatalog implements IcebergCatalog {
     @Override
     public boolean registerTable(ConnectContext context, String dbName, String tableName, 
                                  String metadataFileLocation) {
+        // Outside the try: its catch turns everything into "Failed to register table", which in error
+        // mode would hide the refusal and why it was raised.
+        validateNotUnderLock();
         try {
             TableIdentifier tableIdentifier = TableIdentifier.of(dbName, tableName);
             Table table = delegate.registerTable(tableIdentifier, metadataFileLocation);

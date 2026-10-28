@@ -1283,8 +1283,8 @@ public class InsertPlanner {
                 PartitionSpec partitionSpec = icebergTable.getNativeTable().spec();
                 boolean isInvalid = partitionSpec.fields().stream().anyMatch(field -> !field.transform().isIdentity());
                 if (isInvalid) {
-                    throw new SemanticException("Staitc insert into Iceberg table %s is not supported" +
-                            " for not partitioned by identity transform", icebergTable.getName());
+                    throw new SemanticException("Static partition insert into Iceberg table %s is not supported" +
+                            " because it has a non-identity partition transform", icebergTable.getName());
                 }
             }
         }
@@ -1338,8 +1338,14 @@ public class InsertPlanner {
                 }
             }
         }
-        checkPartitionInsertValid(targetTable);
-        return true;
+        // constant partition values make a static insert only under identity transforms; otherwise the insert stays
+        // dynamic, and the sink computes the transformed partition values
+        return !hasNonIdentityPartitionTransform(targetTable);
+    }
+
+    private static boolean hasNonIdentityPartitionTransform(Table targetTable) {
+        return targetTable instanceof IcebergTable icebergTable && icebergTable.isPartitioned() &&
+                icebergTable.getNativeTable().spec().fields().stream().anyMatch(field -> !field.transform().isIdentity());
     }
 
 

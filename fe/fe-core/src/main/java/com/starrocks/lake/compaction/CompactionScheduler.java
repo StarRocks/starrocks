@@ -381,19 +381,16 @@ public class CompactionScheduler extends Daemon {
                 compactionManager.removePartition(partitionIdentifier);
                 return null;
             }
-            // Only for the shape whose split drags a full UNSHARE rewrite: that rewrite has to be the
-            // one compaction on the partition, because runCleaningJob cancels and then waits on the
-            // resharded partitions' compactions and a stream of new ones keeps it from settling. Every
-            // other table -- including an ordinary range split -- keeps compacting through its reshard,
-            // as it did before this feature existed; pausing those was collateral, and on a wide table
-            // it meant every partition stopped compacting for the life of one tablet's split.
-            if (!unshare && table.getState() == OlapTable.OlapTableState.TABLET_RESHARD
-                    && TabletReshardUtils.splitRewritesEveryShard(table)) {
+            // A full UNSHARE rewrite needs to be the only compaction on its occupied partition.
+            // Other physical partitions keep compacting while this table retains its aggregate barrier.
+            boolean isPartitionResharding = table.getState() == OlapTable.OlapTableState.TABLET_RESHARD
+                    && stateMgr.getTabletReshardJobMgr().isPhysicalPartitionReshardingLocked(table, partition.getId());
+            if (!unshare && isPartitionResharding && TabletReshardUtils.splitRewritesEveryShard(table)) {
                 compactionManager.enableCompactionAfter(partitionIdentifier,
                         Config.lake_compaction_interval_ms_on_failure);
                 return null;
             }
-            if (unshare && (table.getState() != OlapTable.OlapTableState.TABLET_RESHARD
+            if (unshare && (!isPartitionResharding
                     || !partition.isUnsharing() || !table.isFileBundling())) {
                 // Clear the marker before dropping the request. Priority is otherwise only reset for
                 // partitions that made it into runningCompactions, and this one never will -- while

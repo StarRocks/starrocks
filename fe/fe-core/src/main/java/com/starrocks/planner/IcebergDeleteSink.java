@@ -51,6 +51,8 @@ public class IcebergDeleteSink extends DataSink {
     private final String tableIdentifier;
     private CloudConfiguration cloudConfiguration;
     private com.starrocks.connector.iceberg.IcebergMetadata.IcebergSinkExtra sinkExtraInfo;
+    // the branch the commit goes to, or null for the main branch
+    private String targetBranch;
 
     /**
      * Constructor for IcebergDeleteSink
@@ -185,6 +187,14 @@ public class IcebergDeleteSink extends DataSink {
      */
     public com.starrocks.connector.iceberg.IcebergMetadata.IcebergSinkExtra getSinkExtraInfo() {
         return sinkExtraInfo;
+    }
+
+    public String getTargetBranch() {
+        return targetBranch;
+    }
+
+    public void setTargetBranch(String targetBranch) {
+        this.targetBranch = targetBranch;
     }
 
     public boolean isUnpartitionedTable() {

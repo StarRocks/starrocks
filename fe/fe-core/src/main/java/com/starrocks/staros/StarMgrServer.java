@@ -181,9 +181,14 @@ public class StarMgrServer {
         com.staros.util.Config.ENABLE_SHARDMANAGER_WORKER_SHARD_REVERSE_INDEX =
                 Config.lake_enable_worker_shard_reverse_index;
 
-        grpcExecutor = ThreadPoolManager.newDaemonFixedThreadPool(Config.starmgr_grpc_server_max_worker_threads,
-                        Integer.MAX_VALUE, "starmgr-grpc-default-executor", true);
-        grpcExecutor.allowCoreThreadTimeOut(true);
+        // The pool runs every call stage of short reads and heartbeats, and also handlers that block for
+        // seconds (CreateShard, GetShard waiting for placement), so it must be able to grow large. A fixed
+        // pool of that size grows to it under any load and then hands each stage to one of about a thousand
+        // threads parked on its queue's take lock, which costs far more than the handler. A scaling pool
+        // starts a thread only while all are busy and hands a stage to an idle thread without that lock.
+        int grpcMaxThreads = Config.starmgr_grpc_server_max_worker_threads;
+        grpcExecutor = ThreadPoolManager.newDaemonScalingThreadPool(grpcExecutorCoreThreads(grpcMaxThreads),
+                grpcMaxThreads, "starmgr-grpc-default-executor", true);
 
         // sync the mutable configVar to StarMgr in case any changes
         GlobalStateMgr.getCurrentState().getConfigRefreshDaemon().registerListener(() -> {
@@ -203,7 +208,8 @@ public class StarMgrServer {
                     Config.lake_scheduler_colocate_group_sample_empty_fallback_percent;
             com.staros.util.Config.ENABLE_INCREMENTAL_SHARD_REPLICA_JOURNAL =
                     Config.lake_enable_incremental_shard_replica_journal;
-            ThreadPoolManager.setFixedThreadPoolSize(grpcExecutor, Config.starmgr_grpc_server_max_worker_threads);
+            int maxThreads = Config.starmgr_grpc_server_max_worker_threads;
+            ThreadPoolManager.setScalingThreadPoolSize(grpcExecutor, grpcExecutorCoreThreads(maxThreads), maxThreads);
         });
         // set the following config, in order to provide a customized worker group definition
         // com.staros.util.Config.RESOURCE_MANAGER_WORKER_GROUP_SPEC_RESOURCE_FILE = "";
@@ -237,6 +243,17 @@ public class StarMgrServer {
 
         // load meta
         loadImage(imageDir);
+    }
+
+    // Threads the gRPC pool keeps while idle: enough for a CPU-bound burst of short calls, and at least one
+    // so a call queued while the pool is at its maximum always has a thread to run it.
+    private static int grpcExecutorCoreThreads(int maxThreads) {
+        return Math.max(1, Math.min(ThreadPoolManager.cpuCores(), maxThreads));
+    }
+
+    @VisibleForTesting
+    ThreadPoolExecutor getGrpcExecutor() {
+        return grpcExecutor;
     }
 
     private void becomeLeader() {

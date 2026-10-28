@@ -1,0 +1,84 @@
+-- name: test_subdivide_bitmap_scratch_bound
+CREATE DATABASE db_${uuid0};
+-- result:
+-- !result
+USE db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE sbs (
+    `id` int(11) NULL COMMENT "",
+    `b` bitmap BITMAP_UNION NULL COMMENT ""
+)
+AGGREGATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO sbs SELECT 1, bitmap_agg(generate_series) FROM TABLE(generate_series(2, 20000, 2));
+-- result:
+-- !result
+SET pipeline_dop = 1;
+-- result:
+-- !result
+SELECT bitmap_count(subdivide_bitmap) AS cnt, bitmap_min(subdivide_bitmap) AS lo,
+       bitmap_max(subdivide_bitmap) AS hi, array_sum(bitmap_to_array(subdivide_bitmap)) AS total
+FROM sbs, subdivide_bitmap(b, 6000) ORDER BY lo;
+-- result:
+6000	2	12000	36006000
+4000	12002	20000	64004000
+-- !result
+SELECT bitmap_count(subdivide_bitmap) AS cnt, bitmap_min(subdivide_bitmap) AS lo,
+       bitmap_max(subdivide_bitmap) AS hi, array_sum(bitmap_to_array(subdivide_bitmap)) AS total
+FROM sbs, subdivide_bitmap(b, 4096) ORDER BY lo;
+-- result:
+4096	2	8192	16781312
+4096	8194	16384	50335744
+1808	16386	20000	32892944
+-- !result
+SELECT bitmap_count(subdivide_bitmap) AS cnt, bitmap_min(subdivide_bitmap) AS lo,
+       bitmap_max(subdivide_bitmap) AS hi, array_sum(bitmap_to_array(subdivide_bitmap)) AS total
+FROM sbs, subdivide_bitmap(b, 4097) ORDER BY lo;
+-- result:
+4097	2	8194	16789506
+4097	8196	16388	50360324
+1806	16390	20000	32860170
+-- !result
+SELECT bitmap_count(subdivide_bitmap) AS cnt, bitmap_min(subdivide_bitmap) AS lo,
+       bitmap_max(subdivide_bitmap) AS hi, array_sum(bitmap_to_array(subdivide_bitmap)) AS total
+FROM sbs, subdivide_bitmap(b, 9000) ORDER BY lo;
+-- result:
+9000	2	18000	81009000
+1000	18002	20000	19001000
+-- !result
+SET chunk_size = 2;
+-- result:
+-- !result
+SELECT bitmap_count(subdivide_bitmap) AS cnt, bitmap_min(subdivide_bitmap) AS lo,
+       bitmap_max(subdivide_bitmap) AS hi, array_sum(bitmap_to_array(subdivide_bitmap)) AS total
+FROM sbs, subdivide_bitmap(b, 4097) ORDER BY lo;
+-- result:
+4097	2	8194	16789506
+4097	8196	16388	50360324
+1806	16390	20000	32860170
+-- !result
+SET chunk_size = 4096;
+-- result:
+-- !result
+INSERT INTO sbs SELECT 2, bitmap_agg(generate_series) FROM TABLE(generate_series(1, 10000000));
+-- result:
+-- !result
+SELECT /*+ SET_VAR(query_mem_limit=33554432) */
+       bitmap_count(subdivide_bitmap) AS cnt, bitmap_min(subdivide_bitmap) AS lo, bitmap_max(subdivide_bitmap) AS hi
+FROM sbs, subdivide_bitmap(b, 9500000) WHERE id = 2 ORDER BY lo;
+-- result:
+9500000	1	9500000
+500000	9500001	10000000
+-- !result
+SELECT /*+ SET_VAR(query_mem_limit=33554432) */ count(1)
+FROM sbs, subdivide_bitmap(b, 1000) WHERE id = 2;
+-- result:
+10000
+-- !result
+DROP DATABASE db_${uuid0};
+-- result:
+-- !result

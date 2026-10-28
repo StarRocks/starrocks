@@ -52,6 +52,8 @@ struct IcebergColumnMeta;
 class IcebergPositionDeleteReader {
 public:
     using RowCallback = std::function<void(const Slice& file_path, int64_t pos)>;
+    // Called once per run of consecutive rows with the same file_path.
+    using RangeCallback = std::function<void(const Slice& file_path, const int64_t* pos, size_t num_rows)>;
 
     // Invokes cb once per row. `path` is used for error reporting only; `length` is the file
     // size in bytes. `stats` may be null when the caller does not collect scanner stats.
@@ -59,18 +61,33 @@ public:
                             const std::string& format, // "parquet" | "orc"
                             int32_t chunk_size, const std::string& timezone, const FormatScannerOptions& options,
                             FormatScannerStats* stats, const RowCallback& cb);
+    static Status read_rows(RandomAccessFile* file, const std::string& path, int64_t length,
+                            const std::string& format, // "parquet" | "orc"
+                            int32_t chunk_size, const std::string& timezone, const FormatScannerOptions& options,
+                            FormatScannerStats* stats, const RangeCallback& cb);
+
+    // Reads only the pos column, for a delete file whose rows all reference one data file.
+    using PositionsCallback = std::function<void(const int64_t* pos, size_t num_rows)>;
+    static Status read_positions(RandomAccessFile* file, const std::string& path, int64_t length,
+                                 const std::string& format, // "parquet" | "orc"
+                                 int32_t chunk_size, const std::string& timezone, const FormatScannerOptions& options,
+                                 FormatScannerStats* stats, const PositionsCallback& cb);
 };
 
 class IcebergDeleteBuilder {
 public:
-    explicit IcebergDeleteBuilder(IcebergDeleteBuilderContext ctx)
-            : _ctx(std::move(ctx)), _deletion_bitmap(std::make_shared<DeletionBitmap>(roaring64_bitmap_create())) {}
+    explicit IcebergDeleteBuilder(IcebergDeleteBuilderContext ctx);
 
-    ~IcebergDeleteBuilder() = default;
+    // Publishes the ICEBERG_V2_MOR counters of every position delete file read, once.
+    ~IcebergDeleteBuilder();
 
     Status build_orc(const TIcebergDeleteFile& delete_file) const;
 
     Status build_parquet(const TIcebergDeleteFile& delete_file) const;
+
+    // Reads a position delete file in its own format when the FE sent it, else in `data_file_format`: a delete file
+    // may have another format than its data file (write.delete.format.default).
+    Status build_position_delete(const TIcebergDeleteFile& delete_file, THdfsFileFormat::type data_file_format) const;
 
     DeletionBitmapPtr deletion_bitmap() const { return _deletion_bitmap; }
 
@@ -82,13 +99,18 @@ private:
             std::shared_ptr<SharedBufferedInputStream>& shared_buffered_input_stream,
             std::shared_ptr<CacheInputStream>& cache_input_stream) const;
 
-    static void update_delete_file_io_counter(
-            RuntimeProfile* parent_profile, const FormatScannerStats& app_stats, const FormatScannerStats& fs_stats,
+    // IO of the position delete files read so far. Publishing counters per delete file costs a
+    // few percent of the scan when a data file carries many small delete files.
+    struct PositionDeleteIoStats;
+    void accumulate_position_delete_io(
+            const FormatScannerStats& app_stats, const FormatScannerStats& fs_stats,
             const std::shared_ptr<CacheInputStream>& cache_input_stream,
-            const std::shared_ptr<SharedBufferedInputStream>& shared_buffered_input_stream);
+            const std::shared_ptr<SharedBufferedInputStream>& shared_buffered_input_stream) const;
+    static void update_delete_file_io_counter(RuntimeProfile* parent_profile, const PositionDeleteIoStats& stats);
 
     IcebergDeleteBuilderContext _ctx;
     DeletionBitmapPtr _deletion_bitmap;
+    mutable std::unique_ptr<PositionDeleteIoStats> _position_delete_io;
 };
 
 class IcebergDeleteFileMeta {

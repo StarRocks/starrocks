@@ -14,6 +14,7 @@
 
 #include "geo/geo_buffer.h"
 
+#include <algorithm>
 #include <cmath>
 #include <exception>
 #include <variant>
@@ -85,7 +86,29 @@ Status check_translation(const WkbGeometry& geometry, WkbCoordinate origin) {
     return Status::OK();
 }
 
-StatusOr<WkbGeometry> to_geometry(const MultiPolygon& polygons, WkbCoordinate origin) {
+bool same_coordinate(long double left, long double right) {
+    return left == right && std::signbit(left) == std::signbit(right);
+}
+
+bool same_polygon_model(const MultiPolygon& left, const MultiPolygon& right) {
+    const auto same_ring = [](const auto& a, const auto& b) {
+        return a.size() == b.size() && std::equal(a.begin(), a.end(), b.begin(), [](const Point& p, const Point& q) {
+                   return same_coordinate(p.x(), q.x()) && same_coordinate(p.y(), q.y());
+               });
+    };
+    if (left.size() != right.size()) return false;
+    for (size_t i = 0; i < left.size(); ++i) {
+        if (!same_ring(left[i].outer(), right[i].outer()) || left[i].inners().size() != right[i].inners().size()) {
+            return false;
+        }
+        for (size_t j = 0; j < left[i].inners().size(); ++j) {
+            if (!same_ring(left[i].inners()[j], right[i].inners()[j])) return false;
+        }
+    }
+    return true;
+}
+
+StatusOr<WkbGeometry> to_geometry(const MultiPolygon& polygons, WkbCoordinate origin, const MultiPolygon* validated) {
     WkbGeometry result;
     result.type = WkbGeometryType::POLYGON;
     result.empty = polygons.empty();
@@ -121,7 +144,9 @@ StatusOr<WkbGeometry> to_geometry(const MultiPolygon& polygons, WkbCoordinate or
         }
     }
     // Extended-precision topology must survive the actual WKB double coordinates.
-    if (!bg::is_valid(polygon_model(result, origin))) {
+    const auto rounded = polygon_model(result, origin);
+    // A zero buffer can reuse prepared validity only when the entire model, including signed zero, is unchanged.
+    if ((validated == nullptr || !same_polygon_model(rounded, *validated)) && !bg::is_valid(rounded)) {
         return Status::InvalidArgument("ST_Buffer result loses topology at double precision");
     }
     return result;
@@ -212,14 +237,13 @@ StatusOr<std::unique_ptr<PreparedGeoBuffer>> PreparedGeoBuffer::prepare(Slice wk
     }
 }
 
-StatusOr<WkbGeometry> PreparedGeoBuffer::buffer(double distance, const std::function<Status()>& checkpoint) const {
+StatusOr<WkbGeometry> PreparedGeoBuffer::buffer(double distance) const {
     try {
-        auto check = [&]() { return checkpoint ? checkpoint() : Status::OK(); };
-        RETURN_IF_ERROR(check());
         if (!std::isfinite(distance)) return Status::InvalidArgument("ST_Buffer requires a finite distance");
         const bool empty = std::visit([](const auto& model) { return model.empty(); }, _impl->model);
+        const bool unchanged = !empty && _impl->polygonal && distance == 0;
         MultiPolygon output;
-        if (!empty && _impl->polygonal && distance == 0) {
+        if (unchanged) {
             output = std::get<MultiPolygon>(_impl->model);
         } else if (!empty && (_impl->polygonal || distance > 0)) {
             // Boost 1.80 also simplifies the input at abs(distance) / 1000.
@@ -238,15 +262,14 @@ StatusOr<WkbGeometry> PreparedGeoBuffer::buffer(double distance, const std::func
                 return Status::InvalidArgument("ST_Buffer lost a non-empty input at working precision");
             }
         }
-        RETURN_IF_ERROR(check());
         if (bg::num_points(output) > kGeoBufferMaxOutputCoordinates) {
             return Status::InvalidArgument("ST_Buffer result exceeds coordinate limit");
         }
-        if (!output.empty() && !bg::is_valid(output)) {
+        if (!unchanged && !output.empty() && !bg::is_valid(output)) {
             return Status::InvalidArgument("ST_Buffer produced invalid topology");
         }
-        ASSIGN_OR_RETURN(auto result, to_geometry(output, _impl->origin));
-        RETURN_IF_ERROR(check());
+        ASSIGN_OR_RETURN(auto result, to_geometry(output, _impl->origin,
+                                                  unchanged ? &std::get<MultiPolygon>(_impl->model) : nullptr));
         return result;
     } catch (const std::bad_alloc&) {
         return Status::MemoryLimitExceeded("ST_Buffer allocation failed");

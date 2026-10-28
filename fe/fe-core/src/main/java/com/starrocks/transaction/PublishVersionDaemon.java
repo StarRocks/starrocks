@@ -143,10 +143,14 @@ public class PublishVersionDaemon extends LeaderDaemon {
         MetricRepo.COUNTER_PUBLISH_VERSION_DAEMON_LOOP.increase(1L);
         try {
             GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+            // Read the in-flight markers before the committed transactions are snapshotted, see
+            // dropInFlightBatches() for why the order matters.
+            Set<Long> inFlightTxnIds = Sets.newHashSet(getPublishingTransactions());
+            Set<Long> inFlightTableIds = Sets.newHashSet(getPublishingLakeTransactionsBatchTableId());
             if (Config.lake_enable_batch_publish_version && RunMode.isSharedDataMode()) {
                 // batch publish
-                List<TransactionStateBatch> readyTransactionStatesBatch = globalTransactionMgr.
-                        getReadyPublishTransactionsBatch();
+                List<TransactionStateBatch> readyTransactionStatesBatch = dropInFlightBatches(
+                        globalTransactionMgr.getReadyPublishTransactionsBatch(), inFlightTxnIds, inFlightTableIds);
                 if (readyTransactionStatesBatch.size() != 0) {
                     publishVersionForLakeTableBatch(readyTransactionStatesBatch);
                 }
@@ -158,6 +162,13 @@ public class PublishVersionDaemon extends LeaderDaemon {
                     globalTransactionMgr.getReadyToPublishTransactions(Config.enable_new_publish_mechanism);
             if (readyTransactionStates == null || readyTransactionStates.isEmpty()) {
                 return;
+            }
+            if (RunMode.isSharedDataMode()) {
+                readyTransactionStates =
+                        dropInFlightTransactions(readyTransactionStates, inFlightTxnIds, inFlightTableIds);
+                if (readyTransactionStates.isEmpty()) {
+                    return;
+                }
             }
 
             // TODO: need to refactor after be split into cn + dn
@@ -308,6 +319,63 @@ public class PublishVersionDaemon extends LeaderDaemon {
             publishingLakeTransactionsBatchTableId = Sets.newConcurrentHashSet();
         }
         return publishingLakeTransactionsBatchTableId;
+    }
+
+    /**
+     * Drops the batches that touch a table or a transaction which was in flight when {@code inFlightTableIds}
+     * and {@code inFlightTxnIds} were read.
+     * <p>
+     * The markers must be read before the committed transactions are snapshotted. A marker is removed only
+     * after the finish of its batch moved the transactions out of the running set, so a snapshot taken after
+     * the markers were read sees either the marker or a set that no longer contains the finished transactions.
+     * Checking the live marker after the snapshot instead lets a batch that finished in between be published
+     * and finished a second time, which enqueues its transactions twice in the finished-transaction deque and
+     * makes the label cleaner fail on the duplicate.
+     */
+    @VisibleForTesting
+    static List<TransactionStateBatch> dropInFlightBatches(List<TransactionStateBatch> batches,
+                                                           Set<Long> inFlightTxnIds,
+                                                           Set<Long> inFlightTableIds) {
+        if (inFlightTxnIds.isEmpty() && inFlightTableIds.isEmpty()) {
+            return batches;
+        }
+        List<TransactionStateBatch> ready = new ArrayList<>(batches.size());
+        for (TransactionStateBatch batch : batches) {
+            if (!isInFlight(batch.getTransactionStates(), inFlightTxnIds, inFlightTableIds)) {
+                ready.add(batch);
+            }
+        }
+        return ready;
+    }
+
+    /**
+     * The counterpart of {@link #dropInFlightBatches} for the non-batch publish path.
+     */
+    @VisibleForTesting
+    static List<TransactionState> dropInFlightTransactions(List<TransactionState> states,
+                                                           Set<Long> inFlightTxnIds,
+                                                           Set<Long> inFlightTableIds) {
+        if (inFlightTxnIds.isEmpty() && inFlightTableIds.isEmpty()) {
+            return states;
+        }
+        List<TransactionState> ready = new ArrayList<>(states.size());
+        for (TransactionState state : states) {
+            if (!isInFlight(List.of(state), inFlightTxnIds, inFlightTableIds)) {
+                ready.add(state);
+            }
+        }
+        return ready;
+    }
+
+    private static boolean isInFlight(List<TransactionState> states, Set<Long> inFlightTxnIds,
+                                      Set<Long> inFlightTableIds) {
+        for (TransactionState state : states) {
+            if (inFlightTxnIds.contains(state.getTransactionId())
+                    || state.getTableIdList().stream().anyMatch(inFlightTableIds::contains)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void publishVersionForOlapTable(List<TransactionState> readyTransactionStates) throws StarRocksException {

@@ -74,8 +74,14 @@ public class OnPredicateMoveAroundRule extends TransformationRule {
         OptExpression leftChild = input.inputAt(0);
         OptExpression rightChild = input.inputAt(1);
 
+        // A predicate on the left key of `l <=> r` holds for r as well: the two are the same value, NULL included.
+        // Only the Iceberg equality-delete anti join takes it, so a key filter of the query drops the deletes that
+        // no data row can match. Its left side is a data scan, whose domain holds for every row it outputs; the
+        // NULLs an outer join pads in would break that, and `<=>` matches them.
+        boolean withNullSafeEqual = joinOperator.getJoinType() == JoinOperator.LEFT_ANTI_JOIN &&
+                rightChild.getOp().getOpType() == OperatorType.LOGICAL_ICEBERG_EQUALITY_DELETE_SCAN;
         List<BinaryPredicateOperator> binaryPredicates = extractBinaryPredicates(onPredicate,
-                leftChild.getOutputColumns(), rightChild.getOutputColumns());
+                leftChild.getOutputColumns(), rightChild.getOutputColumns(), withNullSafeEqual);
         if (binaryPredicates.isEmpty()) {
             return Lists.newArrayList();
         }
@@ -159,13 +165,15 @@ public class OnPredicateMoveAroundRule extends TransformationRule {
     }
 
     private List<BinaryPredicateOperator> extractBinaryPredicates(ScalarOperator predicate,
-                                                                  ColumnRefSet leftCols, ColumnRefSet rightCols) {
+                                                                  ColumnRefSet leftCols, ColumnRefSet rightCols,
+                                                                  boolean withNullSafeEqual) {
         List<BinaryPredicateOperator> result = Lists.newArrayList();
         List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
         for (ScalarOperator conjunct : conjuncts) {
             if (conjunct instanceof BinaryPredicateOperator) {
                 BinaryPredicateOperator binaryPredicate = (BinaryPredicateOperator) conjunct;
-                if (binaryPredicate.getBinaryType().isEqualOrRange()) {
+                BinaryType binaryType = binaryPredicate.getBinaryType();
+                if (binaryType.isEqualOrRange() || (withNullSafeEqual && binaryType == BinaryType.EQ_FOR_NULL)) {
                     ColumnRefSet leftUsedCols = binaryPredicate.getChild(0).getUsedColumns();
                     ColumnRefSet rightUsedCols = binaryPredicate.getChild(1).getUsedColumns();
                     if (leftUsedCols.isEmpty() || rightUsedCols.isEmpty()) {
@@ -191,8 +199,11 @@ public class OnPredicateMoveAroundRule extends TransformationRule {
         ScalarOperator offspring = binaryPredicate.getChild(1 - idx);
         BinaryType binaryType = binaryPredicate.getBinaryType();
         ScalarOperator rewriteResult = null;
-        if (binaryType.isEqual()) {
-            if (domainProperty.contains(seed)) {
+        if (binaryType.isEquivalence()) {
+            // a non-deterministic predicate evaluates apart on each side: a delete row could fail it while the data
+            // row it deletes passes
+            if (domainProperty.contains(seed) && (binaryType.isEqual() ||
+                    !Utils.hasNonDeterministicFunc(domainProperty.getPredicateDesc(seed)))) {
                 ReplaceShuttle shuttle = new ReplaceShuttle(Map.of(seed, offspring));
                 rewriteResult = shuttle.rewrite(domainProperty.getPredicateDesc(seed));
             }

@@ -76,13 +76,17 @@ public:
 
     uint32_t num_values() const { return _num_values; }
 
+    // True when the column chunk or current data page statistics say it has no nulls; decode_values then
+    // ignores the null flags it is given.
+    bool current_page_no_null() const { return _current_row_group_no_null || _current_page_no_null; }
+
     LevelDecoder& def_level_decoder() { return _def_level_decoder; }
     LevelDecoder& rep_level_decoder() { return _rep_level_decoder; }
 
     Status decode_values(size_t n, const NullInfos& null_infos, ColumnContentType content_type, Column* dst,
                          const FilterData* filter = nullptr) {
         SCOPED_RAW_TIMER(&_opts.stats->value_decode_ns);
-        if (_current_row_group_no_null || _current_page_no_null) {
+        if (current_page_no_null()) {
             return _cur_decoder->next_batch(n, content_type, dst, filter);
         }
         return _cur_decoder->next_batch_with_nulls(n, null_infos, content_type, dst, filter);

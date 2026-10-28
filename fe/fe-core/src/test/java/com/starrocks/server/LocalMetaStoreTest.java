@@ -17,7 +17,10 @@ package com.starrocks.server;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.catalog.ColocateGroupSchema;
+import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
@@ -27,6 +30,7 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.catalog.VacuumState;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.catalog.system.sys.SysDb;
@@ -41,14 +45,17 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.DropInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.OperationType;
+import com.starrocks.persist.PartitionVacuumStateInfo;
 import com.starrocks.persist.PhysicalPartitionPersistInfoV2;
 import com.starrocks.persist.TruncateTableInfo;
 import com.starrocks.persist.WALApplier;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.qe.ConnectContext;
@@ -598,7 +605,11 @@ public class LocalMetaStoreTest {
 
         Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbFullName);
         OlapTable table = (OlapTable) database.getTable(tableName);
-        OlapTable followerTable  = AnalyzerUtils.getShadowCopyTable(table);
+        OlapTable followerTable;
+        // Under the read lock, as the planner copies a published table.
+        try (AutoCloseableLock ignored = new AutoCloseableLock(database.getId(), table.getId(), LockType.READ)) {
+            followerTable = AnalyzerUtils.getShadowCopyTable(table);
+        }
         long oldPartitionId = table.getPartition(tableName).getId();
 
         // 3. Execute truncateTable
@@ -985,5 +996,159 @@ public class LocalMetaStoreTest {
         }
 
         starRocksAssert.dropTable("test.add_partition_race");
+    }
+
+    @Test
+    public void testAddPartitionAutoBucketUsesPartitionReplicationNum() throws Exception {
+        // ADD PARTITION with DISTRIBUTED BY HASH (no BUCKETS) must size via the partition RF.
+        // Poison getDefaultReplicationNum so a mistaken 1-arg inferDistribution would capture 7.
+        starRocksAssert.useDatabase("test").withTable(
+                "CREATE TABLE test.add_part_rf_bucket(dt DATE NOT NULL, k1 INT, v1 INT) " +
+                        "ENGINE=olap DUPLICATE KEY(dt, k1) " +
+                        "PARTITION BY RANGE(dt) (PARTITION p1 VALUES [('2024-01-01'), ('2024-01-02'))) " +
+                        "DISTRIBUTED BY HASH(k1) BUCKETS 3 " +
+                        "PROPERTIES ('replication_num' = '1')");
+
+        AtomicInteger capturedRf = new AtomicInteger(-1);
+        new MockUp<OlapTable>() {
+            @Mock
+            public short getDefaultReplicationNum() {
+                return 7;
+            }
+
+            @Mock
+            public void inferDistribution(Invocation invocation, DistributionInfo info, short replicationNum) {
+                if (info.getBucketNum() == 0) {
+                    capturedRf.set(replicationNum);
+                }
+                invocation.proceed(info, replicationNum);
+            }
+        };
+
+        starRocksAssert.alterTable(
+                "ALTER TABLE test.add_part_rf_bucket ADD PARTITION p2 " +
+                        "VALUES [('2024-01-02'), ('2024-01-03')) DISTRIBUTED BY HASH(k1) " +
+                        "PROPERTIES ('replication_num' = '1')");
+
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable("test", "add_part_rf_bucket");
+        Partition p2 = table.getPartition("p2");
+        Assertions.assertNotNull(p2);
+        Assertions.assertEquals((short) 1, table.getPartitionInfo().getReplicationNum(p2.getId()));
+        Assertions.assertEquals(1, capturedRf.get(),
+                "auto-bucket must use partition replication_num, not table default");
+        Assertions.assertTrue(p2.getDistributionInfo().getBucketNum() > 0);
+
+        starRocksAssert.dropTable("test.add_part_rf_bucket");
+    }
+
+    @Test
+    public void testAddPhysicalPartitionAutoBucketUsesPartitionReplicationNum() throws Exception {
+        starRocksAssert.useDatabase("test").withTable(
+                "CREATE TABLE test.add_pp_rf_bucket(k1 INT, v1 INT) " +
+                        "ENGINE=olap DUPLICATE KEY(k1) DISTRIBUTED BY RANDOM BUCKETS 8 " +
+                        "PROPERTIES ('replication_num' = '1')");
+
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        OlapTable table = (OlapTable) metastore.getTable("test", "add_pp_rf_bucket");
+        // Force the auto-bucket path: default dist has 0 buckets and bucketNum arg is 0.
+        table.getDefaultDistributionInfo().setBucketNum(0);
+
+        AtomicInteger capturedRf = new AtomicInteger(-1);
+        new MockUp<OlapTable>() {
+            @Mock
+            public void inferDistribution(Invocation invocation, DistributionInfo info, short replicationNum) {
+                if (info.getBucketNum() == 0) {
+                    capturedRf.set(replicationNum);
+                }
+                invocation.proceed(info, replicationNum);
+            }
+        };
+
+        metastore.addPhysicalPartition("test", "add_pp_rf_bucket", null, 0);
+        Partition partition = table.getPartitions().iterator().next();
+        PhysicalPartition newPp = partition.getSubPartitions().stream()
+                .filter(p -> p.getId() != partition.getDefaultPhysicalPartition().getId())
+                .findFirst().orElseThrow();
+        Assertions.assertEquals(1, capturedRf.get());
+        Assertions.assertTrue(newPp.getBucketNum() > 0);
+
+        starRocksAssert.dropTable("test.add_pp_rf_bucket");
+    }
+
+    @Test
+    public void testAddPartitionColocateEarlyInferThenCheckDistribution() throws Exception {
+        // Colocate CREATE without BUCKETS pins group schema; ADD with DISTRIBUTED BY HASH
+        // (no BUCKETS) must early-infer then pass checkColocation with the same bucket count.
+        starRocksAssert.useDatabase("test").withTable(
+                "CREATE TABLE test.colocate_auto_add(dt DATE NOT NULL, k1 INT, v1 INT) " +
+                        "ENGINE=olap DUPLICATE KEY(dt, k1) " +
+                        "PARTITION BY RANGE(dt) (PARTITION p1 VALUES [('2024-01-01'), ('2024-01-02'))) " +
+                        "DISTRIBUTED BY HASH(k1) " +
+                        "PROPERTIES ('replication_num' = '1', 'colocate_with' = 'cg_auto_add')");
+
+        AtomicBoolean oneArgInferOnZeroBuckets = new AtomicBoolean(false);
+        new MockUp<OlapTable>() {
+            @Mock
+            public void inferDistribution(Invocation invocation, DistributionInfo info) {
+                if (info.getBucketNum() == 0) {
+                    oneArgInferOnZeroBuckets.set(true);
+                }
+                invocation.proceed(info);
+            }
+        };
+
+        starRocksAssert.alterTable(
+                "ALTER TABLE test.colocate_auto_add ADD PARTITION p2 " +
+                        "VALUES [('2024-01-02'), ('2024-01-03')) DISTRIBUTED BY HASH(k1)");
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable("test", "colocate_auto_add");
+        Partition p2 = table.getPartition("p2");
+        Assertions.assertNotNull(p2);
+        Assertions.assertTrue(oneArgInferOnZeroBuckets.get(),
+                "colocate ADD with auto buckets must call 1-arg inferDistribution before checkColocation");
+
+        ColocateTableIndex index = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        String fullGroupName = ColocateTableIndex.getFullGroupName(db.getId(), "cg_auto_add");
+        ColocateGroupSchema groupSchema = index.getGroupSchema(fullGroupName);
+        Assertions.assertNotNull(groupSchema);
+        Assertions.assertTrue(groupSchema.getBucketsNum() > 0);
+        Assertions.assertEquals(groupSchema.getBucketsNum(), p2.getDistributionInfo().getBucketNum());
+
+        starRocksAssert.dropTable("test.colocate_auto_add");
+    }
+
+    @Test
+    public void testReplayModifyPartitionVacuumState() {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table =
+                (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t1");
+        PhysicalPartition partition = table.getPartitions().stream().findFirst().get().getDefaultPhysicalPartition();
+        partition.setMetadataSwitchVersion(40L);
+        partition.setLastSuccVacuumVersion(10L);
+
+        VacuumState state = new VacuumState();
+        state.setMinRetainedVersion(50L);
+        PartitionVacuumStateInfo info =
+                new PartitionVacuumStateInfo(db.getId(), table.getId(), partition.getId(), state);
+
+        // Round-trip through GSON exactly as the journal does (logJsonObject / EditLogDeserializer), so the
+        // payload's fields and the nested VacuumState survive serialization.
+        PartitionVacuumStateInfo replayed =
+                GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(info), PartitionVacuumStateInfo.class);
+        Assertions.assertEquals(db.getId(), replayed.getDbId());
+        Assertions.assertEquals(table.getId(), replayed.getTableId());
+        Assertions.assertEquals(partition.getId(), replayed.getPhysicalPartitionId());
+        Assertions.assertEquals(50L, replayed.getVacuumState().getMinRetainedVersion());
+
+        GlobalStateMgr.getCurrentState().getLocalMetastore().replayModifyPartitionVacuumState(replayed);
+
+        // Replay installs the state, restores the image-excluded watermark from the retain floor (10 -> 50),
+        // and clears a metadataSwitchVersion the floor has now reached (40 <= 50).
+        Assertions.assertEquals(50L, partition.getVacuumState().getMinRetainedVersion());
+        Assertions.assertEquals(50L, partition.getLastSuccVacuumVersion());
+        Assertions.assertEquals(0L, partition.getMetadataSwitchVersion());
     }
 }

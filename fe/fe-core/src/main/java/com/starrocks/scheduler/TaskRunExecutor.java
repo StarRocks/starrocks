@@ -94,9 +94,11 @@ public class TaskRunExecutor {
         // Persist state change
         TaskRunStatusChange statusChange = new TaskRunStatusChange(taskRun.getTaskId(), taskRun.getStatus(),
                 Constants.TaskRunState.PENDING, Constants.TaskRunState.RUNNING);
+        final long processStartTime = System.currentTimeMillis();
+        statusChange.setProcessStartTime(processStartTime);
         GlobalStateMgr.getCurrentState().getEditLog().logUpdateTaskRun(statusChange, wal -> {
             taskRun.getStatus().setState(Constants.TaskRunState.RUNNING);
-            taskRun.getStatus().setProcessStartTime(System.currentTimeMillis());
+            taskRun.getStatus().setProcessStartTime(processStartTime);
         });
 
         CompletableFuture<Constants.TaskRunState> future = CompletableFuture.supplyAsync(() -> {

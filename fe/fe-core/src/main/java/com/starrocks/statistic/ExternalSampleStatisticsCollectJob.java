@@ -14,6 +14,7 @@
 
 package com.starrocks.statistic;
 
+import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.qe.ConnectContext;
@@ -89,6 +90,7 @@ public class ExternalSampleStatisticsCollectJob extends ExternalFullStatisticsCo
         }
 
         int parallelism = Math.max(1, context.getSessionVariable().getStatisticCollectParallelism());
+        resolveResumableCollectedPartitions();
         List<CollectTask> directValueTasks = buildCollectSQLListForColumns(allPartitionNames, directValueColumnNames,
                 directValueColumnTypes, parallelism);
         List<CollectTask> restTasks = buildCollectSQLListForColumns(partitionNames, restColumnNames, restColumnTypes,
@@ -98,7 +100,7 @@ public class ExternalSampleStatisticsCollectJob extends ExternalFullStatisticsCo
 
         long finishedSQLNum = 0;
         if (!directValueColumnNames.isEmpty()) {
-            finishedSQLNum = executeCollectSQLList(directValueTasks, context, analyzeStatus, finishedSQLNum,
+            finishedSQLNum = executeCollectPhase(directValueTasks, context, analyzeStatus, finishedSQLNum,
                     totalCollectSQL, parallelism);
             flushInsertStatisticsData(context, true);
             // Only a phase that scanned every partition may claim full coverage. If a query was tolerated away,
@@ -109,7 +111,7 @@ public class ExternalSampleStatisticsCollectJob extends ExternalFullStatisticsCo
             }
         }
         if (!restColumnNames.isEmpty()) {
-            executeCollectSQLList(restTasks, context, analyzeStatus, finishedSQLNum, totalCollectSQL, parallelism);
+            executeCollectPhase(restTasks, context, analyzeStatus, finishedSQLNum, totalCollectSQL, parallelism);
         }
         flushInsertStatisticsData(context, true);
         cleanupStaleRawKeyedRows(context, jobId);
@@ -131,6 +133,20 @@ public class ExternalSampleStatisticsCollectJob extends ExternalFullStatisticsCo
             LOG.warn("Failed to eagerly commit ColumnStatsMeta for direct-value partition columns {} on table {}",
                     directValueColumnNames, table.getName(), e);
         }
+    }
+
+    // A direct-value partition column is answered from the partition value itself, so its phase scans
+    // every partition rather than the sampled subset (see runCollectPhases). Measuring its coverage
+    // against the sample would call it complete while most of the table went uncollected.
+    @Override
+    public Map<String, Integer> getRequestedPartitionCountByColumn() {
+        int sampled = getRequestedPartitionCount();
+        int all = getAllPartitionSize();
+        Map<String, Integer> result = Maps.newHashMap();
+        for (String column : columnNames) {
+            result.put(column, StatisticUtils.isDirectValuePartitionColumn(table, column) ? all : sampled);
+        }
+        return result;
     }
 
     @Override

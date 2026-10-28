@@ -20,6 +20,8 @@
 
 #include <array>
 #include <cstring>
+#include <limits>
+#include <optional>
 #include <random>
 #include <utility>
 #include <vector>
@@ -1416,6 +1418,201 @@ TEST_F(TimeFunctionsTest, fromUnixToDatetimeWithConstFormat) {
         ASSERT_TRUE(TimeFunctions::from_unix_close(_utils->get_fn_ctx(),
                                                    FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                             .ok());
+    }
+}
+
+// from_unixtime and friends show each instant in the session (or given) zone with the offset at that instant, the
+// same as the per-row cctz conversion they used before, across DST changes, out-of-range and null inputs, in zones
+// with and without daylight saving time.
+TEST_F(TimeFunctionsTest, unixtimeFunctionsMatchCctzInDstZones) {
+    constexpr int64_t kMaxUnix = 253402243199L; // TimeFunctions::MAX_UNIX_TIMESTAMP
+    std::mt19937_64 rng(13);
+    std::vector<int64_t> seconds = {
+            0, 1, -1, kMaxUnix, kMaxUnix + 1, 1711846800 - 1, 1711846800, 1729990800 - 1, 1729990800};
+    for (int i = 0; i < 3000; i++) {
+        seconds.push_back(static_cast<int64_t>(rng() % (i % 2 ? 4000000000ULL : static_cast<uint64_t>(kMaxUnix))));
+    }
+    auto make_input = [&](auto scale) {
+        auto data = Int64Column::create();
+        auto nulls = NullColumn::create();
+        for (size_t i = 0; i < seconds.size(); i++) {
+            data->append(scale(seconds[i], i));
+            nulls->append(i % 11 == 5);
+        }
+        return NullableColumn::create(std::move(data), std::move(nulls));
+    };
+    auto expect_strings = [&](const ColumnPtr& result, auto want) {
+        ASSERT_EQ(seconds.size(), result->size());
+        for (size_t i = 0; i < seconds.size(); i++) {
+            std::optional<std::string> w = i % 11 == 5 ? std::nullopt : want(i);
+            if (!w.has_value()) {
+                ASSERT_TRUE(result->is_null(i)) << i << " " << seconds[i];
+            } else {
+                ASSERT_FALSE(result->is_null(i)) << i << " " << seconds[i];
+                ASSERT_EQ("'" + w.value() + "'", result->debug_item(i)) << seconds[i];
+            }
+        }
+    };
+
+    RuntimeState* state = _utils->get_fn_ctx()->state();
+    const std::string prev_timezone = state->timezone();
+    DeferOp defer([&]() { state->set_timezone(prev_timezone); });
+    for (const std::string zone : {"America/Los_Angeles", "Europe/London", "Asia/Shanghai", "+05:30"}) {
+        SCOPED_TRACE(zone);
+        ASSERT_TRUE(state->set_timezone(zone));
+        cctz::time_zone ctz;
+        ASSERT_TRUE(TimezoneUtils::find_cctz_time_zone(zone, ctz));
+        auto reference = [&](int64_t second) {
+            DateTimeValue dtv;
+            dtv.from_unixtime(second, ctz);
+            return dtv;
+        };
+        auto in_range = [&](int64_t second) { return second >= 0 && second <= kMaxUnix; };
+
+        // from_unixtime(BIGINT)
+        Columns columns{make_input([](int64_t s, size_t) { return s; })};
+        expect_strings(TimeFunctions::from_unix_to_datetime_64(_utils->get_fn_ctx(), columns).value(),
+                       [&](size_t i) -> std::optional<std::string> {
+                           if (!in_range(seconds[i])) return std::nullopt;
+                           char buf[64];
+                           reference(seconds[i]).to_string(buf);
+                           return std::string(buf);
+                       });
+
+        // from_unixtime_ms(BIGINT): milliseconds truncated to seconds
+        auto millis = [](int64_t s, size_t i) { return s * 1000 + static_cast<int64_t>(i % 1000); };
+        Columns ms_columns{make_input(millis)};
+        expect_strings(TimeFunctions::from_unix_to_datetime_ms_64(_utils->get_fn_ctx(), ms_columns).value(),
+                       [&](size_t i) -> std::optional<std::string> {
+                           const int64_t second = millis(seconds[i], i) / 1000;
+                           if (!in_range(second)) return std::nullopt;
+                           char buf[64];
+                           reference(second).to_string(buf);
+                           return std::string(buf);
+                       });
+
+        // from_unixtime(BIGINT, format) with a constant format, and with a format column
+        const std::string format = "%Y-%m-%d %H:%i:%s %W";
+        auto expected_formatted = [&](size_t i) -> std::optional<std::string> {
+            if (!in_range(seconds[i])) return std::nullopt;
+            std::string converted = TimeFunctions::convert_format(Slice(format));
+            char buf[128];
+            reference(seconds[i]).to_format_string(converted.c_str(), converted.size(), buf);
+            return std::string(buf);
+        };
+        for (bool const_format : {true, false}) {
+            ColumnPtr format_column =
+                    const_format ? ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice(format), seconds.size())
+                                 : [&]() {
+                                       auto c = BinaryColumn::create();
+                                       for (size_t i = 0; i < seconds.size(); i++) c->append(format);
+                                       return ColumnPtr(std::move(c));
+                                   }();
+            Columns format_columns{columns[0], format_column};
+            _utils->get_fn_ctx()->set_constant_columns(format_columns);
+            ASSERT_OK(TimeFunctions::from_unix_prepare(_utils->get_fn_ctx(),
+                                                       FunctionContext::FunctionStateScope::FRAGMENT_LOCAL));
+            expect_strings(
+                    TimeFunctions::from_unix_to_datetime_with_format_64(_utils->get_fn_ctx(), format_columns).value(),
+                    expected_formatted);
+            ASSERT_OK(TimeFunctions::from_unix_close(_utils->get_fn_ctx(),
+                                                     FunctionContext::FunctionStateScope::FRAGMENT_LOCAL));
+        }
+
+        // from_unixtime(BIGINT, format, timezone) with a constant zone, in another zone than the session's
+        {
+            const std::string other = zone == "Europe/London" ? "America/Los_Angeles" : "Europe/London";
+            cctz::time_zone other_ctz;
+            ASSERT_TRUE(TimezoneUtils::find_cctz_time_zone(other, other_ctz));
+            Columns tz_columns{columns[0], ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice(format), 1),
+                               ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice(other), 1)};
+            _utils->get_fn_ctx()->set_constant_columns(tz_columns);
+            ASSERT_OK(TimeFunctions::from_unix_timezone_prepare(_utils->get_fn_ctx(),
+                                                                FunctionContext::FunctionStateScope::FRAGMENT_LOCAL));
+            expect_strings(
+                    TimeFunctions::from_unix_to_datetime_with_format_timezone(_utils->get_fn_ctx(), tz_columns).value(),
+                    [&](size_t i) -> std::optional<std::string> {
+                        if (!in_range(seconds[i])) return std::nullopt;
+                        std::string converted = TimeFunctions::convert_format(Slice(format));
+                        DateTimeValue dtv;
+                        dtv.from_unixtime(seconds[i], other_ctz);
+                        char buf[128];
+                        dtv.to_format_string(converted.c_str(), converted.size(), buf);
+                        return std::string(buf);
+                    });
+            ASSERT_OK(TimeFunctions::from_unix_close(_utils->get_fn_ctx(),
+                                                     FunctionContext::FunctionStateScope::FRAGMENT_LOCAL));
+        }
+
+        // hour_from_unixtime(BIGINT)
+        {
+            ColumnPtr result = TimeFunctions::hour_from_unixtime(_utils->get_fn_ctx(), columns).value();
+            ASSERT_EQ(seconds.size(), result->size());
+            for (size_t i = 0; i < seconds.size(); i++) {
+                if (i % 11 == 5 || !in_range(seconds[i])) {
+                    ASSERT_TRUE(result->is_null(i)) << seconds[i];
+                } else {
+                    ASSERT_EQ(std::to_string(reference(seconds[i]).hour()), result->debug_item(i)) << seconds[i];
+                }
+            }
+        }
+
+        // unixtime_to_datetime(BIGINT, scale), constant and per-row scale, including values beyond year 9999
+        for (bool const_scale : {true, false}) {
+            for (int scale : {0, 3, 6}) {
+                const int64_t factor = scale == 0 ? 1 : (scale == 3 ? 1000 : 1000000);
+                std::vector<int64_t> raw;
+                auto data = Int64Column::create();
+                for (size_t i = 0; i < seconds.size(); i++) {
+                    int64_t sub = factor > 1 ? static_cast<int64_t>(i % factor) : 0;
+                    int64_t v = i % 97 == 0 ? (i % 2 ? std::numeric_limits<int64_t>::max() / factor
+                                                     : std::numeric_limits<int64_t>::min() / factor)
+                                            : seconds[i] * factor + (i % 3 == 0 ? -sub : sub);
+                    raw.push_back(v);
+                    data->append(v);
+                }
+                ColumnPtr scale_column;
+                if (const_scale) {
+                    scale_column = ColumnHelper::create_const_column<TYPE_INT>(scale, seconds.size());
+                } else {
+                    auto c = Int32Column::create();
+                    for (size_t i = 0; i < seconds.size(); i++) c->append(scale);
+                    scale_column = std::move(c);
+                }
+                FunctionContext::TypeDesc return_type;
+                return_type.type = TYPE_DATETIME;
+                FunctionContext::TypeDesc bigint_type;
+                bigint_type.type = TYPE_BIGINT;
+                FunctionContext::TypeDesc int_type;
+                int_type.type = TYPE_INT;
+                std::unique_ptr<FunctionContext> fn_ctx(
+                        FunctionContext::create_context(state, nullptr, return_type, {bigint_type, int_type}));
+                Columns unix_columns{std::move(data), scale_column};
+                fn_ctx->set_constant_columns(unix_columns);
+                ASSERT_OK(TimeFunctions::unixtime_to_datetime_prepare(
+                        fn_ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL));
+                ColumnPtr result = TimeFunctions::unixtime_to_datetime(fn_ctx.get(), unix_columns).value();
+                ASSERT_EQ(raw.size(), result->size());
+                for (size_t i = 0; i < raw.size(); i++) {
+                    int64_t second = raw[i] / factor;
+                    int64_t micro = raw[i] % factor * (1000000 / factor);
+                    if (micro < 0) {
+                        second -= 1;
+                        micro += 1000000;
+                    }
+                    TimestampValue want;
+                    want.from_unixtime(second, micro, ctz);
+                    if (!want.is_valid()) {
+                        ASSERT_TRUE(result->is_null(i)) << "scale=" << scale << " raw=" << raw[i];
+                    } else {
+                        ASSERT_FALSE(result->is_null(i)) << "scale=" << scale << " raw=" << raw[i];
+                        ASSERT_EQ(want.to_string(), result->debug_item(i)) << "scale=" << scale << " raw=" << raw[i];
+                    }
+                }
+                ASSERT_OK(TimeFunctions::unixtime_to_datetime_close(
+                        fn_ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL));
+            }
+        }
     }
 }
 

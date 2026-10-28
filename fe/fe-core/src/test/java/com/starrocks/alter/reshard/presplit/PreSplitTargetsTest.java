@@ -14,6 +14,7 @@
 
 package com.starrocks.alter.reshard.presplit;
 
+import com.starrocks.alter.reshard.TabletReshardJobMgr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
@@ -27,6 +28,7 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.thrift.TStorageMedium;
@@ -71,6 +73,13 @@ public class PreSplitTargetsTest {
     private static final long TEMP_PHYSICAL_PARTITION_ID = 921L;
     private static final long TEMP_TABLET_ID = 922L;
 
+    private static Database database() {
+        Database database = mock(Database.class);
+        // Lock resources share an ID namespace; keep the database distinct from the mock table.
+        when(database.getId()).thenReturn(DB_ID);
+        return database;
+    }
+
     private static OlapTable tableThatPassesUpTo() {
         OlapTable table = mock(OlapTable.class);
         when(table.isCloudNativeTableOrMaterializedView()).thenReturn(true);
@@ -88,7 +97,7 @@ public class PreSplitTargetsTest {
         when(table.isCloudNativeTableOrMaterializedView()).thenReturn(false);
         when(table.isRangeDistribution()).thenReturn(true);
         Assertions.assertEquals(SkipReason.NOT_CLOUD_NATIVE,
-                PreSplitTargets.findEligibleTable(mock(Database.class), table));
+                PreSplitTargets.findEligibleTable(database(), table));
     }
 
     @Test
@@ -97,7 +106,7 @@ public class PreSplitTargetsTest {
         when(table.isCloudNativeTableOrMaterializedView()).thenReturn(true);
         when(table.isRangeDistribution()).thenReturn(false);
         Assertions.assertEquals(SkipReason.NOT_RANGE_DISTRIBUTION,
-                PreSplitTargets.findEligibleTable(mock(Database.class), table));
+                PreSplitTargets.findEligibleTable(database(), table));
     }
 
     @Test
@@ -107,7 +116,18 @@ public class PreSplitTargetsTest {
         when(table.isRangeDistribution()).thenReturn(true);
         when(table.getState()).thenReturn(OlapTable.OlapTableState.SCHEMA_CHANGE);
         Assertions.assertEquals(SkipReason.TABLE_NOT_NORMAL,
-                PreSplitTargets.findEligibleTable(mock(Database.class), table));
+                PreSplitTargets.findEligibleTable(database(), table));
+    }
+
+    @Test
+    public void reshardStateStillAllowsStructuralEligibility() {
+        OlapTable table = tableThatPassesUpTo();
+        when(table.getState()).thenReturn(OlapTable.OlapTableState.TABLET_RESHARD);
+        try (MockedStatic<MetaUtils> metaUtils = Mockito.mockStatic(MetaUtils.class)) {
+            metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(table, BASE_INDEX_META_ID))
+                    .thenReturn(List.of(new Column("k", IntegerType.BIGINT)));
+            Assertions.assertNull(PreSplitTargets.findEligibleTable(database(), table));
+        }
     }
 
     @Test
@@ -117,7 +137,7 @@ public class PreSplitTargetsTest {
             metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(table, BASE_INDEX_META_ID))
                     .thenReturn(List.of());
             Assertions.assertEquals(SkipReason.UNSUPPORTED_SORT_KEY,
-                    PreSplitTargets.findEligibleTable(mock(Database.class), table));
+                    PreSplitTargets.findEligibleTable(database(), table));
         }
     }
 
@@ -129,7 +149,7 @@ public class PreSplitTargetsTest {
             metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(table, BASE_INDEX_META_ID))
                     .thenReturn(List.of(arrayColumn));
             Assertions.assertEquals(SkipReason.UNSUPPORTED_SORT_KEY,
-                    PreSplitTargets.findEligibleTable(mock(Database.class), table));
+                    PreSplitTargets.findEligibleTable(database(), table));
         }
     }
 
@@ -141,7 +161,7 @@ public class PreSplitTargetsTest {
         try (MockedStatic<MetaUtils> metaUtils = Mockito.mockStatic(MetaUtils.class)) {
             metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(table, BASE_INDEX_META_ID))
                     .thenReturn(List.of(scalarColumn));
-            Assertions.assertNull(PreSplitTargets.findEligibleTable(mock(Database.class), table),
+            Assertions.assertNull(PreSplitTargets.findEligibleTable(database(), table),
                     "fully eligible table must return null (no skip reason)");
         }
     }
@@ -168,7 +188,7 @@ public class PreSplitTargetsTest {
                     .thenReturn(List.of(baseSortKey));
             metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(table, ROLLUP_INDEX_META_ID))
                     .thenReturn(List.of(rollupSortKey));
-            Assertions.assertNull(PreSplitTargets.findEligibleTable(mock(Database.class), table),
+            Assertions.assertNull(PreSplitTargets.findEligibleTable(database(), table),
                     "base + scalar-sort-key rollup must be eligible (null)");
         }
     }
@@ -194,7 +214,7 @@ public class PreSplitTargetsTest {
             metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(table, ROLLUP_INDEX_META_ID))
                     .thenReturn(List.of(rollupArrayColumn));
             Assertions.assertEquals(SkipReason.UNSUPPORTED_SORT_KEY,
-                    PreSplitTargets.findEligibleTable(mock(Database.class), table));
+                    PreSplitTargets.findEligibleTable(database(), table));
         }
     }
 
@@ -205,6 +225,7 @@ public class PreSplitTargetsTest {
      */
     private static OlapTable tableWithSinglePartition(int tabletCount) {
         OlapTable table = mock(OlapTable.class);
+        when(table.getId()).thenReturn(TABLE_ID);
         when(table.getBaseIndexMetaId()).thenReturn(BASE_INDEX_META_ID);
         PhysicalPartition partition = mock(PhysicalPartition.class);
         when(partition.getId()).thenReturn(100L);
@@ -237,7 +258,7 @@ public class PreSplitTargetsTest {
             metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(table, BASE_INDEX_META_ID))
                     .thenReturn(List.of(sortKey));
             PreSplitTargets.EligibleTarget target =
-                    PreSplitTargets.findEligibleTarget(mock(Database.class), table);
+                    PreSplitTargets.findEligibleTarget(database(), table);
             Assertions.assertNotNull(target);
             Assertions.assertEquals(100L, target.partitionId());
             Assertions.assertEquals(1000L, target.oldTabletId());
@@ -248,6 +269,7 @@ public class PreSplitTargetsTest {
     public void skipsWhenNoUniquePhysicalPartition() {
         // Zero or multiple physical partitions cannot resolve a single target.
         OlapTable table = mock(OlapTable.class);
+        when(table.getId()).thenReturn(TABLE_ID);
         when(table.getPhysicalPartitions()).thenReturn(List.of(
                 mock(PhysicalPartition.class), mock(PhysicalPartition.class)));
         assertResolveSkips(table, SkipReason.METADATA_NOT_RESOLVED);
@@ -282,7 +304,7 @@ public class PreSplitTargetsTest {
         MetricRepo.hasInit = true;
         try {
             long baseline = skipBucket(expectedReason);
-            Assertions.assertNull(PreSplitTargets.findEligibleTarget(mock(Database.class), table),
+            Assertions.assertNull(PreSplitTargets.findEligibleTarget(database(), table),
                     "ineligible target must resolve to null");
             Assertions.assertEquals(baseline + 1L, skipBucket(expectedReason),
                     expectedReason.name().toLowerCase() + " bucket must increment by one");
@@ -484,12 +506,35 @@ public class PreSplitTargetsTest {
             metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(table, BASE_INDEX_META_ID))
                     .thenReturn(List.of(sortKey));
             PreSplitTargets.EligibleTarget target = PreSplitTargets.findEligibleTemporaryTarget(
-                    mock(Database.class), table, TEMP_PARTITION_NAME);
+                    database(), table, TEMP_PARTITION_NAME);
             Assertions.assertNotNull(target);
             Assertions.assertEquals(TEMP_PHYSICAL_PARTITION_ID, target.partitionId(),
                     "the target must be the temporary partition's physical partition");
             Assertions.assertEquals(TEMP_TABLET_ID, target.oldTabletId(),
                     "the base-index target must be the temporary partition's tablet");
+        }
+    }
+
+    @Test
+    public void resolvesFreeTemporaryTargetAndSkipsOccupiedVisibleTarget() {
+        OlapTable table = tableWithVisibleAndTempPartition(1);
+        table.setState(OlapTable.OlapTableState.TABLET_RESHARD);
+        GlobalStateMgr state = mock(GlobalStateMgr.class);
+        TabletReshardJobMgr mgr = mock(TabletReshardJobMgr.class);
+        when(state.getTabletReshardJobMgr()).thenReturn(mgr);
+        when(mgr.isPhysicalPartitionReshardingLocked(table, VISIBLE_PHYSICAL_PARTITION_ID)).thenReturn(true);
+        try (MockedStatic<GlobalStateMgr> globalState = Mockito.mockStatic(GlobalStateMgr.class);
+                MockedStatic<MetaUtils> metaUtils = Mockito.mockStatic(MetaUtils.class);
+                MockedConstruction<Locker> ignored = Mockito.mockConstruction(Locker.class)) {
+            globalState.when(GlobalStateMgr::getCurrentState).thenReturn(state);
+            metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(table, BASE_INDEX_META_ID))
+                    .thenReturn(List.of(new Column("k", IntegerType.BIGINT)));
+            Assertions.assertNotNull(PreSplitTargets.findEligibleTemporaryTarget(
+                    database(), table, TEMP_PARTITION_NAME));
+            Assertions.assertNull(PreSplitTargets.findEligibleTarget(database(), table));
+            when(mgr.isPhysicalPartitionReshardingLocked(table, TEMP_PHYSICAL_PARTITION_ID)).thenReturn(true);
+            Assertions.assertNull(PreSplitTargets.findEligibleTemporaryTarget(
+                    database(), table, TEMP_PARTITION_NAME));
         }
     }
 
@@ -537,7 +582,7 @@ public class PreSplitTargetsTest {
         try (MockedConstruction<Locker> ignored = Mockito.mockConstruction(Locker.class)) {
             long baseline = skipBucket(expectedReason);
             Assertions.assertNull(
-                    PreSplitTargets.findEligibleTemporaryTarget(mock(Database.class), table, partitionName),
+                    PreSplitTargets.findEligibleTemporaryTarget(database(), table, partitionName),
                     "ineligible temporary target must resolve to null");
             Assertions.assertEquals(baseline + 1L, skipBucket(expectedReason),
                     expectedReason.name().toLowerCase() + " bucket must increment by one");

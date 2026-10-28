@@ -1,0 +1,121 @@
+-- name: test_range_auto_increment @cloud
+-- SQL integration: range-distributed tables with an AUTO_INCREMENT column use the online rewrite
+-- paths (sort-key rewrite, ADD ROLLUP, synchronous MV). Ids are engine-assigned, so they are never
+-- printed; every check compares them against a snapshot table or counts them.
+set enable_range_distribution = true;
+
+create database db_${uuid0};
+use db_${uuid0};
+
+-- Step 1: base table; ids are engine-assigned, so they are only ever compared against a snapshot.
+create table t (
+    k1 int not null,
+    k2 int not null,
+    id bigint not null auto_increment,
+    v int
+)
+duplicate key(k1, k2)
+order by(k1, k2)
+properties('replication_num' = '1');
+insert into t (k1, k2, v) values (1, 1, 10), (1, 2, 20), (2, 1, 30), (2, 2, 40), (3, 1, 50), (3, 2, 60);
+create table ref (
+    k1 int,
+    k2 int,
+    id bigint,
+    v int
+)
+duplicate key(k1)
+distributed by hash(k1) buckets 1
+properties('replication_num' = '1');
+insert into ref select k1, k2, id, v from t;
+select count(*) from t where id > 0;
+
+-- Step 2: a synchronous MV that omits id rewrites the full base schema; ids must survive.
+create materialized view mv_noid as select k2, k1, v from t;
+function: wait_materialized_view_finish()
+select k2, k1, v from mv_noid [_SYNC_MV_] order by k2, k1;
+select count(*) from t join ref using (k1, k2, id, v);
+select count(*) from t;
+select count(*) from ref;
+
+-- A rollup that omits id goes through the subset-write path; ids must survive.
+alter table t add rollup r_noid(k2, k1, v) order by (k2);
+function: wait_alter_table_finish("ROLLUP", 8)
+select count(*) from t join ref using (k1, k2, id, v);
+select count(*) from t;
+select count(*) from ref;
+
+-- Step 3: new rows still get fresh ids, and the dual write reaches the MV.
+insert into t (k1, k2, v) values (100, 100, 100);
+select count(*) from t where k1 = 100 and id > 0;
+select count(distinct id) = count(*) from t;
+select count(*) from mv_noid [_SYNC_MV_] where k1 = 100;
+
+-- Step 4: an MV with a WHERE on id keeps filtering new rows by their allocated ids.
+create materialized view mv_where as select k1, k2, id from t where id > 0;
+function: wait_materialized_view_finish()
+insert into t (k1, k2, v) values (101, 101, 101), (102, 102, 102);
+select count(*) from mv_where [_SYNC_MV_];
+select count(*) from t where id > 0;
+
+-- Step 5: an MV column computed from the AUTO_INCREMENT column is rejected.
+create materialized view mv_sum as select k2, sum(id) from t group by k2;
+
+-- Step 6: ADD ROLLUP with an independent sort key that includes id keeps ids stable.
+truncate table ref;
+insert into ref select k1, k2, id, v from t;
+alter table t add rollup r_id(k2, id) order by (k2, id);
+function: wait_alter_table_finish("ROLLUP", 8)
+select count(*) from t join ref using (k1, k2, id, v);
+select count(*) from t;
+select count(*) from ref;
+select count(*) from r_id [_SYNC_MV_];
+-- The rollup holds the same (k2, id) rows as the snapshot taken before it was built: its ids were carried over,
+-- not re-allocated. Compare against ref, not t, because a query on t may itself be answered from r_id.
+select count(*) from (select k2, id from r_id [_SYNC_MV_] except select k2, id from ref) a;
+select count(*) from (select k2, id from ref except select k2, id from r_id [_SYNC_MV_]) b;
+
+-- Step 7: sort-key rewrite with id first, on a single-index table.
+create table t2 (
+    k1 int not null,
+    k2 int not null,
+    id bigint not null auto_increment,
+    v int
+)
+duplicate key(k1, k2)
+order by(k1, k2)
+properties('replication_num' = '1');
+insert into t2 (k1, k2, v) values (1, 1, 10), (1, 2, 20), (2, 1, 30), (2, 2, 40), (3, 1, 50), (3, 2, 60);
+create table ref2 (
+    k1 int,
+    k2 int,
+    id bigint,
+    v int
+)
+duplicate key(k1)
+distributed by hash(k1) buckets 1
+properties('replication_num' = '1');
+insert into ref2 select k1, k2, id, v from t2;
+alter table t2 order by (id, k1);
+function: wait_alter_table_finish()
+select count(*) from t2 join ref2 using (k1, k2, id, v);
+select count(*) from t2;
+select count(*) from ref2;
+select sort_key from information_schema.tables_config
+    where table_schema = 'db_${uuid0}' and table_name = 't2';
+-- The rewritten base index still allocates ids for a load that omits id.
+insert into t2 (k1, k2, v) values (100, 100, 100);
+select count(*) from t2 where k1 = 100 and id > 0;
+select count(distinct id) = count(*) from t2;
+
+-- Step 8: a PRIMARY KEY table whose AUTO_INCREMENT column is a non-key column is still rejected.
+create table t4 (
+    k1 int not null,
+    id bigint not null auto_increment,
+    v int
+)
+primary key(k1)
+order by(k1)
+properties('replication_num' = '1');
+alter table t4 order by (k1);
+drop database db_${uuid0} force;

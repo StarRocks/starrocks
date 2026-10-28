@@ -32,9 +32,15 @@ public:
     Status do_init(RuntimeState* runtime_state, const HdfsScannerContext& scanner_ctx) override;
     void do_update_counter(HdfsScannerProfile* profile) override;
 
+protected:
+    // do_open() rebuilds the reader from the file start.
+    bool support_reopen_without_datacache() const override { return true; }
+
 private:
     std::shared_ptr<parquet::FileReader> _reader = nullptr;
     SkipRowsContextPtr _skip_rows_ctx;
+    // Every row of the data file is in the deletion bitmap: the file is never opened.
+    bool _all_rows_deleted = false;
 };
 
 } // namespace starrocks

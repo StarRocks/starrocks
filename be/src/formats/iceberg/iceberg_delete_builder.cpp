@@ -16,6 +16,9 @@
 
 #include "cache/scan/cache_input_stream.h"
 #include "cache/scan/shared_buffered_input_stream.h"
+#include "column/binary_column.h"
+#include "column/column_helper.h"
+#include "column/fixed_length_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/config_scan_io_fwd.h"
 #include "formats/file_input_stream.h"
@@ -46,21 +49,69 @@ static const IcebergColumnMeta k_delete_file_pos{
 
 namespace {
 
-Status visit_position_delete_rows(const ChunkPtr& chunk, const IcebergPositionDeleteReader::RowCallback& cb) {
-    const ColumnPtr& file_path = chunk->get_column_by_slot_id(k_delete_file_path.id);
+// Calls cb once per run of consecutive rows with the same file_path. Delete files are sorted by
+// (file_path, pos), so a file referencing one data file is a single run per chunk.
+// Without file_path (read_positions) the whole chunk is one run with an empty file_path.
+Status visit_position_delete_ranges(const ChunkPtr& chunk, bool with_file_path,
+                                    const IcebergPositionDeleteReader::RangeCallback& cb) {
     const ColumnPtr& pos = chunk->get_column_by_slot_id(k_delete_file_pos.id);
-    if (file_path == nullptr || pos == nullptr) {
+    const ColumnPtr* file_path = with_file_path ? &chunk->get_column_by_slot_id(k_delete_file_path.id) : nullptr;
+    if (pos == nullptr || (file_path != nullptr && *file_path == nullptr)) {
         return Status::InternalError("position-delete chunk is missing file_path/pos columns");
     }
-    for (int i = 0; i < chunk->num_rows(); i++) {
-        cb(file_path->get(i).get_slice(), pos->get(i).get_int64());
+    const size_t num_rows = chunk->num_rows();
+    if (num_rows == 0) {
+        return Status::OK();
     }
+    if (pos->has_null() || (file_path != nullptr && (*file_path)->has_null())) {
+        return Status::InternalError("position-delete file has a NULL file_path or pos");
+    }
+    const auto* positions = dynamic_cast<const Int64Column*>(ColumnHelper::get_data_column(pos.get()));
+    if (file_path == nullptr) {
+        if (positions != nullptr) {
+            cb(Slice(), positions->immutable_data().data(), num_rows);
+            return Status::OK();
+        }
+        for (size_t i = 0; i < num_rows; i++) {
+            const int64_t p = pos->get(i).get_int64();
+            cb(Slice(), &p, 1);
+        }
+        return Status::OK();
+    }
+    const auto* paths = dynamic_cast<const BinaryColumn*>(ColumnHelper::get_data_column(file_path->get()));
+    if (paths == nullptr || positions == nullptr) {
+        for (size_t i = 0; i < num_rows; i++) {
+            const int64_t p = pos->get(i).get_int64();
+            cb((*file_path)->get(i).get_slice(), &p, 1);
+        }
+        return Status::OK();
+    }
+    const int64_t* pos_data = positions->immutable_data().data();
+    size_t run_start = 0;
+    Slice run_path = paths->get_slice(0);
+    for (size_t i = 1; i < num_rows; i++) {
+        Slice path = paths->get_slice(i);
+        if (path != run_path) {
+            cb(run_path, pos_data + run_start, i - run_start);
+            run_start = i;
+            run_path = path;
+        }
+    }
+    cb(run_path, pos_data + run_start, num_rows - run_start);
     return Status::OK();
 }
 
+std::vector<SlotDescriptor*> position_delete_slots(bool with_file_path) {
+    if (with_file_path) {
+        return {&(IcebergDeleteFileMeta::get_delete_file_path_slot()),
+                &(IcebergDeleteFileMeta::get_delete_file_pos_slot())};
+    }
+    return {&(IcebergDeleteFileMeta::get_delete_file_pos_slot())};
+}
+
 Status read_parquet_rows(RandomAccessFile* file, int64_t length, int32_t chunk_size, const std::string& timezone,
-                         const FormatScannerOptions& options, FormatScannerStats* stats,
-                         const IcebergPositionDeleteReader::RowCallback& cb) {
+                         const FormatScannerOptions& options, FormatScannerStats* stats, bool with_file_path,
+                         const IcebergPositionDeleteReader::RangeCallback& cb) {
     std::unique_ptr<parquet::FileReader> reader;
     try {
         reader = std::make_unique<parquet::FileReader>(chunk_size, file, length);
@@ -71,8 +122,7 @@ Status read_parquet_rows(RandomAccessFile* file, int64_t length, int32_t chunk_s
         return Status::InternalError(s);
     }
 
-    std::vector slot_descriptors{&(IcebergDeleteFileMeta::get_delete_file_path_slot()),
-                                 &(IcebergDeleteFileMeta::get_delete_file_pos_slot())};
+    std::vector<SlotDescriptor*> slot_descriptors = position_delete_slots(with_file_path);
 
     std::vector<FormatColumnInfo> columns;
     for (size_t i = 0; i < slot_descriptors.size(); i++) {
@@ -116,15 +166,15 @@ Status read_parquet_rows(RandomAccessFile* file, int64_t length, int32_t chunk_s
             break;
         }
         RETURN_IF_ERROR(status);
-        RETURN_IF_ERROR(visit_position_delete_rows(chunk, cb));
+        RETURN_IF_ERROR(visit_position_delete_ranges(chunk, with_file_path, cb));
     }
     return Status::OK();
 }
 
 Status read_orc_rows(RandomAccessFile* file, const std::string& path, int64_t length, int32_t chunk_size,
-                     const std::string& timezone, const IcebergPositionDeleteReader::RowCallback& cb) {
-    std::vector slot_descriptors{&(IcebergDeleteFileMeta::get_delete_file_path_slot()),
-                                 &(IcebergDeleteFileMeta::get_delete_file_pos_slot())};
+                     const std::string& timezone, bool with_file_path,
+                     const IcebergPositionDeleteReader::RangeCallback& cb) {
+    std::vector<SlotDescriptor*> slot_descriptors = position_delete_slots(with_file_path);
 
     auto input_stream = std::make_unique<ORCHdfsFileStream>(file, length, nullptr);
     std::unique_ptr<orc::Reader> reader;
@@ -151,9 +201,26 @@ Status read_orc_rows(RandomAccessFile* file, const std::string& path, int64_t le
         }
         RETURN_IF_ERROR(s);
         ASSIGN_OR_RETURN(ChunkPtr chunk, orc_reader->get_chunk());
-        RETURN_IF_ERROR(visit_position_delete_rows(chunk, cb));
+        RETURN_IF_ERROR(visit_position_delete_ranges(chunk, with_file_path, cb));
     }
     return Status::OK();
+}
+
+Status read_position_delete_file(RandomAccessFile* file, const std::string& path, int64_t length,
+                                 const std::string& format, int32_t chunk_size, const std::string& timezone,
+                                 const FormatScannerOptions& options, FormatScannerStats* stats, bool with_file_path,
+                                 const IcebergPositionDeleteReader::RangeCallback& cb) {
+    FormatScannerStats local_stats;
+    if (stats == nullptr) {
+        stats = &local_stats;
+    }
+    if (format == PARQUET) {
+        return read_parquet_rows(file, length, chunk_size, timezone, options, stats, with_file_path, cb);
+    }
+    if (format == ORC) {
+        return read_orc_rows(file, path, length, chunk_size, timezone, with_file_path, cb);
+    }
+    return Status::NotSupported(strings::Substitute("unsupported iceberg position-delete file format: $0", format));
 }
 
 } // namespace
@@ -162,17 +229,27 @@ Status IcebergPositionDeleteReader::read_rows(RandomAccessFile* file, const std:
                                               const std::string& format, int32_t chunk_size,
                                               const std::string& timezone, const FormatScannerOptions& options,
                                               FormatScannerStats* stats, const RowCallback& cb) {
-    FormatScannerStats local_stats;
-    if (stats == nullptr) {
-        stats = &local_stats;
-    }
-    if (format == PARQUET) {
-        return read_parquet_rows(file, length, chunk_size, timezone, options, stats, cb);
-    }
-    if (format == ORC) {
-        return read_orc_rows(file, path, length, chunk_size, timezone, cb);
-    }
-    return Status::NotSupported(strings::Substitute("unsupported iceberg position-delete file format: $0", format));
+    return read_rows(file, path, length, format, chunk_size, timezone, options, stats,
+                     RangeCallback([&cb](const Slice& file_path, const int64_t* pos, size_t num_rows) {
+                         for (size_t i = 0; i < num_rows; i++) {
+                             cb(file_path, pos[i]);
+                         }
+                     }));
+}
+
+Status IcebergPositionDeleteReader::read_rows(RandomAccessFile* file, const std::string& path, int64_t length,
+                                              const std::string& format, int32_t chunk_size,
+                                              const std::string& timezone, const FormatScannerOptions& options,
+                                              FormatScannerStats* stats, const RangeCallback& cb) {
+    return read_position_delete_file(file, path, length, format, chunk_size, timezone, options, stats, true, cb);
+}
+
+Status IcebergPositionDeleteReader::read_positions(RandomAccessFile* file, const std::string& path, int64_t length,
+                                                   const std::string& format, int32_t chunk_size,
+                                                   const std::string& timezone, const FormatScannerOptions& options,
+                                                   FormatScannerStats* stats, const PositionsCallback& cb) {
+    return read_position_delete_file(file, path, length, format, chunk_size, timezone, options, stats, false,
+                                     [&cb](const Slice&, const int64_t* pos, size_t num_rows) { cb(pos, num_rows); });
 }
 
 StatusOr<std::unique_ptr<RandomAccessFile>> IcebergDeleteBuilder::open_random_access_file(
@@ -208,15 +285,26 @@ Status IcebergDeleteBuilder::build(const TIcebergDeleteFile& delete_file, const 
     ASSIGN_OR_RETURN(auto file, open_random_access_file(delete_file, fs_stats, app_stats, shared_buffered_input_stream,
                                                         cache_input_stream));
 
-    RETURN_IF_ERROR(IcebergPositionDeleteReader::read_rows(
-            file.get(), delete_file.full_path, delete_file.length, format, _ctx.chunk_size, _ctx.scan_context->timezone,
-            _ctx.scan_context->options, &app_stats, [this](const Slice& file_path, int64_t pos) {
-                if (file_path == _ctx.data_file_path) {
-                    _deletion_bitmap->add_value(pos);
-                }
-            }));
-    update_delete_file_io_counter(_ctx.runtime_profile, app_stats, fs_stats, cache_input_stream,
-                                  shared_buffered_input_stream);
+    if (delete_file.__isset.references_only_data_file && delete_file.references_only_data_file) {
+        // Every row references this data file: the file_path column is not read at all.
+        RETURN_IF_ERROR(IcebergPositionDeleteReader::read_positions(
+                file.get(), delete_file.full_path, delete_file.length, format, _ctx.chunk_size,
+                _ctx.scan_context->timezone, _ctx.scan_context->options, &app_stats,
+                [this](const int64_t* pos, size_t num_rows) {
+                    _deletion_bitmap->add_values(reinterpret_cast<const uint64_t*>(pos), num_rows);
+                }));
+    } else {
+        RETURN_IF_ERROR(IcebergPositionDeleteReader::read_rows(
+                file.get(), delete_file.full_path, delete_file.length, format, _ctx.chunk_size,
+                _ctx.scan_context->timezone, _ctx.scan_context->options, &app_stats,
+                IcebergPositionDeleteReader::RangeCallback(
+                        [this](const Slice& file_path, const int64_t* pos, size_t num_rows) {
+                            if (file_path == _ctx.data_file_path) {
+                                _deletion_bitmap->add_values(reinterpret_cast<const uint64_t*>(pos), num_rows);
+                            }
+                        })));
+    }
+    accumulate_position_delete_io(app_stats, fs_stats, cache_input_stream, shared_buffered_input_stream);
     return Status::OK();
 }
 
@@ -226,6 +314,20 @@ Status IcebergDeleteBuilder::build_parquet(const TIcebergDeleteFile& delete_file
 
 Status IcebergDeleteBuilder::build_orc(const TIcebergDeleteFile& delete_file) const {
     return build(delete_file, ORC);
+}
+
+Status IcebergDeleteBuilder::build_position_delete(const TIcebergDeleteFile& delete_file,
+                                                   THdfsFileFormat::type data_file_format) const {
+    auto format = delete_file.__isset.file_format ? delete_file.file_format : data_file_format;
+    switch (format) {
+    case THdfsFileFormat::PARQUET:
+        return build_parquet(delete_file);
+    case THdfsFileFormat::ORC:
+        return build_orc(delete_file);
+    default:
+        return Status::NotSupported(
+                strings::Substitute("Unsupported iceberg position delete file format: $0", static_cast<int>(format)));
+    }
 }
 
 SlotDescriptor IcebergDeleteFileMeta::gen_slot_helper(const IcebergColumnMeta& meta) {
@@ -247,10 +349,81 @@ SlotDescriptor IcebergDeleteFileMeta::gen_slot_helper(const IcebergColumnMeta& m
     return {desc};
 }
 
-void IcebergDeleteBuilder::update_delete_file_io_counter(
-        RuntimeProfile* parent_profile, const FormatScannerStats& app_stats, const FormatScannerStats& fs_stats,
+struct IcebergDeleteBuilder::PositionDeleteIoStats {
+    int64_t app_io_ns = 0;
+    int64_t app_io_count = 0;
+    int64_t app_bytes_read = 0;
+    int64_t fs_io_ns = 0;
+    int64_t fs_io_count = 0;
+    int64_t fs_bytes_read = 0;
+    int64_t shared_io_count = 0;
+    int64_t shared_io_bytes = 0;
+    int64_t shared_align_io_bytes = 0;
+    int64_t shared_io_timer = 0;
+    int64_t direct_io_count = 0;
+    int64_t direct_io_bytes = 0;
+    int64_t direct_io_timer = 0;
+    bool has_cache = false;
+    CacheInputStream::Stats cache;
+};
+
+IcebergDeleteBuilder::IcebergDeleteBuilder(IcebergDeleteBuilderContext ctx)
+        : _ctx(std::move(ctx)), _deletion_bitmap(std::make_shared<DeletionBitmap>(roaring64_bitmap_create())) {}
+
+IcebergDeleteBuilder::~IcebergDeleteBuilder() {
+    if (_position_delete_io != nullptr && _ctx.runtime_profile != nullptr) {
+        update_delete_file_io_counter(_ctx.runtime_profile, *_position_delete_io);
+    }
+}
+
+void IcebergDeleteBuilder::accumulate_position_delete_io(
+        const FormatScannerStats& app_stats, const FormatScannerStats& fs_stats,
         const std::shared_ptr<CacheInputStream>& cache_input_stream,
-        const std::shared_ptr<SharedBufferedInputStream>& shared_buffered_input_stream) {
+        const std::shared_ptr<SharedBufferedInputStream>& shared_buffered_input_stream) const {
+    if (_position_delete_io == nullptr) {
+        _position_delete_io = std::make_unique<PositionDeleteIoStats>();
+    }
+    PositionDeleteIoStats& io = *_position_delete_io;
+    io.app_io_ns += app_stats.io_ns;
+    io.app_io_count += app_stats.io_count;
+    io.app_bytes_read += app_stats.bytes_read;
+    io.fs_io_ns += fs_stats.io_ns;
+    io.fs_io_count += fs_stats.io_count;
+    io.fs_bytes_read += fs_stats.bytes_read;
+    io.shared_io_count += shared_buffered_input_stream->shared_io_count();
+    io.shared_io_bytes += shared_buffered_input_stream->shared_io_bytes();
+    io.shared_align_io_bytes += shared_buffered_input_stream->shared_align_io_bytes();
+    io.shared_io_timer += shared_buffered_input_stream->shared_io_timer();
+    io.direct_io_count += shared_buffered_input_stream->direct_io_count();
+    io.direct_io_bytes += shared_buffered_input_stream->direct_io_bytes();
+    io.direct_io_timer += shared_buffered_input_stream->direct_io_timer();
+    if (cache_input_stream) {
+        io.has_cache = true;
+        const CacheInputStream::Stats& stats = cache_input_stream->stats();
+        io.cache.read_block_cache_count += stats.read_block_cache_count;
+        io.cache.read_block_cache_bytes += stats.read_block_cache_bytes;
+        io.cache.read_mem_cache_bytes += stats.read_mem_cache_bytes;
+        io.cache.read_disk_cache_bytes += stats.read_disk_cache_bytes;
+        io.cache.read_block_cache_ns += stats.read_block_cache_ns;
+        io.cache.skip_read_cache_count += stats.skip_read_cache_count;
+        io.cache.skip_read_cache_bytes += stats.skip_read_cache_bytes;
+        io.cache.read_peer_cache_bytes += stats.read_peer_cache_bytes;
+        io.cache.read_peer_cache_count += stats.read_peer_cache_count;
+        io.cache.read_peer_cache_ns += stats.read_peer_cache_ns;
+        io.cache.skip_read_peer_cache_count += stats.skip_read_peer_cache_count;
+        io.cache.skip_read_peer_cache_bytes += stats.skip_read_peer_cache_bytes;
+        io.cache.write_block_cache_count += stats.write_block_cache_count;
+        io.cache.write_block_cache_bytes += stats.write_block_cache_bytes;
+        io.cache.write_block_cache_ns += stats.write_block_cache_ns;
+        io.cache.write_cache_fail_count += stats.write_cache_fail_count;
+        io.cache.write_cache_fail_bytes += stats.write_cache_fail_bytes;
+        io.cache.read_block_buffer_count += stats.read_block_buffer_count;
+        io.cache.read_block_buffer_bytes += stats.read_block_buffer_bytes;
+    }
+}
+
+void IcebergDeleteBuilder::update_delete_file_io_counter(RuntimeProfile* parent_profile,
+                                                         const PositionDeleteIoStats& io) {
     const std::string ICEBERG_TIMER = "ICEBERG_V2_MOR";
     ADD_COUNTER(parent_profile, ICEBERG_TIMER, TUnit::NONE);
     {
@@ -269,12 +442,12 @@ void IcebergDeleteBuilder::update_delete_file_io_counter(
         RuntimeProfile::Counter* fs_io_counter =
                 ADD_CHILD_COUNTER(parent_profile, "MOR_FSIOCounter", TUnit::UNIT, prefix);
 
-        COUNTER_UPDATE(app_io_timer, app_stats.io_ns);
-        COUNTER_UPDATE(app_io_counter, app_stats.io_count);
-        COUNTER_UPDATE(app_io_bytes_read_counter, app_stats.bytes_read);
-        COUNTER_UPDATE(fs_bytes_read_counter, fs_stats.bytes_read);
-        COUNTER_UPDATE(fs_io_timer, fs_stats.io_ns);
-        COUNTER_UPDATE(fs_io_counter, fs_stats.io_count);
+        COUNTER_UPDATE(app_io_timer, io.app_io_ns);
+        COUNTER_UPDATE(app_io_counter, io.app_io_count);
+        COUNTER_UPDATE(app_io_bytes_read_counter, io.app_bytes_read);
+        COUNTER_UPDATE(fs_bytes_read_counter, io.fs_bytes_read);
+        COUNTER_UPDATE(fs_io_timer, io.fs_io_ns);
+        COUNTER_UPDATE(fs_io_counter, io.fs_io_count);
     }
 
     {
@@ -295,16 +468,16 @@ void IcebergDeleteBuilder::update_delete_file_io_counter(
         RuntimeProfile::Counter* shared_buffered_direct_io_timer =
                 ADD_CHILD_TIMER(parent_profile, "MOR_DirectIOTime", prefix);
 
-        COUNTER_UPDATE(shared_buffered_shared_io_count, shared_buffered_input_stream->shared_io_count());
-        COUNTER_UPDATE(shared_buffered_shared_io_bytes, shared_buffered_input_stream->shared_io_bytes());
-        COUNTER_UPDATE(shared_buffered_shared_align_io_bytes, shared_buffered_input_stream->shared_align_io_bytes());
-        COUNTER_UPDATE(shared_buffered_shared_io_timer, shared_buffered_input_stream->shared_io_timer());
-        COUNTER_UPDATE(shared_buffered_direct_io_count, shared_buffered_input_stream->direct_io_count());
-        COUNTER_UPDATE(shared_buffered_direct_io_bytes, shared_buffered_input_stream->direct_io_bytes());
-        COUNTER_UPDATE(shared_buffered_direct_io_timer, shared_buffered_input_stream->direct_io_timer());
+        COUNTER_UPDATE(shared_buffered_shared_io_count, io.shared_io_count);
+        COUNTER_UPDATE(shared_buffered_shared_io_bytes, io.shared_io_bytes);
+        COUNTER_UPDATE(shared_buffered_shared_align_io_bytes, io.shared_align_io_bytes);
+        COUNTER_UPDATE(shared_buffered_shared_io_timer, io.shared_io_timer);
+        COUNTER_UPDATE(shared_buffered_direct_io_count, io.direct_io_count);
+        COUNTER_UPDATE(shared_buffered_direct_io_bytes, io.direct_io_bytes);
+        COUNTER_UPDATE(shared_buffered_direct_io_timer, io.direct_io_timer);
     }
 
-    if (cache_input_stream) {
+    if (io.has_cache) {
         static const char* prefix = "MOR_DataCache";
         ADD_CHILD_COUNTER(parent_profile, prefix, TUnit::NONE, ICEBERG_TIMER);
         RuntimeProfile::Counter* datacache_read_counter =
@@ -346,7 +519,7 @@ void IcebergDeleteBuilder::update_delete_file_io_counter(
         RuntimeProfile::Counter* datacache_read_block_buffer_bytes =
                 ADD_CHILD_COUNTER(parent_profile, "MOR_DataCacheReadBlockBufferBytes", TUnit::BYTES, prefix);
 
-        const CacheInputStream::Stats& stats = cache_input_stream->stats();
+        const CacheInputStream::Stats& stats = io.cache;
         COUNTER_UPDATE(datacache_read_counter, stats.read_block_cache_count);
         COUNTER_UPDATE(datacache_read_bytes, stats.read_block_cache_bytes);
         COUNTER_UPDATE(datacache_read_mem_bytes, stats.read_mem_cache_bytes);

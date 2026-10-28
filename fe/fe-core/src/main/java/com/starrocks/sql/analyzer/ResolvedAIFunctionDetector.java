@@ -80,10 +80,10 @@ public final class ResolvedAIFunctionDetector {
 
         @Override
         public Void visitFunctionCall(FunctionCallExpr expr, Void context) {
-            if (expr.getFn() != null && expr.getFn().isAi()) {
+            if (expr.getFn() != null && expr.getFn().isAI()) {
                 aiFunctions.add(expr);
             }
-            if (firstAIFunction == null && expr.getFn() != null && expr.getFn().isAi()) {
+            if (firstAIFunction == null && expr.getFn() != null && expr.getFn().isAI()) {
                 firstAIFunction = expr;
             }
             return super.visitExpression(expr, context);

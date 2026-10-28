@@ -437,7 +437,7 @@ Merge Commit を使用する際の重要な注意事項を以下に示します�
 
   これら 2 つのパラメータは、異なるレイヤーで並行処理を制御するため、個別に調整する必要があります。
   - `sink.parallelism` は、Flink シンクサブタスクの数を制御します。各サブタスクは、データをバッファリングして StarRocks に送信します。Flink シンク operator が CPU またはメモリにバインドされている場合は、この値を増やします。Flink の operator ごとの CPU とメモリの使用量を監視して、より多くのサブタスクが必要かどうかを判断できます。
-  - `sink.properties.merge_commit_parallel` は、StarRocks が各 Merge Commit トランザクション用に作成するロードプランの並行処理の度合いを制御します。StarRocks がボトルネックになる場合は、この値を増やします。StarRocks のメトリクス [merge_commit_pending_total](../administration/management/monitoring/metrics.md#merge_commit_pending_total) (保留中の Merge Commit タスクの数) と [merge_commit_pending_bytes](../administration/management/monitoring/metrics.md#merge_commit_pending_bytes) (保留中のタスクが保持するバイト数) を監視して、StarRocks 側でより多くの並行処理が必要かどうかを判断できます。高い値が持続する場合は、ロードプランが受信データに追いついていないことを示します。
+  - `sink.properties.merge_commit_parallel` は、StarRocks が各 Merge Commit トランザクション用に作成するロードプランの並行処理の度合いを制御します。StarRocks がボトルネックになる場合は、この値を増やします。StarRocks のメトリクス [merge_commit_pending_total](../administration/management/monitoring/metric_details/i-p.md#merge_commit_pending_total) (保留中の Merge Commit タスクの数) と [merge_commit_pending_bytes](../administration/management/monitoring/metric_details/i-p.md#merge_commit_pending_bytes) (保留中のタスクが保持するバイト数) を監視して、StarRocks 側でより多くの並行処理が必要かどうかを判断できます。高い値が持続する場合は、ロードプランが受信データに追いついていないことを示します。
 
 - **`sink.merge-commit.chunk.size` と `sink.buffer-flush.max-bytes` の関係**:
   - `sink.merge-commit.chunk.size` は、個々の Stream Load リクエスト (チャンクごと) あたりの最大データサイズを制御します。チャンク内のデータがこのサイズに達すると、すぐにフラッシュされます。

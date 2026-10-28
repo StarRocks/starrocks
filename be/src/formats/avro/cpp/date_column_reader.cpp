@@ -76,7 +76,7 @@ Status DatetimeColumnReader::read_datum(const avro::GenericDatum& datum, Column*
 
 Status DatetimeColumnReader::read_long_value(const avro::GenericDatum& datum,
                                              FixedLengthColumn<TimestampValue>* column) {
-    auto timestamp_value_or = AvroUtils::long_to_timestamp_value(datum, _timezone);
+    auto timestamp_value_or = AvroUtils::long_to_timestamp_value(datum, _timezone, &_offset_cache);
     if (!timestamp_value_or.ok()) {
         return timestamp_value_or.status().clone_and_append(fmt::format("column: {}", _col_name));
     }

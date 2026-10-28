@@ -45,4 +45,20 @@ public class AlterMaterializedViewStatusLogTest {
         Assertions.assertTrue(read.isClearVersionMapUnset());
         Assertions.assertEquals("reason", read.getReason());
     }
+
+    @Test
+    public void testKeepTaskScheduledOfCurrentAndOldEntries() {
+        AlterMaterializedViewStatusLog log = new AlterMaterializedViewStatusLog(1L, 2L, "INACTIVE", "reason");
+        Assertions.assertFalse(log.isKeepTaskScheduled());
+        log.setKeepTaskScheduled(true);
+        AlterMaterializedViewStatusLog read = GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(log),
+                AlterMaterializedViewStatusLog.class);
+        Assertions.assertTrue(read.isKeepTaskScheduled());
+
+        // An entry written by a version that did not journal the flag suspends the task on replay, as it did.
+        JsonObject old = GsonUtils.GSON.toJsonTree(log).getAsJsonObject();
+        old.remove("keepTaskScheduled");
+        read = GsonUtils.GSON.fromJson(old, AlterMaterializedViewStatusLog.class);
+        Assertions.assertFalse(read.isKeepTaskScheduled());
+    }
 }

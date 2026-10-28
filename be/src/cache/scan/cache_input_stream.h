@@ -15,6 +15,7 @@
 #pragma once
 
 #include <memory>
+#include <set>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -88,6 +89,12 @@ public:
 
     int64_t get_align_size() const;
 
+    // Build the block cache key of a remote file version.
+    static std::string calc_cache_key(const std::string& filename, size_t size, int64_t modification_time);
+
+    // Remove the blocks read from the datacache, and return how many are removed.
+    size_t remove_cached_blocks();
+
     StatusOr<std::string_view> peek(int64_t count) override;
 
     Status skip(int64_t count) override {
@@ -135,6 +142,8 @@ protected:
     BlockCache* _cache = nullptr;
     int64_t _block_size = 0;
     std::unordered_map<int64_t, BlockBuffer> _block_map;
+    // Ids of the blocks read from the local or peer datacache.
+    std::set<int64_t> _cache_read_blocks;
     int8_t _priority = 0;
     uint64_t _ttl_seconds = 0;
     int8_t _frequency = 0;

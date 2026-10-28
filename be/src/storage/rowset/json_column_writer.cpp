@@ -62,6 +62,7 @@ FlatJsonColumnWriter::FlatJsonColumnWriter(const ColumnWriterOptions& opts, Type
           _wfile(wfile),
           _json_writer(std::move(json_writer)),
           _flat_json_config(opts.flat_json_config),
+          _json_columns_in_segment(opts.json_columns_in_segment),
           _global_dict(opts.flat_json_dicts),
           _column_name(opts.field_name),
           _use_zstd_compression(opts.use_zstd_compression),
@@ -265,7 +266,34 @@ Status FlatJsonColumnWriter::_init_flat_writers() {
 
         RETURN_IF_ERROR(_flat_writers[i]->init());
     }
+    _value_stats.assign(_flat_paths.size(), std::nullopt);
+    for (size_t i = 0; i < _flat_paths.size(); i++) {
+        if (_flat_types[i] == LogicalType::TYPE_JSON && !(_has_remain && i == _flat_paths.size() - 1)) {
+            _value_stats[i].emplace();
+        }
+    }
     return Status::OK();
+}
+
+void FlatJsonColumnWriter::_update_value_stats(size_t index, const Column& column) {
+    if (_value_stats[index].has_value()) {
+        _value_stats[index]->update(column);
+    }
+}
+
+void FlatJsonColumnWriter::_save_value_stats() {
+    for (size_t i = 0; i < _value_stats.size() && i < static_cast<size_t>(_json_meta->children_columns_size()); i++) {
+        if (!_value_stats[i].has_value()) {
+            continue;
+        }
+        const auto& stats = *_value_stats[i];
+        auto* pb = _json_meta->mutable_children_columns(i)->mutable_json_meta()->mutable_value_stats();
+        pb->set_json_type(stats.json_type);
+        pb->set_values(stats.values);
+        pb->set_base_type_count(stats.base_type_count);
+        pb->set_max_uint(stats.max_uint);
+        pb->set_min_int(stats.min_int);
+    }
 }
 
 Status FlatJsonColumnWriter::_write_flat_column() {
@@ -284,6 +312,7 @@ Status FlatJsonColumnWriter::_write_flat_column() {
 
     // flat datas
     for (size_t i = 0; i < _flat_columns.size(); i++) {
+        _update_value_stats(i, *_flat_columns[i]);
         RETURN_IF_ERROR(_flat_writers[i]->append(*_flat_columns[i]));
     }
 
@@ -327,6 +356,7 @@ Status FlatJsonColumnWriter::finish() {
         _flat_paths.clear();
         _flat_types.clear();
         _flat_columns.clear();
+        _value_stats.clear();
         _subcolumn_dict_valid.clear();
         _has_remain = false;
         _remain_filter.reset();
@@ -349,6 +379,7 @@ Status FlatJsonColumnWriter::finish() {
             _subcolumn_dict_valid[sub_column_key] = sub_dict_valid;
         }
     }
+    _save_value_stats();
 
     _json_meta->set_total_mem_footprint(total_mem_footprint());
     return Status::OK();

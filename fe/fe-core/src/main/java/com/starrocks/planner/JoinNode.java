@@ -36,6 +36,7 @@ package com.starrocks.planner;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Predicates;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.common.FeConstants;
@@ -58,6 +59,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
@@ -171,6 +173,10 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
             }
         }
 
+        // The filters pushed sideways are built by other joins, so the size limits on this join's own filters below
+        // do not apply to them.
+        pushDownRuntimeFiltersSideways(descTbl, execGroupSets);
+
         if (distrMode.equals(DistributionMode.PARTITIONED) || distrMode.equals(DistributionMode.SHUFFLE_HASH_BUCKET)) {
             // If it's partitioned join, and we can not get correct ndv
             // then it's hard to estimate right bloom filter size, or it's too big.
@@ -263,6 +269,77 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
     }
 
     /**
+     * Push the runtime filters built by broadcast joins under the build side of this join into its probe side.
+     * <p>
+     * A runtime filter only drops probe rows that can not contribute to the output of the join building it, so each
+     * non-null value its probe column carries out of that join is in the filter, and no operator above invents one.
+     * When that column is the build key of an equal conjunct of this join, every non-null build key reaching this
+     * join is in the filter, so a probe row whose key is not in it finds no match. The filter is then valid wherever
+     * a filter this join builds on that key is, and is pushed along the same conjunct onto the probe key. It is built
+     * by a broadcast join, whose build is small, under this join's build side, so it arrives before any filter this
+     * join builds.
+     */
+    private void pushDownRuntimeFiltersSideways(DescriptorTable descTbl, ExecGroupSets execGroupSets) {
+        if (joinOp.isCrossJoin() || !(getChild(1) instanceof ExchangeNode)) {
+            return;
+        }
+        if (this instanceof HashJoinNode hashJoinNode && hashJoinNode.isSkewJoin()) {
+            return;
+        }
+        List<RuntimeFilterDescription> filters = collectBroadcastJoinRuntimeFilters(getChild(1));
+        if (filters.isEmpty()) {
+            return;
+        }
+        for (BinaryPredicate joinConjunct : eqJoinConjuncts) {
+            // a null build key matches a null probe key under <=>, but a filter never holds null keys
+            if (!BinaryPredicate.IS_EQ_PREDICATE.apply(joinConjunct)) {
+                continue;
+            }
+            Expr buildExpr = joinConjunct.getChild(0);
+            Expr probeExpr = joinConjunct.getChild(1);
+            if (!ExprUtils.isBoundByTupleIds(buildExpr, getChild(1).getTupleIds())) {
+                buildExpr = joinConjunct.getChild(1);
+                probeExpr = joinConjunct.getChild(0);
+            }
+            if (!(buildExpr instanceof SlotRef buildSlot)) {
+                continue;
+            }
+            for (RuntimeFilterDescription rf : filters) {
+                if (rf.getEqualForNull() || !rf.canPushAcrossExchangeNode()) {
+                    continue;
+                }
+                boolean boundsBuildKey = rf.getNodeIdToProbeExpr().values().stream().anyMatch(
+                        expr -> expr instanceof SlotRef slot && slot.getSlotId().equals(buildSlot.getSlotId()));
+                if (!boundsBuildKey) {
+                    continue;
+                }
+                // The filter is built in a fragment under the build-side exchange of this join, so every target it
+                // gets on the probe side is remote.
+                RuntimeFilterPushDownContext rfPushDownCxt =
+                        new RuntimeFilterPushDownContext(rf, descTbl, execGroupSets);
+                rf.enterExchangeNode();
+                boolean accepted = getChild(0).pushDownRuntimeFilters(rfPushDownCxt, probeExpr, Lists.newArrayList());
+                rf.exitExchangeNode();
+                if (accepted) {
+                    rf.setHasRemoteTargets(true);
+                }
+            }
+        }
+    }
+
+    private static List<RuntimeFilterDescription> collectBroadcastJoinRuntimeFilters(PlanNode root) {
+        List<RuntimeFilterDescription> filters = Lists.newArrayList();
+        List<JoinNode> joinNodes = Lists.newArrayList();
+        root.collectAll(Predicates.instanceOf(JoinNode.class), joinNodes);
+        for (JoinNode joinNode : joinNodes) {
+            joinNode.getBuildRuntimeFilters().stream()
+                    .filter(RuntimeFilterDescription::isBroadcastJoin)
+                    .forEach(filters::add);
+        }
+        return filters;
+    }
+
+    /**
      * Each slotExpr can deduce many slotExprs which is adjective because each join's conjunct can deduce left/right exprs.
      */
     public Optional<List<Expr>> candidatesOfSlotExprForChild(Expr expr, int childIdx) {
@@ -318,7 +395,8 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
         SlotRef probeSlotRefExpr = probeExpr.cast();
         int slotId = probeSlotRefExpr.getSlotId().asInt();
         boolean probeExprIsNotJoinColumn = eqJoinConjuncts.stream()
-                .filter(conj -> conj.getOp().equals(BinaryType.EQ))
+                .filter(conj -> conj.getOp().equals(BinaryType.EQ) ||
+                        isIcebergEqDeletePruningConjunct(conj, context.getDescription()))
                 .noneMatch(conj -> ExprUtils.getUsedSlotIds(conj).contains(slotId));
 
         if (probeExprIsNotJoinColumn) {
@@ -332,6 +410,47 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
         return Optional.of(hasPushedDown);
     }
 
+
+    // A filter from an ancestor join may also reach the delete side of an Iceberg equality-delete anti join through a
+    // `<=>` on an identity partition column. Dropping the deletes of a rejected partition lets its data rows through
+    // this join, but the join that built the filter drops them: only a join filter of an inner or left semi join
+    // whose probe side holds this join guarantees that, and only if no limit on the way can keep such a row in place
+    // of a live one.
+    private boolean isIcebergEqDeletePruningConjunct(BinaryPredicate conj, RuntimeFilterDescription description) {
+        if (!joinOp.isLeftAntiJoin() || joinOp.isNullAwareLeftAntiJoin() || conj.getOp() != BinaryType.EQ_FOR_NULL ||
+                description.runtimeFilterType() != RuntimeFilterDescription.RuntimeFilterType.JOIN_FILTER) {
+            return false;
+        }
+        if (!(description.getBuildPlanNode() instanceof JoinNode buildJoin) ||
+                !(buildJoin.getJoinOp().isInnerJoin() || buildJoin.getJoinOp().isLeftSemiJoin()) ||
+                !isOnPathWithoutLimit(buildJoin.getChild(0), this)) {
+            return false;
+        }
+        PlanNode deleteScan = getChild(1);
+        while (deleteScan instanceof ExchangeNode && deleteScan.getChildren().size() == 1) {
+            deleteScan = deleteScan.getChild(0);
+        }
+        if (!(deleteScan instanceof IcebergScanNode icebergScan)) {
+            return false;
+        }
+        for (Expr side : conj.getChildren()) {
+            if (side instanceof SlotRef slot && ExprUtils.isBoundByTupleIds(slot, getChild(1).getTupleIds())) {
+                return icebergScan.isRuntimeFilterPruningSlot(slot.getSlotId());
+            }
+        }
+        return false;
+    }
+
+    // whether target is under root and no node from root down to target, both included, has a limit
+    private static boolean isOnPathWithoutLimit(PlanNode root, PlanNode target) {
+        if (root == target) {
+            return !root.hasLimit();
+        }
+        if (root.hasLimit()) {
+            return false;
+        }
+        return root.getChildren().stream().anyMatch(child -> isOnPathWithoutLimit(child, target));
+    }
 
     private Optional<Boolean> pushDownRuntimeFilterUnilaterally(RuntimeFilterPushDownContext context,
                                                                 Expr probeExpr,
@@ -394,7 +513,11 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
             }
 
             // use runtime filter at this level if rf can not be pushed down to children.
-            if (description.canProbeUse(this, context)) {
+            // The probe side needs every partition-by expr to locate a row's partition of a partitioned
+            // global filter; if one is only produced above this join, leave the filter to that ancestor.
+            Function<Expr, Boolean> partitionExprBound = couldBoundForPartitionExpr(context.getDescTbl());
+            if (partitionByExprs.stream().allMatch(partitionExprBound::apply)
+                    && description.canProbeUse(this, context)) {
                 description.addProbeExpr(id.asInt(), probeExpr);
                 description.addPartitionByExprsIfNeeded(id.asInt(), probeExpr, partitionByExprs);
                 probeRuntimeFilters.add(description);

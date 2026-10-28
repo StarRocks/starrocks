@@ -123,9 +123,18 @@ Status FileReader::_build_split_tasks() {
     }
 
     size_t row_group_size = _file_metadata->t_metadata().row_groups.size();
+    int64_t row_group_first_row = 0;
+    int64_t deleted_row_groups = 0;
     for (size_t i = 0; i < row_group_size; i++) {
         const tparquet::RowGroup& row_group = _file_metadata->t_metadata().row_groups[i];
+        if (i > 0) {
+            row_group_first_row += _file_metadata->t_metadata().row_groups[i - 1].num_rows;
+        }
         if (!_select_row_group(row_group)) continue;
+        if (_is_row_group_all_deleted(row_group_first_row, row_group.num_rows)) {
+            deleted_row_groups++;
+            continue;
+        }
         int64_t start_offset = ParquetUtils::get_row_group_start_offset(row_group);
         int64_t end_offset = ParquetUtils::get_row_group_end_offset(row_group);
         if (start_offset >= end_offset) {
@@ -154,6 +163,9 @@ Status FileReader::_build_split_tasks() {
     // if only one split task, clear it, no need to do split work.
     if (_scanner_ctx->split.split_tasks.size() <= 1) {
         _scanner_ctx->split.split_tasks.clear();
+    } else {
+        // without split tasks, _init_group_readers skips and counts them
+        _scanner_ctx->stats->deleted_row_groups_skipped += deleted_row_groups;
     }
 
     if (VLOG_OPERATOR_IS_ON) {
@@ -165,6 +177,14 @@ Status FileReader::_build_split_tasks() {
                       << ", split_tasks.size = " << _scanner_ctx->split.split_tasks.size() << ", range = " << ss.str();
     }
     return Status::OK();
+}
+
+bool FileReader::_is_row_group_all_deleted(int64_t first_row, int64_t num_rows) const {
+    if (num_rows <= 0 || _skip_rows_ctx == nullptr || !_skip_rows_ctx->has_skip_rows()) {
+        return false;
+    }
+    return _skip_rows_ctx->deletion_bitmap->get_range_cardinality(first_row, first_row + num_rows) ==
+           static_cast<uint64_t>(num_rows);
 }
 
 // when doing row group filter, there maybe some error, but we'd better just ignore it instead of returning the error
@@ -302,6 +322,12 @@ Status FileReader::_init_group_readers() {
         }
 
         if (_file_metadata->t_metadata().row_groups[i].num_rows == 0) {
+            continue;
+        }
+
+        if (_is_row_group_all_deleted(row_group_first_row, _file_metadata->t_metadata().row_groups[i].num_rows)) {
+            _group_reader_param.stats->total_row_groups += 1;
+            _group_reader_param.stats->deleted_row_groups_skipped += 1;
             continue;
         }
 

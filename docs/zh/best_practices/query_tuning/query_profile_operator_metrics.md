@@ -251,6 +251,7 @@ OLAP_SCAN Operator 负责从 StarRocks 内表中读取数据。
 | RuntimeFilterEvalTime | 在 Parquet Reader 内部对已解码数据行求值 Join Runtime Filter 所花费的时间。 |
 | RuntimeFilterInputRows | 进入 Parquet Reader Join Runtime Filter 求值的行数。 |
 | RuntimeFilterOutputRows | 通过 Parquet Reader Join Runtime Filter 求值的行数。与 `RuntimeFilterInputRows` 差距越大，说明在物化 Lazy 列之前过滤掉的行越多。 |
+| ScanRangesPrunedByPartitionValue | 因 identity 分区值被谓词或已到达的 Join Runtime Filter 过滤，而在读取前被跳过的 Scan Range 数量。 |
 | PaimonFSAppIOCount | Paimon 文件系统适配层收到的有效读请求次数，为顺序读、位置读和异步读次数之和。 |
 | PaimonFSAppIOBytes | Paimon 文件系统适配层成功返回的读取字节数。 |
 | PaimonFSAppIOTime | Paimon 文件系统适配层读请求的端到端耗时。 |

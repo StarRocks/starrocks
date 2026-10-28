@@ -22,6 +22,7 @@ import com.starrocks.common.util.ConsistentHashRing;
 import com.starrocks.common.util.HashRing;
 import com.starrocks.common.util.PlainHashRing;
 import com.starrocks.common.util.RendezvousHashRing;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
@@ -125,6 +126,26 @@ public class HashRingTest {
         ConsistentHashRing hashRing =
                 new ConsistentHashRing(Hashing.murmur3_128(), funnel, funnel, nodes, kVirtualNumber);
         testWithHashRing(hashRing, nodes);
+    }
+
+    @Test
+    public void testConsistentHashRingAskMoreNodesThanRing() {
+        List<String> nodes = generateNodes(2);
+        ConsistentHashRing<String, String> hashRing =
+                new ConsistentHashRing<>(Hashing.murmur3_128(), funnel, funnel, nodes, kVirtualNumber);
+        for (String key : generateKeys(100)) {
+            List<String> hosts = hashRing.get(key, 3);
+            Assertions.assertEquals(2, hosts.size());
+            Assertions.assertEquals(hosts.get(0), hashRing.get(key, 1).get(0));
+            Assertions.assertTrue(hosts.containsAll(nodes));
+        }
+
+        hashRing.removeNode("Host0");
+        Assertions.assertEquals(List.of("Host1"), hashRing.get("Key00", 3));
+        hashRing.removeNode("Host1");
+        Assertions.assertTrue(hashRing.get("Key00", 3).isEmpty());
+        hashRing.addNode("Host2");
+        Assertions.assertEquals(List.of("Host2"), hashRing.get("Key00", 3));
     }
 
     @Test

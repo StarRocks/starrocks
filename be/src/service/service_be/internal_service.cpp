@@ -46,6 +46,7 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/closure_guard.h"
 #include "storage/local_tablet_reader.h"
+#include "storage/segment_flush_executor.h"
 #include "storage/storage_engine.h"
 
 namespace starrocks {
@@ -176,10 +177,11 @@ void BackendInternalServiceImpl<T>::tablet_writer_add_segment(google::protobuf::
                                                               const PTabletWriterAddSegmentRequest* request,
                                                               PTabletWriterAddSegmentResult* response,
                                                               google::protobuf::Closure* done) {
+    const auto deadline = add_segment_lock_deadline();
     VLOG_RPC << "tablet writer add segment, id=" << print_id(request->id()) << ", txn_id: " << request->txn_id()
              << ", index_id=" << request->index_id() << ", tablet_id=" << request->tablet_id()
              << ", eos=" << request->eos();
-    _load_channel_mgr->add_segment(static_cast<brpc::Controller*>(controller), request, response, done);
+    _load_channel_mgr->add_segment(static_cast<brpc::Controller*>(controller), request, response, done, deadline);
 }
 
 template <typename T>

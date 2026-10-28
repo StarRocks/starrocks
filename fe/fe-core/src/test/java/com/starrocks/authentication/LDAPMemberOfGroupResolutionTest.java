@@ -34,6 +34,9 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
@@ -267,14 +270,17 @@ public class LDAPMemberOfGroupResolutionTest {
     /**
      * AC-13, the positive half: a pre-created user declared **without** `AS '<dn>'` does not go
      * through a security integration at all - its provider is built from the FE configuration - and
-     * it must still pick up the memberOf groups.
+     * it must still pick up the memberOf groups. Under `memberof` its group providers stay off: only
+     * the legacy `AS '<dn>'` form keeps them regardless of the group source.
      */
-    @Test
-    public void testPreCreatedUserWithoutAsGetsMemberOfGroupsFromTheFeConfig() throws Exception {
+    @ParameterizedTest
+    @CsvSource({"both, true", "memberof, false"})
+    public void testPreCreatedUserWithoutAsGetsMemberOfGroupsFromTheFeConfig(String groupSource,
+                                                                             boolean providerUsed) throws Exception {
         stubDirectory();
         createGroupProvider();
         Config.group_provider = new String[] {GP_NAME};
-        Config.authentication_ldap_simple_group_source = "both";
+        Config.authentication_ldap_simple_group_source = groupSource;
 
         authMgr().createUser(new CreateUserStmt(
                 new UserRef(USER, "%", false, NodePosition.ZERO),
@@ -285,7 +291,8 @@ public class LDAPMemberOfGroupResolutionTest {
 
         ConnectContext context = login(USER);
 
-        Assertions.assertEquals(Set.of(MEMBEROF_ONLY_GROUP, PROVIDER_ONLY_GROUP), context.getGroups());
+        Assertions.assertEquals(providerUsed ? Set.of(MEMBEROF_ONLY_GROUP, PROVIDER_ONLY_GROUP)
+                : Set.of(MEMBEROF_ONLY_GROUP), context.getGroups());
         Assertions.assertEquals(USER_DN, context.getDistinguishedName());
     }
 
@@ -321,15 +328,17 @@ public class LDAPMemberOfGroupResolutionTest {
     }
 
     /**
-     * AC-13, the negative half at chain level: the legacy `AS '<dn>'` form is excluded even when the
-     * FE configuration turns memberOf on.
+     * AC-13, the negative half at chain level: the legacy `AS '<dn>'` form gets the same groups whatever
+     * the FE configuration says - memberOf is never read, and the group providers are kept even under
+     * `memberof`, which would otherwise leave it with no group at all.
      */
-    @Test
-    public void testPreCreatedUserWithAsIsUnaffectedByTheFeConfig() throws Exception {
+    @ParameterizedTest
+    @ValueSource(strings = {"group_provider", "both", "memberof"})
+    public void testPreCreatedUserWithAsIsUnaffectedByTheFeConfig(String groupSource) throws Exception {
         stubDirectory();
         createGroupProvider();
         Config.group_provider = new String[] {GP_NAME};
-        Config.authentication_ldap_simple_group_source = "both";
+        Config.authentication_ldap_simple_group_source = groupSource;
 
         authMgr().createUser(new CreateUserStmt(
                 new UserRef(USER, "%", false, NodePosition.ZERO),

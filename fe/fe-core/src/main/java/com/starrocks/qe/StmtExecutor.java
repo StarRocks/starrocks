@@ -255,6 +255,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.sql.plan.PlanFragmentBuilder;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeMgr;
 import com.starrocks.statistic.AnalyzeStatus;
@@ -1822,8 +1823,10 @@ public class StmtExecutor {
             String explainPlan;
             try {
                 sv.setEnableDesensitizeExplain(forceDesensitize);
+                context.setExplainForProfile(true);
                 explainPlan = plan.getExplainString(TExplainLevel.COSTS);
             } finally {
+                context.setExplainForProfile(false);
                 sv.setEnableDesensitizeExplain(prevDesensitize);
             }
             // Defense in depth: also strip credential-bearing literals (e.g. FILES("...")
@@ -3419,6 +3422,10 @@ public class StmtExecutor {
                 } else {
                     QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
                 }
+                if (coord != null) {
+                    // Paths that bypass execute(), such as MV refresh DML, release scan resources here.
+                    coord.clearExternalResources();
+                }
             }
         }
     }
@@ -3433,6 +3440,7 @@ public class StmtExecutor {
             if (extra == null) {
                 extra = new IcebergMetadata.IcebergSinkExtra();
             }
+            extra.setRewrite(true);
             // A rewrite removes the data files it scanned, so a delete file may only be removed along with them
             // when it is provably dangling afterwards. Removing one that still applies to an untouched data file
             // would resurrect the rows it deletes.
@@ -3760,7 +3768,10 @@ public class StmtExecutor {
                 insertError = true;
                 return;
             }
-            if (loadedRows == 0 && filteredRows == 0 && (stmt instanceof DeleteStmt || stmt instanceof InsertStmt
+            // An Iceberg rewrite writes no row when every row of its files is deleted; it still has to commit
+            // to drop those files.
+            if (loadedRows == 0 && filteredRows == 0 && !(stmt instanceof IcebergRewriteStmt)
+                    && (stmt instanceof DeleteStmt || stmt instanceof InsertStmt
                     || stmt instanceof UpdateStmt || stmt instanceof MergeIntoStmt)) {
                 // when the target table is not ExternalOlapTable or OlapTable
                 // if there is no data to load, the result of the insert statement is success
@@ -3807,12 +3818,12 @@ public class StmtExecutor {
                     // this PR only wires the FE planner / executor entry points.
                     IcebergMetadata.IcebergSinkExtra extra = rowDeltaSink.getSinkExtraInfo();
                     context.getGlobalStateMgr().getMetadataMgr().finishSink(
-                            catalogName, dbName, tableName, commitInfos, null, extra, context);
+                            catalogName, dbName, tableName, commitInfos, rowDeltaSink.getTargetBranch(), extra, context);
                 } else if (dataSink instanceof IcebergDeleteSink deleteSink) {
                     // This is a DELETE operation, use IcebergDeleteSink
                     IcebergMetadata.IcebergSinkExtra extra = deleteSink.getSinkExtraInfo();
                     context.getGlobalStateMgr().getMetadataMgr().finishSink(
-                            catalogName, dbName, tableName, commitInfos, null, extra, context);
+                            catalogName, dbName, tableName, commitInfos, deleteSink.getTargetBranch(), extra, context);
                 } else if (dataSink instanceof IcebergTableSink) {
                     // This is an INSERT/OVERWRITE operation, use IcebergTableSink
                     IcebergTableSink sink = (IcebergTableSink) dataSink;
@@ -4123,6 +4134,9 @@ public class StmtExecutor {
 
     public Pair<List<TResultBatch>, Status> executeStmtWithExecPlan(ConnectContext context, ExecPlan plan) {
         List<TResultBatch> sqlResult = Lists.newArrayList();
+        // Set when the statement fails before a coordinator exists, e.g. while serializing the descriptor table.
+        Status failedBeforeScheduling = null;
+        coord = null;
         try {
             UUID uuid = context.getQueryId();
             context.setExecutionId(UUIDUtil.toTUniqueId(uuid));
@@ -4158,12 +4172,22 @@ public class StmtExecutor {
             } else {
                 LOG.warn("Failed to execute executeStmtWithExecPlan", e);
             }
-            coord.getExecStatus().setInternalErrorStatus(e.getMessage());
+            if (coord == null) {
+                failedBeforeScheduling = Status.internalError(e.getMessage());
+            } else {
+                coord.getExecStatus().setInternalErrorStatus(e.getMessage());
+            }
         } finally {
             QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
             recordExecStatsIntoContext();
+            if (coord != null) {
+                // Internal queries bypass execute() and publish no query-finished event; release scans here.
+                coord.clearExternalResources();
+            } else {
+                PlanFragmentBuilder.releaseScanResources(plan);
+            }
         }
-        return Pair.create(sqlResult, coord.getExecStatus());
+        return Pair.create(sqlResult, failedBeforeScheduling != null ? failedBeforeScheduling : coord.getExecStatus());
     }
 
     public List<ByteBuffer> getProxyResultBuffer() {

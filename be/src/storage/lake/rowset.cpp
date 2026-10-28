@@ -59,6 +59,10 @@
 
 namespace starrocks::lake {
 
+static bool cancel_requested(const std::atomic<bool>* flag) {
+    return flag != nullptr && flag->load(std::memory_order_acquire);
+}
+
 static SegmentReadStateCache make_segment_read_state_cache(const PreparedSegmentReadState& state) {
     SegmentReadStateCache cache;
     if (state.has_pruned_scan_range()) {
@@ -577,6 +581,11 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::do_read(const Schema& schema, co
             context.prepared_segments != nullptr ? context.prepared_segments->size() : segments.size();
     const size_t segment_end = context.target_segment_idx.has_value() ? *context.target_segment_idx + 1 : segment_count;
     for (size_t i = segment_begin; i < segment_end; i++) {
+        // Creating an iterator loads the segment's delete vector, which can be a remote read.
+        if (cancel_requested(seg_options.is_cancelled)) {
+            return Status::Cancelled(
+                    fmt::format("cancelled while opening segments, tablet:{} rowset:{}", _tablet_id, metadata().id()));
+        }
         // Prepared segments are indexed by metadata position and are not pre-filtered by load_segments(),
         // so apply the metadata filter here; the non-prepared path already carries nullptr placeholders
         // for filtered segments (handled by the nullptr check below).
@@ -998,7 +1007,8 @@ StatusOr<std::vector<SegmentPtr>> Rowset::segments(bool fill_cache) {
     return segments(lake_io_opts);
 }
 
-StatusOr<std::vector<SegmentPtr>> Rowset::segments(const LakeIOOptions& lake_io_opts, OlapReaderStatistics* stats) {
+StatusOr<std::vector<SegmentPtr>> Rowset::segments(const LakeIOOptions& lake_io_opts, OlapReaderStatistics* stats,
+                                                   const std::atomic<bool>* is_cancelled) {
     LakeIOOptions effective_opts = lake_io_opts;
     // A rowset that cannot use the prepared-segments path (partial compaction, segment-range mode)
     // reloads its segments on every read anyway, so holding would pin a second copy for the whole
@@ -1059,6 +1069,7 @@ StatusOr<std::vector<SegmentPtr>> Rowset::segments(const LakeIOOptions& lake_io_
     std::vector<LoadedSegment> loaded;
     SegmentReadOptions seg_options;
     seg_options.lake_io_opts = effective_opts;
+    seg_options.is_cancelled = is_cancelled;
     // NOTE: the held set is deliberately loaded under the ambient (task) tracker. Charging it to the
     // process-lifetime compaction tracker instead looks tempting -- that tracker outlives every
     // range-split subtask -- but it does not balance: a free is charged to whatever tracker is in TLS
@@ -1229,6 +1240,13 @@ Status Rowset::load_segments(std::vector<LoadedSegment>* segments, SegmentReadOp
     // For segment range mode, seg_idx should match the original segment index
     seg_idx = seg_start;
     for (index = seg_start; index < seg_end; index++) {
+        // A rowset can hold thousands of segments and each one costs a footer read, so a query that
+        // was cancelled must stop here instead of opening the rest. Checked before every load: the
+        // check after one segment's IO is the check before the next one's.
+        if (cancel_requested(seg_options.is_cancelled)) {
+            return Status::Cancelled(fmt::format("cancelled while loading segments, tablet:{} rowset:{} segment:{}/{}",
+                                                 _tablet_id, metadata().id(), index - seg_start, seg_end - seg_start));
+        }
         const auto& segment_meta = metadata().segment_metas(index);
         const auto& seg_name = segment_meta.filename();
         int current_idx = base_idx + seg_idx;
@@ -1266,7 +1284,15 @@ Status Rowset::load_segments(std::vector<LoadedSegment>* segments, SegmentReadOp
         if (_parallel_load) {
             int captured_idx = current_idx;
             auto task_open_stats = open_stats != nullptr ? std::make_shared<OlapReaderStatistics>() : nullptr;
+            // The flag outlives the task: |wait_futures| keeps this call, and so its caller, from
+            // returning before every submitted task has finished.
+            const std::atomic<bool>* cancel_flag = seg_options.is_cancelled;
             auto task = std::make_shared<std::packaged_task<std::pair<StatusOr<SegmentPtr>, std::string>()>>([=]() {
+                // A task still queued when the query is cancelled must not start its IO.
+                if (cancel_requested(cancel_flag)) {
+                    return std::make_pair(StatusOr<SegmentPtr>(Status::Cancelled("cancelled while loading segments")),
+                                          seg_name);
+                }
 #ifdef BE_TEST
                 Status injected_st;
                 TEST_SYNC_POINT_CALLBACK("Rowset::load_segments::parallel_load", &injected_st);
@@ -1304,6 +1330,7 @@ Status Rowset::load_segments(std::vector<LoadedSegment>* segments, SegmentReadOp
                 !status.ok()) {
                 return status;
             }
+            TEST_SYNC_POINT_CALLBACK("Rowset::load_segments::serial_loaded", &index);
             seg_idx++;
         }
     }

@@ -51,13 +51,16 @@ import com.starrocks.type.IntegerType;
 import com.starrocks.type.StringType;
 import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.FileContent;
+import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
+import org.apache.iceberg.Schema;
 import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.Table;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -71,6 +74,8 @@ import static com.starrocks.catalog.IcebergTable.PARTITION_KEY;
 import static com.starrocks.catalog.IcebergTable.SPEC_ID;
 
 public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
+    private static final Set<String> EXTENDED_COLUMN_NAMES = Set.of(DATA_SEQUENCE_NUMBER, SPEC_ID, PARTITION_KEY);
+
     public IcebergEqualityDeleteRewriteRule() {
         super(RuleType.TF_ICEBERG_EQUALITY_REWRITE_RULE, Pattern.create(OperatorType.LOGICAL_ICEBERG_SCAN));
     }
@@ -137,13 +142,24 @@ public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
             throw new StarRocksConnectorException("Equality delete files aren't supported for tables with partition evolution." +
                     "You can execute `set enable_read_iceberg_equality_delete_with_partition_evolution = true` then rerun it");
         }
+        if (hasPartitionEvolution && (table.schema().caseInsensitiveFindField(PARTITION_KEY) != null ||
+                icebergTable.getReadSchema().caseInsensitiveFindField(PARTITION_KEY) != null)) {
+            // without the partition key the anti join cannot keep a partitioned delete inside its own spec; a
+            // time-travel read may still see such a column that the current schema has dropped
+            throw new StarRocksConnectorException("Equality delete files that span partition specs aren't supported " +
+                    "for a table with a column named " + PARTITION_KEY);
+        }
 
         List<List<Integer>> allIds = deleteSchemas.stream()
                 .map(IcebergDeleteSchema::equalityIds)
                 .distinct()
                 .toList();
+        // a key whose partition match is done by its identity partition columns needs no $partition_key
+        Map<List<Integer>, Set<String>> pruningColumnsByIds = allIds.stream()
+                .collect(Collectors.toMap(ids -> ids,
+                        ids -> runtimeFilterPruningColumns(context, scanOperator, icebergTable, deleteSchemas, ids)));
         Set<List<Integer>> idsNeedingPartitionMatch = allIds.stream()
-                .filter(ids -> needsPartitionMatch(table, deleteSchemas, ids))
+                .filter(ids -> pruningColumnsByIds.get(ids).isEmpty() && needsPartitionMatch(table, deleteSchemas, ids))
                 .collect(Collectors.toSet());
 
         List<IcebergMORParams> tableFullMorParams = Stream.concat(
@@ -157,8 +173,11 @@ public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
         scanOperator.setFromEqDeleteRewriteRule(true);
 
         ImmutableMap.Builder<ColumnRefOperator, ScalarOperator> projectForUnion = ImmutableMap.builder();
+        Set<String> allPruningColumns = pruningColumnsByIds.values().stream()
+                .flatMap(Set::stream)
+                .collect(Collectors.toSet());
         LogicalIcebergScanOperator icebergDataFileWithDeleteScanOp = buildNewScanOperatorWithUnselectedAndExtendedField(
-                deleteSchemas, scanOperator, columnRefFactory, projectForUnion, hasPartitionEvolution,
+                deleteSchemas, allPruningColumns, scanOperator, columnRefFactory, projectForUnion, hasPartitionEvolution,
                 !idsNeedingPartitionMatch.isEmpty());
         icebergDataFileWithDeleteScanOp.setMORParam(IcebergMORParams.DATA_FILE_WITH_EQ_DELETE);
         icebergDataFileWithDeleteScanOp.setTableFullMORParams(icebergTableFullMorParams);
@@ -169,14 +188,22 @@ public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
             List<Integer> equalityIds = allIds.get(i);
             String equalityDeleteTableName = buildEqualityDeleteTableName(icebergTable, equalityIds);
             List<String> columnNames = equalityIds.stream()
-                    .map(id -> table.schema().findColumnName(id))
+                    .map(id -> findEqualityColumnName(icebergTable, id))
                     .toList();
             List<Column> deleteColumns = columnNames.stream().map(icebergTable::getColumn).collect(Collectors.toList());
+            // a pruning column outside the key gets a delete-side slot holding the partition value, and
+            // buildOnPredicate matches it with `<=>` like a key column, in place of the $partition_key match
+            Set<String> pruningColumns = pruningColumnsByIds.get(equalityIds);
+            pruningColumns.stream()
+                    .filter(name -> !columnNames.contains(name))
+                    .sorted()
+                    .forEach(name -> deleteColumns.add(icebergTable.getColumn(name)));
             IcebergTable equalityDeleteTable = new IcebergTable(
                     ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asLong(), equalityDeleteTableName,
                     icebergTable.getCatalogName(), icebergTable.getResourceName(), icebergTable.getCatalogDBName(),
                     icebergTable.getCatalogTableName(), EQUALITY_DELETE_TABLE_COMMENT, deleteColumns,
                     icebergTable.getNativeTable(), ImmutableMap.of());
+            equalityDeleteTable.inheritReadView(icebergTable);
 
             ImmutableMap.Builder<ColumnRefOperator, Column> colRefToColumn = ImmutableMap.builder();
             ImmutableMap.Builder<Column, ColumnRefOperator> columnToColRef = ImmutableMap.builder();
@@ -186,21 +213,24 @@ public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
                 columnToColRef.put(column, columnRef);
             }
 
-            // the partition key already carries the spec id, and a separate $spec_id match would keep a global
-            // delete from reaching data files of other specs
+            // the partition key already carries the spec id, and a $spec_id match would keep a global delete from
+            // reaching data files of other specs
             boolean needsPartitionMatch = idsNeedingPartitionMatch.contains(equalityIds);
+            boolean withGlobalDeletes = hasGlobalDeletes(table, deleteSchemas, equalityIds);
             fillExtendedColumns(columnRefFactory, colRefToColumn, columnToColRef,
-                    hasPartitionEvolution && !needsPartitionMatch, needsPartitionMatch, icebergTable);
+                    hasPartitionEvolution && !needsPartitionMatch && !withGlobalDeletes, needsPartitionMatch,
+                    icebergTable);
             LogicalIcebergEqualityDeleteScanOperator eqScanOp = new LogicalIcebergEqualityDeleteScanOperator(
                     equalityDeleteTable, colRefToColumn.build(), columnToColRef.build(), -1, null,
                     scanOperator.getTvrVersionRange());
             eqScanOp.setOriginPredicate(scanOperator.getPredicate());
             eqScanOp.setTableFullMORParams(icebergTableFullMorParams);
             eqScanOp.setMORParams(IcebergMORParams.of(IcebergMORParams.ScanTaskType.EQ_DELETE, equalityIds));
+            eqScanOp.setRuntimeFilterPruningColumns(pruningColumns);
 
             ScalarOperator onPredicate = buildOnPredicate(
                     icebergDataFileWithDeleteScanOp.getColumnNameToColRefMap(), eqScanOp.getOutputColumns(),
-                    hasGlobalDeletes(table, deleteSchemas, equalityIds));
+                    withGlobalDeletes);
 
             LogicalJoinOperator.Builder builder = LogicalJoinOperator.builder()
                     .setJoinType(JoinOperator.LEFT_ANTI_JOIN)
@@ -319,6 +349,7 @@ public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
 
     private LogicalIcebergScanOperator buildNewScanOperatorWithUnselectedAndExtendedField(
             Set<IcebergDeleteSchema> deleteSchemas,
+            Set<String> pruningColumns,
             LogicalIcebergScanOperator scanOperator,
             ColumnRefFactory columnRefFactory,
             ImmutableMap.Builder<ColumnRefOperator, ScalarOperator> projectForUnion,
@@ -331,16 +362,19 @@ public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
                 noDeleteTable.getCatalogName(), noDeleteTable.getResourceName(), noDeleteTable.getCatalogDBName(),
                 noDeleteTable.getCatalogTableName(), "iceberg_table_with_delete", noDeleteTable.getFullSchema(),
                 noDeleteTable.getNativeTable(), ImmutableMap.of());
-        Table nativeTable = noDeleteTable.getNativeTable();
+        withDeleteIcebergTable.inheritReadView(noDeleteTable);
 
         Map<ColumnRefOperator, Column> colRefToColumnMetaMap = scanOperator.getColRefToColumnMetaMap();
         Map<Column, ColumnRefOperator> columnMetaToColRefMap = scanOperator.getColumnMetaToColRefMap();
 
-        Map<ColumnRefOperator, Column> deleteColumns = deleteSchemas.stream()
+        // the pruning columns stand in for $partition_key in the anti join, so the data side reads them even when
+        // the query does not
+        Stream<String> keyColumnNames = deleteSchemas.stream()
                 .map(IcebergDeleteSchema::equalityIds)
                 .flatMap(List::stream)
+                .map(fieldId -> findEqualityColumnName(noDeleteTable, fieldId));
+        Map<ColumnRefOperator, Column> deleteColumns = Stream.concat(keyColumnNames, pruningColumns.stream())
                 .distinct()
-                .map(fieldId -> nativeTable.schema().findColumnName(fieldId))
                 .map(withDeleteIcebergTable::getColumn)
                 .collect(Collectors.toMap(columnMetaToColRefMap::get, column -> column));
 
@@ -426,8 +460,10 @@ public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
     }
 
     // A partitioned equality delete only applies to data files with the same spec and partition. The anti join
-    // must check that unless a key match already implies it: every partition field is an identity transform of
-    // an equality column (for example a Flink upsert table). Deletes of an unpartitioned spec are global.
+    // must check that unless a key match already implies it: the deletes share one spec, and every partition field
+    // of it is an identity transform of an equality column (for example a Flink upsert table). Deletes of an
+    // unpartitioned spec are global; next to deletes of another spec they also need the partition key, whose NULL
+    // marks them as global.
     static boolean hasGlobalDeletes(Table table, Set<IcebergDeleteSchema> deleteSchemas, List<Integer> equalityIds) {
         return deleteSchemas.stream()
                 .filter(deleteSchema -> deleteSchema.equalityIds().equals(equalityIds))
@@ -435,10 +471,87 @@ public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
                 .anyMatch(spec -> spec == null || spec.isUnpartitioned());
     }
 
+    private static Set<String> runtimeFilterPruningColumns(OptimizerContext context, LogicalIcebergScanOperator scan,
+                                                           IcebergTable icebergTable, Set<IcebergDeleteSchema> deleteSchemas,
+                                                           List<Integer> equalityIds) {
+        if (!context.getSessionVariable().isEnableIcebergEqDeleteRuntimeFilterPruning()) {
+            return Set.of();
+        }
+        // only the delete scan always takes these columns from partition metadata; with the switch off the data-file
+        // scan reads them from the file, which may not store them (e.g. migrated Hive files), and a NULL never matches,
+        // so match by $partition_key instead, unless a real column of that name leaves no partition match at all
+        if (!context.getSessionVariable().getEnableIcebergIdentityColumnOptimize() &&
+                icebergTable.getNativeTable().schema().caseInsensitiveFindField(PARTITION_KEY) == null) {
+            return Set.of();
+        }
+        Set<String> scanColumnNames = scan.getColRefToColumnMetaMap().values().stream()
+                .map(Column::getName)
+                .collect(Collectors.toSet());
+        // DELETE, UPDATE and MERGE read row locators; keep every delete for them
+        if (scanColumnNames.contains(IcebergTable.FILE_PATH) || scanColumnNames.contains(IcebergTable.ROW_POSITION)) {
+            return Set.of();
+        }
+        // the full schema follows the read schema, so it has every column a partition field resolves to
+        Map<String, Column> tableColumns = icebergTable.getFullSchema().stream()
+                .collect(Collectors.toMap(Column::getName, column -> column, (a, b) -> a));
+        return runtimeFilterPruningColumns(icebergTable.getNativeTable(), icebergTable.getReadSchema(), deleteSchemas,
+                equalityIds, tableColumns);
+    }
+
+    // The identity partition columns that replace the $partition_key match of a key, so a runtime filter on them
+    // may skip the delete files of the partitions it rejects. The table must never have changed its spec and every
+    // partition field must be an identity of a column: a data row and a delete then share a partition exactly when
+    // `data.c <=> delete.c` holds for all of them, so the match needs no wider hash key. The columns are read even
+    // when the query does not select them, as a fixed-width key is much cheaper than $partition_key. A filter that
+    // rejects v on data.c may drop the deletes of partition v: the join that built it drops the data rows with
+    // c = v anyway (JoinNode pushes such filters into the delete scan).
+    static Set<String> runtimeFilterPruningColumns(Table table, Schema readSchema,
+                                                   Set<IcebergDeleteSchema> deleteSchemas, List<Integer> equalityIds,
+                                                   Map<String, Column> tableColumns) {
+        if (table.specs().size() != 1 || table.spec().isUnpartitioned()) {
+            return Set.of();
+        }
+        PartitionSpec spec = table.spec();
+        boolean allOfThisSpec = deleteSchemas.stream()
+                .filter(deleteSchema -> deleteSchema.equalityIds().equals(equalityIds))
+                .allMatch(deleteSchema -> deleteSchema.specId() == spec.specId());
+        if (!allOfThisSpec) {
+            return Set.of();
+        }
+        Set<String> columns = new HashSet<>();
+        for (PartitionField field : spec.fields()) {
+            // the query reads with this schema (a snapshot's for time travel), like the equality columns
+            String name = readSchema.findColumnName(field.sourceId());
+            // the scan range finds an identity value by the partition field name, so it must be the column name;
+            // a real column named like an extended column would be matched as that column by buildOnPredicate
+            if (!field.transform().isIdentity() || name == null || !field.name().equals(name) ||
+                    EXTENDED_COLUMN_NAMES.stream().anyMatch(name::equalsIgnoreCase) ||
+                    !isRuntimeFilterPruningType(tableColumns.get(name))) {
+                return Set.of();
+            }
+            columns.add(name);
+        }
+        return Set.copyOf(columns);
+    }
+
+    // types whose partition value reads back exactly as the data value; timestamps depend on the session time zone
+    private static boolean isRuntimeFilterPruningType(Column column) {
+        return column != null && (column.getType().isIntegerType() || column.getType().isDate() ||
+                column.getType().isStringType());
+    }
+
     static boolean needsPartitionMatch(Table table, Set<IcebergDeleteSchema> deleteSchemas, List<Integer> equalityIds) {
         if (table.schema().caseInsensitiveFindField(PARTITION_KEY) != null) {
             // a real column already has this name; keep the plan without the partition check
             return false;
+        }
+        long specCount = deleteSchemas.stream()
+                .filter(deleteSchema -> deleteSchema.equalityIds().equals(equalityIds))
+                .map(IcebergDeleteSchema::specId)
+                .distinct()
+                .count();
+        if (specCount > 1) {
+            return true;
         }
         for (IcebergDeleteSchema deleteSchema : deleteSchemas) {
             if (!deleteSchema.equalityIds().equals(equalityIds)) {
@@ -457,10 +570,21 @@ public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
         return false;
     }
 
+    // Equality columns are resolved by field id under the schema the query reads with: the targeted snapshot's
+    // schema for time travel, so a key renamed or dropped since then still resolves.
+    private static String findEqualityColumnName(IcebergTable icebergTable, int fieldId) {
+        String name = icebergTable.getReadSchema().findColumnName(fieldId);
+        if (name == null) {
+            throw new StarRocksConnectorException("Equality delete column with field id %s is not in the read schema " +
+                    "of table %s", fieldId, icebergTable.getCatalogTableName());
+        }
+        return name;
+    }
+
     // equality table name format : origin_table_name + "_eq_delete_" + [pk1_pk2_pk3_..._]
     private String buildEqualityDeleteTableName(IcebergTable icebergTable, List<Integer> equalityIds) {
         return icebergTable.getCatalogTableName() + "_eq_delete_" + equalityIds.stream()
-                        .map(id -> icebergTable.getNativeTable().schema().findColumnName(id))
+                        .map(id -> findEqualityColumnName(icebergTable, id))
                         .collect(Collectors.joining("_"));
     }
 }

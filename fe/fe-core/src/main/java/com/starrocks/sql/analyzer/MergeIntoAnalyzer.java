@@ -248,6 +248,7 @@ public class MergeIntoAnalyzer {
         // side.
         TableRelation targetRelation = new TableRelation(tableName);
         targetRelation.setTable(icebergTable);
+        AnalyzerUtils.setIcebergWriteBranch(targetRelation, icebergTable, stmt.getTargetBranch());
         if (stmt.getTargetAlias() != null) {
             targetRelation.setAlias(new TableName(null, null, stmt.getTargetAlias()));
         }

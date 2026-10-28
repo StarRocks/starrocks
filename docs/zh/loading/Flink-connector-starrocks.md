@@ -447,7 +447,7 @@ Merge Commit 有助于扩展吞吐量，而不会成比例地增加 StarRocks �
 
   这两个参数控制不同层的并行度，应独立调整：
   - `sink.parallelism` 控制 Flink sink 子任务的数量。每个子任务缓冲数据并将其发送到 StarRocks。当 Flink sink operator 受到 CPU 或内存限制时，增加此值——您可以监视 Flink 的每个 operator 的 CPU 和内存使用情况，以确定是否需要更多子任务。
-  - `sink.properties.merge_commit_parallel` 控制 StarRocks 为每个 Merge Commit 事务创建的导入计划的并行度。当 StarRocks 成为瓶颈时，增加此值。您可以监视 StarRocks 指标 [merge_commit_pending_total](../administration/management/monitoring/metrics.md#merge_commit_pending_total)（待处理的 Merge Commit 任务数）和 [merge_commit_pending_bytes](../administration/management/monitoring/metrics.md#merge_commit_pending_bytes)（待处理任务持有的字节数），以确定是否需要在 StarRocks 端增加并行度——持续的高值表示导入计划无法跟上输入数据。
+  - `sink.properties.merge_commit_parallel` 控制 StarRocks 为每个 Merge Commit 事务创建的导入计划的并行度。当 StarRocks 成为瓶颈时，增加此值。您可以监视 StarRocks 指标 [merge_commit_pending_total](../administration/management/monitoring/metric_details/i-p.md#merge_commit_pending_total)（待处理的 Merge Commit 任务数）和 [merge_commit_pending_bytes](../administration/management/monitoring/metric_details/i-p.md#merge_commit_pending_bytes)（待处理任务持有的字节数），以确定是否需要在 StarRocks 端增加并行度——持续的高值表示导入计划无法跟上输入数据。
 
 - **`sink.merge-commit.chunk.size` 和 `sink.buffer-flush.max-bytes` 之间的关系**：
   - `sink.merge-commit.chunk.size` 控制每个 Stream Load 请求（每个 chunk）的最大数据大小。当 chunk 中的数据达到此大小时，将立即刷新。

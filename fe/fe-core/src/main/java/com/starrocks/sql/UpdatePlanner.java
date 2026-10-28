@@ -136,7 +136,7 @@ public class UpdatePlanner {
 
             // Setup sink and configure pipeline based on table type
             if (targetTable instanceof IcebergTable icebergTable) {
-                setupIcebergRowDeltaSink(execPlan, colNames, icebergTable, session);
+                setupIcebergRowDeltaSink(execPlan, colNames, icebergTable, updateStmt.getTargetBranch(), session);
                 IcebergPlannerUtils.configureIcebergSinkPipeline(execPlan, session, canUsePipeline);
             } else if (targetTable instanceof OlapTable) {
                 setupOlapTableSink(execPlan, updateStmt, session, targetTable, canUsePipeline);
@@ -238,7 +238,7 @@ public class UpdatePlanner {
     }
 
     private void setupIcebergRowDeltaSink(ExecPlan execPlan, List<String> colNames,
-                                          IcebergTable icebergTable, ConnectContext session) {
+                                          IcebergTable icebergTable, String targetBranch, ConnectContext session) {
         DescriptorTable descriptorTable = execPlan.getDescTbl();
         TupleDescriptor rowDeltaTuple = descriptorTable.createTupleDescriptor();
 
@@ -258,8 +258,11 @@ public class UpdatePlanner {
         IcebergRowDeltaSink dataSink = new IcebergRowDeltaSink(
                 icebergTable, rowDeltaTuple, session.getSessionVariable(), TIcebergWriteMode.ROW_DELTA_UPDATE);
         dataSink.init();
+        dataSink.setTargetBranch(targetBranch);
 
         IcebergMetadata.IcebergSinkExtra icebergSinkExtra = new IcebergMetadata.IcebergSinkExtra();
+        // The BE partitions the output by the spec of the table descriptor built now.
+        icebergSinkExtra.setWriteSpecId(icebergTable.getReadSpec().specId());
         org.apache.iceberg.expressions.Expression filterExpr =
                 IcebergPlannerUtils.buildIcebergFilterExpr(execPlan, icebergTable);
         if (filterExpr != null) {
