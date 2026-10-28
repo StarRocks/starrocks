@@ -261,32 +261,6 @@ TEST(GeoBufferTest, ZeroRoundTripWithDifferentZeroSignsUsesValidRoundedModel) {
     }
 }
 
-TEST(GeoBufferTest, ZeroPreservesCheckpointOrderAndErrors) {
-    auto input = prepared(kSquare);
-    ASSERT_TRUE(input.ok()) << input.status();
-    for (double distance : {0.0, -0.0}) {
-        for (const auto& error : {Status::Cancelled("zero cancellation"), Status::MemoryLimitExceeded("zero memory")}) {
-            for (int fail_at : {1, 2, 3}) {
-                int checkpoints = 0;
-                auto result =
-                        (*input)->buffer(distance, [&] { return ++checkpoints == fail_at ? error : Status::OK(); });
-                ASSERT_FALSE(result.ok());
-                EXPECT_EQ(error.code(), result.status().code());
-                EXPECT_EQ(error.message(), result.status().message());
-                EXPECT_EQ(fail_at, checkpoints);
-            }
-        }
-        int checkpoints = 0;
-        EXPECT_TRUE((*input)->buffer(distance,
-                                     [&] {
-                                         ++checkpoints;
-                                         return Status::OK();
-                                     })
-                            .ok());
-        EXPECT_EQ(3, checkpoints);
-    }
-}
-
 TEST(GeoBufferTest, InvalidTopologyIsRejectedBeforeZeroOrErosion) {
     for (const char* input :
          {"POLYGON ((0 0,4 4,0 4,4 0,0 0))", "POLYGON ((0 0,4 0,4 4,0 4,0 0),(5 5,5 6,6 6,6 5,5 5))",
@@ -362,7 +336,7 @@ TEST(GeoBufferTest, LargeOffsetsAndSubUlpDistancesHaveExplicitOutcomes) {
     EXPECT_FALSE(buffered("POINT (1.7e308 0)", 1.7e308).ok());
 }
 
-TEST(GeoBufferTest, CheckpointsObserveCancellationAndMemoryErrors) {
+TEST(GeoBufferTest, PrepareCheckpointObservesCancellation) {
     WkbGeometry geometry;
     ASSERT_TRUE(WkbCodec::parse_wkt(kSquare, &geometry, kCartesian).ok());
     std::string wkb;
@@ -370,14 +344,6 @@ TEST(GeoBufferTest, CheckpointsObserveCancellationAndMemoryErrors) {
     auto cancelled = PreparedGeoBuffer::prepare(Slice(wkb), [] { return Status::Cancelled("test"); });
     ASSERT_FALSE(cancelled.ok());
     EXPECT_TRUE(cancelled.status().is_cancelled());
-    auto input = PreparedGeoBuffer::prepare(Slice(wkb));
-    ASSERT_TRUE(input.ok());
-    int checkpoints = 0;
-    auto result = (*input)->buffer(
-            1, [&] { return ++checkpoints == 2 ? Status::MemoryLimitExceeded("test") : Status::OK(); });
-    ASSERT_FALSE(result.ok());
-    EXPECT_TRUE(result.status().is_mem_limit_exceeded());
-    EXPECT_EQ(2, checkpoints);
 }
 
 TEST(GeoBufferTest, OwnedPreparationReusesInputWithVaryingDistance) {

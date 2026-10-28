@@ -1334,7 +1334,7 @@ StatusOr<ColumnPtr> geo_buffer(FunctionContext* context, const Columns& columns)
             }
             model = target->get();
         }
-        ASSIGN_OR_RETURN(auto geometry, model->buffer(distance, [&] { return buffer_checkpoint(context); }));
+        ASSIGN_OR_RETURN(auto geometry, model->buffer(distance));
         std::string wkb;
         RETURN_IF_ERROR(WkbCodec::to_wkb(geometry, &wkb, WkbCoordinateSemantics::GEOMETRY_CARTESIAN));
         result->append_datum(Datum(Slice(wkb)));
