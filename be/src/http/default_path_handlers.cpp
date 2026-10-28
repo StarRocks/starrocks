@@ -189,6 +189,12 @@ void MemTrackerWebPageHandler::handle(const RuntimeEnv& runtime_env, MemTracker*
             auto* update_item = update_mem_tracker->get_snapshot(&obj_pool, upper_level);
             update_item->parent = root;
 
+            // passthrough memory tracker not in RootMemTrackerTree. It only mirrors bytes that the query
+            // trackers (and so the process tracker) already count, so it is shown for diagnosis only.
+            MemTracker* passthrough_mem_tracker = runtime_env.passthrough_mem_tracker();
+            auto* passthrough_item = passthrough_mem_tracker->get_snapshot(&obj_pool, upper_level);
+            passthrough_item->parent = root;
+
             // Brpc iobuf memory statistics use the old memory framework,
             MemTracker* brpc_iobuf_mem_tracker = runtime_env.brpc_iobuf_mem_tracker();
             auto* brpc_iobuf_item = brpc_iobuf_mem_tracker->get_snapshot(&obj_pool, upper_level);
@@ -196,6 +202,7 @@ void MemTrackerWebPageHandler::handle(const RuntimeEnv& runtime_env, MemTracker*
 
             root->childs.emplace_back(meta_item);
             root->childs.emplace_back(update_item);
+            root->childs.emplace_back(passthrough_item);
             root->childs.emplace_back(brpc_iobuf_item);
         }
 

@@ -159,8 +159,11 @@ protected:
         _initial_process_bytes = _process->consumption();
         _initial_passthrough_bytes = _passthrough->consumption();
 
-        _sender = std::make_unique<MemTracker>(-1, "passthrough_sender", _process);
-        _receiver = std::make_unique<MemTracker>(-1, "passthrough_receiver", _process);
+        // Both instances share the query tracker, as fragment instances of one query do on a BE. Give it
+        // a limit at construction so it is one of its children's limit trackers; tests lower it later.
+        _query = std::make_shared<MemTracker>(kUnboundedLimit, "passthrough_query", _process);
+        _sender = std::make_unique<MemTracker>(-1, "passthrough_sender", _query.get());
+        _receiver = std::make_unique<MemTracker>(-1, "passthrough_receiver", _query.get());
         _sender_scope = std::make_unique<CurrentThreadMemTrackerSetter>(_sender.get());
         _column_scope = std::make_unique<ThreadLocalColumnAllocatorSetter>(&_allocator);
 
@@ -168,8 +171,8 @@ protected:
         auto* buffer = _manager.get(_query_id);
         _sink = std::make_unique<PassThroughContext>(buffer, make_id(2026, 2), 7);
         _source = std::make_unique<PassThroughContext>(buffer, make_id(2026, 2), 7);
-        _sink->init();
-        _source->init();
+        _sink->init(_query);
+        _source->init(_query);
 
         _input = std::make_unique<Chunk>();
         auto column = Int64Column::create();
@@ -178,6 +181,7 @@ protected:
         flush();
         _before_buffering = _process->consumption();
         _sender_input_bytes = _sender->consumption();
+        _query_before_buffering = _query->consumption();
     }
 
     void TearDown() override {
@@ -191,6 +195,7 @@ protected:
         EXPECT_EQ(_initial_process_bytes, _process->consumption());
         EXPECT_EQ(0, _sender->consumption());
         EXPECT_EQ(0, _receiver->consumption());
+        EXPECT_EQ(0, _query->consumption());
         _column_scope.reset();
         _sender_scope.reset();
     }
@@ -210,6 +215,7 @@ protected:
         flush();
         _before_buffering = _process->consumption();
         _sender_input_bytes = _sender->consumption();
+        _query_before_buffering = _query->consumption();
         return append();
     }
 
@@ -219,6 +225,10 @@ protected:
     int64_t _initial_passthrough_bytes = 0;
     int64_t _before_buffering = 0;
     int64_t _sender_input_bytes = 0;
+    int64_t _query_before_buffering = 0;
+    static constexpr int64_t kUnboundedLimit = int64_t{1} << 60;
+    // Declared before the instance trackers so it outlives them.
+    std::shared_ptr<MemTracker> _query;
     std::unique_ptr<MemTracker> _sender;
     std::unique_ptr<MemTracker> _receiver;
     TrackedColumnAllocator _allocator;
@@ -231,14 +241,16 @@ protected:
     ChunkUniquePtr _input;
 };
 
-TEST_F(LocalPassThroughMemoryTest, buffered_chunks_remain_in_process_budget) {
-    EXPECT_EQ(_process, _passthrough->parent());
+TEST_F(LocalPassThroughMemoryTest, buffered_chunks_remain_in_query_and_process_budget) {
+    // The passthrough tracker only mirrors the parked bytes; it must stay out of the tracker tree.
+    EXPECT_EQ(nullptr, _passthrough->parent());
     EXPECT_EQ(2, _passthrough->get_level());
     const int64_t first_bytes = append();
     ASSERT_GT(first_bytes, 0);
     const int64_t buffered_bytes = append(1);
     EXPECT_GT(buffered_bytes, first_bytes);
     EXPECT_EQ(_initial_passthrough_bytes + buffered_bytes, _passthrough->consumption());
+    EXPECT_EQ(_query_before_buffering + buffered_bytes, _query->consumption());
     EXPECT_EQ(_before_buffering + buffered_bytes, _process->consumption());
     EXPECT_EQ(_sender_input_bytes, _sender->consumption());
     EXPECT_EQ(0, _receiver->consumption());
@@ -282,6 +294,7 @@ TEST_F(LocalPassThroughMemoryTest, append_with_pending_tls_charge_does_not_doubl
     EXPECT_EQ(clone_bytes, _sink->total_bytes());
     EXPECT_EQ(_initial_passthrough_bytes + clone_bytes, _passthrough->consumption());
     EXPECT_EQ(sender_before + pending_bytes, _sender->consumption());
+    EXPECT_EQ(sender_before + pending_bytes + clone_bytes, _query->consumption());
     EXPECT_EQ(expected_process, _process->consumption());
     EXPECT_EQ(expected_process, _process->peak_consumption());
     EXPECT_EQ(nullptr, _sender->find_limit_exceeded_tracker());
@@ -292,10 +305,11 @@ TEST_F(LocalPassThroughMemoryTest, append_with_pending_tls_charge_does_not_doubl
     _source->set_cancelled();
     flush();
     EXPECT_EQ(process_before + pending_bytes, _process->consumption());
+    EXPECT_EQ(sender_before + pending_bytes, _query->consumption());
     EXPECT_EQ(_initial_passthrough_bytes, _passthrough->consumption());
 }
 
-TEST_F(LocalPassThroughMemoryTest, pull_transfers_ownership_without_changing_process_usage) {
+TEST_F(LocalPassThroughMemoryTest, pull_transfers_ownership_without_changing_query_or_process_usage) {
     const int64_t buffered_bytes = append();
     ASSERT_GT(buffered_bytes, 0);
 
@@ -311,11 +325,13 @@ TEST_F(LocalPassThroughMemoryTest, pull_transfers_ownership_without_changing_pro
         EXPECT_EQ(0, _source->total_bytes());
         EXPECT_EQ(_initial_passthrough_bytes, _passthrough->consumption());
         EXPECT_EQ(buffered_bytes, _receiver->consumption());
+        EXPECT_EQ(_query_before_buffering + buffered_bytes, _query->consumption());
         EXPECT_EQ(_before_buffering + buffered_bytes, _process->consumption());
 
         chunks.clear();
         flush();
         EXPECT_EQ(0, _receiver->consumption());
+        EXPECT_EQ(_query_before_buffering, _query->consumption());
         EXPECT_EQ(_before_buffering, _process->consumption());
     });
     consumer.join();
@@ -329,6 +345,7 @@ TEST_F(LocalPassThroughMemoryTest, cancellation_releases_buffered_memory_once) {
     flush();
     EXPECT_EQ(0, _source->total_bytes());
     EXPECT_EQ(_initial_passthrough_bytes, _passthrough->consumption());
+    EXPECT_EQ(_query_before_buffering, _query->consumption());
     EXPECT_EQ(_before_buffering, _process->consumption());
     EXPECT_EQ(0, _receiver->consumption());
 
@@ -345,11 +362,13 @@ TEST_F(LocalPassThroughMemoryTest, last_context_releases_unconsumed_memory) {
     _manager.close_fragment_instance(_query_id);
     _sink.reset();
     EXPECT_EQ(_initial_passthrough_bytes + buffered_bytes, _passthrough->consumption());
+    EXPECT_EQ(_query_before_buffering + buffered_bytes, _query->consumption());
     EXPECT_EQ(_before_buffering + buffered_bytes, _process->consumption());
 
     _source.reset();
     flush();
     EXPECT_EQ(_initial_passthrough_bytes, _passthrough->consumption());
+    EXPECT_EQ(_query_before_buffering, _query->consumption());
     EXPECT_EQ(_before_buffering, _process->consumption());
 }
 
@@ -404,7 +423,6 @@ TEST_F(LocalPassThroughMemoryTest, buffered_memory_triggers_process_limit_checks
     _process->set_limit(_before_buffering + buffered_bytes / 2);
 
     EXPECT_EQ(_process, _sender->find_limit_exceeded_tracker());
-    EXPECT_EQ(_process, _passthrough->find_limit_exceeded_tracker());
     auto* exceeded_tracker = _sender->try_consume(1);
     EXPECT_EQ(_process, exceeded_tracker);
     if (exceeded_tracker == nullptr) {
@@ -419,6 +437,77 @@ TEST_F(LocalPassThroughMemoryTest, buffered_memory_triggers_process_limit_checks
     ASSERT_EQ(nullptr, _sender->try_consume(1));
     _sender->release(1);
     EXPECT_EQ(_before_buffering, _process->consumption());
+}
+
+// The parked bytes count against the query limit, so a query whose pass-through backlog grows without
+// bound fails on its own limit instead of exhausting the process budget for every query on the BE.
+TEST_F(LocalPassThroughMemoryTest, buffered_memory_triggers_query_limit_checks) {
+    const int64_t buffered_bytes = append();
+    ASSERT_GT(buffered_bytes, 1);
+    _query->set_limit(_query_before_buffering + buffered_bytes / 2);
+    DeferOp restore_limit([&] { _query->set_limit(kUnboundedLimit); });
+
+    EXPECT_EQ(_query.get(), _sender->find_limit_exceeded_tracker());
+    EXPECT_EQ(_query.get(), _receiver->find_limit_exceeded_tracker());
+    auto* exceeded_tracker = _sender->try_consume(1);
+    EXPECT_EQ(_query.get(), exceeded_tracker);
+    if (exceeded_tracker == nullptr) {
+        _sender->release(1);
+    }
+
+    _source->set_cancelled();
+    flush();
+    EXPECT_FALSE(_query->limit_exceeded());
+    ASSERT_EQ(nullptr, _sender->try_consume(1));
+    _sender->release(1);
+    EXPECT_EQ(_query_before_buffering, _query->consumption());
+}
+
+// Without a query tracker (e.g. a context initialized without one), the bytes are parked on the
+// passthrough tracker alone, as before: the instance trackers stay balanced, and the parked bytes are
+// mirrored but not part of the process tree.
+TEST(LocalPassThroughBufferTest, falls_back_to_passthrough_tracker_without_query_tracker) {
+    MemTracker* process = RuntimeEnv::GetInstance()->process_mem_tracker();
+    MemTracker* passthrough = RuntimeEnv::GetInstance()->passthrough_mem_tracker();
+    TrackedColumnAllocator allocator;
+    auto sender = std::make_unique<MemTracker>(-1, "passthrough_fallback_sender", process);
+    CurrentThread::current().mem_tracker_ctx_shift();
+    const int64_t passthrough_before = passthrough->consumption();
+    {
+        CurrentThreadMemTrackerSetter sender_scope(sender.get());
+        ThreadLocalColumnAllocatorSetter column_scope(&allocator);
+        PassThroughChunkBufferManager mgr;
+        const TUniqueId query_id = make_id(2026, 11);
+        mgr.open_fragment_instance(query_id);
+        PassThroughContext sink(mgr.get(query_id), make_id(2026, 12), 3);
+        PassThroughContext source(mgr.get(query_id), make_id(2026, 12), 3);
+        sink.init();
+        source.init();
+
+        auto input = std::make_unique<Chunk>();
+        auto column = Int64Column::create();
+        column->append(42);
+        input->append_column(std::move(column), 0);
+        CurrentThread::current().mem_tracker_ctx_shift();
+        const int64_t sender_before = sender->consumption();
+
+        sink.append_chunk(0, input.get(), input->memory_usage(), 0);
+        CurrentThread::current().mem_tracker_ctx_shift();
+        const int64_t buffered_bytes = sink.total_bytes();
+        ASSERT_GT(buffered_bytes, 0);
+        EXPECT_EQ(passthrough_before + buffered_bytes, passthrough->consumption());
+        EXPECT_EQ(sender_before, sender->consumption());
+
+        source.set_cancelled();
+        CurrentThread::current().mem_tracker_ctx_shift();
+        EXPECT_EQ(passthrough_before, passthrough->consumption());
+        EXPECT_EQ(sender_before, sender->consumption());
+        mgr.close_fragment_instance(query_id);
+        input.reset();
+        CurrentThread::current().mem_tracker_ctx_shift();
+    }
+    EXPECT_EQ(0, sender->consumption());
+    EXPECT_TRUE(allocator.empty());
 }
 
 } // namespace
