@@ -772,7 +772,7 @@ public class PublishVersionDaemonTest {
             public void createSubRequestForAggregatePublish(List<Tablet> tablets, List<TxnInfoPB> txnInfos,
                     long baseVersion, long newVersion, Map<ComputeNode, List<Long>> nodeToTablets,
                     ComputeResource computeResource, AggregatePublishVersionRequest request,
-                    boolean preferSharedInitialMetadata) {
+                    boolean preferSharedInitialMetadata, boolean isRetryPublish) {
                 capturedTablets.add(tablets);
                 capturedTxnInfos.add(txnInfos);
                 capturedRequests.add(request);
@@ -804,7 +804,7 @@ public class PublishVersionDaemonTest {
 
         PublishVersionDaemon.aggregatePublishWithCarryForward(touched, txnInfos, carryForward,
                 4L, 6L, null, WarehouseManager.DEFAULT_RESOURCE, new java.util.HashMap<>(),
-                new java.util.HashMap<>(), new ArrayList<>(), true);
+                new java.util.HashMap<>(), new ArrayList<>(), true, false);
 
         // The version-1 layout hint must reach BOTH batches: the carry-forward tablets belong to the
         // same physical partition, so a hint that covered only the touched tablets would leave them
