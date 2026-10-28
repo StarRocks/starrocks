@@ -148,7 +148,7 @@ public final class QueryGroupManifest {
         }
         // Tuple equality can ignore integer types; only the stored task has validated BIGINT bounds.
         Source source = sourceByIndex.get(canonical.sourceIndex());
-        TScanRange result = source.original().getScan_range();
+        TScanRange result = source.original.getScan_range().deepCopy();
         result.getInternal_scan_range().setBucket_sequence(canonical.groupId());
         TGroupedRangeTask grouped = new TGroupedRangeTask();
         grouped.setGroup_id(canonical.groupId());
