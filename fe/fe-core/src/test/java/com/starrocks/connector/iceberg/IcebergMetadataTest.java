@@ -729,6 +729,29 @@ public class IcebergMetadataTest extends TableTestBase {
     }
 
     @Test
+    public void testDropViewKeepsFailingWhenMetadataFileIsMissing() {
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
+
+        new Expectations(icebergHiveCatalog) {
+            {
+                icebergHiveCatalog.getTable((ConnectContext) any, "iceberg_db", "table1");
+                result = new StarRocksConnectorException("Failed to get iceberg table",
+                        new NotFoundException("File does not exist: oss://bucket/db/table1/metadata/00000-abc.metadata.json"));
+                minTimes = 1;
+
+                icebergHiveCatalog.dropTable((ConnectContext) any, anyString, anyString, anyBoolean);
+                times = 0;
+            }
+        };
+
+        Assertions.assertThrows(StarRocksConnectorException.class, () ->
+                metadata.dropTable(connectContext, new DropTableStmt(true,
+                        new TableName(CATALOG_NAME, "iceberg_db", "table1"), true, false)));
+    }
+
+    @Test
     public void testDropTableKeepsFailingWhenMetadataIsUnreadable() {
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,

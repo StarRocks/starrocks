@@ -23,6 +23,7 @@ import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.MetadataMgr;
@@ -256,5 +257,20 @@ public class ExternalDbTablePrivTest {
                 "grant usage on catalog hive0 to test",
                 "revoke usage on catalog hive0 from test",
                 "you need (at least one of) the ANY privilege(s) on CATALOG hive0 for this operation");
+    }
+
+    @Test
+    public void testDropTableIfExistsChecksPrivWhenTableCannotBeLoaded() throws Exception {
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Table getTable(ConnectContext context, String catalogName, String dbName, String tblName) {
+                throw new StarRocksConnectorException("metadata file is missing");
+            }
+        };
+        verifyGrantRevoke(
+                "drop table if exists hive0.tpch.region",
+                "grant drop on tpch.region to test",
+                "revoke drop on tpch.region from test",
+                "Access denied; you need (at least one of) the DROP privilege(s) on TABLE region for this operation");
     }
 }

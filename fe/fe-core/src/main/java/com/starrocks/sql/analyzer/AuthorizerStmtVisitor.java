@@ -1759,9 +1759,19 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
                         PrivilegeType.DROP.name(), ObjectType.VIEW.name(), statement.getTbl().getTbl());
             }
         } else {
-            Table table = null;
             try {
-                table = MetaUtils.getSessionAwareTable(context, null, statement.getTbl());
+                MetaUtils.getSessionAwareTable(context, null, statement.getTbl());
+            } catch (Exception e) {
+                if (!statement.isSetIfExists()) {
+                    throw e;
+                }
+                // External privileges are keyed by name, so still check them: a connector may drop
+                // the entry of a table whose metadata cannot be loaded.
+                if (CatalogMgr.isInternalCatalog(statement.getTbl().getCatalog())) {
+                    return null;
+                }
+            }
+            try {
                 Authorizer.checkTableAction(context,
                         statement.getTbl(), PrivilegeType.DROP);
             } catch (AccessDeniedException e) {
@@ -1769,12 +1779,6 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
                         statement.getTbl().getCatalog(),
                         context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                         PrivilegeType.DROP.name(), ObjectType.TABLE.name(), statement.getTbl().getTbl());
-            } catch (Exception e) {
-                if (table == null && statement.isSetIfExists()) {
-                    // an exception will be thrown if table is not found, ignore it if `if exists` is set.
-                    return null;
-                }
-                throw e;
             }
         }
         return null;
