@@ -393,10 +393,9 @@ public:
     // pending allocations, then leave all common ancestors unchanged during the transfer.
     void mem_transfer_to(MemTracker* tracker, int64_t size) {
         DCHECK_GE(size, 0);
-        if (size == 0) {
-            return;
+        if (size != 0) {
+            _mem_cache_manager.transfer_to(tracker, size);
         }
-        _mem_cache_manager.transfer_to(tracker, size);
     }
 
     // Receive already-accounted memory. This is not an allocation and must not consume a
