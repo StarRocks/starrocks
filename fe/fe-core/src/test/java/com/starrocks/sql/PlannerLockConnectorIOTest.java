@@ -14,30 +14,13 @@
 
 package com.starrocks.sql;
 
-import com.google.common.collect.Maps;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.PartitionKey;
-import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
-import com.starrocks.common.tvr.TvrVersionRange;
-import com.starrocks.common.util.concurrent.lock.LockHoldDepth;
-import com.starrocks.connector.ConnectorMetadataRequestContext;
-import com.starrocks.connector.GetRemoteFilesParams;
-import com.starrocks.connector.RemoteFileInfo;
-import com.starrocks.server.MetadataMgr;
-import com.starrocks.sql.optimizer.OptimizerContext;
-import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
-import mockit.Invocation;
-import mockit.Mock;
-import mockit.MockUp;
+import com.starrocks.utframe.LockProbe;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
-import java.util.Map;
 
 /**
  * Planning a statement that mixes an internal table with an external one asks the external catalog for
@@ -56,57 +39,15 @@ public class PlannerLockConnectorIOTest extends ConnectorPlanTestBase {
             "SELECT t0.v1, l.l_orderkey FROM test.t0 JOIN hive0.partitioned_db.lineitem_par l "
                     + "ON t0.v1 = l.l_orderkey";
 
-    /**
-     * Per connector entry point, whether any call to it ran while an FE metadata lock was held.
-     *
-     * <p>Accumulated with OR rather than overwritten: one planning run calls these several times along
-     * different paths, and a plain put would keep only the last sample and go green on a version that does hold
-     * the lock for the earlier ones.
-     */
-    private final Map<String, Boolean> underLock = Maps.newConcurrentMap();
+    /** The connector calls planning made, per entry point; see {@link LockProbe} for how they are sampled. */
+    private final LockProbe probe = LockProbe.onAnyThread();
 
-    private void record(String key) {
-        underLock.merge(key, LockHoldDepth.isUnderLock(), Boolean::logicalOr);
-    }
-
-    /**
-     * Mounted on MetadataMgr rather than on the connector: it is the one door all of these go through, which
-     * keeps the probe independent of which connector the query happens to use.
-     */
     private void probeConnectorCalls() {
-        new MockUp<MetadataMgr>() {
-            @Mock
-            public Statistics getTableStatistics(Invocation invocation, OptimizerContext session, String catalogName,
-                                                 Table table, Map<ColumnRefOperator, Column> columns,
-                                                 List<PartitionKey> partitionKeys, ScalarOperator predicate,
-                                                 long limit, TvrVersionRange versionRange) {
-                record("getTableStatistics:" + table.getName());
-                return invocation.proceed(session, catalogName, table, columns, partitionKeys, predicate, limit,
-                        versionRange);
-            }
-
-            @Mock
-            public List<String> listPartitionNames(Invocation invocation, String catalogName, String dbName,
-                                                  String tableName, ConnectorMetadataRequestContext requestContext) {
-                record("listPartitionNames:" + tableName);
-                return invocation.proceed(catalogName, dbName, tableName, requestContext);
-            }
-
-            @Mock
-            public List<RemoteFileInfo> getRemoteFiles(Invocation invocation, Table table, GetRemoteFilesParams params) {
-                record("getRemoteFiles:" + table.getName());
-                return invocation.proceed(table, params);
-            }
-        };
+        probe.probeScanMetadata();
     }
 
     private void assertNothingWentRemoteUnderTheLock() {
-        // Without this the check below passes on an empty map, i.e. whenever the probe never fired.
-        Assertions.assertFalse(underLock.isEmpty(),
-                "planning never reached the external catalog, the probe proves nothing");
-        underLock.forEach((site, held) -> Assertions.assertFalse(held,
-                "an FE metadata lock was held while planning contacted the external catalog, at " + site
-                        + "; full samples: " + underLock));
+        probe.assertNothingUnderTheLock("planning contacted the external catalog");
     }
 
     /**
@@ -178,13 +119,9 @@ public class PlannerLockConnectorIOTest extends ConnectorPlanTestBase {
                     "SELECT * FROM test.t0 JOIN iceberg0.unpartitioned_db.t0 ON true",
                     "SELECT * FROM test.t0 JOIN hive0.partitioned_db.lineitem_par ON true "
                             + "JOIN iceberg0.unpartitioned_db.t0 ON true")) {
-                underLock.clear();
+                probe.reset();
                 getFragmentPlan(sql);
-                Assertions.assertFalse(underLock.isEmpty(),
-                        "planning never reached the external catalog for: " + sql);
-                underLock.forEach((site, held) -> Assertions.assertFalse(held,
-                        "an FE metadata lock was held while planning contacted the external catalog, at " + site
-                                + ", for: " + sql));
+                probe.assertNothingUnderTheLock("planning contacted the external catalog, for: " + sql);
             }
         } finally {
             Config.skip_whole_phase_lock_mv_limit = limit;
@@ -234,8 +171,8 @@ public class PlannerLockConnectorIOTest extends ConnectorPlanTestBase {
         } finally {
             connectContext.getSessionVariable().setCboUseDBLock(false);
         }
-        Assertions.assertFalse(underLock.isEmpty(), "planning never reached the external catalog");
-        Assertions.assertTrue(underLock.values().stream().anyMatch(Boolean::booleanValue),
-                "cbo_use_lock_db no longer forces the whole planning phase under the lock: " + underLock);
+        Assertions.assertFalse(probe.isEmpty(), "planning never reached the external catalog");
+        Assertions.assertTrue(probe.anyUnderLock(),
+                "cbo_use_lock_db no longer forces the whole planning phase under the lock: " + probe);
     }
 }
