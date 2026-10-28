@@ -58,6 +58,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeState;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.Field;
+import com.starrocks.sql.analyzer.IndexAnalyzer;
 import com.starrocks.sql.analyzer.PlannerMetaLocker;
 import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
@@ -398,6 +399,12 @@ public class InsertPlanner {
 
         if (insertStmt.usePartialUpdate()) {
             inferOutputSchemaForPartialUpdate(insertStmt);
+            // Checked against the sink schema, so columns the sink fills itself (DEFAULT expressions) count as written.
+            IndexAnalyzer.findPartialUpdateVectorIndexError((OlapTable) targetTable,
+                            outputFullSchema.stream().map(Column::getName).collect(Collectors.toList()))
+                    .ifPresent(error -> {
+                        throw new SemanticException(error);
+                    });
         } else {
             outputBaseSchema = targetTable.getBaseSchema();
             // Online OPTIMIZE rewrites a temporary partition and does not perform a schema change.
