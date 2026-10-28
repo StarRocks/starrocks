@@ -41,4 +41,4 @@ TEST(MemTrackerTest, ReplicationCancellationClearsLoadAccounting) {
     process.release(120);
 }
 
-}
+} // namespace starrocks
