@@ -413,6 +413,7 @@ Properties of the asynchronous materialized view. You can modify the properties 
     See [Example 6](#examples) for detailed instructions on the `force_mv` semantic and `partition_retention_condition`.
 
 - `storage_volume`: The name of the storage volume used to store the asynchronous materialized view you want to create if you are using a shared-data cluster. This property is supported from v3.1 onwards. If this property is not specified, the default storage volume is used. Example: `"storage_volume" = "def_volume"`.
+- `file_bundling`: Whether to enable the File Bundling optimization for the asynchronous materialized view. This property is supported only for shared-data clusters, from v26.2 onwards. If this property is not specified, the FE configuration `enable_file_bundling` (Default: `true`) decides. Existing materialized views keep File Bundling disabled after the upgrade. You can change this property with [ALTER MATERIALIZED VIEW](ALTER_MATERIALIZED_VIEW.md). For what File Bundling does and the restrictions on changing it, see the `file_bundling` property in [CREATE TABLE](../table_bucket_part_index/CREATE_TABLE.md).
 - `force_external_table_query_rewrite`: Whether to enable query rewrite for external catalog-based materialized views. This property is supported from v3.2. Valid values:
   - `true`(Default value since v3.3): Enable query rewrite for external catalog-based materialized views.
   - `false`: Disable query rewrite for external catalog-based materialized views.

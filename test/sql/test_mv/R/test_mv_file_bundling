@@ -1,0 +1,110 @@
+-- name: test_mv_file_bundling @cloud
+CREATE DATABASE mv_file_bundling_${uuid0};
+-- result:
+-- !result
+USE mv_file_bundling_${uuid0};
+-- result:
+-- !result
+CREATE TABLE t1 (
+    dt DATE,
+    k1 INT,
+    v1 INT
+)
+DUPLICATE KEY(dt, k1)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k1) BUCKETS 3
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO t1 VALUES ('2026-01-01', 1, 10), ('2026-01-01', 2, 20), ('2026-01-02', 1, 30);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_default
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k1) BUCKETS 3
+REFRESH DEFERRED MANUAL
+AS SELECT dt, k1, SUM(v1) AS s FROM t1 GROUP BY dt, k1;
+-- result:
+-- !result
+function: assert_query_contains("show create materialized view mv_default", '"file_bundling" = "true"')
+-- result:
+None
+-- !result
+CREATE MATERIALIZED VIEW mv_off
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k1) BUCKETS 3
+PROPERTIES (
+    "file_bundling" = "false"
+)
+REFRESH DEFERRED MANUAL
+AS SELECT dt, k1, SUM(v1) AS s FROM t1 GROUP BY dt, k1;
+-- result:
+-- !result
+function: assert_query_contains("show create materialized view mv_off", '"file_bundling" = "false"')
+-- result:
+None
+-- !result
+REFRESH MATERIALIZED VIEW mv_default WITH SYNC MODE;
+REFRESH MATERIALIZED VIEW mv_off WITH SYNC MODE;
+SELECT * FROM mv_default ORDER BY dt, k1;
+-- result:
+2026-01-01	1	10
+2026-01-01	2	20
+2026-01-02	1	30
+-- !result
+SELECT * FROM mv_off ORDER BY dt, k1;
+-- result:
+2026-01-01	1	10
+2026-01-01	2	20
+2026-01-02	1	30
+-- !result
+ALTER MATERIALIZED VIEW mv_off SET ("file_bundling" = "true");
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+function: assert_query_contains("show create materialized view mv_off", '"file_bundling" = "true"')
+-- result:
+None
+-- !result
+SELECT * FROM mv_off ORDER BY dt, k1;
+-- result:
+2026-01-01	1	10
+2026-01-01	2	20
+2026-01-02	1	30
+-- !result
+function: assert_query_error_contains("ALTER MATERIALIZED VIEW mv_off SET ('file_bundling' = 'false')", "mixed metadata types")
+-- result:
+None
+-- !result
+INSERT INTO t1 VALUES ('2026-01-02', 2, 40), ('2026-01-03', 1, 50);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_default WITH SYNC MODE;
+REFRESH MATERIALIZED VIEW mv_off WITH SYNC MODE;
+SELECT * FROM mv_default ORDER BY dt, k1;
+-- result:
+2026-01-01	1	10
+2026-01-01	2	20
+2026-01-02	1	30
+2026-01-02	2	40
+2026-01-03	1	50
+-- !result
+SELECT * FROM mv_off ORDER BY dt, k1;
+-- result:
+2026-01-01	1	10
+2026-01-01	2	20
+2026-01-02	1	30
+2026-01-02	2	40
+2026-01-03	1	50
+-- !result
+DROP DATABASE mv_file_bundling_${uuid0} FORCE;
+-- result:
+-- !result
+CLEANUP {
+    DROP DATABASE IF EXISTS mv_file_bundling_${uuid0} FORCE;
+} END CLEANUP

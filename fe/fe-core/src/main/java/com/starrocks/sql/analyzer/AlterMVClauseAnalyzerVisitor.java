@@ -18,6 +18,11 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.MaterializedViewExceptions;
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/sql/analyzer/AlterMVClauseAnalyzerVisitor.java
+=======
+import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.epack.sql.analyzer.AlterTableClauseAnalyzerEPack;
+>>>>>>> fb429eec9de... [Enhancement][RB-810] Enable file bundling for new async materialized views and allow ALTER to change it (#67132):fe/fe-core/src/main/java/com/starrocks/sql/analyzer/AlterMVClauseAnalyzer.java
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AddMVColumnClause;
 import com.starrocks.sql.ast.DropMVColumnClause;
@@ -42,7 +47,11 @@ public class AlterMVClauseAnalyzerVisitor extends AlterTableClauseAnalyzer {
     }
 
     public Void visitModifyTablePropertiesClause(ModifyTablePropertiesClause clause, ConnectContext context) {
-        //modify properties check in AlterMVJobExecutor
+        // file_bundling rewrites tablet metadata the same way for a table and a materialized view, so it shares
+        // the ALTER TABLE checks; other properties are checked in AlterMVJobExecutor
+        if (clause.getProperties().containsKey(PropertyAnalyzer.PROPERTIES_FILE_BUNDLING)) {
+            return super.visitModifyTablePropertiesClause(clause, context);
+        }
         return null;
     }
 

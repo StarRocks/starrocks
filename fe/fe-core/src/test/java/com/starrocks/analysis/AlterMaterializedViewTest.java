@@ -250,6 +250,14 @@ public class AlterMaterializedViewTest extends MVTestBase  {
                     (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
             Assertions.assertThrows(SemanticException.class, () -> currentState.getLocalMetastore().alterMaterializedView(stmt));
         }
+
+        {
+            String alterMvSql = "alter materialized view mv1 set (\"file_bundling\" = \"true\")";
+            Exception e = Assertions.assertThrows(AnalysisException.class,
+                    () -> UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext));
+            Assertions.assertTrue(e.getMessage().contains("only support cloud native table or materialized view"),
+                    e.getMessage());
+        }
     }
 
     @Test

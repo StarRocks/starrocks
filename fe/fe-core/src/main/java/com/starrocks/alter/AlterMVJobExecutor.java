@@ -748,6 +748,17 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                                                  ConnectContext context) {
         MaterializedView materializedView = (MaterializedView) table;
         Map<String, String> properties = modifyTablePropertiesClause.getProperties();
+        // file_bundling changes how every tablet's metadata is stored, so instead of being applied here it runs
+        // as the same asynchronous alter job that ALTER TABLE uses
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FILE_BUNDLING)) {
+            try {
+                GlobalStateMgr.getCurrentState().getSchemaChangeHandler()
+                        .processLakeTableAlterMeta(modifyTablePropertiesClause, db, materializedView);
+            } catch (StarRocksException e) {
+                throw new AlterJobException(e.getMessage(), e);
+            }
+            return null;
+        }
         // A constraint analyzed before the lock names the MV and its columns as they were then; applied after a
         // RENAME or a column change that got in between, it would persist names that no longer resolve.
         if (preResolvedConstraintBasis != null
