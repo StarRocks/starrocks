@@ -509,6 +509,10 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             LOG.warn(errorMsg);
             throw new DmlException(errorMsg);
         }
+        // TaskRun creates a private session from the latest global defaults for every run.
+        // Reuse the existing timeout chain without affecting ordinary queries or INSERTs.
+        context.ctx.getSessionVariable().setQueryTimeoutS(context.ctx.getSessionVariable().getMvRefreshTimeoutS());
+
         // wait util transaction is visible for mv refresh task
         // because mv will update base tables' visible version after insert, the mv's visible version
         // should keep up with the base tables, or it will return outdated result.

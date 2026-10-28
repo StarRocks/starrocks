@@ -484,6 +484,21 @@ The variables are described **in alphabetical order**. Variables with the `globa
 
   The maximum timeout of a pending query in a queue. When this threshold is reached, the corresponding query is rejected. Unit: second. Default: `300`.
 
+### mv_refresh_timeout (3.0.9-tc customization)
+
+Execution timeout in seconds for each asynchronous materialized view refresh task. Default: 14400 (4 hours). Range: 1–259200.
+Only refresh tasks use this setting; ordinary SELECT, INSERT, UPDATE, DELETE, CTAS and statistics collection retain their existing timeouts.
+
+```sql
+SET GLOBAL mv_refresh_timeout = 14400;
+SHOW GLOBAL VARIABLES LIKE 'mv_refresh_timeout';
+```
+
+The global default applies to refresh sessions created afterwards, not running tasks. A materialized view can override it with `"session.mv_refresh_timeout"`.
+This replaces `session.query_timeout` for refresh execution; migrate existing refresh timeout properties to the new setting.
+Queueing, metadata operations and commit visibility waits retain their existing behavior. Each batch refresh task has its own timeout.
+Synchronous materialized views (ROLLUP) are unaffected.
+
 ### query_timeout
 
   Used to set the query timeout in "seconds". This variable will act on all query statements in the current connection, as well as INSERT statements. The default value is 300 seconds. Value range: [1, 259200].

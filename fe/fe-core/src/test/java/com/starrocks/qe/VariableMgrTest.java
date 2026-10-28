@@ -100,6 +100,35 @@ public class VariableMgrTest {
     }
 
     @Test
+    public void testGlobalMvRefreshTimeout() throws Exception {
+        SessionVariable existing = VariableMgr.newSessionVariable();
+        int oldTimeout = existing.getMvRefreshTimeoutS();
+        int queryTimeout = existing.getQueryTimeoutS();
+        SystemVariable update = new SystemVariable(SetType.GLOBAL, SessionVariable.MV_REFRESH_TIMEOUT,
+                new IntLiteral(600));
+        try {
+            SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(update)), null);
+            VariableMgr.setSystemVariable(VariableMgr.newSessionVariable(), update, false);
+            SessionVariable fresh = VariableMgr.newSessionVariable();
+            Assert.assertEquals(600, fresh.getMvRefreshTimeoutS());
+            Assert.assertEquals(queryTimeout, fresh.getQueryTimeoutS());
+            Assert.assertEquals(queryTimeout, fresh.toThrift().getQuery_timeout());
+            Assert.assertEquals(oldTimeout, existing.getMvRefreshTimeoutS());
+            SessionVariable restored = new SessionVariable();
+            restored.replayFromJson(fresh.getJsonString());
+            Assert.assertEquals(600, restored.getMvRefreshTimeoutS());
+            restored.replayFromJson("{\"query_timeout\":300}");
+            Assert.assertEquals(600, restored.getMvRefreshTimeoutS());
+            SessionVariable legacy = new SessionVariable();
+            legacy.replayFromJson("{\"query_timeout\":300}");
+            Assert.assertEquals(14400, legacy.getMvRefreshTimeoutS());
+        } finally {
+            VariableMgr.setSystemVariable(existing, new SystemVariable(SetType.GLOBAL,
+                    SessionVariable.MV_REFRESH_TIMEOUT, new IntLiteral(oldTimeout)), false);
+        }
+    }
+
+    @Test
     public void testNormal() throws IllegalAccessException, NoSuchFieldException, UserException {
         GlobalStateMgr.getCurrentState().initAuth(false);
         SessionVariable var = VariableMgr.newSessionVariable();

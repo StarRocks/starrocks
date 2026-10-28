@@ -38,6 +38,17 @@ public class AnalyzeSetVariableTest {
     }
 
     @Test
+    public void testMvRefreshTimeout() {
+        analyzeSuccess("set global mv_refresh_timeout = 600");
+        analyzeSuccess("set session mv_refresh_timeout = 1");
+        analyzeSuccess("set global mv_refresh_timeout = 259200");
+        analyzeFail("set global mv_refresh_timeout = 0");
+        analyzeFail("set global mv_refresh_timeout = -1");
+        analyzeFail("set global mv_refresh_timeout = 259201");
+        analyzeFail("set global mv_refresh_timeout = 'invalid'");
+    }
+
+    @Test
     public void testSetVariable() {
         String sql = "set query_timeout = 10";
         analyzeSuccess(sql);

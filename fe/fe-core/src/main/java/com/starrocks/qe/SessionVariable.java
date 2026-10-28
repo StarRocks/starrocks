@@ -96,6 +96,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String QUERY_MEM_LIMIT = "query_mem_limit";
 
     public static final String QUERY_TIMEOUT = "query_timeout";
+    public static final String MV_REFRESH_TIMEOUT = "mv_refresh_timeout";
 
     /* 
      * When FE does not set the pagecache parameter, we expect a query to follow the pagecache policy of BE.
@@ -601,6 +602,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // query timeout in second.
     @VariableMgr.VarAttr(name = QUERY_TIMEOUT)
     private int queryTimeoutS = 300;
+
+    // Only applied to the private session of asynchronous materialized view refresh tasks.
+    @VariableMgr.VarAttr(name = MV_REFRESH_TIMEOUT)
+    private int mvRefreshTimeoutS = 14400;
 
     @VariableMgr.VarAttr(name = USE_PAGE_CACHE)
     private boolean usePageCache = true;
@@ -1416,6 +1421,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public long getLoadMemLimit() {
         return loadMemLimit;
+    }
+
+    public int getMvRefreshTimeoutS() {
+        return mvRefreshTimeoutS;
+    }
+
+    public void setMvRefreshTimeoutS(int mvRefreshTimeoutS) {
+        this.mvRefreshTimeoutS = mvRefreshTimeoutS;
     }
 
     public int getQueryTimeoutS() {

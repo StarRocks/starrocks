@@ -18,6 +18,7 @@ package com.starrocks.scheduler;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Database;
@@ -40,11 +41,15 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.Coordinator;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.StmtExecutor;
+import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.LoadPlanner;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.SetType;
+import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TExplainLevel;
@@ -269,6 +274,46 @@ public class PartitionBasedMvRefreshProcessorTest {
         for (String expected : explain) {
             Assert.assertTrue("expected is: " + expected + " but plan is \n" + explainString,
                     StringUtils.containsIgnoreCase(explainString.toLowerCase(), expected));
+        }
+    }
+
+    @Test
+    public void testGlobalMvRefreshTimeout() throws Exception {
+        int oldTimeout = VariableMgr.newSessionVariable().getMvRefreshTimeoutS();
+        int callerQueryTimeout = connectContext.getSessionVariable().getQueryTimeoutS();
+        String mvName = "mv_refresh_timeout_test";
+        AtomicInteger executions = new AtomicInteger();
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) {
+                ConnectContext refreshContext = ConnectContext.get();
+                Assert.assertEquals(600, refreshContext.getSessionVariable().getQueryTimeoutS());
+                Assert.assertEquals(600, refreshContext.getSessionVariable().toThrift().getQuery_timeout());
+                executions.incrementAndGet();
+            }
+        };
+        try {
+            VariableMgr.setSystemVariable(new SessionVariable(), new SystemVariable(SetType.GLOBAL,
+                    SessionVariable.MV_REFRESH_TIMEOUT, new IntLiteral(600)), false);
+            starRocksAssert.withMaterializedView("create materialized view test." + mvName
+                    + " distributed by hash(k2) buckets 3 refresh deferred manual "
+                    + "properties('replication_num'='1') as select k1, k2 from tbl6");
+            Database db = GlobalStateMgr.getCurrentState().getDb("test");
+            MaterializedView mv = (MaterializedView) db.getTable(mvName);
+            Task task = TaskBuilder.buildMvTask(mv, db.getFullName());
+            Map<String, String> properties = Maps.newHashMap();
+            properties.put(TaskRun.FORCE, "true");
+            TaskRun run = TaskRunBuilder.newBuilder(task).properties(properties).build();
+            run.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+            Assert.assertTrue(run.executeTaskRun());
+            Assert.assertTrue(executions.get() > 0);
+            Assert.assertEquals(callerQueryTimeout, connectContext.getSessionVariable().getQueryTimeoutS());
+            Assert.assertEquals(callerQueryTimeout, VariableMgr.newSessionVariable().getQueryTimeoutS());
+        } finally {
+            VariableMgr.setSystemVariable(new SessionVariable(), new SystemVariable(SetType.GLOBAL,
+                    SessionVariable.MV_REFRESH_TIMEOUT, new IntLiteral(oldTimeout)), false);
+            starRocksAssert.dropMaterializedView("test." + mvName);
+            connectContext.setThreadLocalInfo();
         }
     }
 
