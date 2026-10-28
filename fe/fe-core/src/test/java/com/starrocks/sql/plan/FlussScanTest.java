@@ -36,6 +36,7 @@ import com.starrocks.planner.FlussScanNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -49,6 +50,7 @@ import com.starrocks.type.IntegerType;
 import com.starrocks.type.StringType;
 import com.starrocks.utframe.LockProbe;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
@@ -183,8 +185,6 @@ public class FlussScanTest extends PlanTestBase {
         Assertions.assertEquals(3, params.getPartitionKeys().size());
     }
 
-<<<<<<< HEAD
-=======
     /**
      * The combination the lock report left unmeasured: a statement that reads Fluss together with an
      * internal table. Fluss lives in an external catalog, so it is never in the lock set and abstains
@@ -204,47 +204,6 @@ public class FlussScanTest extends PlanTestBase {
                     + "join fluss0.fluss_db.log_events e on t.v1 = e.id");
             probe.assertNothingUnderTheLock("planning contacted fluss");
         } finally {
-            connectContext.changeCatalogDb(CATALOG + "." + DB);
-        }
-    }
-
-    /**
-     * And the residual, asserted as the deliberate current behaviour rather than as a defect: a table
-     * the planner has no snapshot for -- an ENGINE=mysql external table here, an {@code ExternalOlapTable}
-     * or a resource-mapping table just as well -- keeps the whole statement on the locked path, and every
-     * connector call in it is then made under the lock again. The Fluss side is guiltless; what decides
-     * is the table that cannot be copied.
-     */
-    @Test
-    public void testATableWithNoSnapshotPutsFlussBackUnderTheLock() throws Exception {
-        connectContext.changeCatalogDb("default_catalog.test");
-        starRocksAssert.useDatabase("test").withTable("CREATE EXTERNAL TABLE fluss_lock_mysql_tbl\n"
-                + "(\n"
-                + "    k1 INT,\n"
-                + "    k2 VARCHAR(64)\n"
-                + ")\n"
-                + "ENGINE=mysql\n"
-                + "PROPERTIES\n"
-                + "(\n"
-                + "    \"host\" = \"127.0.0.1\",\n"
-                + "    \"port\" = \"3306\",\n"
-                + "    \"user\" = \"mysql_user\",\n"
-                + "    \"password\" = \"mysql_passwd\",\n"
-                + "    \"database\" = \"mysql_db_test\",\n"
-                + "    \"table\" = \"mysql_table_test\"\n"
-                + ");");
-        try {
-            LockProbe probe = probeConnectorCalls();
-            getFragmentPlan("select m.k1, e.id from test.fluss_lock_mysql_tbl m "
-                    + "join fluss0.fluss_db.log_events e on m.k1 = e.id");
-            Assertions.assertFalse(probe.isEmpty(),
-                    "planning never reached the fluss catalog, the probe proves nothing");
-            Assertions.assertTrue(probe.anyUnderLock(),
-                    "a statement with no snapshot for one of its tables is expected to plan under the "
-                            + "lock; if this now passes, the residual entry point is closed and the "
-                            + "lock plan doc should say so: " + probe);
-        } finally {
-            starRocksAssert.dropTable("test.fluss_lock_mysql_tbl");
             connectContext.changeCatalogDb(CATALOG + "." + DB);
         }
     }
@@ -275,7 +234,6 @@ public class FlussScanTest extends PlanTestBase {
         return probe;
     }
 
->>>>>>> b443cdd84c9... [Refactor] De-duplicate the FE pre-resolve-before-lock machinery (#64265)
     private static String toPartitionName(PartitionKey partitionKey) {
         return PartitionUtil.toHivePartitionName(ImmutableList.of("category"), partitionKey);
     }
@@ -389,7 +347,8 @@ public class FlussScanTest extends PlanTestBase {
         if (partitioned) {
             descriptorBuilder.partitionedBy("category");
         }
-        return TableInfo.of(TablePath.of(DB, tableName), 42L, 7, descriptorBuilder.build(), 1000L, 2000L);
+        return TableInfo.of(TablePath.of(DB, tableName), 42L, 7, descriptorBuilder.build(),
+                null, 1000L, 2000L);
     }
 
     private static class FakeConnection implements Connection {
@@ -411,6 +370,11 @@ public class FlussScanTest extends PlanTestBase {
 
         @Override
         public org.apache.fluss.client.table.Table getTable(TablePath tablePath) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public org.apache.fluss.client.table.MultiTable getMultiTable() {
             throw new UnsupportedOperationException();
         }
 

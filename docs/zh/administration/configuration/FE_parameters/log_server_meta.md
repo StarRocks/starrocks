@@ -438,6 +438,42 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 为内部 appender (`fe.internal.log`) 保留的轮转 FE 内部日志文件的最大数量。此值用作 Log4j DefaultRolloverStrategy `max` 属性；当发生轮转时，StarRocks 最多保留 `internal_log_roll_num` 个归档文件并删除旧文件（也受 `internal_log_delete_age` 控制）。较低的值会减少磁盘使用，但会缩短日志历史记录；较高的值会保留更多的历史内部日志。此项与 `internal_log_dir`、`internal_log_roll_interval` 和 `internal_roll_maxsize` 协同工作。
 - 引入版本: v3.2.4
 
+### `lock_blocking_call_validation_mode`
+
+- 默认值: warn
+- 类型: String
+- 单位: -
+- 是否可变: Yes
+- 描述: 当 FE 在持有元数据锁期间访问外部系统（例如 Hive Metastore、JDBC 数据源、Iceberg REST Catalog 或 Thrift 对端）时的处理方式。此时锁的持有时长等于该外部系统的往返时延，所有等待同一把锁的操作都要为此付出代价。该检查位于 FE 自身代码中发起网络请求之前的最后一层，因此缓存命中不会触发它，报出的每一条违规都是真实发出的请求。有效值：`off`（不检查）、`warn`（打印带违规调用方堆栈的日志，调用继续执行）、`error`（拒绝该调用）。无法识别的取值按 `warn` 处理。与 `lock_target_validation_mode` 不同，该检查在运行正常的集群上也会报出违规，因为它覆盖的调用点仍在迁移过程中；因此 `warn` 的作用是把这些调用点变成可按传输类型聚合的日志，只有在这些日志干净之后才适合收紧为 `error`。`warn` 模式下每条违规以单行输出，带 `LOCK_INVARIANT_VIOLATION` 标记及 `kind=blocking_call_under_lock` 字段；日志量由 `lock_invariant_violation_log_interval_ms` 控制。
+- 引入版本: v26.2
+
+### `lock_invariant_violation_log_interval_ms`
+
+- 默认值: 10000
+- 类型: Long
+- 单位: 毫秒
+- 是否可变: Yes
+- 描述: 同一调用点输出锁不变量违规日志的最小间隔。限流按调用点进行而非全局限流，因此高频违规的调用点不会把其他调用点挤出日志。排查问题时可设置为 `0`，输出全部违规记录。仅在 `lock_target_validation_mode`、`lock_blocking_call_validation_mode` 或 `lock_snapshot_copy_validation_mode` 为 `warn` 时生效。
+- 引入版本: v26.2
+
+### `lock_snapshot_copy_validation_mode`
+
+- 默认值: warn
+- 类型: String
+- 单位: -
+- 是否可变: Yes
+- 描述: 当某个线程在既未持有表的读锁或写锁、也未持有其所在数据库的读锁或写锁的情况下，为查询规划复制内表或物化视图时，FE 的处理方式。复制会读取该表当前的分区和索引元数据，而 DDL、INSERT OVERWRITE 和元数据回放都会在写锁下原地修改这些元数据，因此不持锁的复制可能导致语句因 `ConcurrentModificationException` 失败，或基于从未完整发布过的元数据生成计划。有效值：`off`（不检查）、`warn`（打印带复制调用方堆栈的违规日志，复制继续执行）、`error`（拒绝该复制）。无法识别的取值按 `warn` 处理。`warn` 模式下每条违规以单行输出，带 `LOCK_INVARIANT_VIOLATION` 标记及 `kind=snapshot_copy_without_lock` 字段；日志量由 `lock_invariant_violation_log_interval_ms` 控制。
+- 引入版本: v26.2
+
+### `lock_target_validation_mode`
+
+- 默认值: warn
+- 类型: String
+- 单位: -
+- 是否可变: Yes
+- 描述: 当 FE 对非 Internal Catalog 所有的对象（例如来自 External Catalog 的数据库，或占位的表 ID）请求元数据锁时的处理方式。这类标识符并不指向锁管理器能够保护的任何对象：它要么永远不会与其他锁冲突，要么与同类的所有锁冲突。有效值：`off`（不检查）、`warn`（打印带堆栈的违规日志，操作继续执行）、`error`（拒绝该操作）。无法识别的取值按 `warn` 处理。由于该参数可动态修改，集群可以先以 `warn` 运行，确认日志干净后再收紧为 `error`，无需重启。`warn` 模式下每条违规以单行输出，带 `LOCK_INVARIANT_VIOLATION` 标记并附带违规调用方的堆栈；日志量由 `lock_invariant_violation_log_interval_ms` 控制。
+- 引入版本: v26.2
+
 ### `log_cleaner_audit_log_min_retention_days`
 
 - 默认值: 3
@@ -1019,6 +1055,69 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: No
 - 描述: FE 节点中 HTTPS 服务器监听的端口。
 - 引入版本: v4.0
+
+### `ssl_keystore_type`
+
+- 默认值: `""`
+- 类型: String
+- 单位: -
+- 是否可变: No
+- 描述: FE SSL 和 HTTPS 使用的 keystore 类型。如果该值为空，StarRocks 会自动尝试 JVM 默认 keystore 类型、JKS 和 PKCS12。如需使用 BCFKS 等其他 keystore 格式，需要显式设置该参数。
+- 引入版本: -
+
+### `ssl_keystore_provider`
+
+- 默认值: `""`
+- 类型: String
+- 单位: -
+- 是否可变: No
+- 描述: 加载 SSL keystore 时使用的安全 provider。留空表示使用 JVM 选择的 provider。当配置的 keystore 类型必须由特定 provider 加载时，例如 `BCFIPS`，需要设置该参数。
+- 引入版本: -
+
+### `ssl_truststore_type`
+
+- 默认值: `""`
+- 类型: String
+- 单位: -
+- 是否可变: No
+- 描述: MySQL SSL 使用的 truststore 类型。如果该值为空，StarRocks 会自动尝试 JVM 默认 keystore 类型、JKS 和 PKCS12。如需使用 BCFKS 等其他 truststore 格式，需要显式设置该参数。
+- 引入版本: -
+
+### `ssl_truststore_provider`
+
+- 默认值: `""`
+- 类型: String
+- 单位: -
+- 是否可变: No
+- 描述: 加载 MySQL SSL truststore 时使用的安全 provider。留空表示使用 JVM 选择的 provider。当配置的 truststore 类型必须由特定 provider 加载时，例如 `BCFIPS`，需要设置该参数。
+- 引入版本: -
+
+### `ssl_security_provider_class`
+
+- 默认值: `""`
+- 类型: String
+- 单位: -
+- 是否可变: No
+- 描述: StarRocks 加载 SSL keystore 或 truststore 前注册的安全 provider 类。如果所需 provider 已由 JVM 注册，可以留空。
+- 引入版本: -
+
+### `ssl_security_provider_name`
+
+- 默认值: `""`
+- 类型: String
+- 单位: -
+- 是否可变: No
+- 描述: 期望使用的安全 provider 名称。如果设置该值且同名 provider 已存在，StarRocks 会复用该 provider。如果 StarRocks 注册 `ssl_security_provider_class`，注册后的 provider 名称必须与该值匹配。
+- 引入版本: -
+
+### `ssl_security_provider_path`
+
+- 默认值: `""`
+- 类型: String
+- 单位: -
+- 是否可变: No
+- 描述: 安全 provider JAR 的路径。多个路径可以使用系统路径分隔符分隔。如果 provider 类已在 FE classpath 中，可以留空。
+- 引入版本: -
 
 ### `max_mysql_service_task_threads_num`
 

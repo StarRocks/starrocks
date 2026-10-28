@@ -23,6 +23,7 @@ import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -62,7 +63,12 @@ public final class PhysicalAIProjectOperator extends PhysicalOperator {
 
     @Override
     public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
-        return new RowOutputInfo(columnRefMap, commonSubOperatorMap);
+        // AIProject can carry an additional projection (for example after TopN pruning).
+        // Preserve its own outputs so that projection dependencies are not mistaken for child inputs.
+        Map<ColumnRefOperator, ScalarOperator> originalOutputs = new LinkedHashMap<>();
+        ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(commonSubOperatorMap, true);
+        columnRefMap.forEach((column, expression) -> originalOutputs.put(column, rewriter.rewrite(expression)));
+        return new RowOutputInfo(originalOutputs);
     }
 
     @Override

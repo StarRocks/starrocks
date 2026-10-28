@@ -1,0 +1,70 @@
+-- name: test_runtime_filter_on_join_probe
+CREATE DATABASE db_${uuid0};
+-- result:
+-- !result
+USE db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE t_a (k bigint, dt int, v int) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+CREATE TABLE t_d (dt int, wk int) DUPLICATE KEY(dt) DISTRIBUTED BY HASH(dt) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+CREATE TABLE t_w (dt int) DUPLICATE KEY(dt) DISTRIBUTED BY HASH(dt) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+CREATE TABLE t_c (k bigint, wk int) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t_a SELECT g % 100, g % 50, g FROM TABLE(generate_series(0, 799)) t(g);
+-- result:
+-- !result
+INSERT INTO t_d SELECT g, g DIV 5 FROM TABLE(generate_series(0, 49)) t(g);
+-- result:
+-- !result
+INSERT INTO t_w SELECT g FROM TABLE(generate_series(0, 49)) t(g);
+-- result:
+-- !result
+INSERT INTO t_c SELECT g % 10 * 10, g DIV 10 FROM TABLE(generate_series(0, 19)) t(g);
+-- result:
+-- !result
+SET disable_join_reorder = true;
+-- result:
+-- !result
+SET enable_profile = true;
+-- result:
+-- !result
+SET enable_async_profile = false;
+-- result:
+-- !result
+SET pipeline_dop = 1;
+-- result:
+-- !result
+SELECT count(*), sum(t_a.v) FROM t_a JOIN [broadcast] t_d ON t_a.dt = t_d.dt JOIN [shuffle] t_c ON t_a.k = t_c.k AND t_d.wk = t_c.wk;
+-- result:
+16	6000
+-- !result
+SELECT CAST(regexp_extract(get_query_profile(last_query_id()), '(?s)EXCHANGE_SINK \\(plan_node_id=5\\):.*?PushRowNum: ([0-9]+)', 1) AS BIGINT) < 800;
+-- result:
+1
+-- !result
+SELECT /*+ SET_VAR(enable_global_runtime_filter=false) */ count(*), sum(t_a.v) FROM t_a JOIN [broadcast] t_d ON t_a.dt = t_d.dt JOIN [shuffle] t_c ON t_a.k = t_c.k AND t_d.wk = t_c.wk;
+-- result:
+16	6000
+-- !result
+SELECT count(*), sum(t_a.v) FROM t_a JOIN [broadcast] t_w ON t_a.dt = t_w.dt JOIN [broadcast] t_d ON t_a.dt = t_d.dt JOIN [shuffle] t_c ON t_a.k = t_c.k AND t_d.wk = t_c.wk;
+-- result:
+16	6000
+-- !result
+SELECT CAST(regexp_extract(get_query_profile(last_query_id()), '(?s)EXCHANGE_SINK \\(plan_node_id=9\\):.*?PushRowNum: ([0-9]+)', 1) AS BIGINT) < 800;
+-- result:
+1
+-- !result
+SELECT /*+ SET_VAR(enable_global_runtime_filter=false) */ count(*), sum(t_a.v) FROM t_a JOIN [broadcast] t_w ON t_a.dt = t_w.dt JOIN [broadcast] t_d ON t_a.dt = t_d.dt JOIN [shuffle] t_c ON t_a.k = t_c.k AND t_d.wk = t_c.wk;
+-- result:
+16	6000
+-- !result
+DROP DATABASE db_${uuid0};
+-- result:
+-- !result

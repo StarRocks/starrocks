@@ -1577,7 +1577,8 @@ public class OlapTableSinkTest {
     /**
      * In shared-data mode the backup of an unavailable tablet owner follows the session's blacklist_backup_routing and
      * is keyed on the tablet, as the scan is: under TABLET_HASH the owner's tablets spread over the other nodes, each
-     * on the backup a scan of it picks. A load without a session keeps the default CIRCULAR policy.
+     * on the backup a scan of it picks. TABLET_HASH is the default, for a session that does not set the variable and
+     * for a load without a session. CIRCULAR sends all of them to the next node.
      */
     @Test
     public void testCreateLocationWithSharedDataModeRoutesBackupBySessionPolicy(@Mocked GlobalStateMgr globalStateMgr)
@@ -1654,18 +1655,9 @@ public class OlapTableSinkTest {
         tPartition.setId(physicalPartitionId);
         partitionParam.addToPartitions(tPartition);
 
-        ConnectContext context = new ConnectContext();
-        SessionVariable sessionVariable = new SessionVariable();
-        sessionVariable.setBlacklistBackupRouting("tablet_hash");
-        context.setSessionVariable(sessionVariable);
-        context.setThreadLocalInfo();
-        Map<Long, List<Long>> tabletHashNodes = new HashMap<>();
-        try {
-            OlapTableSink.createLocation(table, partitionParam, false, null).getTablets()
-                    .forEach(location -> tabletHashNodes.put(location.getTablet_id(), location.getNode_ids()));
-        } finally {
-            ConnectContext.remove();
-        }
+        SessionVariable tabletHashSession = new SessionVariable();
+        tabletHashSession.setBlacklistBackupRouting("tablet_hash");
+        Map<Long, List<Long>> tabletHashNodes = createLocationNodeIds(table, partitionParam, tabletHashSession);
 
         DefaultSharedDataWorkerProvider scanProvider = new DefaultSharedDataWorkerProvider(allNodes, aliveNodes,
                 WarehouseManager.DEFAULT_RESOURCE, SessionVariableConstants.BlacklistBackupRoutingPolicy.TABLET_HASH);
@@ -1676,10 +1668,35 @@ public class OlapTableSinkTest {
         tabletHashNodes.values().forEach(tabletHashBackups::addAll);
         Assertions.assertEquals(aliveNodes.keySet(), tabletHashBackups);
 
-        Set<Long> defaultBackups = new HashSet<>();
-        OlapTableSink.createLocation(table, partitionParam, false, null).getTablets()
-                .forEach(location -> defaultBackups.addAll(location.getNode_ids()));
-        Assertions.assertEquals(Set.of(10002L), defaultBackups);
+        Assertions.assertEquals(tabletHashNodes, createLocationNodeIds(table, partitionParam, new SessionVariable()));
+        Assertions.assertEquals(tabletHashNodes, createLocationNodeIds(table, partitionParam, null));
+
+        SessionVariable circularSession = new SessionVariable();
+        circularSession.setBlacklistBackupRouting("circular");
+        Set<Long> circularBackups = new HashSet<>();
+        createLocationNodeIds(table, partitionParam, circularSession).values().forEach(circularBackups::addAll);
+        Assertions.assertEquals(Set.of(10002L), circularBackups);
+    }
+
+    /**
+     * Runs OlapTableSink.createLocation with {@code sessionVariable} in the thread's ConnectContext, or without a
+     * ConnectContext if it is null, and returns the node ids of every tablet.
+     */
+    private static Map<Long, List<Long>> createLocationNodeIds(OlapTable table, TOlapTablePartitionParam partitionParam,
+                                                               SessionVariable sessionVariable) throws Exception {
+        if (sessionVariable != null) {
+            ConnectContext context = new ConnectContext();
+            context.setSessionVariable(sessionVariable);
+            context.setThreadLocalInfo();
+        }
+        Map<Long, List<Long>> tabletToNodeIds = new HashMap<>();
+        try {
+            OlapTableSink.createLocation(table, partitionParam, false, null).getTablets()
+                    .forEach(location -> tabletToNodeIds.put(location.getTablet_id(), location.getNode_ids()));
+        } finally {
+            ConnectContext.remove();
+        }
+        return tabletToNodeIds;
     }
 
     /**
@@ -1756,6 +1773,7 @@ public class OlapTableSinkTest {
                 ConnectContext context = new ConnectContext();
                 SessionVariable sessionVariable = new SessionVariable();
                 Deencapsulation.setField(sessionVariable, "skipBlackList", skipBlackList);
+                sessionVariable.setBlacklistBackupRouting("circular");
                 context.setSessionVariable(sessionVariable);
                 context.setThreadLocalInfo();
                 Set<Long> nodeIds = new HashSet<>();

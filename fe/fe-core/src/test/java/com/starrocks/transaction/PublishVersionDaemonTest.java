@@ -23,6 +23,7 @@ import com.starrocks.catalog.TabletRange;
 import com.starrocks.common.Config;
 import com.starrocks.common.ConfigRefreshDaemon;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
@@ -1005,5 +1006,42 @@ public class PublishVersionDaemonTest {
         Assertions.assertFalse(PublishVersionDaemon.batchHasPublishablePartition(states, t2 + 999));
         // Once A's back-off elapses the batch runs again.
         Assertions.assertTrue(PublishVersionDaemon.batchHasPublishablePartition(states, t2 + 1000));
+    }
+
+    private static TransactionState txnOn(long txnId, Long... tableIds) {
+        return new TransactionState(1L, Lists.newArrayList(tableIds), txnId, "in_flight_" + txnId,
+                UUIDUtil.genTUniqueId(), TransactionState.LoadJobSourceType.FRONTEND,
+                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, "fe"), -1, 60 * 1000L);
+    }
+
+    @Test
+    public void testDropInFlightBatchesAndTransactions() {
+        TransactionStateBatch onTable10 =
+                new TransactionStateBatch(Lists.newArrayList(txnOn(1L, 10L), txnOn(2L, 10L)));
+        TransactionStateBatch onTable20 = new TransactionStateBatch(Lists.newArrayList(txnOn(3L, 20L)));
+        TransactionStateBatch onTables30And40 = new TransactionStateBatch(Lists.newArrayList(txnOn(4L, 30L, 40L)));
+        List<TransactionStateBatch> batches = Lists.newArrayList(onTable10, onTable20, onTables30And40);
+
+        // nothing in flight: the very same list comes back
+        Assertions.assertSame(batches,
+                PublishVersionDaemon.dropInFlightBatches(batches, Sets.newHashSet(), Sets.newHashSet()));
+
+        // a table in flight drops every batch touching it, a multi-table batch included, and only those
+        List<TransactionStateBatch> kept =
+                PublishVersionDaemon.dropInFlightBatches(batches, Sets.newHashSet(), Sets.newHashSet(10L, 40L));
+        Assertions.assertEquals(Lists.newArrayList(onTable20), kept);
+
+        // a transaction in flight (the marker of the non-batch path) drops its whole batch, never a part of it
+        kept = PublishVersionDaemon.dropInFlightBatches(batches, Sets.newHashSet(2L), Sets.newHashSet());
+        Assertions.assertEquals(Lists.newArrayList(onTable20, onTables30And40), kept);
+
+        // the non-batch path filters transaction by transaction
+        List<TransactionState> states = Lists.newArrayList(txnOn(5L, 10L), txnOn(6L, 20L), txnOn(7L, 30L));
+        Assertions.assertSame(states,
+                PublishVersionDaemon.dropInFlightTransactions(states, Sets.newHashSet(), Sets.newHashSet()));
+        List<TransactionState> keptStates =
+                PublishVersionDaemon.dropInFlightTransactions(states, Sets.newHashSet(7L), Sets.newHashSet(10L));
+        Assertions.assertEquals(1, keptStates.size());
+        Assertions.assertEquals(6L, keptStates.get(0).getTransactionId());
     }
 }

@@ -376,6 +376,12 @@ final class PreSplitFlow {
         PreSplitProfile.recordOutcome(outcome);
         if (outcome instanceof PreSplitOutcome.SubmittedCombined submittedCombined) {
             PreSplitProfile.recordReshardJobId(submittedCombined.combinedJob().getJobId());
+            if (overwriteTransactionId > 0) {
+                TabletPreSplitCoordinator.awaitCombinedJobLayoutReadyAllowingFallback(
+                        loadKind, table, submittedCombined.combinedJob(), shouldAbort,
+                        submittedCombined.combinedJob().getAdmissionLease());
+                return;
+            }
             try {
                 TabletPreSplitCoordinator.awaitCombinedJobAllowingFallback(
                         loadKind, table, submittedCombined.combinedJob(), shouldAbort);

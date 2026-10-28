@@ -14,6 +14,7 @@
 
 #include "data_workflows/load/tablet_writer/load_channel.h"
 
+#include <butil/time.h>
 #include <gtest/gtest.h>
 
 #include "base/testutil/assert.h"
@@ -568,7 +569,8 @@ TEST_F(LoadChannelTestForLakeTablet, test_add_segment) {
         request.set_eos(false);
         request.set_num_segments(0);
 
-        _load_channel->add_segment(nullptr, &request, &response, nullptr);
+        constexpr int64_t kLockTimeoutMs = 60000;
+        _load_channel->add_segment(nullptr, &request, &response, nullptr, butil::milliseconds_from_now(kLockTimeoutMs));
         EXPECT_EQ(TStatusCode::INTERNAL_ERROR, response.status().status_code());
         EXPECT_EQ("channel is not local tablets channel.", response.status().error_msgs()[0]);
     }

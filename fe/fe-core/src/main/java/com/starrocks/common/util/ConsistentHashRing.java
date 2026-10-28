@@ -32,6 +32,8 @@ public class ConsistentHashRing<K, N> implements HashRing<K, N> {
     HashFunction hashFunction;
 
     TreeMap<Long, VNode> hashRing = new TreeMap<>();
+    // distinct physical nodes on the ring, to stop a lookup once all of them are found
+    Set<N> nodes = new HashSet<>();
     Funnel<K> keyFunnel;
     Funnel<N> nodeFunnel;
     int virtualNumber;
@@ -86,6 +88,7 @@ public class ConsistentHashRing<K, N> implements HashRing<K, N> {
 
     @Override
     public void addNode(N node) {
+        nodes.add(node);
         for (int i = 0; i < virtualNumber; i++) {
             VNode vnode = new VNode(node, i);
             long hash = vnode.hashValue();
@@ -97,6 +100,7 @@ public class ConsistentHashRing<K, N> implements HashRing<K, N> {
 
     @Override
     public void removeNode(N node) {
+        nodes.remove(node);
         for (int i = 0; i < virtualNumber; i++) {
             VNode vnode = new VNode(node, i);
             long hash = vnode.hashValue();
@@ -124,6 +128,10 @@ public class ConsistentHashRing<K, N> implements HashRing<K, N> {
     @Override
     public List<N> get(K key, int distinctNumber) {
         List<N> ans = new ArrayList<>();
+        // asking for more nodes than the ring has would walk every virtual node twice; the result is the same
+        if (distinctNumber > nodes.size()) {
+            distinctNumber = nodes.size();
+        }
         Hasher hasher = hashFunction.newHasher();
         long hash = hasher.putObject(key, keyFunnel).hash().asLong();
 

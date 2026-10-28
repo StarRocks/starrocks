@@ -20,6 +20,7 @@
 #include <optional>
 #include <string_view>
 
+#include "base/container/raw_container.h"
 #include "base/simd/simd.h"
 #include "base/string/slice.h"
 #include "column/array_column.h"
@@ -206,9 +207,12 @@ Status ListColumnReader::read_range(const Range<uint64_t>& range, const Filter* 
     _element_reader->get_levels(&def_levels, &rep_levels, &num_levels);
 
     auto& offsets = array_column->offsets_column_raw_ptr()->get_data();
-    offsets.resize(num_levels + 1);
-    NullColumn null_column(num_levels);
+    // def_rep_to_offset writes every offset after offsets[0] and every null flag it produces, so neither needs
+    // zero filling to the worst case of one row per level.
+    raw::stl_vector_resize_uninitialized(&offsets, num_levels + 1);
+    NullColumn null_column;
     auto& is_nulls = null_column.get_data();
+    raw::stl_vector_resize_uninitialized(&is_nulls, num_levels);
     size_t num_offsets = 0;
     bool has_null = false;
     def_rep_to_offset(get_column_parquet_field()->level_info, def_levels, rep_levels, num_levels, &offsets[0],
@@ -309,9 +313,12 @@ Status MapColumnReader::read_range(const Range<uint64_t>& range, const Filter* f
     }
 
     auto& offsets = map_column->offsets_column_raw_ptr()->get_data();
-    offsets.resize(num_levels + 1);
-    NullColumn null_column(num_levels);
+    // def_rep_to_offset writes every offset after offsets[0] and every null flag it produces, so neither needs
+    // zero filling to the worst case of one row per level.
+    raw::stl_vector_resize_uninitialized(&offsets, num_levels + 1);
+    NullColumn null_column;
     auto& is_nulls = null_column.get_data();
+    raw::stl_vector_resize_uninitialized(&is_nulls, num_levels);
     size_t num_offsets = 0;
     bool has_null = false;
 

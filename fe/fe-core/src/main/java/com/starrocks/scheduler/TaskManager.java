@@ -1298,6 +1298,7 @@ public class TaskManager implements MemoryTrackable {
             if (toStatus == Constants.TaskRunState.RUNNING) {
                 if (status.getQueryId().equals(statusChange.getQueryId())) {
                     status.setState(Constants.TaskRunState.RUNNING);
+                    status.setProcessStartTime(statusChange.getProcessStartTime());
                     taskRunScheduler.addRunningTaskRun(pendingTaskRun);
                 }
             } else if (toStatus == Constants.TaskRunState.MERGED) {

@@ -16,12 +16,15 @@ package com.starrocks.sql;
 
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
+import com.starrocks.common.util.concurrent.lock.LockInvariantViolations;
 import com.starrocks.common.util.concurrent.lock.LockManager;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.PlannerMetaLocker;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -299,5 +302,44 @@ public class PlanningSnapshotViewLockTest extends ConnectorPlanTestBase {
         assertEveryCopyWasLocked("SELECT * FROM " + NESTED_VIEW);
         assertEveryCopyWasLocked("SELECT * FROM test.t1 JOIN test.t0 ON t1.v4 = t0.v1");
         Assertions.assertEquals(0, reLocks.get());
+    }
+
+    /**
+     * The state #62981 left behind, before the fix above: the lock set is collected without the tables behind a
+     * view, and nothing takes the set again once analysis has expanded it, so the view's base table is copied
+     * without its lock. That is POST-1966, and on a single thread it plans fine -- only the snapshot-copy check
+     * sees it. Undo both halves of the fix and the check has to fire.
+     */
+    @Test
+    public void testSnapshotCopyCheckCatchesTheUnfixedViewPath() throws Exception {
+        // The collector reaches t0 only through the view's body here; skipping it is not walking that body.
+        new MockUp<Object>(Class.forName(PlannerMetaLocker.class.getName() + "$TableCollector")) {
+            @Mock
+            public Void visitTable(Invocation invocation, TableRelation node, Void context) {
+                return "t0".equals(node.getName().getTbl()) ? null : invocation.proceed(node, context);
+            }
+        };
+        StatementBase noTables = UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer("SELECT 1", connectContext);
+        new MockUp<PlannerMetaLocker>() {
+            @Mock
+            public PlannerMetaLocker forTablesNotLockedOf(Invocation invocation, ConnectContext session,
+                                                          StatementBase analyzedStatement) {
+                return invocation.proceed(session, noTables);
+            }
+        };
+        String savedMode = Config.lock_snapshot_copy_validation_mode;
+        Config.lock_snapshot_copy_validation_mode = "error";
+        try {
+            Assertions.assertThrows(Exception.class, () -> getExecPlan("SELECT * FROM " + VIEW));
+            Assertions.assertEquals(List.of("t0"), copiedWithoutLock);
+            Assertions.assertTrue(LockInvariantViolations.violationsBySite().keySet().stream()
+                            .anyMatch(site -> site.startsWith("snapshot_copy_without_lock@")),
+                    LockInvariantViolations.violationsBySite().toString());
+        } finally {
+            Config.lock_snapshot_copy_validation_mode = savedMode;
+            // Expected here; the base class fails any test that leaves one behind.
+            LockInvariantViolations.drainViolations();
+        }
+        assertNothingLeftLocked("SELECT * FROM " + VIEW);
     }
 }

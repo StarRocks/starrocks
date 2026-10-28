@@ -734,29 +734,12 @@ public class PartitionBasedMvRefreshProcessorIcebergTest extends MVTestBase {
                 "\"replication_num\" = \"1\"\n" +
                 ")\n" +
                 "AS SELECT id, data, ts  FROM `iceberg0`.`partitioned_transforms_db`.`t0_multi_day_tz` as a;");
-<<<<<<< HEAD
-        Thread testThread = Thread.currentThread();
-        AtomicInteger calls = new AtomicInteger();
-        AtomicBoolean resolvedUnderLock = new AtomicBoolean(false);
+        LockProbe probe = LockProbe.onCurrentThread();
         new MockUp<MvUtils>() {
             @Mock
             public Optional<Table> getTable(Invocation invocation, BaseTableInfo baseTableInfo) {
-                if (Thread.currentThread() == testThread) {
-                    calls.incrementAndGet();
-                    // OR-accumulated: a later lock-free lookup must not erase a locked one
-                    resolvedUnderLock.compareAndSet(false, LockHoldDepth.isUnderLock());
-                }
-                return invocation.proceed(baseTableInfo);
-=======
-        LockProbe probe = LockProbe.onCurrentThread();
-        // Probed at the connector: under the lock MvUtils.getTable is still called, but answered from the
-        // tables pre-resolved before it (PreResolvedBaseTables) without reaching the connector.
-        new MockUp<MockIcebergMetadata>() {
-            @Mock
-            public Table getTable(Invocation invocation, ConnectContext context, String dbName, String tblName) {
                 probe.record("getTable");
-                return invocation.proceed(context, dbName, tblName);
->>>>>>> b443cdd84c9... [Refactor] De-duplicate the FE pre-resolve-before-lock machinery (#64265)
+                return invocation.proceed(baseTableInfo);
             }
         };
         try {

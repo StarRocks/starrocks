@@ -551,15 +551,14 @@ public class AstToStringBuilder {
         sb.append(column.getType().toSql());
         if (!column.isAllowNull()) {
             sb.append(" NOT NULL");
-        } else {
-            String defaultValue = column.getMetaDefaultValue(Lists.newArrayList());
-            if (defaultValue == null) {
-                sb.append(" DEFAULT NULL");
-            } else {
-                sb.append(" DEFAULT \"")
-                        .append(new UnicodeUnescaper().translate(StringEscapeUtils.escapeJava(defaultValue)))
-                        .append("\"");
-            }
+        }
+        String defaultValue = column.getMetaDefaultValue(Lists.newArrayList());
+        if (defaultValue != null) {
+            sb.append(" DEFAULT \"")
+                    .append(new UnicodeUnescaper().translate(StringEscapeUtils.escapeJava(defaultValue)))
+                    .append("\"");
+        } else if (column.isAllowNull()) {
+            sb.append(" DEFAULT NULL");
         }
 
         if (!Strings.isNullOrEmpty(column.getComment())) {

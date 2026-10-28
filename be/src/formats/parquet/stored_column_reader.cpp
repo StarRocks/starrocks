@@ -428,6 +428,17 @@ Status OptionalStoredColumnReader::_skip_deferred_levels() {
         DCHECK(num_levels == 0);
     }
 #endif
+    auto& def_level_decoder = _reader->def_level_decoder();
+    if (!_need_parse_levels && def_level_decoder.can_decode_nulls()) {
+        // 1-bit levels nobody reads back: count the non-null values without materializing them
+        size_t num_non_null = 0;
+        if (UNLIKELY(!def_level_decoder.skip_count_non_null(_levels_to_skip, &num_non_null))) {
+            return Status::InternalError(fmt::format("def levels need to skip: {}", _levels_to_skip));
+        }
+        _values_to_skip += num_non_null;
+        _levels_to_skip = 0;
+        return Status::OK();
+    }
     size_t level_skipped = 0;
     while (level_skipped < _levels_to_skip) {
         level_t* def_levels = nullptr;
@@ -455,27 +466,6 @@ Status RequiredStoredColumnReader::_read_values_on_levels(size_t num_values,
     return _reader->decode_values(num_values, content_type, dst, filter);
 }
 
-static void assign_nulls(int16_t* __restrict levels, uint16_t def_level, size_t n, uint8_t* __restrict is_nulls,
-                         size_t* ranges_dst, size_t* num_nulls_dst) {
-    size_t num_ranges = 1;
-    size_t num_nulls{};
-    int16_t max_def_level = def_level;
-    size_t num_values = n;
-    if (num_values > 0) {
-        is_nulls[0] = levels[0] < max_def_level;
-        num_nulls += is_nulls[0];
-    }
-
-    for (size_t i = 1; i < num_values; ++i) {
-        is_nulls[i] = levels[i] < max_def_level;
-        num_nulls += is_nulls[i];
-        num_ranges += is_nulls[i] != is_nulls[i - 1];
-    }
-
-    *ranges_dst = num_ranges;
-    *num_nulls_dst = num_nulls;
-}
-
 Status OptionalStoredColumnReader::_read_values_on_levels(size_t num_values,
                                                           starrocks::parquet::ColumnContentType content_type,
                                                           starrocks::Column* dst, bool append_default,
@@ -485,19 +475,30 @@ Status OptionalStoredColumnReader::_read_values_on_levels(size_t num_values,
         dst->append_default(num_values);
         return Status::OK();
     } else {
+        auto& def_level_decoder = _reader->def_level_decoder();
+        if (!_need_parse_levels && def_level_decoder.can_decode_nulls()) {
+            // Nobody reads these levels back (get_levels), so decode 1-bit levels straight into null flags.
+            if (UNLIKELY(!def_level_decoder.decode_nulls(num_values, &_null_infos))) {
+                return Status::InternalError(fmt::format("def levels need to parsed: {}", num_values));
+            }
+            if (_reader->current_page_no_null()) {
+                return _reader->decode_values(num_values, content_type, dst, filter);
+            }
+            return _reader->decode_values(num_values, _null_infos, content_type, dst, filter);
+        }
         level_t* def_levels = nullptr;
         size_t level_parsed = 0;
         RETURN_IF_ERROR(_decode_levels(&num_values, &level_parsed, &def_levels));
         DCHECK_EQ(num_values, level_parsed);
-        _null_infos.reset_with_capacity(num_values);
-        size_t num_ranges = 1;
-        size_t num_nulls{};
-        // decode def levels
-        level_t max_def_level = _field->max_def_level();
-        uint8_t* __restrict is_nulls = _null_infos.nulls_data();
-        assign_nulls(def_levels, max_def_level, num_values, is_nulls, &num_ranges, &num_nulls);
-        _null_infos.num_ranges = num_ranges;
-        _null_infos.num_nulls = num_nulls;
+        if (_reader->current_page_no_null()) {
+            // statistics say there are no nulls: the null flags would be all zero and decode_values ignores them
+            return _reader->decode_values(num_values, content_type, dst, filter);
+        }
+        {
+            SCOPED_RAW_TIMER(&_opts.stats->level_decode_ns);
+            _null_infos.reset_with_capacity(num_values);
+            assign_nulls_from_def_levels(def_levels, _field->max_def_level(), num_values, &_null_infos);
+        }
         return _reader->decode_values(num_values, _null_infos, content_type, dst, filter);
     }
 }

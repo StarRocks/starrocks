@@ -14,10 +14,12 @@
 
 #include "connector/hive/scanner/hdfs_scanner.h"
 
+#include <bvar/bvar.h>
 #include <gtest/gtest.h>
 
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <limits>
 #include <memory>
 #include <vector>
@@ -28,9 +30,13 @@
 #include "cache/disk_cache/block_cache.h"
 #include "cache/disk_cache/starcache_engine.h"
 #include "cache/disk_cache/test_cache_utils.h"
+#include "cache/mem_cache/lrucache_engine.h"
+#include "cache/mem_cache/page_cache.h"
+#include "cache/scan/cache_input_stream.h"
 #include "column/column_helper.h"
 #include "common/config_cache_fwd.h"
 #include "common/config_exec_fwd.h"
+#include "common/config_scan_io_fwd.h"
 #include "compute_env/global_dict/fragment_dict_state.h"
 #include "compute_env/query/fragment_runtime_state.h"
 #include "connector/hive/scanner/hdfs_scanner_avro.h"
@@ -232,6 +238,216 @@ TEST_F(HdfsScannerTest, TestParquetOpen) {
 
     status = scanner->open(_runtime_state);
     ASSERT_TRUE(status.ok());
+}
+
+// A position delete file that covers every row of its data file: the data file is never opened.
+// The delete file repeats position 3, so it has 5 rows but deletes only 4 distinct positions.
+TEST_F(HdfsScannerTest, TestParquetSkipFileWithAllRowsDeleted) {
+    const std::string delete_file_path =
+            "./be/test/exec/test_data/parquet_scanner/iceberg_position_delete_repeated_pos.parquet";
+    // The data file does not exist: any attempt to open it fails the scan.
+    const std::string data_file_path = "missing_data_file.parquet";
+    ASSIGN_OR_ABORT(const int64_t delete_file_size, FileSystem::Default()->get_file_size(delete_file_path));
+    TIcebergDeleteFile delete_file;
+    delete_file.__set_full_path(delete_file_path);
+    delete_file.__set_file_content(TIcebergFileContent::POSITION_DELETES);
+    delete_file.__set_length(delete_file_size);
+
+    auto run = [&](int64_t record_count, bool expect_open_ok) {
+        auto scanner = std::make_shared<HdfsParquetScanner>();
+        auto* range = _create_scan_range(default_parquet_file, 0, 0);
+        range->__set_record_count(record_count);
+        auto* tuple_desc = _create_tuple_desc(default_parquet_descs);
+        auto* ctx = _create_ctx(data_file_path, range, tuple_desc);
+        ctx->format_scan_context.timezone = "UTC";
+        ctx->profile.runtime_profile = _runtime_profile;
+        ctx->table_specific.iceberg_delete_files.emplace_back(&delete_file);
+
+        ASSERT_OK(scanner->init(_runtime_state, ctx));
+        Status status = scanner->open(_runtime_state);
+        if (!expect_open_ok) {
+            ASSERT_FALSE(status.ok());
+            ctx->profile.runtime_profile = nullptr;
+            scanner->close();
+            return;
+        }
+        ASSERT_OK(status);
+        ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
+        status = scanner->get_next(_runtime_state, &chunk);
+        ASSERT_TRUE(status.is_end_of_file()) << status;
+        ASSERT_EQ(0, chunk->num_rows());
+
+        HdfsScannerProfile profile;
+        profile.runtime_profile = _runtime_profile;
+        scanner->do_update_counter(&profile);
+        ASSERT_NE(nullptr, _runtime_profile->get_counter("DeletedFilesSkipped"));
+        ASSERT_EQ(1, _runtime_profile->get_counter("DeletedFilesSkipped")->value());
+        // The fixture never sets up the HdfsScannerProfile counters that close() publishes into.
+        ctx->profile.runtime_profile = nullptr;
+        scanner->close();
+    };
+    // 4 rows, all deleted.
+    run(4, true);
+    // 5 rows: the 5 delete rows do not cover row 4, so the file must be opened.
+    run(5, false);
+}
+
+// Scans iceberg_three_row_groups.parquet (c1 = 0..11, 3 row groups of 4 rows) with Iceberg deletes.
+class HdfsParquetDeletedSkipTest : public HdfsScannerTest {
+protected:
+    static constexpr const char* kDataFile =
+            "./be/test/exec/test_data/parquet_scanner/iceberg_three_row_groups.parquet";
+
+    const TIcebergDeleteFile* _position_delete(const std::string& name) {
+        const std::string path = "./be/test/exec/test_data/parquet_scanner/" + name;
+        auto* df = _pool.add(new TIcebergDeleteFile());
+        df->__set_full_path(path);
+        df->__set_file_content(TIcebergFileContent::POSITION_DELETES);
+        ASSIGN_OR_ABORT(const int64_t size, FileSystem::Default()->get_file_size(path));
+        df->__set_length(size);
+        return df;
+    }
+
+    HdfsScannerContext* _create_deletes_ctx(SlotDesc* slot_descs, const std::vector<const TIcebergDeleteFile*>& deletes,
+                                            TupleDescriptor** tuple_desc) {
+        auto* range = _create_scan_range(kDataFile, 0, 0);
+        range->__set_record_count(12);
+        *tuple_desc = _create_tuple_desc(slot_descs);
+        auto* ctx = _create_ctx(kDataFile, range, *tuple_desc);
+        ctx->format_scan_context.timezone = "UTC";
+        ctx->profile.runtime_profile = _runtime_profile;
+        // As the FE sends them: on the scan range, and referenced from table_specific.
+        std::vector<TIcebergDeleteFile> range_deletes;
+        for (const auto* df : deletes) {
+            range_deletes.emplace_back(*df);
+        }
+        range->__set_delete_files(range_deletes);
+        for (const auto& df : range->delete_files) {
+            ctx->table_specific.iceberg_delete_files.emplace_back(&df);
+        }
+        return ctx;
+    }
+
+    // Reads the scanner to EOF and returns the rows; publishes its counters into _runtime_profile.
+    std::vector<std::string> _read_all(HdfsScanner* scanner, HdfsScannerContext* ctx, TupleDescriptor* tuple_desc) {
+        std::vector<std::string> rows;
+        Status status;
+        while (status.ok()) {
+            ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
+            status = scanner->get_next(_runtime_state, &chunk);
+            CHECK(status.ok() || status.is_end_of_file()) << status;
+            for (size_t i = 0; i < chunk->num_rows(); i++) {
+                rows.emplace_back(chunk->debug_row(i));
+            }
+        }
+        HdfsScannerProfile profile;
+        profile.runtime_profile = _runtime_profile;
+        scanner->do_update_counter(&profile);
+        // The fixture never sets up the HdfsScannerProfile counters that close() publishes into.
+        ctx->profile.runtime_profile = nullptr;
+        scanner->close();
+        return rows;
+    }
+
+    std::vector<std::string> _scan(const std::vector<const TIcebergDeleteFile*>& deletes) {
+        SlotDesc slot_descs[] = {{"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)}, {""}};
+        TupleDescriptor* tuple_desc = nullptr;
+        auto* ctx = _create_deletes_ctx(slot_descs, deletes, &tuple_desc);
+        auto scanner = std::make_shared<HdfsParquetScanner>();
+        CHECK_OK(scanner->init(_runtime_state, ctx));
+        CHECK_OK(scanner->open(_runtime_state));
+        return _read_all(scanner.get(), ctx, tuple_desc);
+    }
+
+    int64_t _counter(const std::string& name) {
+        auto* counter = _runtime_profile->get_counter(name);
+        return counter == nullptr ? -1 : counter->value();
+    }
+
+    // Rows left when row 0 and all of row group 1 (rows 4..7) are deleted.
+    const std::vector<std::string> _rows_without_group1{"[1]", "[2]", "[3]", "[8]", "[9]", "[10]", "[11]"};
+};
+
+// Row group 1 is fully deleted (position 6 repeated) and is skipped before any IO; row 0 of row
+// group 0 is deleted by the regular row filter.
+TEST_F(HdfsParquetDeletedSkipTest, SkipRowGroup) {
+    ASSERT_EQ(_rows_without_group1, _scan({_position_delete("iceberg_three_row_groups_position_delete.parquet")}));
+    ASSERT_EQ(3, _counter("TotalRowGroups"));
+    ASSERT_EQ(1, _counter("DeletedRowGroupsSkipped"));
+    ASSERT_EQ(0, _counter("DeletedFilesSkipped"));
+}
+
+// Neither delete file alone covers row group 1 ({0,4,5} and {6,7}); their union does. With a third
+// file the union covers the whole file.
+TEST_F(HdfsParquetDeletedSkipTest, SkipOnUnionOfDeleteFiles) {
+    const auto* a = _position_delete("iceberg_three_row_groups_position_delete_a.parquet");
+    const auto* b = _position_delete("iceberg_three_row_groups_position_delete_b.parquet");
+    const auto* c = _position_delete("iceberg_three_row_groups_position_delete_c.parquet");
+    ASSERT_EQ(_rows_without_group1, _scan({a, b}));
+    ASSERT_EQ(1, _counter("DeletedRowGroupsSkipped"));
+    ASSERT_EQ(0, _counter("DeletedFilesSkipped"));
+
+    ASSERT_TRUE(_scan({a, b, c}).empty());
+    ASSERT_EQ(1, _counter("DeletedFilesSkipped"));
+}
+
+// COUNT(*) with position deletes has no metadata count, so it reads the file without any column:
+// the skipped row group must not be counted, and a skipped file yields no count row.
+TEST_F(HdfsParquetDeletedSkipTest, CountSkipsDeletedRows) {
+    auto count = [&](const std::vector<const TIcebergDeleteFile*>& deletes) {
+        SlotDesc slot_descs[] = {{"___count___", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)}, {""}};
+        TupleDescriptor* tuple_desc = nullptr;
+        auto* ctx = _create_deletes_ctx(slot_descs, deletes, &tuple_desc);
+        ctx->format_scan_context.options.use_count_opt = true;
+        auto scanner = std::make_shared<HdfsParquetScanner>();
+        CHECK_OK(scanner->init(_runtime_state, ctx));
+        CHECK_OK(scanner->open(_runtime_state));
+        return _read_all(scanner.get(), ctx, tuple_desc);
+    };
+    ASSERT_EQ((std::vector<std::string>{"[7]"}),
+              count({_position_delete("iceberg_three_row_groups_position_delete.parquet")}));
+    ASSERT_EQ(1, _counter("DeletedRowGroupsSkipped"));
+
+    ASSERT_TRUE(count({_position_delete("iceberg_three_row_groups_position_delete_a.parquet"),
+                       _position_delete("iceberg_three_row_groups_position_delete_b.parquet"),
+                       _position_delete("iceberg_three_row_groups_position_delete_c.parquet")})
+                        .empty());
+    ASSERT_EQ(1, _counter("DeletedFilesSkipped"));
+}
+
+// The task that splits the file creates no split task for the deleted row group; the split tasks
+// it creates share its deletes.
+TEST_F(HdfsParquetDeletedSkipTest, NoSplitTaskForDeletedRowGroup) {
+    SlotDesc slot_descs[] = {{"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)}, {""}};
+    TupleDescriptor* tuple_desc = nullptr;
+    auto* ctx = _create_deletes_ctx(slot_descs, {_position_delete("iceberg_three_row_groups_position_delete.parquet")},
+                                    &tuple_desc);
+    ctx->format_scan_context.options.enable_split_tasks = true;
+    // one split task per row group: never merge
+    ctx->format_scan_context.options.connector_max_split_size = 1;
+    auto scanner = std::make_shared<HdfsParquetScanner>();
+    ASSERT_OK(scanner->init(_runtime_state, ctx));
+    ASSERT_OK(scanner->open(_runtime_state));
+    const auto& split_tasks = ctx->format_scan_context.split.split_tasks;
+    ASSERT_EQ(2, split_tasks.size());
+    ASSERT_TRUE(_read_all(scanner.get(), ctx, tuple_desc).empty());
+
+    std::vector<std::string> rows;
+    for (const auto& task : split_tasks) {
+        auto* split_range = _create_scan_range(kDataFile, task->start_offset, task->end_offset - task->start_offset);
+        split_range->__set_record_count(12);
+        auto* split_ctx = _create_ctx(kDataFile, split_range, tuple_desc);
+        split_ctx->format_scan_context.timezone = "UTC";
+        split_ctx->format_scan_context.split_context = task.get();
+        auto split_scanner = std::make_shared<HdfsParquetScanner>();
+        ASSERT_OK(split_scanner->init(_runtime_state, split_ctx));
+        ASSERT_OK(split_scanner->open(_runtime_state));
+        auto split_rows = _read_all(split_scanner.get(), split_ctx, tuple_desc);
+        rows.insert(rows.end(), split_rows.begin(), split_rows.end());
+    }
+    ASSERT_EQ(_rows_without_group1, rows);
+    // counted once, by the task that splits the file
+    ASSERT_EQ(1, _counter("DeletedRowGroupsSkipped"));
 }
 
 TEST_F(HdfsScannerTest, TestHdfsRunningTime) {
@@ -2066,6 +2282,190 @@ TEST_F(HdfsScannerTest, TestOrcSplitTasksShareDeletes) {
     }
     EXPECT_EQ(live, rows);
     split_scanner->close();
+}
+
+// Stripes whose rows are all deleted are skipped: no IO, no split task; a scan range left with no
+// stripe returns nothing.
+TEST_F(HdfsScannerTest, TestOrcSkipStripesWithAllRowsDeleted) {
+    const std::string file = "orc_skip_deleted_stripes.orc";
+    std::filesystem::remove(file);
+    const size_t num_rows = 5000;
+    const size_t stripe_rows = 1000;
+    {
+        ORC_UNIQUE_PTR<orc::Type> schema(orc::Type::buildTypeFromString("struct<id:bigint>"));
+        orc::WriterOptions options;
+        // force a stripe per batch
+        options.setStripeSize(0);
+        ORC_UNIQUE_PTR<orc::OutputStream> out = orc::writeLocalFile(file);
+        ORC_UNIQUE_PTR<orc::Writer> writer = orc::createWriter(*schema, out.get(), options);
+        ORC_UNIQUE_PTR<orc::ColumnVectorBatch> batch = writer->createRowBatch(stripe_rows);
+        auto* root = dynamic_cast<orc::StructVectorBatch*>(batch.get());
+        auto* id = dynamic_cast<orc::LongVectorBatch*>(root->fields[0]);
+        for (size_t start = 0; start < num_rows; start += stripe_rows) {
+            for (size_t i = 0; i < stripe_rows; i++) {
+                id->data[i] = start + i;
+            }
+            id->numElements = stripe_rows;
+            root->numElements = stripe_rows;
+            writer->add(*batch);
+        }
+        writer->close();
+    }
+    DeferOp remove_file([&]() { std::filesystem::remove(file); });
+    const size_t num_stripes = orc::createReader(orc::readLocalFile(file), orc::ReaderOptions{})->getNumberOfStripes();
+    ASSERT_EQ(num_rows / stripe_rows, num_stripes);
+
+    SlotDesc descs[] = {{"id", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)}, {""}};
+    auto* tuple_desc = _create_tuple_desc(descs);
+    auto open_scanner = [&](const DeletionBitmapPtr& bitmap, bool enable_split_tasks) {
+        auto* range = _create_scan_range(file, 0, 0);
+        auto* ctx = _create_ctx(file, range, tuple_desc);
+        ctx->format_scan_context.options.enable_split_tasks = enable_split_tasks;
+        auto scanner = std::make_shared<HdfsOrcScanner>();
+        scanner->_skip_rows_ctx->deletion_bitmap = bitmap;
+        CHECK_OK(scanner->init(_runtime_state, ctx));
+        CHECK_OK(scanner->open(_runtime_state));
+        return std::make_pair(scanner, ctx);
+    };
+    auto read_ids = [&](HdfsOrcScanner* scanner) {
+        std::vector<int64_t> ids;
+        Status status;
+        while (status.ok()) {
+            ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
+            status = scanner->get_next(_runtime_state, &chunk);
+            CHECK(status.ok() || status.is_end_of_file()) << status;
+            const Column* col = chunk->get_column_raw_ptr_by_slot_id(0);
+            for (size_t i = 0; i < chunk->num_rows(); i++) {
+                ids.push_back(col->get(i).get_int64());
+            }
+        }
+        return ids;
+    };
+    auto skipped_counter = [&](HdfsOrcScanner* scanner) {
+        RuntimeProfile profile("orc");
+        HdfsScannerProfile hdfs_profile;
+        hdfs_profile.runtime_profile = &profile;
+        scanner->do_update_counter(&hdfs_profile);
+        auto* counter = profile.get_counter("DeletedStripesSkipped");
+        return counter == nullptr ? -1 : counter->value();
+    };
+
+    // row 0 and all of stripe 1
+    auto bitmap = std::make_shared<DeletionBitmap>(roaring64_bitmap_create());
+    bitmap->add_value(0);
+    for (size_t i = stripe_rows; i < 2 * stripe_rows; i++) {
+        bitmap->add_value(i);
+    }
+    {
+        auto [scanner, ctx] = open_scanner(bitmap, false);
+        auto ids = read_ids(scanner.get());
+        std::vector<int64_t> expected;
+        for (int64_t v = 1; v < static_cast<int64_t>(num_rows); v++) {
+            if (v < static_cast<int64_t>(stripe_rows) || v >= static_cast<int64_t>(2 * stripe_rows)) {
+                expected.push_back(v);
+            }
+        }
+        EXPECT_EQ(expected, ids);
+        EXPECT_EQ(1, skipped_counter(scanner.get()));
+        scanner->close();
+    }
+    {
+        // no split task for the deleted stripe
+        auto [scanner, ctx] = open_scanner(bitmap, true);
+        const auto& split_tasks = ctx->format_scan_context.split.split_tasks;
+        ASSERT_EQ(num_stripes - 1, split_tasks.size());
+        const int64_t deleted_offset =
+                orc::createReader(orc::readLocalFile(file), orc::ReaderOptions{})->getStripe(1)->getOffset();
+        for (const auto& task : split_tasks) {
+            EXPECT_NE(deleted_offset, task->start_offset);
+        }
+        // the task that splits the file reports the stripe it dropped
+        EXPECT_EQ(1, skipped_counter(scanner.get()));
+        scanner->close();
+    }
+    {
+        // every stripe deleted
+        auto all = std::make_shared<DeletionBitmap>(roaring64_bitmap_create());
+        for (size_t i = 0; i < num_rows; i++) {
+            all->add_value(i);
+        }
+        auto [scanner, ctx] = open_scanner(all, false);
+        EXPECT_TRUE(read_ids(scanner.get()).empty());
+        EXPECT_EQ(num_stripes, skipped_counter(scanner.get()));
+        scanner->close();
+    }
+}
+
+// The whole-stripe (tiny stripe) read is decided on every stripe of the scan range: dropping a large,
+// fully deleted stripe must not switch the small surviving ones to whole-stripe reads.
+TEST_F(HdfsScannerTest, TestOrcSkipDeletedStripeKeepsTinyStripeDecision) {
+    const std::string file = "orc_skip_deleted_large_stripe.orc";
+    std::filesystem::remove(file);
+    // stripe 1 is much larger than stripes 0 and 2
+    const std::vector<size_t> stripe_rows{100, 100000, 100};
+    {
+        ORC_UNIQUE_PTR<orc::Type> schema(orc::Type::buildTypeFromString("struct<id:bigint>"));
+        orc::WriterOptions options;
+        options.setStripeSize(0);
+        ORC_UNIQUE_PTR<orc::OutputStream> out = orc::writeLocalFile(file);
+        ORC_UNIQUE_PTR<orc::Writer> writer = orc::createWriter(*schema, out.get(), options);
+        int64_t next = 0;
+        for (size_t rows : stripe_rows) {
+            ORC_UNIQUE_PTR<orc::ColumnVectorBatch> batch = writer->createRowBatch(rows);
+            auto* root = dynamic_cast<orc::StructVectorBatch*>(batch.get());
+            auto* id = dynamic_cast<orc::LongVectorBatch*>(root->fields[0]);
+            for (size_t i = 0; i < rows; i++) {
+                // not compressible to nothing: keep the large stripe large
+                id->data[i] = (next++) * 2654435761LL;
+            }
+            id->numElements = rows;
+            root->numElements = rows;
+            writer->add(*batch);
+        }
+        writer->close();
+    }
+    DeferOp remove_file([&]() { std::filesystem::remove(file); });
+    auto reader = orc::createReader(orc::readLocalFile(file), orc::ReaderOptions{});
+    ASSERT_EQ(stripe_rows.size(), reader->getNumberOfStripes());
+    auto stripe_size = [&](size_t idx) {
+        auto stripe = reader->getStripe(idx);
+        return static_cast<int64_t>(stripe->getIndexLength() + stripe->getDataLength() + stripe->getFooterLength());
+    };
+    ASSERT_GT(stripe_size(1), 4 * stripe_size(0));
+    // stripes 0 and 2 are tiny, stripe 1 is not
+    const int32_t saved_threshold = config::orc_tiny_stripe_threshold_size;
+    DeferOp restore([&]() { config::orc_tiny_stripe_threshold_size = saved_threshold; });
+    config::orc_tiny_stripe_threshold_size = static_cast<int32_t>((stripe_size(0) + stripe_size(1)) / 2);
+
+    auto bitmap = std::make_shared<DeletionBitmap>(roaring64_bitmap_create());
+    for (size_t i = stripe_rows[0]; i < stripe_rows[0] + stripe_rows[1]; i++) {
+        bitmap->add_value(i);
+    }
+    SlotDesc descs[] = {{"id", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)}, {""}};
+    auto* tuple_desc = _create_tuple_desc(descs);
+    auto* range = _create_scan_range(file, 0, 0);
+    auto* ctx = _create_ctx(file, range, tuple_desc);
+    auto scanner = std::make_shared<HdfsOrcScanner>();
+    scanner->_skip_rows_ctx->deletion_bitmap = bitmap;
+    ASSERT_OK(scanner->init(_runtime_state, ctx));
+    ASSERT_OK(scanner->open(_runtime_state));
+    size_t rows = 0;
+    Status status;
+    while (status.ok()) {
+        ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
+        status = scanner->get_next(_runtime_state, &chunk);
+        ASSERT_TRUE(status.ok() || status.is_end_of_file()) << status;
+        rows += chunk->num_rows();
+    }
+    EXPECT_EQ(stripe_rows[0] + stripe_rows[2], rows);
+
+    RuntimeProfile profile("orc");
+    HdfsScannerProfile hdfs_profile;
+    hdfs_profile.runtime_profile = &profile;
+    scanner->do_update_counter(&hdfs_profile);
+    EXPECT_EQ(1, profile.get_counter("DeletedStripesSkipped")->value());
+    EXPECT_EQ(0, profile.get_counter("TotalTinyStripeSize")->value());
+    scanner->close();
 }
 
 // =============================================================================
@@ -4043,5 +4443,391 @@ TEST_F(HdfsScannerTest, TestParquetLZOFormat) {
     READ_SCANNER_ROWS(scanner, 100000);
     scanner->close();
 }
+
+#if defined(WITH_STARCACHE)
+// Real columns of `default_parquet_file`, so that its data pages are read.
+static SlotDesc corrupted_datacache_parquet_descs[] = {
+        {"col1", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
+        {"col2", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)},
+        {"col3", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
+        {"col4", TypeDescriptor::from_logical_type(LogicalType::TYPE_DATETIME)},
+        {""}};
+
+// Two row groups, with c0 in [0, 1023] and [1024, 1999].
+static const std::string multi_row_groups_parquet_file =
+        "./be/test/exec/test_data/parquet_scanner/multi_stripes.parquet";
+static SlotDesc multi_row_groups_parquet_descs[] = {
+        {"c0", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)},
+        {"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
+        {""}};
+// The first data page of c0 in the second row group: a header, then the Snappy compressed data of one literal.
+static constexpr size_t second_row_group_page_offset = 9859;
+static constexpr size_t second_row_group_page_header_size = 64;
+
+static const std::string corrupted_datacache_orc_file = "./be/test/exec/test_data/orc_scanner/mtypes_100.orc.zlib";
+static SlotDesc corrupted_datacache_orc_descs[] = {
+        {"id", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)},
+        {"col_varchar", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
+        {""}};
+
+#define ASSERT_SCAN_MATCHES(Scanner, file)            \
+    do {                                              \
+        auto res = _scan<Scanner>(file);              \
+        ASSERT_TRUE(res.ok()) << res.status();        \
+        ASSERT_EQ((file).expected_rows, res.value()); \
+    } while (false)
+
+class HdfsScannerCorruptedDatacacheTest : public HdfsScannerTest {
+public:
+    void SetUp() override {
+        HdfsScannerTest::SetUp();
+        auto cache_options = TestCacheUtils::create_simple_options(config::datacache_block_size, 50 * MB);
+        _block_cache = TestCacheUtils::create_cache(cache_options);
+        DataCache::GetInstance()->set_block_cache(_block_cache);
+        _clear_corrupted_cache_data = config::external_table_clear_corrupted_cache_data;
+    }
+
+    void TearDown() override {
+        config::external_table_clear_corrupted_cache_data = _clear_corrupted_cache_data;
+        DataCache::GetInstance()->set_page_cache(nullptr);
+        DataCache::GetInstance()->set_block_cache(nullptr);
+        HdfsScannerTest::TearDown();
+    }
+
+protected:
+    struct TestFile {
+        std::string path;
+        SlotDesc* descs = nullptr;
+        int64_t size = 0;
+        std::string cache_key;
+        std::vector<std::string> expected_rows;
+        // Applied to the context of every scan.
+        std::function<void(HdfsScannerContext*)> setup;
+    };
+
+    // Scan the whole file and return its rows.
+    template <typename Scanner>
+    StatusOr<std::vector<std::string>> _scan(const TestFile& file, bool enable_datacache = true,
+                                             const std::function<void()>& after_open = nullptr) {
+        auto* range = _create_scan_range(file.path, 0, 0);
+        auto* tuple_desc = _create_tuple_desc(file.descs);
+        auto* ctx = _create_ctx(file.path, range, tuple_desc);
+        ctx->datacache_options.enable_datacache = enable_datacache;
+        ctx->datacache_options.enable_populate_datacache = enable_datacache;
+        if (file.setup) {
+            file.setup(ctx);
+        }
+
+        auto scanner = std::make_shared<Scanner>();
+        RETURN_IF_ERROR(scanner->init(_runtime_state, ctx));
+        DeferOp defer([&]() { scanner->close(); });
+        RETURN_IF_ERROR(scanner->open(_runtime_state));
+        if (after_open) {
+            after_open();
+        }
+        std::vector<std::string> rows;
+        while (true) {
+            ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
+            Status status = scanner->get_next(_runtime_state, &chunk);
+            if (status.is_end_of_file()) {
+                break;
+            }
+            RETURN_IF_ERROR(status);
+            for (size_t i = 0; i < chunk->num_rows(); i++) {
+                rows.emplace_back(chunk->debug_row(i));
+            }
+        }
+        return rows;
+    }
+
+    // Expected rows are read bypassing the datacache.
+    template <typename Scanner>
+    void _prepare(const std::string& path, SlotDesc* descs, size_t expected_num_rows, TestFile* file) {
+        file->path = path;
+        file->descs = descs;
+        ASSIGN_OR_ABORT(file->size, FileSystem::Default()->get_file_size(path));
+        // The whole file fits in block 0.
+        ASSERT_LT(file->size, config::datacache_block_size);
+        file->cache_key = CacheInputStream::calc_cache_key(path, file->size, 0);
+        ASSIGN_OR_ABORT(file->expected_rows, _scan<Scanner>(*file, false));
+        ASSERT_EQ(expected_num_rows, file->expected_rows.size());
+        ASSERT_FALSE(_file_cached(*file));
+    }
+
+    void _write_cached_file(const TestFile& file, const std::string& data) {
+        DiskCacheWriteOptions options;
+        options.overwrite = true;
+        ASSERT_OK(_block_cache->write(file.cache_key, 0, data.size(), data.data(), &options));
+    }
+
+    // Overwrite the cached copy of the file with `mutate(content)`.
+    void _corrupt_cached_file(const TestFile& file, const std::function<void(std::string*)>& mutate) {
+        std::string data(file.size, '\0');
+        ASSERT_OK(_block_cache->read(file.cache_key, 0, file.size, data.data()).status());
+        mutate(&data);
+        _write_cached_file(file, data);
+    }
+
+    // Zero the header of the first data page of c0 in the second row group of `multi_row_groups_parquet_file`.
+    static void _corrupt_second_row_group(std::string* data) {
+        auto begin = data->begin() + second_row_group_page_offset;
+        std::fill(begin, begin + second_row_group_page_header_size, '\0');
+    }
+
+    // Filter out the rows of the first row group of `multi_row_groups_parquet_file`. The conjunct is not in the
+    // predicate tree, so the row group is not filtered by its statistics but returns an empty chunk.
+    void _filter_first_row_group(HdfsScannerContext* ctx) {
+        SlotDescriptor* c0 = ctx->tuple_desc->slots()[0];
+        std::vector<TExprNode> nodes;
+        push_binary_pred_texpr_node(nodes, TExprOpcode::GE, c0, TPrimitiveType::BIGINT,
+                                    create_int_literal_node(TPrimitiveType::BIGINT, 1024));
+        std::vector<ExprContext*> conjuncts{create_expr_context(&_pool, nodes)};
+        ASSERT_OK(ExprExecutor::prepare(conjuncts, _runtime_state));
+        ASSERT_OK(ExprExecutor::open(conjuncts, _runtime_state));
+        ctx->format_scan_context.conjuncts.by_slot[c0->id()] = conjuncts;
+    }
+
+    // Replace the page cache, which also caches footers, with an empty one.
+    void _reset_page_cache() {
+        auto engine = std::make_shared<LRUCacheEngine>();
+        ASSERT_OK(engine->init(MemCacheOptions{.mem_space_size = 100 * MB}));
+        DataCache::GetInstance()->set_page_cache(std::make_shared<StoragePageCache>(engine.get()));
+        _page_cache_engine = std::move(engine);
+    }
+
+    bool _file_cached(const TestFile& file) const { return _block_cache->exist(file.cache_key, 0, file.size); }
+
+    static int64_t _removed_files() {
+        return std::stoll(bvar::Variable::describe_exposed("datacache_corruption_removed_files"));
+    }
+    static int64_t _retried_files() {
+        return std::stoll(bvar::Variable::describe_exposed("datacache_corruption_retried_files"));
+    }
+
+    std::shared_ptr<BlockCache> _block_cache;
+    std::shared_ptr<LRUCacheEngine> _page_cache_engine;
+    bool _clear_corrupted_cache_data = true;
+};
+
+// Corrupted footer in the cache: the cache is dropped and the file is read again bypassing it.
+TEST_F(HdfsScannerCorruptedDatacacheTest, TestParquetDropCorruptedFooterAndRetry) {
+    TestFile file;
+    ASSERT_NO_FATAL_FAILURE(
+            _prepare<HdfsParquetScanner>(default_parquet_file, corrupted_datacache_parquet_descs, 4, &file));
+    // Populate the datacache.
+    ASSERT_SCAN_MATCHES(HdfsParquetScanner, file);
+    ASSERT_TRUE(_file_cached(file));
+
+    ASSERT_NO_FATAL_FAILURE(
+            _corrupt_cached_file(file, [](std::string* data) { data->replace(data->size() - 4, 4, "XXXX"); }));
+
+    // Switch off: the error is returned and the corrupted copy is kept.
+    config::external_table_clear_corrupted_cache_data = false;
+    auto res = _scan<HdfsParquetScanner>(file);
+    ASSERT_TRUE(res.status().is_corruption()) << res.status();
+    ASSERT_TRUE(res.status().message().find("magic not matched") != std::string::npos) << res.status();
+    ASSERT_TRUE(_file_cached(file));
+
+    // Switch on: the corrupted copy is dropped and the file is read again.
+    config::external_table_clear_corrupted_cache_data = true;
+    const int64_t removed_files = _removed_files();
+    const int64_t retried_files = _retried_files();
+    ASSERT_SCAN_MATCHES(HdfsParquetScanner, file);
+    ASSERT_FALSE(_file_cached(file));
+    ASSERT_EQ(removed_files + 1, _removed_files());
+    ASSERT_EQ(retried_files + 1, _retried_files());
+
+    // The next reads re-populate and hit the datacache.
+    ASSERT_SCAN_MATCHES(HdfsParquetScanner, file);
+    ASSERT_TRUE(_file_cached(file));
+    ASSERT_SCAN_MATCHES(HdfsParquetScanner, file);
+    ASSERT_EQ(retried_files + 1, _retried_files());
+}
+
+// Corrupted data pages in the cache, with an intact footer.
+TEST_F(HdfsScannerCorruptedDatacacheTest, TestParquetDropCorruptedPagesAndRetry) {
+    TestFile file;
+    ASSERT_NO_FATAL_FAILURE(
+            _prepare<HdfsParquetScanner>(default_parquet_file, corrupted_datacache_parquet_descs, 4, &file));
+    ASSERT_SCAN_MATCHES(HdfsParquetScanner, file);
+    ASSERT_TRUE(_file_cached(file));
+
+    // Zero the first page header, right after the leading magic.
+    ASSERT_NO_FATAL_FAILURE(_corrupt_cached_file(
+            file, [](std::string* data) { std::fill(data->begin() + 4, data->begin() + 64, '\0'); }));
+
+    config::external_table_clear_corrupted_cache_data = false;
+    auto res = _scan<HdfsParquetScanner>(file);
+    ASSERT_FALSE(res.ok()) << "corrupted pages are read without error: " << ::testing::PrintToString(res.value());
+    ASSERT_TRUE(res.status().is_corruption() || res.status().is_internal_error()) << res.status();
+
+    config::external_table_clear_corrupted_cache_data = true;
+    const int64_t retried_files = _retried_files();
+    ASSERT_SCAN_MATCHES(HdfsParquetScanner, file);
+    ASSERT_FALSE(_file_cached(file));
+    ASSERT_EQ(retried_files + 1, _retried_files());
+}
+
+// A file corrupted in the remote storage: the cached copy matches it, so the cache is kept.
+TEST_F(HdfsScannerCorruptedDatacacheTest, TestKeepCacheOfCorruptedRemoteFile) {
+    std::ifstream in(default_parquet_file, std::ios::binary);
+    std::string data((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    data.replace(data.size() - 4, 4, "XXXX");
+    const std::string corrupted_file = "./be/test/exec/test_data/parquet_scanner/corrupted_remote_file.parquet";
+    std::ofstream(corrupted_file, std::ios::binary) << data;
+    DeferOp defer([&]() { std::filesystem::remove(corrupted_file); });
+    TestFile file{.path = corrupted_file,
+                  .descs = corrupted_datacache_parquet_descs,
+                  .size = static_cast<int64_t>(data.size()),
+                  .cache_key = CacheInputStream::calc_cache_key(corrupted_file, data.size(), 0)};
+
+    const int64_t removed_files = _removed_files();
+    const int64_t retried_files = _retried_files();
+    // Nothing comes from the datacache, so nothing is handled, while the content is populated.
+    auto res = _scan<HdfsParquetScanner>(file);
+    ASSERT_TRUE(res.status().is_corruption()) << res.status();
+    ASSERT_EQ(retried_files, _retried_files());
+    ASSERT_TRUE(_file_cached(file));
+
+    // Reading again bypassing the datacache fails as well, so the cache is kept.
+    res = _scan<HdfsParquetScanner>(file);
+    ASSERT_TRUE(res.status().is_corruption()) << res.status();
+    ASSERT_EQ(retried_files + 1, _retried_files());
+    ASSERT_EQ(removed_files, _removed_files());
+    ASSERT_TRUE(_file_cached(file));
+}
+
+// Empty chunks are returned before the corrupted page in the cache is read, with the page cache and the footer cache
+// on as by default: the file is read again up to some rows.
+TEST_F(HdfsScannerCorruptedDatacacheTest, TestParquetRetryPastEmptyChunks) {
+    TestFile file;
+    file.setup = [this](HdfsScannerContext* ctx) {
+        _filter_first_row_group(ctx);
+        ctx->format_scan_context.options.use_file_metacache = true;
+        ctx->format_scan_context.options.use_file_pagecache = true;
+    };
+    ASSERT_NO_FATAL_FAILURE(_reset_page_cache());
+    ASSERT_NO_FATAL_FAILURE(
+            _prepare<HdfsParquetScanner>(multi_row_groups_parquet_file, multi_row_groups_parquet_descs, 976, &file));
+    ASSERT_NO_FATAL_FAILURE(_reset_page_cache());
+    ASSERT_SCAN_MATCHES(HdfsParquetScanner, file);
+    ASSERT_TRUE(_file_cached(file));
+
+    ASSERT_NO_FATAL_FAILURE(_corrupt_cached_file(file, _corrupt_second_row_group));
+    ASSERT_NO_FATAL_FAILURE(_reset_page_cache());
+    const int64_t retried_files = _retried_files();
+    ASSERT_SCAN_MATCHES(HdfsParquetScanner, file);
+    ASSERT_FALSE(_file_cached(file));
+    ASSERT_EQ(retried_files + 1, _retried_files());
+
+    // The corrupted page header fails before the page is put into the page cache, so the next read recovers.
+    ASSERT_SCAN_MATCHES(HdfsParquetScanner, file);
+    ASSERT_EQ(retried_files + 1, _retried_files());
+}
+
+// A data page failing decompression in the cache, which returns InvalidArgument.
+TEST_F(HdfsScannerCorruptedDatacacheTest, TestParquetRetryOnFailedDecompression) {
+    TestFile file;
+    file.setup = [this](HdfsScannerContext* ctx) { _filter_first_row_group(ctx); };
+    ASSERT_NO_FATAL_FAILURE(
+            _prepare<HdfsParquetScanner>(multi_row_groups_parquet_file, multi_row_groups_parquet_descs, 976, &file));
+    ASSERT_SCAN_MATCHES(HdfsParquetScanner, file);
+    ASSERT_TRUE(_file_cached(file));
+
+    // Skip the 2-byte length of the Snappy data, and turn its literal tag into a copy before the start of the output.
+    ASSERT_NO_FATAL_FAILURE(_corrupt_cached_file(file, [](std::string* data) {
+        (*data)[second_row_group_page_offset + second_row_group_page_header_size + 2] = '\xff';
+    }));
+    config::external_table_clear_corrupted_cache_data = false;
+    auto res = _scan<HdfsParquetScanner>(file);
+    ASSERT_TRUE(res.status().is_invalid_argument()) << res.status();
+
+    config::external_table_clear_corrupted_cache_data = true;
+    const int64_t retried_files = _retried_files();
+    ASSERT_SCAN_MATCHES(HdfsParquetScanner, file);
+    ASSERT_FALSE(_file_cached(file));
+    ASSERT_EQ(retried_files + 1, _retried_files());
+}
+
+// A file corrupted in the remote storage after empty chunks: reading it again must not stop at an empty chunk and
+// take the cached copy as corrupted.
+TEST_F(HdfsScannerCorruptedDatacacheTest, TestKeepCacheOfFileCorruptedAfterEmptyChunks) {
+    std::ifstream in(multi_row_groups_parquet_file, std::ios::binary);
+    std::string data((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    _corrupt_second_row_group(&data);
+    const std::string corrupted_file =
+            "./be/test/exec/test_data/parquet_scanner/corrupted_remote_multi_row_groups.parquet";
+    std::ofstream(corrupted_file, std::ios::binary) << data;
+    DeferOp defer([&]() { std::filesystem::remove(corrupted_file); });
+    TestFile file{.path = corrupted_file,
+                  .descs = multi_row_groups_parquet_descs,
+                  .size = static_cast<int64_t>(data.size()),
+                  .cache_key = CacheInputStream::calc_cache_key(corrupted_file, data.size(), 0),
+                  .setup = [this](HdfsScannerContext* ctx) { _filter_first_row_group(ctx); }};
+    // The cached copy is the same as the remote file.
+    ASSERT_NO_FATAL_FAILURE(_write_cached_file(file, data));
+
+    const int64_t removed_files = _removed_files();
+    const int64_t retried_files = _retried_files();
+    auto res = _scan<HdfsParquetScanner>(file);
+    ASSERT_TRUE(res.status().is_corruption() || res.status().is_internal_error()) << res.status();
+    ASSERT_EQ(retried_files + 1, _retried_files());
+    ASSERT_EQ(removed_files, _removed_files());
+    ASSERT_TRUE(_file_cached(file));
+}
+
+// The file is deleted before it is read again bypassing the datacache: the error of reading it is returned instead of
+// the corruption, e.g. a 404 lets the FE refresh the table and retry.
+TEST_F(HdfsScannerCorruptedDatacacheTest, TestReturnErrorOfDeletedFile) {
+    const std::string deleted_file = "./be/test/exec/test_data/parquet_scanner/deleted_remote_file.parquet";
+    std::filesystem::copy_file(multi_row_groups_parquet_file, deleted_file,
+                               std::filesystem::copy_options::overwrite_existing);
+    DeferOp defer([&]() { std::filesystem::remove(deleted_file); });
+    TestFile file;
+    file.setup = [this](HdfsScannerContext* ctx) { _filter_first_row_group(ctx); };
+    ASSERT_NO_FATAL_FAILURE(_prepare<HdfsParquetScanner>(deleted_file, multi_row_groups_parquet_descs, 976, &file));
+    ASSERT_SCAN_MATCHES(HdfsParquetScanner, file);
+    ASSERT_NO_FATAL_FAILURE(_corrupt_cached_file(file, _corrupt_second_row_group));
+
+    const int64_t removed_files = _removed_files();
+    const int64_t retried_files = _retried_files();
+    auto res = _scan<HdfsParquetScanner>(file, true, [&]() { std::filesystem::remove(deleted_file); });
+    ASSERT_TRUE(res.status().is_not_found()) << res.status();
+    ASSERT_EQ(retried_files + 1, _retried_files());
+    ASSERT_EQ(removed_files, _removed_files());
+    ASSERT_TRUE(_file_cached(file));
+}
+
+// ORC cannot be reopened: the corrupted copy is dropped but the error is returned.
+TEST_F(HdfsScannerCorruptedDatacacheTest, TestOrcDropCorruptedCacheWithoutRetry) {
+    TestFile file;
+    ASSERT_NO_FATAL_FAILURE(
+            _prepare<HdfsOrcScanner>(corrupted_datacache_orc_file, corrupted_datacache_orc_descs, 100, &file));
+    ASSERT_SCAN_MATCHES(HdfsOrcScanner, file);
+    ASSERT_TRUE(_file_cached(file));
+
+    // Corrupt the postscript at the file tail.
+    ASSERT_NO_FATAL_FAILURE(
+            _corrupt_cached_file(file, [](std::string* data) { data->replace(data->size() - 4, 4, "XXXX"); }));
+
+    config::external_table_clear_corrupted_cache_data = false;
+    ASSERT_FALSE(_scan<HdfsOrcScanner>(file).ok());
+    ASSERT_TRUE(_file_cached(file));
+
+    config::external_table_clear_corrupted_cache_data = true;
+    const int64_t removed_files = _removed_files();
+    const int64_t retried_files = _retried_files();
+    auto res = _scan<HdfsOrcScanner>(file);
+    ASSERT_TRUE(res.status().is_corruption() || res.status().is_internal_error()) << res.status();
+    ASSERT_FALSE(_file_cached(file));
+    ASSERT_EQ(removed_files + 1, _removed_files());
+    ASSERT_EQ(retried_files, _retried_files());
+
+    // The next read recovers from the remote storage.
+    ASSERT_SCAN_MATCHES(HdfsOrcScanner, file);
+    ASSERT_TRUE(_file_cached(file));
+}
+#undef ASSERT_SCAN_MATCHES
+#endif
 
 } // namespace starrocks

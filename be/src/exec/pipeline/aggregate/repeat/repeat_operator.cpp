@@ -41,27 +41,62 @@ bool RepeatOperator::has_output() const {
 }
 
 StatusOr<ChunkPtr> RepeatOperator::pull_chunk(RuntimeState* state) {
-    ChunkPtr curr_chunk = _curr_chunk->clone_unique();
-    extend_and_update_columns(&curr_chunk);
+    // The row count comes from the source chunk. The copy cannot be asked for it: a chunk reports
+    // the size of its column 0, and this grouping set may be the one that blanks that column out.
+    const size_t num_rows = _curr_chunk->num_rows();
+    ChunkPtr curr_chunk = clone_curr_chunk(num_rows);
+    append_grouping_columns(curr_chunk.get(), num_rows);
     RETURN_IF_ERROR(eval_conjuncts_and_in_filters(_conjunct_ctxs, curr_chunk.get()));
     return curr_chunk;
 }
 
-void RepeatOperator::extend_and_update_columns(ChunkPtr* curr_chunk) {
-    const size_t num_rows = (*curr_chunk)->num_rows();
+ChunkPtr RepeatOperator::clone_curr_chunk(size_t num_rows) {
+    // The columns this grouping set blanks out are not copied, they are built: a column the caller
+    // is about to overwrite with a const NULL column does not need its data deep-copied first. That
+    // discarded copy used to be paid once per grouping set for every chunk, which on a wide table
+    // under GROUPING SETS / ROLLUP / CUBE is the bulk of this operator's work.
+    //
+    // The columns that do survive are still copied: eval_conjuncts_and_in_filters() filters the
+    // result in place through as_mutable_raw_ptr(), which would write through to _curr_chunk if the
+    // two shared a column, and _curr_chunk has to stay intact for the remaining repeats.
+    ChunkPtr chunk = _curr_chunk->clone_empty(0);
+
+    const size_t num_columns = _curr_chunk->num_columns();
+    _is_nulled_column.assign(num_columns, 0);
+    for (auto slot_id : _null_slot_ids[_repeat_times_last]) {
+        if (_curr_chunk->is_slot_exist(slot_id)) {
+            _is_nulled_column[_curr_chunk->get_index_by_slot_id(slot_id)] = 1;
+        }
+    }
+
+    for (size_t i = 0; i < num_columns; ++i) {
+        ColumnPtr& column = chunk->get_column_by_index(i);
+        if (_is_nulled_column[i]) {
+            // clone_empty(0) already left an empty column of the right type here, and its type is
+            // all generate_null_column() reads. Filling it in now rather than after the grouping
+            // columns are appended also keeps the chunk valid throughout: Chunk::append_column()
+            // checks that every non-constant column has the chunk's row count.
+            column = generate_null_column(column, num_rows);
+        } else {
+            column = _curr_chunk->get_column_by_index(i)->clone();
+        }
+    }
+
+    // Bookkeeping Chunk::clone_unique() used to carry for us; owner_info in particular drives the
+    // query cache and the last-chunk marker.
+    chunk->owner_info() = _curr_chunk->owner_info();
+    if (_curr_chunk->has_extra_data()) {
+        chunk->set_extra_data(_curr_chunk->get_extra_data()->clone());
+    }
+    return chunk;
+}
+
+void RepeatOperator::append_grouping_columns(Chunk* curr_chunk, size_t num_rows) {
     // extend virtual columns for gourping_id and grouping()/grouping_id() columns.
     for (int i = 0; i < _grouping_list.size(); ++i) {
         auto grouping_column = generate_repeat_column(_grouping_list[i][_repeat_times_last], num_rows);
 
-        (*curr_chunk)->append_column(std::move(grouping_column), _tuple_desc->slots()[i]->id());
-    }
-
-    // update columns for unneed columns.
-    const std::vector<SlotId>& null_slot_ids = _null_slot_ids[_repeat_times_last];
-    for (auto slot_id : null_slot_ids) {
-        auto& cur_column = (*curr_chunk)->get_column_by_slot_id(slot_id);
-        auto null_column = generate_null_column(cur_column, num_rows);
-        (*curr_chunk)->update_column(std::move(null_column), slot_id);
+        curr_chunk->append_column(std::move(grouping_column), _tuple_desc->slots()[i]->id());
     }
     ++_repeat_times_last;
 }

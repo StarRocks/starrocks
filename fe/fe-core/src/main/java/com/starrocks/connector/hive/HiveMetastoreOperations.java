@@ -23,6 +23,7 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.util.concurrent.lock.BlockingCallValidator;
 import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.PartitionUtil;
@@ -87,10 +88,15 @@ public class HiveMetastoreOperations {
 
     public void createDb(String dbName, Map<String, String> properties) {
         properties = properties == null ? new HashMap<>() : properties;
+        // The door sits inside the location branch and before the try: a property map with nothing but an
+        // unrecognized key waits on nothing and must not be reported, and in error mode the catch below
+        // would rewrite the refusal into "Invalid location URI". Everything else about this loop is as it
+        // was -- CREATE DATABASE holds the lock across this stat, which is the point of reporting it.
         for (Map.Entry<String, String> entry : properties.entrySet()) {
             String key = entry.getKey();
             String value = entry.getValue();
             if (key.equalsIgnoreCase(LOCATION_PROPERTY)) {
+                BlockingCallValidator.validateNotUnderLock("remote-storage");
                 try {
                     URI uri = new Path(value).toUri();
                     FileSystem fileSystem = FileSystem.get(uri, hadoopConf);
@@ -125,6 +131,9 @@ public class HiveMetastoreOperations {
             throw new MetaNotFoundException("Database location is empty");
         }
         boolean deleteData = false;
+        // Outside the try: its catch only logs, so a refusal raised inside it would vanish and the drop
+        // would carry on as if the directory had been checked.
+        BlockingCallValidator.validateNotUnderLock("remote-storage");
         try {
             deleteData = !FileSystem.get(URI.create(dbLocation), hadoopConf)
                     .listLocatedStatus(new Path(dbLocation)).hasNext();
@@ -218,6 +227,9 @@ public class HiveMetastoreOperations {
         } catch (Exception e) {
             LOG.error("Failed to create table {}.{}", dbName, tableName);
             boolean shouldDelete;
+            // The cleanup of a failed CREATE TABLE -- a listing and possibly a delete, still inside the
+            // lock the DDL took. Outside the try, whose catch only logs.
+            BlockingCallValidator.validateNotUnderLock("remote-storage");
             try {
                 if (tableExists(dbName, tableName)) {
                     LOG.warn("Table {}.{} already exists. But some error occur such as accessing meta service timeout",

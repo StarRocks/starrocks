@@ -130,7 +130,8 @@
         "datacache_persistence_enable",
         "datacache_inline_item_count_limit",
         "datacache_eviction_policy",
-        "block_cache_enable"
+        "block_cache_enable",
+        "external_table_clear_corrupted_cache_data"
       ]
     },
     {
@@ -304,10 +305,7 @@
         "ai_function_on_error",
         "ai_function_rate_limit_qps_chat",
         "ai_function_rate_limit_qps_embedding",
-        "ai_function_max_inflight",
-        "llm_cache_size",
-        "llm_max_concurrent_queries",
-        "llm_max_queue_size"
+        "ai_function_max_inflight"
       ]
     },
     {
@@ -336,6 +334,8 @@
       "configs": [
         "enable_json_flat",
         "enable_compaction_flat_json",
+        "enable_compaction_flat_json_mixed_inputs",
+        "enable_compaction_flat_json_partial_paths",
         "enable_lazy_dynamic_flat_json",
         "enable_json_flat_remain_filter",
         "enable_json_flat_complex_type",
@@ -441,6 +441,7 @@
         "streaming_load_max_batch_size_mb",
         "streaming_load_rpc_max_alive_time_sec",
         "tablet_writer_open_rpc_timeout_sec",
+        "tablet_writer_add_segment_lock_timeout_ms",
         "enable_load_diagnose",
         "load_diagnose_send_rpc_timeout_ms",
         "load_diagnose_rpc_timeout_profile_threshold_ms",
@@ -996,7 +997,8 @@
         "deliver_broadcast_rf_passthrough_inflight_num",
         "send_rpc_runtime_filter_timeout_ms",
         "send_runtime_filter_via_http_rpc_min_size",
-        "runtime_filter_queue_limit"
+        "runtime_filter_queue_limit",
+        "runtime_filter_worker_thread_num"
       ]
     },
     {

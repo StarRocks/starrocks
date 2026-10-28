@@ -17,12 +17,17 @@
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
+#include <optional>
 #include <random>
+#include <string>
+#include <vector>
 
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "column/fixed_length_column.h"
 #include "column/runtime_type_traits.h"
+#include "column/variant_column.h"
+#include "column/variant_encoder.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/expr_factory.h"
 #include "exprs/mock_vectorized_expr.h"
@@ -64,6 +69,59 @@ private:
     std::vector<TTypeDesc> tttype_desc1;
     TExprNode expr_node;
 };
+
+// VARIANT goes down the same row-wise Column::append() path as ARRAY/MAP/STRUCT, because a shredded
+// VariantColumn keeps its rows in _typed_columns/_metadata_column/_remain_value_column rather than in
+// ObjectColumn::_pool, which is the only place ColumnViewer<TYPE_VARIANT> would look. Every column built
+// here is shredded, so a regression back onto the viewer/builder path cannot pass these tests.
+static MutableColumnPtr create_variant_column(const std::vector<std::string>& json_values) {
+    auto column = VariantColumn::create();
+    for (const auto& json : json_values) {
+        auto encoded = VariantEncoder::encode_json_text_to_variant(json);
+        CHECK(encoded.ok()) << encoded.status().to_string();
+        column->append(encoded.value());
+    }
+    CHECK(column->is_shredded_variant());
+    return column;
+}
+
+static MutableColumnPtr create_nullable_variant_column(const std::vector<std::optional<std::string>>& values) {
+    std::vector<std::string> data;
+    auto nulls = NullColumn::create();
+    for (const auto& value : values) {
+        // Null rows still need a well-formed payload underneath, so the shredded layout stays intact.
+        data.push_back(value.value_or("0"));
+        nulls->append(value.has_value() ? 0 : 1);
+    }
+    return NullableColumn::create(create_variant_column(data), std::move(nulls));
+}
+
+static void assert_variant_result(const ColumnPtr& result, const std::vector<std::optional<std::string>>& expected) {
+    ASSERT_EQ(expected.size(), result->size());
+
+    const Column* data_column = result.get();
+    const bool is_const = data_column->is_constant();
+    if (is_const) {
+        data_column = down_cast<const ConstColumn*>(data_column)->data_column().get();
+    }
+    if (data_column->is_nullable()) {
+        data_column = down_cast<const NullableColumn*>(data_column)->data_column().get();
+    }
+    const auto* variant_column = down_cast<const VariantColumn*>(data_column);
+
+    for (size_t i = 0; i < expected.size(); ++i) {
+        SCOPED_TRACE(i);
+        if (!expected[i].has_value()) {
+            EXPECT_TRUE(result->is_null(i));
+            continue;
+        }
+        ASSERT_FALSE(result->is_null(i));
+        VariantRowValue row_buffer;
+        const VariantRowValue* row = variant_column->get_row_value(is_const ? 0 : i, &row_buffer);
+        ASSERT_NE(nullptr, row);
+        EXPECT_EQ(expected[i].value(), row->to_string());
+    }
+}
 
 TEST_F(VectorizedConditionExprTest, ifNullLArray) {
     expr_node.type = tttype_desc[1];
@@ -483,6 +541,98 @@ TEST_F(VectorizedConditionExprTest, ifExpr) {
             }
         }
     }
+}
+
+TEST_F(VectorizedConditionExprTest, ifNullVariant) {
+    expr_node.type = gen_type_desc(TPrimitiveType::VARIANT);
+    auto expr = std::unique_ptr<Expr>(VectorizedConditionExprFactory::create_if_null_expr(expr_node));
+    ASSERT_NE(nullptr, expr);
+
+    MockExpr lhs(TypeDescriptor(TYPE_VARIANT), create_nullable_variant_column({"1", std::nullopt, "3", std::nullopt}));
+    MockExpr rhs(TypeDescriptor(TYPE_VARIANT), create_variant_column({"10", "20", "30", "40"}));
+
+    expr->_children.push_back(&lhs);
+    expr->_children.push_back(&rhs);
+
+    ColumnPtr result = expr->evaluate(nullptr, nullptr);
+    assert_variant_result(result, {"1", "20", "3", "40"});
+}
+
+TEST_F(VectorizedConditionExprTest, nullIfVariant) {
+    expr_node.type = gen_type_desc(TPrimitiveType::VARIANT);
+    auto expr = std::unique_ptr<Expr>(VectorizedConditionExprFactory::create_null_if_expr(expr_node));
+    ASSERT_NE(nullptr, expr);
+
+    MockExpr lhs(TypeDescriptor(TYPE_VARIANT), create_variant_column({"1", "2", "3", "4"}));
+    MockExpr rhs(TypeDescriptor(TYPE_VARIANT), create_variant_column({"1", "20", "3", "40"}));
+
+    expr->_children.push_back(&lhs);
+    expr->_children.push_back(&rhs);
+
+    ColumnPtr result = expr->evaluate(nullptr, nullptr);
+    assert_variant_result(result, {std::nullopt, "2", std::nullopt, "4"});
+}
+
+TEST_F(VectorizedConditionExprTest, ifVariant) {
+    expr_node.type = gen_type_desc(TPrimitiveType::VARIANT);
+    auto expr = std::unique_ptr<Expr>(VectorizedConditionExprFactory::create_if_expr(expr_node));
+    ASSERT_NE(nullptr, expr);
+
+    auto selector = BooleanColumn::create();
+    selector->append(1);
+    selector->append(0);
+    selector->append(1);
+    selector->append(0);
+    MockExpr cond(TypeDescriptor(TYPE_BOOLEAN), selector);
+    MockExpr lhs(TypeDescriptor(TYPE_VARIANT), create_variant_column({"1", "2", "3", "4"}));
+    MockExpr rhs(TypeDescriptor(TYPE_VARIANT), create_variant_column({"10", "20", "30", "40"}));
+
+    expr->_children.push_back(&cond);
+    expr->_children.push_back(&lhs);
+    expr->_children.push_back(&rhs);
+
+    ColumnPtr result = expr->evaluate(nullptr, nullptr);
+    assert_variant_result(result, {"1", "20", "3", "40"});
+}
+
+TEST_F(VectorizedConditionExprTest, ifVariantWithNulls) {
+    expr_node.type = gen_type_desc(TPrimitiveType::VARIANT);
+    auto expr = std::unique_ptr<Expr>(VectorizedConditionExprFactory::create_if_expr(expr_node));
+    ASSERT_NE(nullptr, expr);
+
+    auto selector = BooleanColumn::create();
+    selector->append(1);
+    selector->append(0);
+    selector->append(1);
+    selector->append(0);
+    MockExpr cond(TypeDescriptor(TYPE_BOOLEAN), selector);
+    MockExpr lhs(TypeDescriptor(TYPE_VARIANT), create_nullable_variant_column({std::nullopt, "2", "3", std::nullopt}));
+    MockExpr rhs(TypeDescriptor(TYPE_VARIANT), create_nullable_variant_column({"10", std::nullopt, "30", "40"}));
+
+    expr->_children.push_back(&cond);
+    expr->_children.push_back(&lhs);
+    expr->_children.push_back(&rhs);
+
+    ColumnPtr result = expr->evaluate(nullptr, nullptr);
+    assert_variant_result(result, {std::nullopt, std::nullopt, "3", "40"});
+}
+
+TEST_F(VectorizedConditionExprTest, coalesceVariant) {
+    expr_node.type = gen_type_desc(TPrimitiveType::VARIANT);
+    auto expr = std::unique_ptr<Expr>(VectorizedConditionExprFactory::create_coalesce_expr(expr_node));
+    ASSERT_NE(nullptr, expr);
+
+    MockExpr c0(TypeDescriptor(TYPE_VARIANT),
+                create_nullable_variant_column({"1", std::nullopt, std::nullopt, std::nullopt}));
+    MockExpr c1(TypeDescriptor(TYPE_VARIANT), create_nullable_variant_column({"11", "12", std::nullopt, std::nullopt}));
+    MockExpr c2(TypeDescriptor(TYPE_VARIANT), create_nullable_variant_column({"21", "22", "23", std::nullopt}));
+
+    expr->_children.push_back(&c0);
+    expr->_children.push_back(&c1);
+    expr->_children.push_back(&c2);
+
+    ColumnPtr result = expr->evaluate(nullptr, nullptr);
+    assert_variant_result(result, {"1", "12", "23", std::nullopt});
 }
 
 } // namespace starrocks

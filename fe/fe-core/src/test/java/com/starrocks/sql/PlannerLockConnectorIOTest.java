@@ -118,13 +118,8 @@ public class PlannerLockConnectorIOTest extends ConnectorPlanTestBase {
                     // job, not this one's; cover JDBC here once that has landed.
                     "SELECT * FROM test.t0 JOIN iceberg0.unpartitioned_db.t0 ON true",
                     "SELECT * FROM test.t0 JOIN hive0.partitioned_db.lineitem_par ON true "
-<<<<<<< HEAD
                             + "JOIN iceberg0.unpartitioned_db.t0 ON true")) {
-                underLock.clear();
-=======
-                            + "JOIN jdbc0.partitioned_db0.tbl0 ON true")) {
                 probe.reset();
->>>>>>> b443cdd84c9... [Refactor] De-duplicate the FE pre-resolve-before-lock machinery (#64265)
                 getFragmentPlan(sql);
                 probe.assertNothingUnderTheLock("planning contacted the external catalog, for: " + sql);
             }

@@ -33,6 +33,7 @@ import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.thrift.THdfsFileFormat;
 import com.starrocks.thrift.THdfsPartition;
 import com.starrocks.thrift.THdfsScanRange;
+import com.starrocks.thrift.TIcebergDeleteFile;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.type.DateType;
 import org.apache.iceberg.DataFile;
@@ -41,14 +42,18 @@ import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.FileMetadata;
 import org.apache.iceberg.FileScanTask;
+import org.apache.iceberg.MetadataColumns;
+import org.apache.iceberg.Metrics;
 import org.apache.iceberg.PartitionKey;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.StructLike;
+import org.apache.iceberg.types.Conversions;
 import org.apache.iceberg.types.Types;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -176,6 +181,73 @@ public class IcebergConnectorScanRangeSourceTest extends TableTestBase {
         Assertions.assertEquals(THdfsFileFormat.PARQUET, range.getDelete_files().get(0).getFile_format());
     }
 
+    private static DeleteFile positionDeletes(String path, String referencedDataFile, String lowerPath,
+                                              String upperPath) {
+        FileMetadata.Builder builder = FileMetadata.deleteFileBuilder(SPEC_A).ofPositionDeletes()
+                .withPath(path).withFormat(FileFormat.PARQUET).withFileSizeInBytes(10).withRecordCount(1)
+                .withPartitionPath("data_bucket=0");
+        if (referencedDataFile != null) {
+            builder.withReferencedDataFile(referencedDataFile);
+        }
+        if (lowerPath != null) {
+            int filePathId = MetadataColumns.DELETE_FILE_PATH.fieldId();
+            builder.withMetrics(new Metrics(1L, null, null, null, null,
+                    Map.of(filePathId, Conversions.toByteBuffer(Types.StringType.get(), lowerPath)),
+                    Map.of(filePathId, Conversions.toByteBuffer(Types.StringType.get(), upperPath))));
+        }
+        return builder.build();
+    }
+
+    @Test
+    public void testReferencesOnlyDataFile() {
+        String a = FILE_A.location();
+        String b = FILE_A_2.location();
+        // referenced_data_file decides when it is set
+        Assertions.assertTrue(IcebergConnectorScanRangeSource.referencesOnlyDataFile(
+                positionDeletes("/d1.parquet", a, null, null), FILE_A));
+        Assertions.assertFalse(IcebergConnectorScanRangeSource.referencesOnlyDataFile(
+                positionDeletes("/d2.parquet", b, null, null), FILE_A));
+        // else the file_path bounds must both be this data file's path
+        Assertions.assertTrue(IcebergConnectorScanRangeSource.referencesOnlyDataFile(
+                positionDeletes("/d3.parquet", null, a, a), FILE_A));
+        Assertions.assertFalse(IcebergConnectorScanRangeSource.referencesOnlyDataFile(
+                positionDeletes("/d4.parquet", null, a, b), FILE_A));
+        Assertions.assertFalse(IcebergConnectorScanRangeSource.referencesOnlyDataFile(
+                positionDeletes("/d5.parquet", null, b, b), FILE_A));
+        // a truncated bound is a prefix of the path
+        String prefix = a.substring(0, a.length() - 1);
+        Assertions.assertFalse(IcebergConnectorScanRangeSource.referencesOnlyDataFile(
+                positionDeletes("/d6.parquet", null, prefix, prefix), FILE_A));
+        // no bounds: unknown
+        Assertions.assertFalse(IcebergConnectorScanRangeSource.referencesOnlyDataFile(
+                positionDeletes("/d7.parquet", null, null, null), FILE_A));
+    }
+
+    @Test
+    public void testPositionDeleteFileReferencesOnlyDataFileIsSent() {
+        TestTables.TestTable v2Table = create(SCHEMA_A, SPEC_A, "ta_v2_pos_delete_single_file", 2);
+        v2Table.newFastAppend().appendFile(FILE_A).commit();
+        v2Table.newRowDelta()
+                .addDeletes(positionDeletes("/path/to/a-file-scoped-deletes.parquet", FILE_A.location(), null, null))
+                .addDeletes(positionDeletes("/path/to/a-partition-deletes.parquet", null, null, null))
+                .commit();
+        IcebergTable icebergTable = new IcebergTable(1, "iceberg_table", "iceberg_catalog", "resource", "db",
+                "table", "", Lists.newArrayList(new Column("id", INT), new Column("data", VARCHAR)), v2Table,
+                Maps.newHashMap());
+        List<RemoteFileInfo> infos = new ArrayList<>();
+        v2Table.newScan().planFiles().forEach(task -> infos.add(new IcebergRemoteFileInfo(task)));
+        IcebergConnectorScanRangeSource source = new IcebergConnectorScanRangeSource(icebergTable,
+                new RemoteFileInfoDefaultSource(infos), IcebergMORParams.EMPTY, tupleDescriptor, Optional.empty(),
+                PartitionIdGenerator.of(), false, false, false);
+
+        THdfsScanRange range = source.getSourceOutputs(100).get(0).getScan_range().getHdfs_scan_range();
+        Assertions.assertEquals(2, range.getDelete_files().size());
+        for (TIcebergDeleteFile deleteFile : range.getDelete_files()) {
+            Assertions.assertEquals(deleteFile.getFull_path().endsWith("a-file-scoped-deletes.parquet"),
+                    deleteFile.isReferences_only_data_file(), deleteFile.getFull_path());
+        }
+    }
+
     @Test
     public void testBucketsOfOneIdentityPartitionShareAPartitionId() throws Exception {
         PartitionSpec spec = PartitionSpec.builderFor(SCHEMA_B).identity("k2").bucket("k1", 4).build();
@@ -229,6 +301,40 @@ public class IcebergConnectorScanRangeSourceTest extends TableTestBase {
         Assertions.assertNotSame(valueByFile.get(k2Is1Bucket0.location()), valueByFile.get(k2Is2Bucket0.location()));
         // the partition count still counts every (k2, bucket) combination
         Assertions.assertEquals(3, scanRangeSource.selectedPartitionCount());
+    }
+
+    @Test
+    public void testTaskSpecIsParsedOncePerSpecId() throws Exception {
+        PartitionSpec spec = PartitionSpec.builderFor(SCHEMA_B).identity("k2").build();
+        TestTables.TestTable nativeTable = create(SCHEMA_B, spec, "t_spec_parse", 2);
+        nativeTable.newFastAppend().appendFile(DataFiles.builder(spec).withPath("/path/to/k2=1/a.parquet")
+                .withFileSizeInBytes(10).withPartitionPath("k2=1").withRecordCount(1).build())
+                .appendFile(DataFiles.builder(spec).withPath("/path/to/k2=2/b.parquet")
+                .withFileSizeInBytes(10).withPartitionPath("k2=2").withRecordCount(1).build()).commit();
+
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(5));
+        SlotDescriptor k2Slot = new SlotDescriptor(new SlotId(2), desc);
+        k2Slot.setType(INT);
+        k2Slot.setColumn(new Column("k2", INT));
+        desc.addSlot(k2Slot);
+        IcebergTable icebergTable = new IcebergTable(1, "iceberg_table", "iceberg_catalog", "resource", "db",
+                "table", "", Lists.newArrayList(new Column("k1", INT), new Column("k2", INT)), nativeTable,
+                Maps.newHashMap());
+        IcebergConnectorScanRangeSource scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable,
+                RemoteFileInfoDefaultSource.EMPTY, IcebergMORParams.EMPTY, desc, Optional.empty(),
+                PartitionIdGenerator.of(), false, false);
+
+        List<FileScanTask> tasks = Lists.newArrayList(nativeTable.newScan().planFiles());
+        Assertions.assertEquals(2, tasks.size());
+        long firstId = scanRangeSource.addPartition(tasks.get(0));
+        // task.spec() parses the spec per task, hashing the whole schema; a later file of the spec, in another
+        // partition or the same one, must not need it
+        FileScanTask otherPartition = Mockito.spy(tasks.get(1));
+        Assertions.assertNotEquals(firstId, scanRangeSource.addPartition(otherPartition));
+        FileScanTask samePartition = Mockito.spy(tasks.get(0));
+        Assertions.assertEquals(firstId, scanRangeSource.addPartition(samePartition));
+        Mockito.verify(otherPartition, Mockito.never()).spec();
+        Mockito.verify(samePartition, Mockito.never()).spec();
     }
 
     @Test

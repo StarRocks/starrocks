@@ -30,6 +30,11 @@
 
 namespace starrocks {
 
+enum class AIProviderProtocol {
+    OPENAI,
+    DASHSCOPE_MULTIMODAL,
+};
+
 struct AIChatRequest {
     std::string_view endpoint;
     std::string_view model;
@@ -104,7 +109,7 @@ public:
                                                  AICapability capability = AICapability::CHAT) const = 0;
 };
 
-Status validate_ai_protocol(std::string_view protocol, AICapability capability);
-StatusOr<std::unique_ptr<AIProvider>> create_ai_provider(std::string_view protocol, AICapability capability);
+Status validate_ai_protocol(AIProviderProtocol protocol, AICapability capability);
+StatusOr<std::unique_ptr<AIProvider>> create_ai_provider(AIProviderProtocol protocol, AICapability capability);
 
 } // namespace starrocks

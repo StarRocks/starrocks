@@ -1283,8 +1283,8 @@ public class InsertPlanner {
                 PartitionSpec partitionSpec = icebergTable.getNativeTable().spec();
                 boolean isInvalid = partitionSpec.fields().stream().anyMatch(field -> !field.transform().isIdentity());
                 if (isInvalid) {
-                    throw new SemanticException("Staitc insert into Iceberg table %s is not supported" +
-                            " for not partitioned by identity transform", icebergTable.getName());
+                    throw new SemanticException("Static partition insert into Iceberg table %s is not supported" +
+                            " because it has a non-identity partition transform", icebergTable.getName());
                 }
             }
         }

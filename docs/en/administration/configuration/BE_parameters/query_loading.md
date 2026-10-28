@@ -147,7 +147,7 @@ This topic introduces the following types of BE configurations:
 - Unit: Requests per second
 - Valid values: Positive integers
 - Is mutable: Yes
-- Description: Per-BE admission rate for each text-embedding HTTP-attempt bucket, keyed by endpoint, credential, and capability. Applies to SYSTEM and AI provider-selected embedding calls, including retries. This limit is independent of `ai_function_rate_limit_qps_chat`; the process-wide `ai_function_max_inflight` limit still applies. Lower it for provider quotas or outbound-load control; raise it only when the provider and BE have capacity. Runtime updates take effect live and require no BE restart.
+- Description: Per-BE admission rate for each text-embedding HTTP-attempt bucket, keyed by endpoint, credential, and capability. This limit is independent of `ai_function_rate_limit_qps_chat`; the process-wide `ai_function_max_inflight` limit still applies. Lower it for provider quotas or outbound-load control; raise it only when the provider and BE have capacity. Runtime updates take effect live and require no BE restart.
 - Introduced in: -
 
 ### ai_function_max_inflight
@@ -226,6 +226,24 @@ This topic introduces the following types of BE configurations:
 - Is mutable: Yes
 - Description: Whether to enable compaction for Flat JSON data.
 - Introduced in: v3.3.3
+
+### enable_compaction_flat_json_mixed_inputs
+
+- Default: True
+- Type: Boolean
+- Unit:
+- Is mutable: Yes
+- Description: Whether a compaction whose input segments store a JSON column partly as Flat JSON and partly as whole JSON reads the whole-JSON segments into the Flat JSON layout of the other segments, with every sub-column typed JSON. The output is then written while it is read instead of being held in memory as a whole segment. The JSON-typed sub-columns record the types and ranges of their values, so a later compaction can store them with the type that holds every value exactly. It takes effect only when `enable_compaction_flat_json` is `true` and the table flattens JSON.
+- Introduced in: -
+
+### enable_compaction_flat_json_partial_paths
+
+- Default: True
+- Type: Boolean
+- Unit:
+- Is mutable: Yes
+- Description: Whether a compaction of Flat JSON segments keeps a sub-column that only some input segments have, when enough rows hold it (`json_flat_sparsity_factor`). Segments without the sub-column contribute the values in their remaining JSON, and the sub-column is typed JSON when such a segment may hold values there. When disabled, a compaction keeps only the sub-columns that every input segment has, and a key that any input segment does not flatten is stored in the remaining JSON. It takes effect only when `enable_compaction_flat_json` is `true`.
+- Introduced in: -
 
 ### enable_default_value_column_zonemap_filter
 
@@ -768,6 +786,15 @@ This topic introduces the following types of BE configurations:
 - Description: The wait time before BufferControlBlock releases data.
 - Introduced in: -
 
+### runtime_filter_worker_thread_num
+
+- Default: 4
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: The number of threads on each BE that merge and deliver global runtime filters. All events of one runtime filter are handled by the same thread, and different runtime filters are spread over the threads. A value less than or equal to `1` uses a single thread.
+- Introduced in: -
+
 ### scan_context_gc_interval_min
 
 - Default: 5
@@ -1120,6 +1147,24 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Unit: -
 - Is mutable: Yes
 - Description: The maximum number of threads that run the final close of load sinks. In a shared-data cluster this close writes the combined transaction log to object storage; running it in this pool keeps a slow write from blocking the pipeline poller and the pipeline execution threads. When all threads are busy, further closes wait in the queue of the pool, which has no size limit, so no close is dropped. Values must be greater than 0. This limit can be changed at runtime without restarting the BE or CN. Lowering the limit does not interrupt closes already running. One worker is prestarted and retained while idle; additional workers can exit after 500 ms of idle time.
+- Introduced in: -
+
+### enable_put_combinded_txn_log_parallel
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to write the combined transaction logs of a load in parallel in a shared-data cluster. When the load sink closes, it writes one combined transaction log for each partition the load touched to object storage. When this item is set to `true`, these writes run concurrently in a dedicated thread pool, whose size is capped by `put_combined_txn_log_thread_pool_num_max` (default `64`). When it is set to `false`, the partitions are written one after another. In both cases the load waits for all writes to finish, and fails if any write fails.
+- Introduced in: -
+
+### put_combined_txn_log_thread_pool_num_max
+
+- Default: 64
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of threads in the thread pool that writes combined transaction logs to object storage in a shared-data cluster. When `enable_put_combinded_txn_log_parallel` is set to `true`, the combined transaction logs of the partitions that a load touched are written concurrently in this pool. When all threads are busy, further writes wait in the queue of the pool, which has no size limit. This limit can be changed at runtime without restarting the BE or CN. A value less than or equal to `0` is treated as `1`. Lowering the limit does not interrupt writes already running. Idle threads exit after 500 ms.
 - Introduced in: -
 
 ### enable_rejected_record_sync

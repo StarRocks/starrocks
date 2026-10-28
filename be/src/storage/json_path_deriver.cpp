@@ -20,6 +20,7 @@
 #include <limits>
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include <string_view>
 #include <unordered_set>
@@ -27,6 +28,7 @@
 #include <vector>
 
 #include "base/string/string_parser.hpp"
+#include "column/column_helper.h"
 #include "column/flat_json/flat_json_internal.h"
 #include "column/json_column.h"
 #include "column/nullable_column.h"
@@ -107,8 +109,20 @@ static BigintRange bigint_range_of(const Column& sub) {
 // The layout derived from sub-columns is read by casting each source sub-column to the derived type, so the
 // derived type must hold every source value exactly; dfs_keep_numbers_exact() checks that from the value range
 // of the path. A LARGEINT sub-column only exists for values past INT64_MAX; a BIGINT sub-column contributes its
-// value range, or the whole BIGINT range when it is unknown.
-static void add_flat_sub_column(JsonFlatPath* leaf, LogicalType type, uint64_t hits, const BigintRange& range) {
+// value range, or the whole BIGINT range when it is unknown. A JSON sub-column with value stats contributes
+// what deriving from its values would have found; without them it leaves the path JSON.
+static void add_flat_sub_column(JsonFlatPath* leaf, LogicalType type, uint64_t hits, const BigintRange& range,
+                                const flat_json::JsonValueStats* stats) {
+    if (type == LogicalType::TYPE_JSON && stats != nullptr) {
+        leaf->json_type &= stats->json_type;
+        leaf->max_uint = std::max(leaf->max_uint, stats->max_uint);
+        leaf->min_int = std::min(leaf->min_int, stats->min_int);
+        leaf->hits += hits;
+        // A NULL row holds no value at the path, as a row without it in a typed sub-column.
+        const uint64_t non_base = stats->values - std::min(stats->values, stats->base_type_count);
+        leaf->flat_base_type_hits += hits - std::min(hits, non_base);
+        return;
+    }
     leaf->json_type &= flat_json::LOGICAL_TYPE_TO_JSON_BITS.at(type);
     if (type == LogicalType::TYPE_LARGEINT) {
         leaf->max_uint = std::numeric_limits<uint64_t>::max();
@@ -223,6 +237,19 @@ void JsonPathDeriver::derived(const std::vector<const Column*>& json_datas) {
     }
 
     _finalize();
+    // Flat inputs (a compaction's chunks) are read into the layout by whole sub-columns: leave a path that one of them
+    // holds a prefix of, or a path below, to the remain. Whole-JSON inputs fit any layout.
+    std::vector<std::pair<std::set<std::string>, bool>> flat_layouts;
+    for (const auto* col : json_datas) {
+        const auto* json_col = down_cast<const JsonColumn*>(ColumnHelper::get_data_column(col));
+        if (json_col->is_flat_json()) {
+            const auto& paths = json_col->flat_column_paths();
+            flat_layouts.emplace_back(std::set<std::string>(paths.begin(), paths.end()), json_col->has_remain());
+        }
+    }
+    if (!flat_layouts.empty()) {
+        _keep_readable_paths(flat_layouts, false);
+    }
 }
 
 JsonFlatPath* JsonPathDeriver::_normalize_exists_path(const std::string_view& path, JsonFlatPath* root, uint64_t hits) {
@@ -254,6 +281,8 @@ void JsonPathDeriver::derived(const std::vector<const ColumnReader*>& json_reade
 
     _path_root = std::make_shared<JsonFlatPath>();
     _total_rows = 0;
+    // The sub-column paths of each input, and whether it has a remain column.
+    std::vector<std::pair<std::set<std::string>, bool>> input_layouts;
 
     // extract flat paths
     for (const auto& reader : json_readers) {
@@ -264,18 +293,92 @@ void JsonPathDeriver::derived(const std::vector<const ColumnReader*>& json_reade
         int start = reader->is_nullable() ? 1 : 0;
         int end = reader->has_remain_json() ? reader->sub_readers()->size() - 1 : reader->sub_readers()->size();
         _has_remain |= reader->has_remain_json();
+        auto& [input_paths, input_remain] = input_layouts.emplace_back();
+        input_remain = reader->has_remain_json();
         for (size_t i = start; i < end; i++) {
             const auto& sub = (*reader->sub_readers())[i];
+            input_paths.emplace(sub->name());
             // compaction only extract common leaf, extract parent node need more compute on remain, it's bad performance
             auto leaf = _normalize_exists_path(sub->name(), _path_root.get(), 0);
+            std::optional<flat_json::JsonValueStats> stats;
+            if (const auto* pb = sub->json_value_stats(); pb != nullptr) {
+                stats.emplace();
+                // Bits a writer of another version stored may not be a value of the type lattice; read those as JSON.
+                const uint32_t bits = pb->json_type();
+                stats->json_type =
+                        bits <= 31 && flat_json::JSON_BITS_TO_LOGICAL_TYPE.contains(static_cast<uint8_t>(bits))
+                                ? static_cast<uint8_t>(bits)
+                                : flat_json::JSON_BASE_TYPE_BITS;
+                stats->values = pb->values();
+                stats->base_type_count = pb->base_type_count();
+                stats->max_uint = pb->max_uint();
+                stats->min_int = pb->min_int();
+            }
             add_flat_sub_column(
                     leaf, sub->column_type(), reader->num_rows(),
-                    sub->column_type() == LogicalType::TYPE_BIGINT ? bigint_range_of(sub.get()) : std::nullopt);
+                    sub->column_type() == LogicalType::TYPE_BIGINT ? bigint_range_of(sub.get()) : std::nullopt,
+                    stats.has_value() ? &*stats : nullptr);
         }
     }
 
-    _min_json_sparsity_factory = 1; // only extract common schema
+    if (!config::enable_compaction_flat_json_partial_paths) {
+        _min_json_sparsity_factory = 1; // only extract common schema
+        _finalize();
+        return;
+    }
+    // Keep a path that enough rows hold as a sub-column, as a load does, not only the paths every input holds as
+    // one: a key that one input keeps in its remain, or lacks (a key added later), would otherwise go to the
+    // remain of the output, and no later compaction derived from metadata could flatten it again.
     _finalize();
+    _keep_readable_paths(input_layouts, true);
+}
+
+void JsonPathDeriver::_keep_readable_paths(const std::vector<std::pair<std::set<std::string>, bool>>& input_layouts,
+                                           bool type_from_remain) {
+    std::vector<std::string> paths;
+    std::vector<LogicalType> types;
+    bool dropped = false;
+    for (size_t i = 0; i < _paths.size(); i++) {
+        const std::string& path = _paths[i];
+        bool readable = true;
+        bool from_remain = false;
+        for (const auto& [input_paths, input_remain] : input_layouts) {
+            if (input_paths.contains(path)) {
+                continue;
+            }
+            // An input that holds a prefix of the path, or a path below it, as a sub-column cannot be read into
+            // this path (HyperJsonTransformer maps whole sub-columns); leave the path to the remain.
+            auto below = input_paths.lower_bound(path + ".");
+            if (below != input_paths.end() && below->starts_with(path + ".")) {
+                readable = false;
+                break;
+            }
+            for (size_t dot = path.find('.'); dot != std::string::npos; dot = path.find('.', dot + 1)) {
+                if (input_paths.contains(path.substr(0, dot))) {
+                    readable = false;
+                    break;
+                }
+            }
+            if (!readable) {
+                break;
+            }
+            // Otherwise the input's value is in its remain, of any type, or absent.
+            from_remain |= input_remain;
+        }
+        if (!readable) {
+            _has_remain = true;
+            dropped = true;
+            continue;
+        }
+        paths.emplace_back(path);
+        types.emplace_back(type_from_remain && from_remain ? LogicalType::TYPE_JSON : _types[i]);
+    }
+    _paths = std::move(paths);
+    _types = std::move(types);
+    if (dropped) {
+        // The remain filter was built for the paths before; without it a reader always reads the remain.
+        _remain_filter.reset();
+    }
 }
 
 void JsonPathDeriver::_derived_on_flat_json(const std::vector<const Column*>& json_datas) {
@@ -302,9 +405,15 @@ void JsonPathDeriver::_derived_on_flat_json(const std::vector<const Column*>& js
 
         for (size_t i = 0; i < paths.size(); i++) {
             auto leaf = _normalize_exists_path(paths[i], _path_root.get(), hits);
-            add_flat_sub_column(leaf, types[i], hits,
-                                types[i] == LogicalType::TYPE_BIGINT ? bigint_range_of(*json_col->get_flat_field(i))
-                                                                     : std::nullopt);
+            std::optional<flat_json::JsonValueStats> stats;
+            if (types[i] == LogicalType::TYPE_JSON) {
+                stats.emplace();
+                stats->update(*json_col->get_flat_field(i));
+            }
+            add_flat_sub_column(
+                    leaf, types[i], hits,
+                    types[i] == LogicalType::TYPE_BIGINT ? bigint_range_of(*json_col->get_flat_field(i)) : std::nullopt,
+                    stats.has_value() ? &*stats : nullptr);
         }
     }
 }

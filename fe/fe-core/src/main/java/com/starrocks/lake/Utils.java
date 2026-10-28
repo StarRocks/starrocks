@@ -30,6 +30,7 @@ import com.starrocks.catalog.TabletRange;
 import com.starrocks.common.Config;
 import com.starrocks.common.NoAliveBackendException;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.concurrent.lock.BlockingCallValidator;
 import com.starrocks.lake.vector.VectorIndexBuildScheduler;
 import com.starrocks.proto.AggregatePublishVersionRequest;
 import com.starrocks.proto.ComputeNodePB;
@@ -206,6 +207,9 @@ public class Utils {
                                            Map<Long, TabletStatPB> tabletStats,
                                            List<VectorIndexBuildInfoPB> vectorIndexBuildInfos)
             throws NoAliveBackendException, RpcException {
+        // The brpc send is asynchronous, but this method waits for every response before
+        // returning, so the wait is what a lock would be held across.
+        BlockingCallValidator.validateNotUnderLock("lake-publish");
         WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         if (!warehouseManager.isResourceAvailable(computeResource)) {
             LOG.warn("publish version operation should be successful even if the warehouse is not exist, " +
@@ -603,6 +607,9 @@ public class Utils {
                                                           Map<Long, TabletStatPB> tabletStats,
                                                           List<VectorIndexBuildInfoPB> vectorIndexBuildInfos)
             throws NoAliveBackendException, RpcException {
+        // The brpc send is asynchronous, but this method waits for every response before
+        // returning, so the wait is what a lock would be held across.
+        BlockingCallValidator.validateNotUnderLock("lake-publish");
         WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         if (computeResource == null || !warehouseManager.isResourceAvailable(computeResource)) {
             LOG.warn("publish version operation should be successful even if the warehouse is not exist, " +
@@ -747,6 +754,9 @@ public class Utils {
     public static void publishLogVersionBatch(@NotNull List<Tablet> tablets, List<TxnInfoPB> txns, List<Long> versions,
                                               ComputeResource computeResource)
             throws NoAliveBackendException, RpcException {
+        // The brpc send is asynchronous, but this method waits for every response before
+        // returning, so the wait is what a lock would be held across.
+        BlockingCallValidator.validateNotUnderLock("lake-publish");
         Map<ComputeNode, List<Long>> nodeToTablets = new HashMap<>();
 
         WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();

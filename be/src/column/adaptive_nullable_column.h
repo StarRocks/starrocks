@@ -298,20 +298,44 @@ public:
         return sizeof(bool) + _data_column->max_one_element_serialize_size();
     }
 
+    // NullableColumn overrides the compact trio, which shadows Column's defaults -- those would
+    // have dispatched back through the virtual serialize()/deserialize_and_append() below and
+    // materialized on the way. So every compact entry point needs its own materializing override
+    // here, exactly like its persisted-encoding sibling.
+    uint32_t max_one_element_serialize_size_compact() const override {
+        materialized_nullable();
+        return sizeof(bool) + _data_column->max_one_element_serialize_size_compact();
+    }
+
     uint32_t serialize(size_t idx, uint8_t* pos) const override;
+
+    uint32_t serialize_compact(size_t idx, uint8_t* pos) const override;
 
     uint32_t serialize_default(uint8_t* pos) const override;
 
     void serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
                          uint32_t max_one_row_size) const override;
 
+    uint32_t serialize_batch_fixed_row_size() const override {
+        materialized_nullable();
+        return NullableColumn::serialize_batch_fixed_row_size();
+    }
+
+    void serialize_size_compact_batch(Buffer<uint64_t>& sizes, size_t chunk_size) const override {
+        materialized_nullable();
+        NullableColumn::serialize_size_compact_batch(sizes, chunk_size);
+    }
+
     const uint8_t* deserialize_and_append(const uint8_t* pos) override;
+
+    const uint8_t* deserialize_compact_and_append(const uint8_t* pos) override;
 
     void deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) override;
 
     uint32_t serialize_size(size_t idx) const override {
         materialized_nullable();
-        if (_null_column->immutable_data()[idx]) {
+        // Must match serialize(): the null mask only counts when _has_null is set.
+        if (_has_null && _null_column->immutable_data()[idx]) {
             return sizeof(uint8_t);
         }
         return sizeof(uint8_t) + _data_column->serialize_size(idx);

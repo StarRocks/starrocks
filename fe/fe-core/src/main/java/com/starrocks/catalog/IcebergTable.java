@@ -454,7 +454,8 @@ public class IcebergTable extends Table {
     }
 
     // Immutable read view a time-travel query pins on its per-query IcebergTable copy: the targeted
-    // snapshot's schema and the partition specs its manifests reference, keyed by spec id.
+    // snapshot's schema and the partition specs its manifests reference, keyed by spec id. A branch read
+    // pins the current schema and no specs, so it keeps the current spec.
     private static class SnapshotReadView {
         private final Schema schema;
         private final Map<Integer, PartitionSpec> specsById;
