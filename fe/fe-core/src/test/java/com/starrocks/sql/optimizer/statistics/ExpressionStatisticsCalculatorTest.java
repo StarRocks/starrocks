@@ -730,7 +730,18 @@ public class ExpressionStatisticsCalculatorTest {
         Assertions.assertEquals(Double.NEGATIVE_INFINITY, columnStatistic.getMinValue(), 0.001);
         Assertions.assertEquals(Double.POSITIVE_INFINITY, columnStatistic.getMaxValue(), 0.001);
         Assertions.assertEquals(100, columnStatistic.getDistinctValuesCount(), 0.001);
-
+        // test str_to_date function
+        callOperator = new CallOperator(FunctionSet.STR_TO_DATE, Type.DATETIME, Lists.newArrayList(left, right));
+        columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
+        Assertions.assertEquals(Double.NEGATIVE_INFINITY, columnStatistic.getMinValue(), 0.001);
+        Assertions.assertEquals(Double.POSITIVE_INFINITY, columnStatistic.getMaxValue(), 0.001);
+        Assertions.assertEquals(100, columnStatistic.getDistinctValuesCount(), 0.001);
+        // test str2date function, the DATE variant of str_to_date
+        callOperator = new CallOperator(FunctionSet.STR2DATE, Type.DATE, Lists.newArrayList(left, right));
+        columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
+        Assertions.assertEquals(Double.NEGATIVE_INFINITY, columnStatistic.getMinValue(), 0.001);
+        Assertions.assertEquals(Double.POSITIVE_INFINITY, columnStatistic.getMaxValue(), 0.001);
+        Assertions.assertEquals(100, columnStatistic.getDistinctValuesCount(), 0.001);
 
         callOperator = new CallOperator(FunctionSet.MULTIPLY, Type.BIGINT, Lists.newArrayList(left, right));
         columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
