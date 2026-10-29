@@ -31,11 +31,7 @@ dependencies {
     implementation("org.antlr:antlr4-runtime")
     implementation("org.apache.commons:commons-lang3")
     implementation("com.google.guava:guava")
-<<<<<<< HEAD
-=======
     implementation("com.google.code.findbugs:jsr305")
-    implementation("com.google.code.gson:gson")
->>>>>>> 61c23e17775... [BugFix][RB-833][CVE] Bump guava to 33.7.2 and snappy-java to 1.1.10.9 (#67288)
     implementation("javax.validation:validation-api")
 
     testImplementation("org.junit.jupiter:junit-jupiter")

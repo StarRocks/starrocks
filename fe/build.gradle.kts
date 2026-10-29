@@ -124,14 +124,9 @@ subprojects {
             implementation("com.github.oshi:oshi-core:6.2.1")
             implementation("com.github.seancfoley:ipaddress:5.4.2")
             implementation("com.google.cloud.bigdataoss:gcs-connector:${project.ext["gcs.connector.version"]}")
-<<<<<<< HEAD
-            implementation("com.google.code.gson:gson:2.8.9")
-            implementation("com.google.guava:guava:32.0.1-jre")
-=======
             implementation("com.google.code.findbugs:jsr305:3.0.2")
-            implementation("com.google.code.gson:gson:${project.ext["gson.version"]}")
+            implementation("com.google.code.gson:gson:2.8.9")
             implementation("com.google.guava:guava:33.7.2-jre")
->>>>>>> 61c23e17775... [BugFix][RB-833][CVE] Bump guava to 33.7.2 and snappy-java to 1.1.10.9 (#67288)
             implementation("com.google.protobuf:protobuf-java:${project.ext["protobuf-java.version"]}")
             implementation("com.google.protobuf:protobuf-java-util:${project.ext["protobuf-java.version"]}")
             implementation("com.microsoft.sqlserver:mssql-jdbc:12.4.2.jre11")
