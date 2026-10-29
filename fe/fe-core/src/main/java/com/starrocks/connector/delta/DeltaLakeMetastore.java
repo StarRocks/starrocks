@@ -69,6 +69,8 @@ public abstract class DeltaLakeMetastore implements IDeltaLakeMetastore {
                               DeltaLakeCatalogProperties properties) {
         this.catalogName = catalogName;
         this.delegate = metastore;
+        // Register before the catalog is in use; per-table configurations are copies and inherit it.
+        DeltaLakeAzureLogStore.registerAsDefault(hdfsConfiguration);
         this.hdfsConfiguration = hdfsConfiguration;
         this.properties = properties;
         long checkpointCacheSize = Math.round(Runtime.getRuntime().maxMemory() *
