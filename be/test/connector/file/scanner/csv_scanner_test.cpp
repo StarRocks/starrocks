@@ -38,11 +38,8 @@
 #include "runtime/descriptors.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
-<<<<<<< HEAD
-#include "testutil/type_test_helper.h"
-=======
 #include "runtime/service_contexts.h"
->>>>>>> 08f90cdbbd1... [BugFix][RB-843] Read channel stream load pipes without blocking, with the default buffer (#67291)
+#include "testutil/type_test_helper.h"
 
 namespace starrocks {
 
