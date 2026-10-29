@@ -328,8 +328,7 @@ protected:
     static TuplePB make_varchar_tuple(int64_t key) {
         TuplePB tuple;
         auto* v = tuple.add_values();
-        TypeDescriptor type_desc = TypeDescriptor::create_varchar_type(32);
-        v->mutable_type()->CopyFrom(type_desc.to_protobuf());
+        v->mutable_type()->CopyFrom(TYPE_VARCHAR_DESC.to_protobuf());
         v->set_variant_type(VariantTypePB::NORMAL_VALUE);
         v->set_value(encode_varchar_key(key));
         return tuple;

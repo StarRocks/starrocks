@@ -2263,7 +2263,7 @@ TEST_P(RowsetColumnPartialUpdateTest, partial_update_json_meta_dict_reads_overla
 
     // The extended column for get_json_string(j, '$.y').
     std::vector<ColumnAccessPathPtr> paths;
-    paths.emplace_back(make_extended_json_path("j", "y", TypeDescriptor::create_varchar_type(255)));
+    paths.emplace_back(make_extended_json_path("j", "y", TYPE_VARCHAR_DESC));
     ASSIGN_OR_ABORT(auto extended_schema,
                     extend_schema_by_access_paths(tablet->tablet_schema(),
                                                   std::numeric_limits<int32_t>::max() - 1000000, paths));
@@ -2330,8 +2330,7 @@ TEST_P(RowsetColumnPartialUpdateTest, partial_update_json_meta_dict_reads_overla
 
     // Non-nullable, matching what MetaReader builds for META_DICT_MERGE: _collect_dict_for_column only
     // appends to the array's offsets/elements, never to a null column.
-    auto dict_column = ColumnHelper::create_column(
-            TypeDescriptor::create_array_type(TypeDescriptor::create_varchar_type(255)), false);
+    auto dict_column = ColumnHelper::create_column(TypeDescriptor::create_array_type(TYPE_VARCHAR_DESC), false);
     std::vector<Column*> dsts = {dict_column.get()};
     ASSERT_OK(collecter.collect(&dsts));
 

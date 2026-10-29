@@ -359,8 +359,7 @@ TEST_F(AvroReaderTest, test_read_complex_types_as_varchar) {
     // read as varchar type
     for (auto& slot_desc : tmp_slot_descs) {
         slot_descs.emplace_back(_obj_pool.add(
-                new SlotDescriptor(slot_desc.id(), std::string(slot_desc.col_name()),
-                                   TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH))));
+                new SlotDescriptor(slot_desc.id(), std::string(slot_desc.col_name()), TYPE_VARCHAR_DESC)));
     }
 
     // create column readers
@@ -568,8 +567,8 @@ TEST_F(AvroReaderTest, test_direct_path_scalar_conversion_matrix) {
     descs.emplace_back(3, "bool_from_float", TypeDescriptor::from_logical_type(TYPE_BOOLEAN));
     descs.emplace_back(4, "bool_from_double", TypeDescriptor::from_logical_type(TYPE_BOOLEAN));
     descs.emplace_back(5, "int_from_bool", TypeDescriptor::from_logical_type(TYPE_INT));
-    descs.emplace_back(6, "enum_as_string", TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH));
-    descs.emplace_back(7, "fixed_as_string", TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH));
+    descs.emplace_back(6, "enum_as_string", TYPE_VARCHAR_DESC);
+    descs.emplace_back(7, "fixed_as_string", TYPE_VARCHAR_DESC);
     descs.emplace_back(8, "nullable_int", TypeDescriptor::from_logical_type(TYPE_INT));
     std::vector<SlotDescriptor*> slot_descs;
     for (auto& desc : descs) {
@@ -600,7 +599,7 @@ TEST_F(AvroReaderTest, test_direct_path_missing_column_as_null) {
 
     std::vector<SlotDescriptor> descs;
     descs.emplace_back(1, "id", TypeDescriptor::from_logical_type(TYPE_INT));
-    descs.emplace_back(2, "missing_col", TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH));
+    descs.emplace_back(2, "missing_col", TYPE_VARCHAR_DESC);
     std::vector<SlotDescriptor*> slot_descs = {&descs[0], &descs[1]};
     create_column_readers(slot_descs, _timezone, false);
 
@@ -628,7 +627,7 @@ TEST_F(AvroReaderTest, test_direct_path_data_quality_error_drains_remaining_fiel
 
     std::vector<SlotDescriptor> descs;
     descs.emplace_back(3, "long_field", TypeDescriptor::from_logical_type(TYPE_INT));
-    descs.emplace_back(7, "string_field", TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH));
+    descs.emplace_back(7, "string_field", TYPE_VARCHAR_DESC);
     std::vector<SlotDescriptor*> slot_descs = {&descs[0], &descs[1]};
     create_column_readers(slot_descs, _timezone, false);
 

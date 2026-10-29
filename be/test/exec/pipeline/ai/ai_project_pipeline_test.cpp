@@ -110,7 +110,7 @@ AIProjectModelConfigs provider_model_configs(std::string model = std::string(kMo
 }
 
 TypeDescriptor varchar_type() {
-    return TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+    return TYPE_VARCHAR_DESC;
 }
 
 TExpr make_slot_ref(TTupleId tuple_id, TSlotId slot_id) {

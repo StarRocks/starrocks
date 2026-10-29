@@ -685,8 +685,7 @@ TEST_F(SegmentMetadataFilterTest, test_varchar_sort_key_no_use_after_free) {
 
     auto make_varchar_variant = [](const std::string& value) {
         VariantPB var;
-        TypeDescriptor td = TypeDescriptor::create_varchar_type(128);
-        *var.mutable_type() = td.to_protobuf();
+        *var.mutable_type() = TYPE_VARCHAR_DESC.to_protobuf();
         var.set_variant_type(VariantTypePB::NORMAL_VALUE);
         var.set_value(value);
         return var;
