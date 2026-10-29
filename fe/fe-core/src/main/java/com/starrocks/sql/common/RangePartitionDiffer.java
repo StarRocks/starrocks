@@ -345,7 +345,11 @@ public final class RangePartitionDiffer extends PartitionDiffer {
     public PartitionDiffResult computePartitionDiff(Range<PartitionKey> rangeToInclude,
                                                     Map<Table, BaseToMVPartitionMapping> refBaseTablePartitionMap) {
         Map<Table, List<Column>> refBaseTablePartitionColumns = mv.getRefBaseTablePartitionColumns();
-        Preconditions.checkArgument(!refBaseTablePartitionColumns.isEmpty());
+        Preconditions.checkArgument(!refBaseTablePartitionColumns.isEmpty(),
+                "The partition columns of the ref base tables of materialized view %s are not analyzed " +
+                        "(active: %s, inactive reason: %s). Its metadata was probably reset by a concurrent change, " +
+                        "for example ALTER MATERIALIZED VIEW ... INACTIVE or ACTIVE; retry the operation.",
+                mv.getName(), mv.isActive(), mv.getInactiveReason());
         // get the materialized view's partition range map
         PCellSortedSet mvPartitionCells = mv.getRangePartitionMap();
 

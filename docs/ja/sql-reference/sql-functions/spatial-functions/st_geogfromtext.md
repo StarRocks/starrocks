@@ -25,6 +25,8 @@ GEOGRAPHY ST_GeogFromText(VARCHAR wkt, INT srid)
 
 `GEOGRAPHY` 値を返します。いずれかの引数が `NULL`、WKT が無効、座標がサポート範囲外、または `srid` が `4326` 以外の場合は `NULL` を返します。
 
+ネイティブの `GEOGRAPHY` と `GEOMETRY` は、`ARRAY`、`MAP`、`STRUCT` 内にネストできません。外側の式がスカラーを返す場合や、地理空間値が `NULL` の場合も、解析時に拒否されます。
+
 ## 例
 
 ```SQL

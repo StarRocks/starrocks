@@ -865,6 +865,11 @@ public class ColumnTypeConverter {
     }
 
     public static Type fromIcebergType(org.apache.iceberg.types.Type icebergType) {
+        Type type = convertIcebergType(icebergType);
+        return type.hasNestedGeoType() ? UnknownType.UNKNOWN_TYPE : type;
+    }
+
+    private static Type convertIcebergType(org.apache.iceberg.types.Type icebergType) {
         if (icebergType == null) {
             return NullType.NULL;
         }

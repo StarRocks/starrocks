@@ -44,6 +44,9 @@ public class TaskRunStatusChange implements Writable {
     @SerializedName("extraMessage")
     private String extraMessage;
 
+    @SerializedName("processStartTime")
+    private long processStartTime;
+
     public TaskRunStatusChange(long taskId, TaskRunStatus status,
                                Constants.TaskRunState fromStatus,
                                Constants.TaskRunState toStatus) {
@@ -123,11 +126,20 @@ public class TaskRunStatusChange implements Writable {
         this.extraMessage = extraMessage;
     }
 
+    public long getProcessStartTime() {
+        return processStartTime;
+    }
+
+    public void setProcessStartTime(long processStartTime) {
+        this.processStartTime = processStartTime;
+    }
+
     @Override
     public String toString() {
         return "TaskRunStatus{" +
                 "queryId='" + queryId + '\'' +
                 ", taskId='" + taskId + '\'' +
+                ", processStartTime=" + processStartTime +
                 ", finishTime=" + finishTime +
                 ", fromStatus=" + fromStatus +
                 ", toStatus=" + toStatus +

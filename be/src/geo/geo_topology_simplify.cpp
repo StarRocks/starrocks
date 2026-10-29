@@ -74,31 +74,18 @@ struct Stop {
 };
 class Budget {
 public:
-    Budget(size_t limit, const std::function<Status()>& checkpoint, size_t used = 0)
-            : _limit(limit), _checkpoint(checkpoint), _used(used) {
-        check();
-    }
+    explicit Budget(size_t limit, size_t used = 0) : _limit(limit), _used(used) {}
     void charge(size_t count = 1) {
         if (_used > _limit || count > _limit - _used) {
             throw Stop{Status::InvalidArgument("ST_SimplifyPreserveTopology exceeds work limit")};
         }
         _used += count;
-        if (_used - _last_check >= 128) check();
-    }
-    void check() {
-        _last_check = _used;
-        if (_checkpoint) {
-            Status result = _checkpoint();
-            if (!result.ok()) throw Stop{std::move(result)};
-        }
     }
     size_t used() const { return _used; }
 
 private:
     size_t _limit;
-    const std::function<Status()>& _checkpoint;
     size_t _used;
-    size_t _last_check = 0;
 };
 
 enum class PathKind { POINT, LINE, RING };
@@ -195,7 +182,6 @@ struct Index {
     std::vector<size_t> counts;
     Tree tree;
     void rebuild(const std::vector<Path>& paths, const Retained& kept, Budget& budget) {
-        budget.check();
         edges.clear();
         tree.clear();
         counts.assign(paths.size(), 0);
@@ -214,7 +200,6 @@ struct Index {
             auto s = segment(edges[i], paths);
             tree.insert({bounds(s.raw_a, s.raw_b), i});
         }
-        budget.check();
     }
     static constexpr size_t none = std::numeric_limits<size_t>::max();
     struct Links {
@@ -458,7 +443,6 @@ void validate_paths(const std::vector<Path>& paths, const Retained& kept, const 
             }
         }
     }
-    budget.check();
 }
 
 bool within_distance(const ExactPoint& p, const ExactPoint& a, const ExactPoint& c, const Integer& tolerance2,
@@ -522,7 +506,6 @@ void append_paths(const WkbGeometry& geometry, int group, int& next_polygon, int
             throw Stop{Status::InvalidArgument("ST_SimplifyPreserveTopology exceeds coordinate limit")};
         }
         coordinates += raw.size();
-        budget.check();
         Path path;
         path.raw = &raw;
         path.kind = kind;
@@ -639,9 +622,8 @@ struct PreparedGeoTopologySimplify::Impl {
     // ring/contact incidence graph is a forest (a cycle is rejected immediately),
     // hence has O(rings) nodes/links, not a quadratic allocation of all contacts.
     // No all-pairs contact matrix or tolerance-dependent result cache is kept.
-    // Standard allocator bytes are charged by BE memory hooks; checkpoints run
-    // before bounded allocation groups and through charged loops. Work units
-    // bound these loops, not wall-clock time or Boost internals' instruction count.
+    // Standard allocator bytes are charged by BE memory hooks. Work units bound
+    // these loops, not wall-clock time or Boost internals' instruction count.
     std::string wkb;
     WkbGeometry geometry;
     std::vector<Path> paths;
@@ -653,10 +635,10 @@ struct PreparedGeoTopologySimplify::Impl {
 PreparedGeoTopologySimplify::PreparedGeoTopologySimplify(std::unique_ptr<Impl> impl) : _impl(std::move(impl)) {}
 PreparedGeoTopologySimplify::~PreparedGeoTopologySimplify() = default;
 
-StatusOr<std::unique_ptr<PreparedGeoTopologySimplify>> PreparedGeoTopologySimplify::prepare(
-        Slice wkb, const std::function<Status()>& checkpoint, size_t work_limit) {
+StatusOr<std::unique_ptr<PreparedGeoTopologySimplify>> PreparedGeoTopologySimplify::prepare(Slice wkb,
+                                                                                            size_t work_limit) {
     try {
-        Budget budget(std::min(work_limit, kGeoTopologySimplifyMaxWork), checkpoint);
+        Budget budget(std::min(work_limit, kGeoTopologySimplifyMaxWork));
         budget.charge(wkb.size);
         if (wkb.size > kGeoTopologySimplifyMaxBytes) {
             return Status::InvalidArgument("ST_SimplifyPreserveTopology input exceeds 256 KiB");
@@ -666,7 +648,6 @@ StatusOr<std::unique_ptr<PreparedGeoTopologySimplify>> PreparedGeoTopologySimpli
         RETURN_IF_ERROR(WkbCodec::parse_wkb_bounded(
                 wkb, &impl->geometry, kGeoTopologySimplifyMaxCoordinates + kGeoTopologySimplifyMaxComponents,
                 kCartesian));
-        budget.check();
         impl->wkb.assign(wkb.data, wkb.size);
         impl->work_limit = std::min(work_limit, kGeoTopologySimplifyMaxWork);
         size_t components = 0, coordinates = 0;
@@ -683,7 +664,6 @@ StatusOr<std::unique_ptr<PreparedGeoTopologySimplify>> PreparedGeoTopologySimpli
             }
         }
         impl->preparation_work = budget.used();
-        budget.check();
         return std::unique_ptr<PreparedGeoTopologySimplify>(new PreparedGeoTopologySimplify(std::move(impl)));
     } catch (const Stop& stop) {
         return stop.status;
@@ -694,10 +674,9 @@ StatusOr<std::unique_ptr<PreparedGeoTopologySimplify>> PreparedGeoTopologySimpli
     }
 }
 
-StatusOr<std::string> PreparedGeoTopologySimplify::simplify(double tolerance,
-                                                            const std::function<Status()>& checkpoint) const {
+StatusOr<std::string> PreparedGeoTopologySimplify::simplify(double tolerance) const {
     try {
-        Budget budget(_impl->work_limit, checkpoint, _impl->preparation_work);
+        Budget budget(_impl->work_limit, _impl->preparation_work);
         if (!std::isfinite(tolerance) || tolerance < 0) {
             return Status::InvalidArgument("ST_SimplifyPreserveTopology requires a finite nonnegative tolerance");
         }
@@ -740,7 +719,6 @@ StatusOr<std::string> PreparedGeoTopologySimplify::simplify(double tolerance,
         reconstruct(output, paths, retained, next);
         std::string wkb;
         RETURN_IF_ERROR(WkbCodec::to_wkb(output, &wkb, kCartesian));
-        budget.check();
         return wkb;
     } catch (const Stop& stop) {
         return stop.status;

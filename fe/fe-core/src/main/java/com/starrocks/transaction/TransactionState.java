@@ -54,6 +54,7 @@ import com.starrocks.common.TraceManager;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
@@ -87,7 +88,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
 
-public class TransactionState implements Writable, GsonPreProcessable {
+public class TransactionState implements Writable, GsonPreProcessable, GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(TransactionState.class);
 
     // compare the TransactionState by txn id, desc
@@ -225,6 +226,29 @@ public class TransactionState implements Writable, GsonPreProcessable {
         }
     }
 
+    // The persisted form of a load id. A TUniqueId cannot be persisted as is: it is a Thrift struct whose fields
+    // carry no @SerializedName, so GSON writes it as {} and reads it back as 0-0.
+    private static class LoadId {
+        @SerializedName("hi")
+        private long hi;
+        @SerializedName("lo")
+        private long lo;
+
+        LoadId(long hi, long lo) {
+            this.hi = hi;
+            this.lo = lo;
+        }
+
+        TUniqueId toThrift() {
+            return new TUniqueId(hi, lo);
+        }
+
+        // A load id read from the {} that FEs persisted before LoadId existed. No load generates 0-0.
+        boolean isLost() {
+            return hi == 0 && lo == 0;
+        }
+    }
+
     // Transaction source types that are NOT a user data write (compaction / replication / shadow-rewrite):
     // they bump the visible version but must NOT advance a partition's lastUpdateTime. See isUserWriteSource().
     private static final EnumSet<LoadJobSourceType> NON_USER_WRITE_SOURCE_TYPES =
@@ -306,8 +330,12 @@ public class TransactionState implements Writable, GsonPreProcessable {
     @SerializedName("npr")
     private String noOpPublishReason = "";
 
-    @SerializedName("loadIds")
-    private List<TUniqueId> loadIds;
+    // The load id of every statement of an explicit transaction (BEGIN ... COMMIT). On a shared-data table each
+    // statement writes its own txn logs, named after its load id, so the FE that publishes the transaction after
+    // a restart or a leader change needs them from the journal. FEs before LoadId wrote them under "loadIds" as
+    // {}; those read back as lost load ids, and the BE fails the publish instead of applying no statement.
+    @SerializedName(value = "lids", alternate = {"loadIds"})
+    private List<LoadId> loadIds;
 
     private final CountDownLatch latch;
 
@@ -1158,7 +1186,7 @@ public class TransactionState implements Writable, GsonPreProcessable {
         sb.append(", db id: ").append(dbId);
         sb.append(", table id list: ").append(StringUtils.join(tableIdList, ","));
         sb.append(", load id list: ").append(loadIds != null ?
-                loadIds.stream().map(DebugUtil::printId).collect(java.util.stream.Collectors.joining(",")) : "null");
+                getLoadIds().stream().map(DebugUtil::printId).collect(java.util.stream.Collectors.joining(",")) : "null");
         sb.append(", callback id: ").append(getCallbackId());
         sb.append(", coordinator: ").append(txnCoordinator.toString());
         sb.append(", transaction status: ").append(transactionStatus);
@@ -1564,14 +1592,26 @@ public class TransactionState implements Writable, GsonPreProcessable {
     }
 
     public void addLoadId(TUniqueId loadId) {
+        // The loads of a multi-statement stream load carry no load id: they write the txn logs of single-statement
+        // loads.
+        if (loadId == null) {
+            return;
+        }
         if (this.loadIds == null) {
             this.loadIds = new ArrayList<>();
         }
-        this.loadIds.add(loadId);
+        this.loadIds.add(new LoadId(loadId.getHi(), loadId.getLo()));
     }
 
     public List<TUniqueId> getLoadIds() {
-        return loadIds;
+        if (loadIds == null) {
+            return null;
+        }
+        return loadIds.stream().map(LoadId::toThrift).collect(java.util.stream.Collectors.toList());
+    }
+
+    public boolean hasLostLoadIds() {
+        return loadIds != null && loadIds.stream().anyMatch(LoadId::isLost);
     }
 
     @Override
@@ -1579,6 +1619,23 @@ public class TransactionState implements Writable, GsonPreProcessable {
         //For compatibility, if the implicit transaction can be rolled back, duplicates will be removed in getCallbackId.
         if (callbackId == -1 && !callbackIdList.isEmpty()) {
             callbackId = callbackIdList.get(0);
+        }
+    }
+
+    @Override
+    public void gsonPostProcess() throws IOException {
+        if (loadIds != null) {
+            // FEs before LoadId also persisted the null load ids of a multi-statement stream load.
+            loadIds.removeIf(Objects::isNull);
+            if (loadIds.isEmpty()) {
+                loadIds = null;
+            }
+        }
+        if (transactionStatus == TransactionStatus.COMMITTED && hasLostLoadIds()
+                && !GlobalStateMgr.isCheckpointThread()) {
+            LOG.warn("Transaction {} was committed by an FE that persisted the load ids of its statements as 0, so"
+                    + " its txn logs cannot be found and its publish fails. ADMIN SKIP COMMITTED TRANSACTION {}"
+                    + " unblocks the partitions it writes, without its data.", transactionId, transactionId);
         }
     }
 }

@@ -1099,13 +1099,14 @@ public class PlanFragmentBuilder {
 
             OlapScanNode scanNode = new OlapScanNode(context.getNextNodeId(), tupleDescriptor, "OlapScanNode",
                     node.getSelectedIndexMetaId(), context.getConnectContext().getCurrentComputeResource());
+            scanNode.setParallelRangeScan(node.isParallelRangeScan());
             scanNode.setLimit(node.getLimit());
             scanNode.computeStatistics(optExpr.getStatistics());
             scanNode.setScanOptimizeOption(node.getScanOptimizeOption());
-            scanNode.setIsSortedByKeyPerTablet(node.needSortedByKeyPerTablet());
-            scanNode.setIsOutputChunkByBucket(node.needOutputChunkByBucket());
+            scanNode.setIsSortedByKeyPerTablet(!node.isParallelRangeScan() && node.needSortedByKeyPerTablet());
+            scanNode.setIsOutputChunkByBucket(!node.isParallelRangeScan() && node.needOutputChunkByBucket());
             scanNode.setEnableGlobalLateMaterialization(node.isEnableGlobalLateMaterialization());
-            scanNode.setWithoutColocateRequirement(node.isWithoutColocateRequirement());
+            scanNode.setWithoutColocateRequirement(!node.isParallelRangeScan() && node.isWithoutColocateRequirement());
             scanNode.setGtid(node.getGtid());
             scanNode.setVectorSearchOptions(node.getVectorSearchOptions());
             scanNode.setSample(node.getSample());
@@ -1124,7 +1125,7 @@ public class PlanFragmentBuilder {
                 scanNode.setUsePreparedPhysicalSplitScan(true);
             }
 
-            currentExecGroup.add(scanNode);
+            currentExecGroup.add(scanNode, node.isParallelRangeScan());
 
             // set slot
             List<ColumnRefOperator> partitionRefs = Lists.newArrayList();
@@ -1186,7 +1187,8 @@ public class PlanFragmentBuilder {
                             .getBackendIdByHost(FrontendOptions.getLocalHostAddress());
                 }
 
-                RangeColocateScanDispatch dispatch = RangeColocateScanDispatch.forTable(referenceTable);
+                RangeColocateScanDispatch dispatch = node.isParallelRangeScan() ? null
+                        : RangeColocateScanDispatch.forTable(referenceTable);
 
                 // Filter out logical partitions that have no non-empty physical sub-partition. The result
                 // keeps deduplicated LOGICAL (parent) partition ids -- matching the convention used by every
@@ -1225,9 +1227,10 @@ public class PlanFragmentBuilder {
                         Preconditions.checkState(selectTabletIds != null && !selectTabletIds.isEmpty());
                         final MaterializedIndex selectedIndex = physicalPartition.getQueryableIndex(selectedIndexMetaId);
                         totalTabletsNum += selectedIndex.getTablets().size();
-                        List<Long> allTabletIds = selectedIndex.getTabletIdsInOrder();
-                        OlapScanNode.fillTabletId2BucketSeq(
-                                dispatch, selectedIndex, allTabletIds, tabletId2BucketSeq);
+                        if (!node.isParallelRangeScan()) {
+                            OlapScanNode.fillTabletId2BucketSeq(
+                                    dispatch, selectedIndex, selectedIndex.getTabletIdsInOrder(), tabletId2BucketSeq);
+                        }
                         List<Tablet> tablets =
                                 selectTabletIds.stream().map(selectedIndex::getTablet).collect(Collectors.toList());
                         scanNode.addScanRangeLocations(partition, physicalPartition, selectedIndex, tablets, partitionRange,
@@ -3109,6 +3112,20 @@ public class PlanFragmentBuilder {
 
         // Check whether colocate Table exists in the same Fragment
         public boolean hasColocateScanChildInFragment(PlanNode node) {
+            return !containsParallelRangeScan(node) && hasColocateScanChild(node);
+        }
+
+        private boolean containsParallelRangeScan(PlanNode node) {
+            if (node instanceof OlapScanNode scan && scan.isParallelRangeScan()) {
+                return true;
+            }
+            if (node instanceof ExchangeNode) {
+                return false;
+            }
+            return node.getChildren().stream().anyMatch(this::containsParallelRangeScan);
+        }
+
+        private boolean hasColocateScanChild(PlanNode node) {
             if (node instanceof OlapScanNode scanNode) {
                 ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
                 if (colocateIndex.isColocateTable(scanNode.getOlapTable().getId())) {
@@ -3125,7 +3142,7 @@ public class PlanFragmentBuilder {
             }
             boolean hasColocateChild = false;
             for (PlanNode child : node.getChildren()) {
-                hasColocateChild |= hasColocateScanChildInFragment(child);
+                hasColocateChild |= hasColocateScanChild(child);
             }
             return hasColocateChild;
         }

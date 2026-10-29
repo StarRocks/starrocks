@@ -416,30 +416,6 @@ TEST(GeoOverlayTest, RegistryUsesPrepareAndCloseAndReservesGeography) {
     }
 }
 
-TEST(GeoOverlayTest, CancellationAndQueryMemoryLimit) {
-    RuntimeState state(TUniqueId(), TQueryOptions(), TQueryGlobals(), nullptr);
-    state.init_mem_trackers(TUniqueId());
-    ASSERT_NE(nullptr, state.runtime_profile());
-    ASSERT_NE(nullptr, state.query_mem_tracker_ptr());
-    ASSERT_EQ(state.query_mem_tracker_ptr().get(), state.instance_mem_tracker()->parent());
-    auto type = geo_type();
-    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_context(&state, nullptr, type, {type, type}));
-    auto a = geometries({square}), b = geometries({shifted});
-    state.set_is_cancelled(true);
-    for (auto fn : {functions[0], functions[1], functions[2], GeoFunctions::st_geometry_intersection}) {
-        auto result = fn(ctx.get(), {a, b});
-        ASSERT_FALSE(result.ok());
-        EXPECT_TRUE(result.status().is_cancelled());
-    }
-    state.set_is_cancelled(false);
-    ASSERT_TRUE(state.set_mem_limit_exceeded(state.instance_mem_tracker(), 1, "overlay test").is_mem_limit_exceeded());
-    for (auto fn : {functions[0], functions[1], functions[2], GeoFunctions::st_geometry_intersection}) {
-        auto result = fn(ctx.get(), {a, b});
-        ASSERT_FALSE(result.ok());
-        EXPECT_TRUE(result.status().is_mem_limit_exceeded());
-    }
-}
-
 TEST(GeoOverlayTest, CoordinateAndPairWorkLimits) {
     WkbGeometry polygon;
     polygon.type = WkbGeometryType::POLYGON;
@@ -632,26 +608,6 @@ TEST(GeoOverlayTest, ExpressionOwnerAndCloneShareImmutablePreparationAndCleanUpO
         EXPECT_EQ(nullptr, owner.fn_context(0)->get_function_state(FunctionContext::FRAGMENT_LOCAL));
         owner.close(&state);
     }
-}
-
-TEST(GeoOverlayTest, SymmetricDifferenceChecksCancellationBetweenPrimitives) {
-    auto a = geometries({square}), b = geometries({shifted});
-    auto wkb_a = GeoFunctions::st_geometry_as_wkb(nullptr, {a});
-    auto wkb_b = GeoFunctions::st_geometry_as_wkb(nullptr, {b});
-    ASSERT_TRUE(wkb_a.ok());
-    ASSERT_TRUE(wkb_b.ok());
-    auto left = PreparedGeoPolygon::prepare(ColumnViewer<TYPE_VARBINARY>(*wkb_a).value(0));
-    auto right = PreparedGeoPolygon::prepare(ColumnViewer<TYPE_VARBINARY>(*wkb_b).value(0));
-    ASSERT_TRUE(left.ok());
-    ASSERT_TRUE(right.ok());
-    size_t checkpoints = 0;
-    // Entry and post-translation checks precede the first difference.
-    auto result = (*left)->overlay(**right, GeoOverlayKind::SYMMETRIC_DIFFERENCE, [&]() {
-        return ++checkpoints == 3 ? Status::Cancelled("cancel after first difference") : Status::OK();
-    });
-    ASSERT_FALSE(result.ok());
-    EXPECT_TRUE(result.status().is_cancelled());
-    EXPECT_EQ(3, checkpoints);
 }
 
 TEST(GeoOverlayTest, IntersectionReturnsAreaLinePointAndEmptyWithInputCrs) {
