@@ -16,6 +16,7 @@
 
 #include <memory>
 #include <tuple>
+#include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -51,6 +52,10 @@ struct GeneralFuncMapHash {
         return hasher(std::get<0>(key)) ^ std::get<1>(key) ^ std::get<2>(key);
     }
 };
+
+// Values for AggregateFuncResolver::add_aggregate_mapping's |is_window| argument.
+inline constexpr std::true_type kWithWindow{};
+inline constexpr std::false_type kWithoutWindow{};
 
 class AggregateFuncResolver {
 public:
@@ -150,18 +155,20 @@ public:
         }
     }
 
+    // |is_window| is kWithWindow or kWithoutWindow rather than a bool, so the window variant of the
+    // nullable wrapper is only instantiated for mappings that actually register it.
     template <LogicalType ArgType, LogicalType RetType, class StateType,
               typename SpecificAggFunctionPtr = AggregateFunctionPtr, bool IgnoreNull = true,
-              IsAggNullPred<StateType> AggNullPred = AggNonNullPred<StateType>>
-    void add_aggregate_mapping(const std::string& name, bool is_window, SpecificAggFunctionPtr fun,
-                               AggNullPred null_pred = AggNullPred()) {
+              IsAggNullPred<StateType> AggNullPred = AggNonNullPred<StateType>, bool IsWindow>
+    void add_aggregate_mapping(const std::string& name, std::bool_constant<IsWindow> /*is_window*/,
+                               SpecificAggFunctionPtr fun, AggNullPred null_pred = AggNullPred()) {
         track_function(fun);
         _infos_mapping.emplace(std::make_tuple(name, ArgType, RetType, false, false), fun);
         auto nullable_agg =
                 AggregateFactory::MakeNullableAggregateFunctionUnary<StateType, false, IgnoreNull>(fun, null_pred);
         _infos_mapping.emplace(std::make_tuple(name, ArgType, RetType, false, true), track_function(nullable_agg));
 
-        if (is_window) {
+        if constexpr (IsWindow) {
             _infos_mapping.emplace(std::make_tuple(name, ArgType, RetType, true, false), fun);
             auto nullable_agg = AggregateFactory::MakeNullableAggregateFunctionUnary<StateType, true, IgnoreNull>(
                     fun, std::move(null_pred));
