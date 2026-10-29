@@ -77,7 +77,9 @@ curl -XGET http://be_ip:be_http_port/metrics | grep 'column_pool'
 
 metrics の値は10秒ごとに更新されます。古いバージョンで一部のメモリ統計を監視することが可能です。
 
-## Lake メタデータメモリ {#lake-metadata-memory}
+<a id="lake-metadata-memory"></a>
+
+## Lake メタデータメモリ
 
 共有データクラスタの `lake_metadata_cache_limit` が制限するのは、各 CN のメタデータ LRU キャッシュだけです。`metadata` トラッカーが報告する総メモリの上限ではありません。クエリとコンパクションは、LRU から削除された Segment を保持したり、キャッシュに追加せずにメタデータをロードしたりできます。オブジェクトは最後の所有者が解放するまで存続するため、キャッシュ上限を下げても実行中のタスクが保持するメモリは制限できません。
 

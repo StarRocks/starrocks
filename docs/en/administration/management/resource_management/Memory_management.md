@@ -77,7 +77,7 @@ curl -XGET http://be_ip:be_http_port/metrics | grep 'column_pool'
 
 The value of metrics is updated every 10 seconds. It is possible to monitor some of the memory statistics with older versions.
 
-## Lake metadata memory {#lake-metadata-memory}
+## Lake metadata memory
 
 In a shared-data cluster, `lake_metadata_cache_limit` limits only the metadata LRU cache on each CN. It does not limit all memory reported by the `metadata` tracker. Queries and compactions can retain Segment objects after LRU eviction, or load metadata without filling the cache. These objects remain alive until their last owner releases them. A smaller cache limit therefore does not impose a bound on metadata held by running tasks.
 

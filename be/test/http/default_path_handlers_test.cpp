@@ -21,9 +21,16 @@
 
 #include "base/auth/credential_mask.h"
 #include "base/utility/defer_op.h"
+#include "column/schema.h"
 #include "common/config_object_storage_fwd.h"
 #include "exec/exec_env.h"
 #include "runtime/mem_tracker.h"
+#include "storage/lake/fixed_location_provider.h"
+#include "storage/lake/metacache.h"
+#include "storage/lake/tablet_manager.h"
+#include "storage/rowset/segment.h"
+#include "storage/storage_env.h"
+#include "storage/tablet_schema.h"
 
 namespace starrocks {
 
@@ -45,6 +52,41 @@ TEST_F(DefaultPathHandlersTest, mem_tracker) {
     MemTrackerWebPageHandler::handle(runtime_env, mem_tracker, args, &output2);
     ASSERT_TRUE(output2.str().find("<tr><td>1</td><td>process</td><td>") == std::string::npos);
     ASSERT_TRUE(output2.str().find("<tr><td>3</td><td>tablet_metadata</td><td>metadata</td>") != std::string::npos);
+}
+
+TEST_F(DefaultPathHandlersTest, lake_cache_is_a_separate_diagnostic_view) {
+    auto* storage = StorageEnv::GetInstance();
+    auto saved = std::move(storage->_lake_tablet_manager);
+    DeferOp restore([&] { storage->_lake_tablet_manager = std::move(saved); });
+    storage->_lake_tablet_manager =
+            std::make_unique<lake::TabletManager>(std::make_shared<lake::FixedLocationProvider>("unused"), 1LL << 30);
+    auto* cache = storage->lake_tablet_manager()->metacache();
+    auto schema = std::make_shared<TabletSchema>();
+    auto segment =
+            std::make_shared<Segment>(nullptr, FileInfo{"diagnostic.dat"}, 0, schema, storage->lake_tablet_manager());
+    cache->cache_segment("segment", segment);
+    const auto& runtime = *RuntimeEnv::GetInstance();
+    // Charge updates and tracker samples need not coincide. Clamp the residual
+    // instead of showing negative bytes when cached payload exceeds the sample.
+    ASSERT_TRUE(cache->update_segment_cache_size("segment", runtime.metadata_mem_tracker()->consumption() + 128,
+                                                 segment.get()));
+    for (const auto& type : {"process", "metadata"}) {
+        WebPageHandler::ArgumentMap args{{"type", type}};
+        std::stringstream output;
+        MemTrackerWebPageHandler::handle(runtime, runtime.process_mem_tracker(), args, &output);
+        const auto page = output.str();
+        EXPECT_NE(std::string::npos, page.find("<h2>Lake metadata cache</h2>"));
+        EXPECT_NE(std::string::npos, page.find("Metadata minus cached Segment payload (estimate)</td><td>0</td>"));
+        EXPECT_NE(std::string::npos, page.find("do not add them"));
+        // Cache diagnostics must not become additive children of the tracker tree.
+        EXPECT_EQ(std::string::npos, page.find("<td>lake_metacache</td>"));
+    }
+    cache->prune();
+    EXPECT_EQ(1, segment.use_count());
+    WebPageHandler::ArgumentMap args{{"type", "query_pool"}};
+    std::stringstream output;
+    MemTrackerWebPageHandler::handle(runtime, runtime.process_mem_tracker(), args, &output);
+    EXPECT_EQ(std::string::npos, output.str().find("<h2>Lake metadata cache</h2>"));
 }
 
 TEST_F(DefaultPathHandlersTest, passthrough_is_rendered_once_outside_process_tree) {

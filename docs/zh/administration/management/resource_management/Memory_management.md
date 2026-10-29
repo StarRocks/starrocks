@@ -110,7 +110,9 @@ StarRocks BE 中的内存分为以下几类。
 | query_mem_limit | 0 | 各 BE 节点上单个查询的内存限制，单位是 Byte。建议设置为 17179869184（16GB）以上。 |
 | load_mem_limit| 0| 各 BE 节点上单个导入任务的内存限制，单位是 Byte。如果设置为 `0`，StarRocks 采用 `exec_mem_limit` 作为内存限制。 |
 
-## Lake 元数据内存 {#lake-metadata-memory}
+<a id="lake-metadata-memory"></a>
+
+## Lake 元数据内存
 
 存算分离集群中，`lake_metadata_cache_limit` 只限制每个 CN 的元数据 LRU 缓存，不限制 `metadata` Tracker 报告的全部内存。查询和 Compaction 可以在 LRU 淘汰后继续持有 Segment，也可以不填充缓存而加载元数据；这些对象会一直存活到最后一个持有者释放它们。因此，调小缓存上限无法限制运行中任务持有的元数据内存。
 
