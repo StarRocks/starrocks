@@ -46,6 +46,12 @@
 #include "common/config.h"
 #include "common/status.h"
 #include "fs/fs_util.h"
+<<<<<<< HEAD
+=======
+#include "runtime/current_thread.h"
+#include "runtime/exec_env.h"
+#include "runtime/mem_tracker.h"
+>>>>>>> 9402eeece0 ([Enhancement] Align local compaction MemTracker labels to Compaction-<tablet_id> (#74399))
 #include "storage/compaction.h"
 #include "storage/compaction_manager.h"
 #include "storage/lake/local_pk_index_manager.h"
@@ -446,9 +452,12 @@ void* StorageEngine::_repair_compaction_thread_callback(void* arg) {
                 LOG(ERROR) << "repair compaction failed, tablet not primary key tablet found: " << task.first;
                 continue;
             }
+            auto mem_tracker = std::make_unique<MemTracker>(MemTrackerType::COMPACTION_TASK, -1,
+                                                            "Compaction-" + std::to_string(tablet->tablet_id()),
+                                                            GlobalEnv::GetInstance()->compaction_mem_tracker());
             vector<pair<uint32_t, string>> rowset_results;
             for (auto rowsetid : task.second) {
-                auto st = tablet->updates()->compaction(GlobalEnv::GetInstance()->compaction_mem_tracker(), {rowsetid});
+                auto st = tablet->updates()->compaction(mem_tracker.get(), {rowsetid});
                 if (!st.ok()) {
                     LOG(WARNING) << "repair compaction failed tablet: " << task.first << " rowset: " << rowsetid << " "
                                  << st;
