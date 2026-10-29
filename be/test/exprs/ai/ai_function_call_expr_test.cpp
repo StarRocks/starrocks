@@ -1131,7 +1131,6 @@ struct AIOverloadCase {
 std::vector<AIOverloadCase> ai_overload_cases() {
     const TypeDescriptor text = varchar_type();
     const TypeDescriptor strings = TypeDescriptor::create_array_type(text);
-    const TypeDescriptor embedding = TYPE_ARRAY_FLOAT;
     const TypeDescriptor json(TYPE_JSON);
     const TypeDescriptor similarity(TYPE_FLOAT);
     const TypeDescriptor boolean(TYPE_BOOLEAN);
@@ -1150,8 +1149,8 @@ std::vector<AIOverloadCase> ai_overload_cases() {
             {200010, "ai_similarity", similarity, {text, text, text, text}, Result::SIMILARITY, 3, 2},
             {200011, "ai_summarize", text, {text, text, text}, Result::STRING, 2, 1},
             {200012, "ai_filter", boolean, {text, text, text, text}, Result::BOOLEAN, 3, 2},
-            {200002, "ai_embed", embedding, {text, text, text, options}, Result::EMBEDDING, 2, 1},
-            {200003, "ai_embed", embedding, {file, text, text, options}, Result::EMBEDDING, 2, 1},
+            {200002, "ai_embed", TYPE_ARRAY_FLOAT, {text, text, text, options}, Result::EMBEDDING, 2, 1},
+            {200003, "ai_embed", TYPE_ARRAY_FLOAT, {file, text, text, options}, Result::EMBEDDING, 2, 1},
     };
 }
 
@@ -1802,8 +1801,7 @@ TEST_F(AIFunctionCallExprTest, EmbeddingOptionsCannotOverrideProviderInput) {
 
 TEST_F(AIFunctionCallExprTest, CapabilityAndResultKindMatchTheDescriptor) {
     ObjectPool pool;
-    const auto embedding_type = TYPE_ARRAY_FLOAT;
-    auto embedding = make_extended_ai_expression(200002, "ai_embed", embedding_type, {varchar_type()});
+    auto embedding = make_extended_ai_expression(200002, "ai_embed", TYPE_ARRAY_FLOAT, {varchar_type()});
     auto created = AIFunctionCallExpr::create(&pool, embedding.nodes.front());
     ASSERT_TRUE(created.ok());
     EXPECT_EQ(AICapability::EMBEDDING, created.value()->capability());

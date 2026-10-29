@@ -147,9 +147,7 @@ TEST_F(FunctionHelperTest, testCreateColumnScalarNullableAndNonNullable) {
 }
 
 TEST_F(FunctionHelperTest, testCreateColumnArray) {
-    TypeDescriptor array_type = TYPE_ARRAY_INT;
-
-    auto array_column = FunctionHelper::create_column(array_type, false);
+    auto array_column = FunctionHelper::create_column(TYPE_ARRAY_INT, false);
     ASSERT_NE(array_column, nullptr);
     ASSERT_TRUE(array_column->is_array());
 

@@ -155,8 +155,7 @@ static MutableColumnPtr build_nullable_variant_column(const std::vector<VariantR
 
 static MutableColumnPtr build_nullable_int_array_column(const std::vector<DatumArray>& values,
                                                         const std::vector<uint8_t>& is_null) {
-    TypeDescriptor array_type = TYPE_ARRAY_BIGINT;
-    auto col = ColumnHelper::create_column(array_type, true);
+    auto col = ColumnHelper::create_column(TYPE_ARRAY_BIGINT, true);
     DCHECK_EQ(values.size(), is_null.size());
     for (size_t i = 0; i < values.size(); ++i) {
         if (is_null[i] != 0) {

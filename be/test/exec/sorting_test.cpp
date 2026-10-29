@@ -519,10 +519,9 @@ protected:
 
     void check(const SortDescs& sort_desc, const std::vector<int32_t>& expected) {
         auto runtime_state = create_runtime_state();
-        TypeDescriptor array_type = TYPE_ARRAY_INT;
         std::vector<std::unique_ptr<ColumnRef>> exprs;
         std::vector<ExprContext*> sort_exprs;
-        exprs.emplace_back(std::make_unique<ColumnRef>(array_type, 1));
+        exprs.emplace_back(std::make_unique<ColumnRef>(TYPE_ARRAY_INT, 1));
         sort_exprs.emplace_back(new ExprContext(exprs.back().get()));
         ASSERT_OK(ExprExecutor::prepare(sort_exprs, runtime_state.get()));
         ASSERT_OK(ExprExecutor::open(sort_exprs, runtime_state.get()));

@@ -789,12 +789,11 @@ TEST_F(DataConverterTest, convert_to_boxed_array_with_null_descs) {
     auto* env = JVMHelper::getInstance().getEnv();
 
     // ARRAY<INT> column with one populated row.
-    TypeDescriptor td = TYPE_ARRAY_INT;
-    auto col = ColumnHelper::create_column(td, true);
+    auto col = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
     Datum datum = std::vector<Datum>{1, 2, 3};
     col->append_datum(datum);
 
-    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context({td}, td));
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context({TYPE_ARRAY_INT}, TYPE_ARRAY_INT));
     std::vector<const Column*> cols = {col.get()};
     std::vector<jobject> arg_descs = {nullptr};
     std::vector<jobject> res;
