@@ -81,15 +81,10 @@ import com.starrocks.sql.OptimisticVersion;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.KeysType;
-<<<<<<< HEAD
-=======
-import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TKafkaRLTaskProgress;
 import com.starrocks.thrift.TLoadSourceType;
 import com.starrocks.thrift.TPulsarRLTaskProgress;
 import com.starrocks.thrift.TRLTaskTxnCommitAttachment;
-import com.starrocks.thrift.TStorageMedium;
->>>>>>> a65b666 ([BugFix] Fix Kafka routine load EOF tracking and empty-load offsets (#81412))
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.type.FloatType;
@@ -758,44 +753,6 @@ public class DatabaseTransactionMgrTest {
         assertEquals(TransactionStatus.UNKNOWN, masterDbTransMgr.getTxnState(12134).getStatus());
     }
 
-    @Test
-<<<<<<< HEAD
-=======
-    public void testEmptyShadowRewriteTxnCommitsWithoutNoRowsError() throws StarRocksException {
-        // Regression: an empty-partition range rewrite produces zero rows, but its SHADOW_REWRITE txn must
-        // still commit so the flip can anchor an empty op_schema_change@W on that partition. With
-        // empty_load_as_error on (the default), the empty-load guard must exempt SHADOW_REWRITE just as it
-        // exempts INSERT_STREAMING; otherwise the commit aborts with ERR_NO_ROWS_IMPORTED and cancels the
-        // whole schema change.
-        boolean savedEmptyLoadAsError = Config.empty_load_as_error;
-        Config.empty_load_as_error = true;
-        try {
-            DatabaseTransactionMgr masterDbTransMgr =
-                    masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
-
-            // Control: a non-exempt (FRONTEND) txn committing with no tablets DOES hit the guard, proving
-            // empty_load_as_error is in effect for this fixture.
-            long frontendTxnId = masterTransMgr.beginTransaction(GlobalStateMgrTestUtil.testDbId1,
-                    Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
-                    "empty_frontend_label", transactionSource,
-                    TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
-            assertThrows(TransactionCommitFailedException.class, () ->
-                    masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, frontendTxnId,
-                            Lists.newArrayList(), Lists.newArrayList(), null));
-
-            // A SHADOW_REWRITE txn committing with no tablets must NOT throw and must reach COMMITTED.
-            long shadowTxnId = masterTransMgr.beginTransaction(GlobalStateMgrTestUtil.testDbId1,
-                    Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
-                    "empty_shadow_rewrite_label", transactionSource,
-                    TransactionState.LoadJobSourceType.SHADOW_REWRITE, Config.stream_load_default_timeout_second);
-            masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, shadowTxnId,
-                    Lists.newArrayList(), Lists.newArrayList(), null);
-            assertEquals(TransactionStatus.COMMITTED, masterDbTransMgr.getTxnState(shadowTxnId).getStatus());
-        } finally {
-            Config.empty_load_as_error = savedEmptyLoadAsError;
-        }
-    }
-
     @ParameterizedTest
     @ValueSource(longs = {0, 10})
     public void testEmptyKafkaRoutineLoadTxnCommitsAndBecomesVisible(long unselectedRows) throws StarRocksException {
@@ -943,7 +900,6 @@ public class DatabaseTransactionMgrTest {
     }
 
     @Test
->>>>>>> a65b666 ([BugFix] Fix Kafka routine load EOF tracking and empty-load offsets (#81412))
     public void testAbortTransactionWithAttachment() throws StarRocksException {
         DatabaseTransactionMgr masterDbTransMgr =
                 masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);

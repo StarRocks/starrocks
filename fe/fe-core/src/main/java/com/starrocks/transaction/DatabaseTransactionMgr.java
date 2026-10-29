@@ -387,22 +387,12 @@ public class DatabaseTransactionMgr {
                 return;
             }
             // For compatible reason, the default behavior of empty load is still returning
-<<<<<<< HEAD
             // "No rows were imported from upstream" and abort transaction.
-            if (Config.empty_load_as_error && tabletCommitInfos.isEmpty()
-                    && transactionState.getSourceType() != TransactionState.LoadJobSourceType.INSERT_STREAMING) {
-=======
-            // "No rows were imported from upstream" and abort transaction. A shadow-rewrite txn is exempt
-            // too: an empty-partition range rewrite produces zero rows but must still commit so the flip
-            // can anchor an empty op_schema_change@W on that partition (the BE converter tolerates an empty
-            // source). Without this it would abort with ERR_NO_ROWS_IMPORTED and cancel the schema change.
             // Kafka routine load must also commit successful empty batches carrying consumption progress:
             // aborting them prevents the BE from committing the corresponding Kafka consumer-group offsets.
             if (Config.empty_load_as_error && tabletCommitInfos.isEmpty()
                     && transactionState.getSourceType() != TransactionState.LoadJobSourceType.INSERT_STREAMING
-                    && !transactionState.isShadowRewrite()
                     && !canCommitEmptyKafkaRoutineLoad(transactionState, txnCommitAttachment)) {
->>>>>>> a65b666 ([BugFix] Fix Kafka routine load EOF tracking and empty-load offsets (#81412))
                 throw new TransactionCommitFailedException(ERR_NO_ROWS_IMPORTED.formatErrorMsg());
             }
 

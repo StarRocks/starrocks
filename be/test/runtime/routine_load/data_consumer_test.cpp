@@ -14,26 +14,18 @@
 
 #include "runtime/routine_load/data_consumer.h"
 
+#include <gtest/gtest.h>
+
 #include <chrono>
 #include <map>
 #include <thread>
 
-<<<<<<< HEAD:be/test/runtime/routine_load/data_consumer_test.cpp
+#include "librdkafka/rdkafka.h"
+#include "librdkafka/rdkafka_mock.h"
 #include "runtime/exec_env.h"
 #include "runtime/routine_load/data_consumer_group.h"
 #include "testutil/assert.h"
 #include "util/byte_buffer.h"
-=======
-#include "gtest/gtest.h"
-
-// Routine load dependencies.
-#include "base/testutil/assert.h"
-#include "data_workflows/load/routine_load/data_consumer_group.h"
-#include "exec/exec_env.h"
-#include "librdkafka/rdkafka.h"
-#include "librdkafka/rdkafka_mock.h"
-#include "runtime/byte_buffer.h"
->>>>>>> a65b666 ([BugFix] Fix Kafka routine load EOF tracking and empty-load offsets (#81412)):be/test/data_workflows/load/routine_load/data_consumer_test.cpp
 
 #ifndef __APPLE__
 #include "pulsar/MessageBuilder.h"
