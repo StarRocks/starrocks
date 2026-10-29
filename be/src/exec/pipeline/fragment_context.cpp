@@ -42,7 +42,47 @@
 
 namespace starrocks::pipeline {
 
+<<<<<<< HEAD:be/src/exec/pipeline/fragment_context.cpp
 FragmentContext::FragmentContext() : _data_sink(nullptr) {}
+=======
+namespace {
+
+const QueryExecutionServices& query_execution_services(const RuntimeState* state) {
+    DCHECK(state != nullptr);
+    return *state->query_execution_services();
+}
+
+const ExecutionEnv& execution_services(const RuntimeState* state) {
+    return *query_execution_services(state).execution;
+}
+
+const RuntimeServices& runtime_services(const RuntimeState* state) {
+    return *query_execution_services(state).runtime;
+}
+
+} // namespace
+
+// RAII guard for pass-through chunk buffer lifecycle.
+class PassThroughChunkBufferGuard {
+public:
+    PassThroughChunkBufferGuard(DataStreamMgr* stream_mgr, const TUniqueId& query_id,
+                                std::shared_ptr<MemTracker> query_mem_tracker)
+            : _stream_mgr(stream_mgr), _query_id(query_id) {
+        _stream_mgr->prepare_pass_through_chunk_buffer(_query_id, std::move(query_mem_tracker));
+    }
+
+    ~PassThroughChunkBufferGuard() { _stream_mgr->destroy_pass_through_chunk_buffer(_query_id); }
+
+    PassThroughChunkBufferGuard(const PassThroughChunkBufferGuard&) = delete;
+    PassThroughChunkBufferGuard& operator=(const PassThroughChunkBufferGuard&) = delete;
+
+private:
+    DataStreamMgr* _stream_mgr;
+    TUniqueId _query_id;
+};
+
+FragmentContext::FragmentContext() : _data_sink(nullptr), _fragment_dict_state(std::make_unique<FragmentDictState>()) {}
+>>>>>>> 99ec6bf ([Refactor] Pass the query tracker to the pass-through buffer at open (#81820)):be/src/exec/runtime/fragment_context.cpp
 
 FragmentContext::~FragmentContext() {
     _close_stream_load_contexts();
@@ -290,6 +330,7 @@ void FragmentContext::cancel(const Status& status, bool cancelled_by_fe) {
     }
 }
 
+<<<<<<< HEAD:be/src/exec/pipeline/fragment_context.cpp
 FragmentContext* FragmentContextManager::get_or_register(const TUniqueId& fragment_id) {
     std::lock_guard<std::mutex> lock(_lock);
     auto it = _fragment_contexts.find(fragment_id);
@@ -302,6 +343,14 @@ FragmentContext* FragmentContextManager::get_or_register(const TUniqueId& fragme
         raw_ctx->set_workgroup(ExecEnv::GetInstance()->workgroup_manager()->get_default_workgroup());
         return raw_ctx;
     }
+=======
+void FragmentContext::prepare_pass_through_chunk_buffer() {
+    _pass_through_chunk_buffer_guard = std::make_unique<PassThroughChunkBufferGuard>(
+            runtime_services(_runtime_state.get()).stream_mgr, _query_id, _runtime_state->query_mem_tracker_ptr());
+}
+void FragmentContext::destroy_pass_through_chunk_buffer() {
+    _pass_through_chunk_buffer_guard.reset();
+>>>>>>> 99ec6bf ([Refactor] Pass the query tracker to the pass-through buffer at open (#81820)):be/src/exec/runtime/fragment_context.cpp
 }
 
 Status FragmentContextManager::register_ctx(const TUniqueId& fragment_id, FragmentContextPtr fragment_ctx) {

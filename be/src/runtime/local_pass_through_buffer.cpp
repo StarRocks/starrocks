@@ -106,6 +106,9 @@ private:
 // channel per [fragment_instance_id, dest_node_id]
 class PassThroughChannel {
 public:
+    explicit PassThroughChannel(std::shared_ptr<MemTracker> query_mem_tracker)
+            : _query_mem_tracker(std::move(query_mem_tracker)) {}
+
     PassThroughSenderChannel* get_or_create_sender_channel(int sender_id) {
         std::unique_lock lock(_mutex);
         auto it = _sender_id_to_channel.find(sender_id);
@@ -126,21 +129,6 @@ public:
 
     int64_t get_total_bytes() const { return _total_bytes; }
 
-    // Both ends of a channel belong to the same query, so they pass the same tracker; the first
-    // non-null one wins. Sender channels capture it when they are created, which only happens after
-    // the end that creates them has been initialized.
-    void set_query_mem_tracker(std::shared_ptr<MemTracker> query_mem_tracker) {
-        if (query_mem_tracker == nullptr) {
-            return;
-        }
-        std::unique_lock lock(_mutex);
-        if (_query_mem_tracker == nullptr) {
-            _query_mem_tracker = std::move(query_mem_tracker);
-        } else {
-            DCHECK_EQ(_query_mem_tracker.get(), query_mem_tracker.get());
-        }
-    }
-
     // Marked once the receiver (DataStreamRecvr) is cancelled or closed. The sink and
     // receiver share the same PassThroughChannel, so this is how the append side learns
     // that the peer is gone and it should stop buffering chunks. It also drops whatever is
@@ -160,11 +148,16 @@ private:
     std::atomic_int64_t _total_bytes = 0;
     std::atomic<bool> _cancelled{false};
     // Destroyed after ~PassThroughChannel() has deleted the sender channels that point to it.
-    std::shared_ptr<MemTracker> _query_mem_tracker;
+    const std::shared_ptr<MemTracker> _query_mem_tracker;
 };
 
+<<<<<<< HEAD:be/src/runtime/local_pass_through_buffer.cpp
 PassThroughChunkBuffer::PassThroughChunkBuffer(const TUniqueId& query_id)
         : _mutex(), _query_id(query_id), _ref_count(1) {}
+=======
+PassThroughChunkBuffer::PassThroughChunkBuffer(const TUniqueId& query_id, std::shared_ptr<MemTracker> query_mem_tracker)
+        : _mutex(), _query_id(query_id), _query_mem_tracker(std::move(query_mem_tracker)) {}
+>>>>>>> 99ec6bf ([Refactor] Pass the query tracker to the pass-through buffer at open (#81820)):be/src/compute_env/data_stream/local_pass_through_buffer.cpp
 
 PassThroughChunkBuffer::~PassThroughChunkBuffer() {
     if (UNLIKELY(_ref_count != 0)) {
@@ -181,7 +174,7 @@ PassThroughChannelPtr PassThroughChunkBuffer::get_or_create_channel(const Key& k
     std::unique_lock lock(_mutex);
     auto it = _key_to_channel.find(key);
     if (it == _key_to_channel.end()) {
-        auto channel = std::make_shared<PassThroughChannel>();
+        auto channel = std::make_shared<PassThroughChannel>(_query_mem_tracker);
         _key_to_channel.emplace(key, channel);
         return channel;
     } else {
@@ -189,12 +182,11 @@ PassThroughChannelPtr PassThroughChunkBuffer::get_or_create_channel(const Key& k
     }
 }
 
-void PassThroughContext::init(std::shared_ptr<MemTracker> query_mem_tracker) {
+void PassThroughContext::init() {
     if (_channel != nullptr) {
         return;
     }
     _channel = _chunk_buffer->get_or_create_channel(PassThroughChunkBuffer::Key(_fragment_instance_id, _node_id));
-    _channel->set_query_mem_tracker(std::move(query_mem_tracker));
     // From here on the context owns the channel, so every later use of it is safe regardless of
     // when the PassThroughChunkBuffer is released.
     _chunk_buffer = nullptr;
@@ -228,15 +220,17 @@ bool PassThroughContext::is_cancelled() const {
     return _channel->is_cancelled();
 }
 
-void PassThroughChunkBufferManager::open_fragment_instance(const TUniqueId& query_id) {
+void PassThroughChunkBufferManager::open_fragment_instance(const TUniqueId& query_id,
+                                                           std::shared_ptr<MemTracker> query_mem_tracker) {
     VLOG_FILE << "PassThroughChunkBufferManager::open_fragment_instance, query_id = " << query_id;
     {
         std::unique_lock lock(_mutex);
         auto it = _query_id_to_buffer.find(query_id);
         if (it == _query_id_to_buffer.end()) {
-            auto* buffer = new PassThroughChunkBuffer(query_id);
+            auto* buffer = new PassThroughChunkBuffer(query_id, std::move(query_mem_tracker));
             _query_id_to_buffer.emplace(query_id, buffer);
         } else {
+            DCHECK_EQ(it->second->query_mem_tracker(), query_mem_tracker.get());
             it->second->ref();
         }
     }
