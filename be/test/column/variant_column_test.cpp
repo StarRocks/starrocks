@@ -81,7 +81,7 @@ static MutableColumnPtr build_nullable_varchar_column(const std::vector<std::str
 
 static MutableColumnPtr build_nullable_int_array_column(const std::vector<DatumArray>& values,
                                                         const std::vector<uint8_t>& is_null) {
-    auto col = ColumnHelper::create_column(TYPE_ARRAY_BIGINT, true);
+    auto col = ColumnHelper::create_column(TYPE_ARRAY_BIGINT_DESC, true);
     DCHECK_EQ(values.size(), is_null.size());
     for (size_t i = 0; i < values.size(); ++i) {
         if (is_null[i] != 0) {
@@ -580,7 +580,8 @@ PARALLEL_TEST(VariantColumnTest, test_reserve_skips_shredded_typed_columns) {
     append_json_variant_row(metadata.get(), remain.get(), R"({})");
     MutableColumns typed;
     typed.emplace_back(build_nullable_int_array_column({DatumArray{Datum(int64_t(1)), Datum(int64_t(2))}}, {0}));
-    column->set_shredded_columns({"a"}, {TYPE_ARRAY_BIGINT}, std::move(typed), std::move(metadata), std::move(remain));
+    column->set_shredded_columns({"a"}, {TYPE_ARRAY_BIGINT_DESC}, std::move(typed), std::move(metadata),
+                                 std::move(remain));
     const size_t typed_capacity_before = column->typed_columns()[0]->capacity();
 
     constexpr size_t kRows = 2048;
@@ -988,7 +989,7 @@ PARALLEL_TEST(VariantColumnTest, test_single_path_typed_only_array_materializati
     auto col = VariantColumn::create();
     MutableColumns typed;
     typed.emplace_back(build_nullable_int_array_column({DatumArray{Datum(int64_t(1)), Datum(int64_t(2))}}, {0}));
-    col->set_shredded_columns({"a"}, {TYPE_ARRAY_BIGINT}, std::move(typed), nullptr, nullptr);
+    col->set_shredded_columns({"a"}, {TYPE_ARRAY_BIGINT_DESC}, std::move(typed), nullptr, nullptr);
 
     ASSERT_EQ(1, col->shredded_paths().size());
     ASSERT_EQ("a", col->shredded_paths()[0]);

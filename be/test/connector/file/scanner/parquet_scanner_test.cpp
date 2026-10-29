@@ -1299,7 +1299,7 @@ TEST_F(ParquetScannerTest, test_nested_dictionary_string_parquet) {
     create_nested_dictionary_parquet("nested_dictionary.parquet", {{"a", "b"}, {"c"}}, &parquet_file_name);
     DeferOp defer([&]() { std::filesystem::remove(parquet_file_name); });
 
-    SlotTypeDescInfoArray slot_infos = {{"nested_dict", TYPE_ARRAY_VARCHAR, true}};
+    SlotTypeDescInfoArray slot_infos = {{"nested_dict", TYPE_ARRAY_VARCHAR_DESC, true}};
     auto ranges = generate_ranges({parquet_file_name}, slot_infos.size(), {});
     auto* desc_tbl = DescTblHelper::generate_desc_tbl(_runtime_state, _obj_pool, {slot_infos, {}});
     auto scanner = create_parquet_scanner("UTC", desc_tbl, {}, ranges);

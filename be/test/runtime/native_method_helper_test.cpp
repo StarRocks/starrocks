@@ -166,7 +166,7 @@ TEST_F(NativeMethodHelperTest, get_addrs_int) {
     // test array/map
     // array with scalar types
     {
-        auto column = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
+        auto column = ColumnHelper::create_column(TYPE_ARRAY_INT_DESC, true);
         column->resize(10);
         auto arr = NativeMethodHelperTestBridge::getAddrs(env, nullptr, reinterpret_cast<size_t>(column.get()));
         jlong results[5];
@@ -219,7 +219,7 @@ TEST_F(NativeMethodHelperTest, get_column_logical_type) {
     // (UDFHelper.getResultFromListArray / getResultFromMapArray) calls back into
     // getColumnLogicalType on element/key/value columns to dispatch nested writes.
     {
-        auto c = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
+        auto c = ColumnHelper::create_column(TYPE_ARRAY_INT_DESC, true);
         ASSERT_EQ(TYPE_ARRAY,
                   NativeMethodHelperTestBridge::getColumnLogicalType(env, nullptr, reinterpret_cast<size_t>(c.get())));
     }

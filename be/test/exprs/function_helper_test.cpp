@@ -147,7 +147,7 @@ TEST_F(FunctionHelperTest, testCreateColumnScalarNullableAndNonNullable) {
 }
 
 TEST_F(FunctionHelperTest, testCreateColumnArray) {
-    auto array_column = FunctionHelper::create_column(TYPE_ARRAY_INT, false);
+    auto array_column = FunctionHelper::create_column(TYPE_ARRAY_INT_DESC, false);
     ASSERT_NE(array_column, nullptr);
     ASSERT_TRUE(array_column->is_array());
 
@@ -161,7 +161,7 @@ TEST_F(FunctionHelperTest, testCreateColumnArray) {
 
 TEST_F(FunctionHelperTest, testCreateColumnStruct) {
     std::vector<std::string> field_names{"c1", "c2"};
-    std::vector<TypeDescriptor> field_types{TypeDescriptor(TYPE_INT), TYPE_ARRAY_INT};
+    std::vector<TypeDescriptor> field_types{TypeDescriptor(TYPE_INT), TYPE_ARRAY_INT_DESC};
     TypeDescriptor struct_type = TypeDescriptor::create_struct_type(field_names, field_types);
 
     auto struct_column = FunctionHelper::create_column(struct_type, false);

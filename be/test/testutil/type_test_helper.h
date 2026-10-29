@@ -35,19 +35,24 @@ inline TypeDescriptor array_type(const LogicalType& child_type) {
     return t;
 }
 
+// Scalar types used only by tests. The ones also used by production code live in types/type_descriptor.h.
+inline const TypeDescriptor TYPE_UNKNOWN_DESC = TypeDescriptor(LogicalType::TYPE_UNKNOWN);
+inline const TypeDescriptor TYPE_CHAR_DESC = TypeDescriptor::create_char_type(TypeDescriptor::MAX_CHAR_LENGTH);
+inline const TypeDescriptor TYPE_JSON_DESC = TypeDescriptor::create_json_type();
+
 // Common ARRAY types shared by tests.
-inline const TypeDescriptor TYPE_ARRAY_BOOLEAN = array_type(TYPE_BOOLEAN);
-inline const TypeDescriptor TYPE_ARRAY_TINYINT = array_type(TYPE_TINYINT);
-inline const TypeDescriptor TYPE_ARRAY_SMALLINT = array_type(TYPE_SMALLINT);
-inline const TypeDescriptor TYPE_ARRAY_INT = array_type(TYPE_INT);
-inline const TypeDescriptor TYPE_ARRAY_BIGINT = array_type(TYPE_BIGINT);
-inline const TypeDescriptor TYPE_ARRAY_LARGEINT = array_type(TYPE_LARGEINT);
-inline const TypeDescriptor TYPE_ARRAY_FLOAT = array_type(TYPE_FLOAT);
-inline const TypeDescriptor TYPE_ARRAY_DOUBLE = array_type(TYPE_DOUBLE);
-inline const TypeDescriptor TYPE_ARRAY_VARCHAR = array_type(TYPE_VARCHAR);
-inline const TypeDescriptor TYPE_ARRAY_DATE = array_type(TYPE_DATE);
-inline const TypeDescriptor TYPE_ARRAY_DATETIME = array_type(TYPE_DATETIME);
-inline const TypeDescriptor TYPE_ARRAY_ARRAY_INT = array_type(array_type(TYPE_INT));
-inline const TypeDescriptor TYPE_ARRAY_ARRAY_VARCHAR = array_type(array_type(TYPE_VARCHAR));
+inline const TypeDescriptor TYPE_ARRAY_BOOLEAN_DESC = array_type(TYPE_BOOLEAN);
+inline const TypeDescriptor TYPE_ARRAY_TINYINT_DESC = array_type(TYPE_TINYINT);
+inline const TypeDescriptor TYPE_ARRAY_SMALLINT_DESC = array_type(TYPE_SMALLINT);
+inline const TypeDescriptor TYPE_ARRAY_INT_DESC = array_type(TYPE_INT);
+inline const TypeDescriptor TYPE_ARRAY_BIGINT_DESC = array_type(TYPE_BIGINT);
+inline const TypeDescriptor TYPE_ARRAY_LARGEINT_DESC = array_type(TYPE_LARGEINT);
+inline const TypeDescriptor TYPE_ARRAY_FLOAT_DESC = array_type(TYPE_FLOAT);
+inline const TypeDescriptor TYPE_ARRAY_DOUBLE_DESC = array_type(TYPE_DOUBLE);
+inline const TypeDescriptor TYPE_ARRAY_VARCHAR_DESC = array_type(TYPE_VARCHAR);
+inline const TypeDescriptor TYPE_ARRAY_DATE_DESC = array_type(TYPE_DATE);
+inline const TypeDescriptor TYPE_ARRAY_DATETIME_DESC = array_type(TYPE_DATETIME);
+inline const TypeDescriptor TYPE_ARRAY_ARRAY_INT_DESC = array_type(array_type(TYPE_INT));
+inline const TypeDescriptor TYPE_ARRAY_ARRAY_VARCHAR_DESC = array_type(array_type(TYPE_VARCHAR));
 
 } // namespace starrocks

@@ -373,22 +373,22 @@ TEST_F(VectorizedInPredicateTest, inArray) {
         expr_node.in_predicate.is_not_in = not_in;
 
         auto expr = std::unique_ptr<Expr>(VectorizedInPredicateFactory::from_thrift(expr_node));
-        auto array0 = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
+        auto array0 = ColumnHelper::create_column(TYPE_ARRAY_INT_DESC, true);
         array0->append_datum(DatumArray{Datum((int32_t)11), Datum((int32_t)4)}); // [11,4]
         array0->append_datum(Datum{});                                           // NULL
         array0->append_datum(DatumArray{Datum(), Datum((int32_t)1)});            // [NULL, 1]
-        auto array_expr0 = MockExpr(TYPE_ARRAY_INT, std::move(array0));
+        auto array_expr0 = MockExpr(TYPE_ARRAY_INT_DESC, std::move(array0));
 
-        auto array1 = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
+        auto array1 = ColumnHelper::create_column(TYPE_ARRAY_INT_DESC, false);
         array1->append_datum(DatumArray{Datum((int32_t)1), Datum((int32_t)4)}); // [1,4]
         array1->append_datum(DatumArray{Datum(), Datum()});                     // [NULL, NULL]
         array1->append_datum(DatumArray{Datum(), Datum((int32_t)2)});           // [NULL, 2]
-        auto array_expr1 = MockExpr(TYPE_ARRAY_INT, std::move(array1));
+        auto array_expr1 = MockExpr(TYPE_ARRAY_INT_DESC, std::move(array1));
 
-        auto array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
+        auto array = ColumnHelper::create_column(TYPE_ARRAY_INT_DESC, false);
         array->append_datum(DatumArray{Datum((int32_t)11), Datum((int32_t)4)}); // [11,4]
         auto const_col = ConstColumn::create(std::move(array), 3);
-        auto* const_array = new_fake_const_expr(std::move(const_col), TYPE_ARRAY_INT);
+        auto* const_array = new_fake_const_expr(std::move(const_col), TYPE_ARRAY_INT_DESC);
 
         expr->add_child(&array_expr0);
         expr->add_child(&array_expr1);
@@ -420,20 +420,20 @@ TEST_F(VectorizedInPredicateTest, inArrayConstAll) {
         expr_node.in_predicate.is_not_in = not_in;
 
         auto expr = std::unique_ptr<Expr>(VectorizedInPredicateFactory::from_thrift(expr_node));
-        auto array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
+        auto array = ColumnHelper::create_column(TYPE_ARRAY_INT_DESC, false);
         array->append_datum(DatumArray{Datum((int32_t)11), Datum((int32_t)4)}); // [11,4]
         auto const_col = ConstColumn::create(std::move(array), 3);
-        auto* const_array = new_fake_const_expr(std::move(const_col), TYPE_ARRAY_INT);
+        auto* const_array = new_fake_const_expr(std::move(const_col), TYPE_ARRAY_INT_DESC);
 
-        auto array0 = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
+        auto array0 = ColumnHelper::create_column(TYPE_ARRAY_INT_DESC, false);
         array0->append_datum(DatumArray{Datum(), Datum((int32_t)4)}); // [NULL,4]
         auto const_col0 = ConstColumn::create(std::move(array0), 3);
-        auto* const_array0 = new_fake_const_expr(std::move(const_col0), TYPE_ARRAY_INT);
+        auto* const_array0 = new_fake_const_expr(std::move(const_col0), TYPE_ARRAY_INT_DESC);
 
-        auto array1 = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
+        auto array1 = ColumnHelper::create_column(TYPE_ARRAY_INT_DESC, false);
         array1->append_datum(DatumArray{Datum((int32_t)11), Datum((int32_t)4)}); // [11,4]
         auto const_col1 = ConstColumn::create(std::move(array1), 3);
-        auto* const_array1 = new_fake_const_expr(std::move(const_col1), TYPE_ARRAY_INT);
+        auto* const_array1 = new_fake_const_expr(std::move(const_col1), TYPE_ARRAY_INT_DESC);
 
         expr->add_child(const_array);
         expr->add_child(const_array0);
@@ -460,20 +460,20 @@ TEST_F(VectorizedInPredicateTest, inArrayConstAllNULL) {
         expr_node.in_predicate.is_not_in = not_in;
 
         auto expr = std::unique_ptr<Expr>(VectorizedInPredicateFactory::from_thrift(expr_node));
-        auto array = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
+        auto array = ColumnHelper::create_column(TYPE_ARRAY_INT_DESC, true);
         array->append_datum(Datum{}); // NULL
         auto const_col = ConstColumn::create(std::move(array), 3);
-        auto* const_array = new_fake_const_expr(std::move(const_col), TYPE_ARRAY_INT);
+        auto* const_array = new_fake_const_expr(std::move(const_col), TYPE_ARRAY_INT_DESC);
 
-        auto array0 = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
+        auto array0 = ColumnHelper::create_column(TYPE_ARRAY_INT_DESC, false);
         array0->append_datum(DatumArray{Datum(), Datum((int32_t)4)}); // [NULL,4]
         auto const_col0 = ConstColumn::create(std::move(array0), 3);
-        auto* const_array0 = new_fake_const_expr(std::move(const_col0), TYPE_ARRAY_INT);
+        auto* const_array0 = new_fake_const_expr(std::move(const_col0), TYPE_ARRAY_INT_DESC);
 
-        auto array1 = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
+        auto array1 = ColumnHelper::create_column(TYPE_ARRAY_INT_DESC, false);
         array1->append_datum(DatumArray{Datum((int32_t)11), Datum((int32_t)4)}); // [11,4]
         auto const_col1 = ConstColumn::create(std::move(array1), 3);
-        auto* const_array1 = new_fake_const_expr(std::move(const_col1), TYPE_ARRAY_INT);
+        auto* const_array1 = new_fake_const_expr(std::move(const_col1), TYPE_ARRAY_INT_DESC);
 
         expr->add_child(const_array);
         expr->add_child(const_array0);

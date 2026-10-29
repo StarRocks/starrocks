@@ -275,7 +275,7 @@ TEST_F(ArrowConverterTest, BuildArrowColumnConvertPlanArray) {
     ConvertFuncTree conv_func;
     bool need_cast = false;
 
-    ASSERT_STATUS_OK(build_arrow_column_convert_plan(arrow_type.get(), &TYPE_ARRAY_INT, true, &raw_type_desc,
+    ASSERT_STATUS_OK(build_arrow_column_convert_plan(arrow_type.get(), &TYPE_ARRAY_INT_DESC, true, &raw_type_desc,
                                                      &conv_func, need_cast, false));
     ASSERT_FALSE(need_cast);
     ASSERT_EQ(TYPE_ARRAY, raw_type_desc.type);
@@ -353,7 +353,7 @@ TEST_F(ArrowConverterTest, BuildArrowColumnConvertPlanMissingComplexStructChildr
     std::vector<std::shared_ptr<arrow::DataType>> arrow_children = {
             arrow::list(arrow::int32()), arrow::map(arrow::utf8(), arrow::int32()),
             arrow::struct_({arrow::field("value", arrow::int32())})};
-    std::vector<TypeDescriptor> children = {TYPE_ARRAY_INT, map_type, struct_type};
+    std::vector<TypeDescriptor> children = {TYPE_ARRAY_INT_DESC, map_type, struct_type};
     for (size_t i = 0; i < children.size(); ++i) {
         SCOPED_TRACE(children[i].debug_string());
         auto arrow_type =
@@ -384,7 +384,7 @@ TEST_F(ArrowConverterTest, BuildArrowColumnConvertPlanRejectsInvalidNestedType) 
     ConvertFuncTree conv_func;
     bool need_cast = false;
 
-    auto st = build_arrow_column_convert_plan(arrow_type.get(), &TYPE_ARRAY_INT, true, &raw_type_desc, &conv_func,
+    auto st = build_arrow_column_convert_plan(arrow_type.get(), &TYPE_ARRAY_INT_DESC, true, &raw_type_desc, &conv_func,
                                               need_cast, false);
     ASSERT_FALSE(st.ok());
     ASSERT_NE(std::string::npos, st.message().find("does not match"));
@@ -1945,11 +1945,11 @@ static std::shared_ptr<arrow::Array> create_list_array(int64_t num_elements, ssi
 
 PARALLEL_TEST(ArrowConverterTest, test_convert_list_array) {
     ConvertFuncTree cf;
-    auto [need_cast, st] = get_conv_func(TYPE_ARRAY_INT, TYPE_ARRAY_INT, cf);
+    auto [need_cast, st] = get_conv_func(TYPE_ARRAY_INT_DESC, TYPE_ARRAY_INT_DESC, cf);
     ASSERT_STATUS_OK(st);
     ASSERT_FALSE(need_cast);
 
-    auto column = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
+    auto column = ColumnHelper::create_column(TYPE_ARRAY_INT_DESC, false);
     column->reserve(4096);
     ssize_t counter = 0;
     int num = 100;
@@ -1985,7 +1985,7 @@ static std::shared_ptr<arrow::Array> create_nest_list_array(int64_t num_parents,
 
 PARALLEL_TEST(ArrowConverterTest, test_convert_nest_list_array) {
     TypeDescriptor array_type(TYPE_ARRAY);
-    array_type.children.emplace_back(TYPE_ARRAY_BIGINT);
+    array_type.children.emplace_back(TYPE_ARRAY_BIGINT_DESC);
 
     ConvertFuncTree cf;
     auto [need_cast, st] = get_conv_func(array_type, array_type, cf);
@@ -2006,11 +2006,11 @@ PARALLEL_TEST(ArrowConverterTest, test_convert_nest_list_array) {
 
 PARALLEL_TEST(ArrowConverterTest, test_convert_nullable_list_array) {
     ConvertFuncTree cf;
-    auto [need_cast, st] = get_conv_func(TYPE_ARRAY_INT, TYPE_ARRAY_INT, cf, true);
+    auto [need_cast, st] = get_conv_func(TYPE_ARRAY_INT_DESC, TYPE_ARRAY_INT_DESC, cf, true);
     ASSERT_STATUS_OK(st);
     ASSERT_FALSE(need_cast);
 
-    auto column = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
+    auto column = ColumnHelper::create_column(TYPE_ARRAY_INT_DESC, true);
     column->reserve(4096);
     ssize_t counter = 0;
     int num = 100;

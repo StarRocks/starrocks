@@ -531,7 +531,7 @@ std::string ai_value(const ChunkPtr& chunk, size_t row) {
 TEST(AIProjectProcessorTest, MaterializesEmbeddingWithNullableElementsAndSqlNullRows) {
     auto buffer = make_input_buffer();
     auto projection = std::make_shared<RecordingProjection>();
-    projection->result_type = TYPE_ARRAY_FLOAT;
+    projection->result_type = TYPE_ARRAY_FLOAT_DESC;
     projection->result_kind = AIFunctionResultKind::EMBEDDING;
     projection->row_actions = {AIFunctionRowAction::DISPATCH, AIFunctionRowAction::SQL_NULL};
     auto submitter = std::make_shared<ManualTaskSubmitter>();

@@ -147,7 +147,7 @@ protected:
 
     void SetUp() override {
         _runtime_state = create_runtime_state();
-        _exprs.emplace_back(std::make_unique<ColumnRef>(TYPE_ARRAY_INT, 1));
+        _exprs.emplace_back(std::make_unique<ColumnRef>(TYPE_ARRAY_INT_DESC, 1));
         _sort_exprs.emplace_back(new ExprContext(_exprs.back().get()));
         ASSERT_OK(ExprExecutor::prepare(_sort_exprs, _runtime_state.get()));
         ASSERT_OK(ExprExecutor::open(_sort_exprs, _runtime_state.get()));

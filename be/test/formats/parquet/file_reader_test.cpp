@@ -63,6 +63,7 @@
 #include "storage_primitive/predicate_parser.h"
 #include "testutil/column_test_helper.h"
 #include "testutil/exprs_test_helper.h"
+#include "testutil/type_test_helper.h"
 #include "types/type_descriptor.h"
 #include "types/variant.h"
 
@@ -384,18 +385,18 @@ protected:
 
     RuntimeFilterProbeCollector* _rf_probe_collector;
     const TypeDescriptor TYPE_DECIMAL128_DESC = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 27, 9);
-    const TypeDescriptor TYPE_INT_ARRAY_ARRAY_DESC = TypeDescriptor::create_array_type(TYPE_INT_ARRAY_DESC);
+    const TypeDescriptor TYPE_INT_ARRAY_ARRAY_DESC = TypeDescriptor::create_array_type(TYPE_ARRAY_INT_DESC);
     const TypeDescriptor TYPE_INT_INT_MAP_DESC = TypeDescriptor::create_map_type(TYPE_INT_DESC, TYPE_INT_DESC);
     const TypeDescriptor TYPE_CHAR_INT_MAP_DESC = TypeDescriptor::create_map_type(TYPE_CHAR_DESC, TYPE_INT_DESC);
     const TypeDescriptor TYPE_VARCHAR_INT_MAP_DESC = TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TYPE_INT_DESC);
     const TypeDescriptor TYPE_VARBINARY_INT_MAP_DESC =
             TypeDescriptor::create_map_type(TYPE_VARBINARY_DESC, TYPE_INT_DESC);
     const TypeDescriptor TYPE_VARCHAR_INTARRAY_MAP_DESC =
-            TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TYPE_INT_ARRAY_DESC);
+            TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TYPE_ARRAY_INT_DESC);
     const TypeDescriptor TYPE_VARCHAR_UNKNOWN_MAP_DESC =
             TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TYPE_UNKNOWN_DESC);
     const TypeDescriptor TYPE_UNKNOWN_INTARRAY_MAP_DESC =
-            TypeDescriptor::create_map_type(TYPE_UNKNOWN_DESC, TYPE_INT_ARRAY_DESC);
+            TypeDescriptor::create_map_type(TYPE_UNKNOWN_DESC, TYPE_ARRAY_INT_DESC);
     const TypeDescriptor TYPE_VARCHAR_ARRAY_DESC = TypeDescriptor::create_array_type(TYPE_VARCHAR_DESC);
 };
 
@@ -690,7 +691,7 @@ HdfsScannerContext* FileReaderTest::_create_file6_base_context() {
     // struct columns are not supported now, so we skip reading them
     Utils::SlotDesc slot_descs[] = {
             {"col_int", TYPE_INT_DESC},
-            {"col_array", TYPE_INT_ARRAY_DESC},
+            {"col_array", TYPE_ARRAY_INT_DESC},
             {""},
     };
     return _create_scan_context(slot_descs, _file6_path);
@@ -1215,7 +1216,7 @@ ChunkPtr FileReaderTest::_create_required_array_chunk() {
     ChunkPtr chunk = std::make_shared<Chunk>();
     _append_column_for_chunk(LogicalType::TYPE_INT, &chunk);
 
-    auto c = ColumnHelper::create_column(TYPE_INT_ARRAY_DESC, true);
+    auto c = ColumnHelper::create_column(TYPE_ARRAY_INT_DESC, true);
     chunk->append_column(std::move(c), chunk->num_columns());
     return chunk;
 }
@@ -1675,7 +1676,7 @@ TEST_F(FileReaderTest, TestReadStruct) {
 
     // --------------init context---------------
     TypeDescriptor c2 = TypeDescriptor::create_struct_type({"f2", "f1", "f3"},
-                                                           {TYPE_VARCHAR_DESC, TYPE_INT_DESC, TYPE_INT_ARRAY_DESC});
+                                                           {TYPE_VARCHAR_DESC, TYPE_INT_DESC, TYPE_ARRAY_INT_DESC});
     TypeDescriptor c4_struct = TypeDescriptor::create_struct_type({"e1", "e2"}, {TYPE_INT_DESC, TYPE_VARCHAR_DESC});
     TypeDescriptor c4 = TypeDescriptor::create_array_type(c4_struct);
 
@@ -1723,7 +1724,7 @@ TEST_F(FileReaderTest, TestReadStructSubField) {
     auto file_reader = _create_file_reader(_file4_path);
 
     // --------------init context---------------
-    TypeDescriptor c2 = TypeDescriptor::create_struct_type({"f1", "f3"}, {TYPE_INT_DESC, TYPE_INT_ARRAY_DESC});
+    TypeDescriptor c2 = TypeDescriptor::create_struct_type({"f1", "f3"}, {TYPE_INT_DESC, TYPE_ARRAY_INT_DESC});
     TypeDescriptor c4_struct = TypeDescriptor::create_struct_type({"e2"}, {TYPE_VARCHAR_DESC});
     TypeDescriptor c4 = TypeDescriptor::create_array_type(c4_struct);
 
@@ -1777,7 +1778,7 @@ TEST_F(FileReaderTest, TestReadStructAbsentSubField) {
     // --------------init context---------------
     TypeDescriptor c2 = TypeDescriptor::create_struct_type(
             {"f1", "f2", "f3", "not_existed"},
-            {TYPE_INT_DESC, TYPE_VARCHAR_DESC, TYPE_INT_ARRAY_DESC, TYPE_VARCHAR_DESC});
+            {TYPE_INT_DESC, TYPE_VARCHAR_DESC, TYPE_ARRAY_INT_DESC, TYPE_VARCHAR_DESC});
     Utils::SlotDesc slot_descs[] = {
             {"c1", TYPE_INT_DESC},
             {"c2", c2},
@@ -1811,7 +1812,7 @@ TEST_F(FileReaderTest, TestReadStructCaseSensitive) {
 
     // --------------init context---------------
     TypeDescriptor c2 = TypeDescriptor::create_struct_type({"F1", "F2", "F3"},
-                                                           {TYPE_INT_DESC, TYPE_VARCHAR_DESC, TYPE_INT_ARRAY_DESC});
+                                                           {TYPE_INT_DESC, TYPE_VARCHAR_DESC, TYPE_ARRAY_INT_DESC});
 
     Utils::SlotDesc slot_descs[] = {{"c1", TYPE_INT_DESC}, {"c2", c2}, {""}};
     auto ctx = _create_scan_context(slot_descs, _file4_path);
@@ -1838,7 +1839,7 @@ TEST_F(FileReaderTest, TestReadStructCaseSensitiveError) {
 
     // --------------init context---------------
     TypeDescriptor c2 = TypeDescriptor::create_struct_type({"F1", "F2", "F3"},
-                                                           {TYPE_INT_DESC, TYPE_VARCHAR_DESC, TYPE_INT_ARRAY_DESC});
+                                                           {TYPE_INT_DESC, TYPE_VARCHAR_DESC, TYPE_ARRAY_INT_DESC});
 
     Utils::SlotDesc slot_descs[] = {{"c1", TYPE_INT_DESC}, {"c2", c2}, {""}};
     auto ctx = _create_scan_context(slot_descs, _file4_path);
@@ -1861,7 +1862,7 @@ TEST_F(FileReaderTest, TestReadStructNull) {
     auto file_reader = _create_file_reader(_file_struct_null_path);
 
     // --------------init context---------------
-    TypeDescriptor c1 = TypeDescriptor::create_struct_type({"c1_0", "c1_1"}, {TYPE_INT_DESC, TYPE_INT_ARRAY_DESC});
+    TypeDescriptor c1 = TypeDescriptor::create_struct_type({"c1_0", "c1_1"}, {TYPE_INT_DESC, TYPE_ARRAY_INT_DESC});
     TypeDescriptor c2_struct = TypeDescriptor::create_struct_type({"c2_0", "c2_1"}, {TYPE_INT_DESC, TYPE_INT_DESC});
     TypeDescriptor c2 = TypeDescriptor::create_array_type(c2_struct);
 
@@ -1933,7 +1934,7 @@ TEST_F(FileReaderTest, TestReadMapColumnWithPartialMaterialize) {
     EXPECT_EQ(file_reader->_file_metadata->num_rows(), 8);
 
     TypeDescriptor type_map_map = TypeDescriptor::create_map_type(TYPE_UNKNOWN_DESC, TYPE_VARCHAR_UNKNOWN_MAP_DESC);
-    TypeDescriptor type_map_array = TypeDescriptor::create_map_type(TYPE_UNKNOWN_DESC, TYPE_INT_ARRAY_DESC);
+    TypeDescriptor type_map_array = TypeDescriptor::create_map_type(TYPE_UNKNOWN_DESC, TYPE_ARRAY_INT_DESC);
 
     ChunkPtr chunk = std::make_shared<Chunk>();
     _append_column_for_chunk(LogicalType::TYPE_INT, &chunk);
@@ -2000,7 +2001,7 @@ TEST_F(FileReaderTest, TestTwoNestedLevelArray) {
     auto file_reader = _create_file_reader(filepath);
 
     // --------------init context---------------
-    TypeDescriptor type_array = TypeDescriptor::create_array_type(TYPE_INT_ARRAY_DESC);
+    TypeDescriptor type_array = TypeDescriptor::create_array_type(TYPE_ARRAY_INT_DESC);
     Utils::SlotDesc slot_descs[] = {
             {"id", TYPE_INT_DESC},
             {"b", type_array},
@@ -2692,7 +2693,7 @@ TEST_F(FileReaderTest, TestRandomReadWith2PageSize) {
     chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
     chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
     chunk->append_column(ColumnHelper::create_column(TYPE_VARCHAR_DESC, true), chunk->num_columns());
-    chunk->append_column(ColumnHelper::create_column(TYPE_INT_ARRAY_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_ARRAY_INT_DESC, true), chunk->num_columns());
 
     // c0 = np.arange(1, 20001)
     // c1 = np.arange(20000, 0, -1)
@@ -2725,7 +2726,7 @@ TEST_F(FileReaderTest, TestRandomReadWith2PageSize) {
     const std::string big_page_file = "./be/test/formats/parquet/test_data/read_range_big_page_test.parquet";
 
     Utils::SlotDesc slot_descs[] = {
-            {"c0", TYPE_INT_DESC}, {"c1", TYPE_INT_DESC}, {"c2", TYPE_VARCHAR_DESC}, {"c3", TYPE_INT_ARRAY_DESC}, {""}};
+            {"c0", TYPE_INT_DESC}, {"c1", TYPE_INT_DESC}, {"c2", TYPE_VARCHAR_DESC}, {"c3", TYPE_ARRAY_INT_DESC}, {""}};
 
     // for small page 1000 values / page
     // for big page 10000 values / page
@@ -3492,10 +3493,10 @@ TEST_F(FileReaderTest, TestReadRoundByRound) {
     chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
     chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
     chunk->append_column(ColumnHelper::create_column(TYPE_VARCHAR_DESC, true), chunk->num_columns());
-    chunk->append_column(ColumnHelper::create_column(TYPE_INT_ARRAY_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_ARRAY_INT_DESC, true), chunk->num_columns());
 
     Utils::SlotDesc slot_descs[] = {
-            {"c0", TYPE_INT_DESC}, {"c1", TYPE_INT_DESC}, {"c2", TYPE_VARCHAR_DESC}, {"c3", TYPE_INT_ARRAY_DESC}, {""}};
+            {"c0", TYPE_INT_DESC}, {"c1", TYPE_INT_DESC}, {"c2", TYPE_VARCHAR_DESC}, {"c3", TYPE_ARRAY_INT_DESC}, {""}};
 
     auto ctx = _create_file_random_read_context(file_path, slot_descs);
     // c0 >= 100
@@ -3696,7 +3697,7 @@ TEST_F(FileReaderTest, TestIsNullStatistics) {
                                                     std::filesystem::file_size(small_page_file));
 
     Utils::SlotDesc slot_descs[] = {
-            {"c0", TYPE_INT_DESC}, {"c1", TYPE_INT_DESC}, {"c2", TYPE_VARCHAR_DESC}, {"c3", TYPE_INT_ARRAY_DESC}, {""},
+            {"c0", TYPE_INT_DESC}, {"c1", TYPE_INT_DESC}, {"c2", TYPE_VARCHAR_DESC}, {"c3", TYPE_ARRAY_INT_DESC}, {""},
     };
     std::vector<TExpr> t_conjuncts;
     ParquetUTBase::is_null_pred(0, true, &t_conjuncts);
@@ -3754,7 +3755,7 @@ TEST_F(FileReaderTest, TestInFilterStatitics) {
 
     auto file_reader = _create_file_reader(multi_rg_file);
     Utils::SlotDesc slot_descs[] = {
-            {"c0", TYPE_INT_DESC}, {"c1", TYPE_INT_DESC}, {"c2", TYPE_VARCHAR_DESC}, {"c3", TYPE_INT_ARRAY_DESC}, {""},
+            {"c0", TYPE_INT_DESC}, {"c1", TYPE_INT_DESC}, {"c2", TYPE_VARCHAR_DESC}, {"c3", TYPE_ARRAY_INT_DESC}, {""},
     };
     // min value and max value in this file, so it will be in the first and last row group
     std::set<int32_t> in_oprands{1, 100000};
@@ -4369,12 +4370,12 @@ TEST_F(FileReaderTest, low_rows_reader) {
     chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
     chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
     chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
-    chunk->append_column(ColumnHelper::create_column(TYPE_INT_ARRAY_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_ARRAY_INT_DESC, true), chunk->num_columns());
 
     const std::string low_rows_file = "./be/test/formats/parquet/test_data/low_rows_non_dict.parquet";
 
     Utils::SlotDesc slot_descs[] = {
-            {"c0", TYPE_INT_DESC}, {"c1", TYPE_INT_DESC}, {"c2", TYPE_INT_DESC}, {"c3", TYPE_INT_ARRAY_DESC}, {""}};
+            {"c0", TYPE_INT_DESC}, {"c1", TYPE_INT_DESC}, {"c2", TYPE_INT_DESC}, {"c3", TYPE_ARRAY_INT_DESC}, {""}};
     auto ctx = _create_file_random_read_context(low_rows_file, slot_descs);
 
     std::vector<std::string> values;
@@ -4439,12 +4440,12 @@ TEST_F(FileReaderTest, low_rows_reader_empty_not_null_not_match) {
     chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
     chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
     chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
-    chunk->append_column(ColumnHelper::create_column(TYPE_INT_ARRAY_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_ARRAY_INT_DESC, true), chunk->num_columns());
 
     const std::string low_rows_file = "./be/test/formats/parquet/test_data/low_rows_non_dict_empty.parquet";
 
     Utils::SlotDesc slot_descs[] = {
-            {"c0", TYPE_INT_DESC}, {"c1", TYPE_INT_DESC}, {"c2", TYPE_INT_DESC}, {"c3", TYPE_INT_ARRAY_DESC}, {""}};
+            {"c0", TYPE_INT_DESC}, {"c1", TYPE_INT_DESC}, {"c2", TYPE_INT_DESC}, {"c3", TYPE_ARRAY_INT_DESC}, {""}};
     auto ctx = _create_file_random_read_context(low_rows_file, slot_descs);
 
     std::vector<std::string> values;
@@ -4478,12 +4479,12 @@ TEST_F(FileReaderTest, low_rows_reader_empty_not_null) {
     chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
     chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
     chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
-    chunk->append_column(ColumnHelper::create_column(TYPE_INT_ARRAY_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_ARRAY_INT_DESC, true), chunk->num_columns());
 
     const std::string low_rows_file = "./be/test/formats/parquet/test_data/low_rows_non_dict_empty.parquet";
 
     Utils::SlotDesc slot_descs[] = {
-            {"c0", TYPE_INT_DESC}, {"c1", TYPE_INT_DESC}, {"c2", TYPE_INT_DESC}, {"c3", TYPE_INT_ARRAY_DESC}, {""}};
+            {"c0", TYPE_INT_DESC}, {"c1", TYPE_INT_DESC}, {"c2", TYPE_INT_DESC}, {"c3", TYPE_ARRAY_INT_DESC}, {""}};
     auto ctx = _create_file_random_read_context(low_rows_file, slot_descs);
 
     std::vector<std::string> values;

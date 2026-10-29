@@ -102,7 +102,7 @@ TEST(AIFunctionResultTest, SentimentIsAValidatedNormalizedLabel) {
 }
 
 TEST(AIFunctionResultTest, EmbeddingAppendsNullableFloatElementsAndDoesNotPartiallyAppendInvalidValues) {
-    auto output = ColumnHelper::create_column(TYPE_ARRAY_FLOAT, true);
+    auto output = ColumnHelper::create_column(TYPE_ARRAY_FLOAT_DESC, true);
     ASSERT_TRUE(
             append_ai_function_result(AIFunctionResultKind::EMBEDDING, std::vector<float>{0.25f, -0.5f}, output.get())
                     .ok());

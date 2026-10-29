@@ -69,7 +69,7 @@ TEST_F(ArrayExprTest, test_evaluate) {
 
     // []
     {
-        std::unique_ptr<Expr> expr = create_array_expr(TYPE_ARRAY_INT);
+        std::unique_ptr<Expr> expr = create_array_expr(TYPE_ARRAY_INT_DESC);
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_EQ(1, result->size());
         ASSERT_TRUE(result->is_constant());
@@ -82,7 +82,7 @@ TEST_F(ArrayExprTest, test_evaluate) {
     // [3, 4, 8]
     // [6, 8, 12]
     {
-        std::unique_ptr<Expr> expr = create_array_expr(TYPE_ARRAY_INT);
+        std::unique_ptr<Expr> expr = create_array_expr(TYPE_ARRAY_INT_DESC);
         expr->add_child(new_mock_expr(ColumnTestHelper::build_column<int32_t>({1, 3, 6}), LogicalType::TYPE_INT));
         expr->add_child(new_mock_expr(ColumnTestHelper::build_column<int32_t>({2, 4, 8}), LogicalType::TYPE_INT));
         expr->add_child(new_mock_expr(ColumnTestHelper::build_column<int32_t>({4, 8, 12}), LogicalType::TYPE_INT));
@@ -109,7 +109,7 @@ TEST_F(ArrayExprTest, test_evaluate) {
     // [3, 4, NULL]
     // [6, 8, 12]
     {
-        std::unique_ptr<Expr> expr = create_array_expr(TYPE_ARRAY_INT);
+        std::unique_ptr<Expr> expr = create_array_expr(TYPE_ARRAY_INT_DESC);
         expr->add_child(new_mock_expr(ColumnTestHelper::build_column<int32_t>({1, 3, 6}), LogicalType::TYPE_INT));
         expr->add_child(new_mock_expr(ColumnTestHelper::build_column<int32_t>({2, 4, 8}), LogicalType::TYPE_INT));
         expr->add_child(new_mock_expr(ColumnTestHelper::build_nullable_column<int32_t>({4, 0, 12}, {0, 1, 0}),
@@ -165,7 +165,7 @@ TEST_F(ArrayExprTest, test_evaluate) {
 
     // constant: [1, 4, 8]
     {
-        std::unique_ptr<Expr> expr = create_array_expr(TYPE_ARRAY_INT);
+        std::unique_ptr<Expr> expr = create_array_expr(TYPE_ARRAY_INT_DESC);
         expr->add_child(
                 new_mock_expr(ColumnHelper::create_const_column<LogicalType::TYPE_INT>(1, 3), LogicalType::TYPE_INT));
         expr->add_child(

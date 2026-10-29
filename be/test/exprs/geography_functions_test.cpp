@@ -5129,7 +5129,7 @@ TEST_F(geographyFunctionsTest, h3RecursiveFillRetainsNullsConstantInputsAndLimit
     RuntimeState state;
     state.init_instance_mem_tracker();
     std::unique_ptr<FunctionContext> context(FunctionContext::create_context(
-            &state, nullptr, TYPE_ARRAY_BIGINT, {geography_type(), TypeDescriptor(TYPE_INT)}));
+            &state, nullptr, TYPE_ARRAY_BIGINT_DESC, {geography_type(), TypeDescriptor(TYPE_INT)}));
     const auto evaluate = [&]() {
         return GeoFunctions::h3_polygon_to_cells(context.get(),
                                                  {input, ColumnHelper::create_const_column<TYPE_INT>(9, rows)});
@@ -5239,7 +5239,7 @@ TEST_F(geographyFunctionsTest, h3PolygonFillRetainsOrderedCellsAndVaryingRowOffs
 TEST_F(geographyFunctionsTest, h3PreparedPolygonAcrossBatchesAndThreads) {
     auto polygon = ConstColumn::create(geography({"POLYGON ((-20 -20, 20 -20, 20 20, -20 20, -20 -20))"}), 2);
     std::unique_ptr<FunctionContext> context(
-            FunctionContext::create_test_context({geography_type(), TypeDescriptor(TYPE_INT)}, TYPE_ARRAY_BIGINT));
+            FunctionContext::create_test_context({geography_type(), TypeDescriptor(TYPE_INT)}, TYPE_ARRAY_BIGINT_DESC));
     context->set_constant_columns({polygon, nullptr});
     ASSERT_TRUE(GeoFunctions::h3_polygon_to_cells_prepare(context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
     ASSERT_NE(nullptr, context->get_function_state(FunctionContext::FRAGMENT_LOCAL));

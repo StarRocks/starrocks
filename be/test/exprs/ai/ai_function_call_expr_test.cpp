@@ -1149,8 +1149,8 @@ std::vector<AIOverloadCase> ai_overload_cases() {
             {200010, "ai_similarity", similarity, {text, text, text, text}, Result::SIMILARITY, 3, 2},
             {200011, "ai_summarize", text, {text, text, text}, Result::STRING, 2, 1},
             {200012, "ai_filter", boolean, {text, text, text, text}, Result::BOOLEAN, 3, 2},
-            {200002, "ai_embed", TYPE_ARRAY_FLOAT, {text, text, text, options}, Result::EMBEDDING, 2, 1},
-            {200003, "ai_embed", TYPE_ARRAY_FLOAT, {file, text, text, options}, Result::EMBEDDING, 2, 1},
+            {200002, "ai_embed", TYPE_ARRAY_FLOAT_DESC, {text, text, text, options}, Result::EMBEDDING, 2, 1},
+            {200003, "ai_embed", TYPE_ARRAY_FLOAT_DESC, {file, text, text, options}, Result::EMBEDDING, 2, 1},
     };
 }
 
@@ -1244,7 +1244,7 @@ TEST_F(AIFunctionCallExprTest, FileEmbeddingIsNotAStringCastAndEnforcesInputLimi
     auto files = FileColumn::create();
     files->append_datum(FileDatumBuilder::make({}, {}, {}, Slice("image/png"), {}, Slice(png)));
     ObjectPool pool;
-    auto wire = make_extended_ai_expression(200003, "ai_embed", TYPE_ARRAY_FLOAT, {TypeDescriptor(TYPE_FILE)});
+    auto wire = make_extended_ai_expression(200003, "ai_embed", TYPE_ARRAY_FLOAT_DESC, {TypeDescriptor(TYPE_FILE)});
     auto created = AIFunctionCallExpr::create(&pool, wire.nodes.front());
     ASSERT_TRUE(created.ok()) << created.status();
     auto* expression = created.value();
@@ -1302,7 +1302,7 @@ TEST_F(AIFunctionCallExprTest, MalformedInlineFilesFailOnlyTheirOwnRows) {
     files->append_datum(FileDatumBuilder::make({}, {}, {}, {}, {}, Slice("not-an-image")));
     files->append_datum(FileDatumBuilder::make({}, {}, {}, {}, {}, Slice(png)));
     ObjectPool pool;
-    auto wire = make_extended_ai_expression(200003, "ai_embed", TYPE_ARRAY_FLOAT, {TypeDescriptor(TYPE_FILE)});
+    auto wire = make_extended_ai_expression(200003, "ai_embed", TYPE_ARRAY_FLOAT_DESC, {TypeDescriptor(TYPE_FILE)});
     auto created = AIFunctionCallExpr::create(&pool, wire.nodes.front());
     ASSERT_TRUE(created.ok()) << created.status();
     auto* expression = created.value();
@@ -1778,7 +1778,7 @@ TEST_F(AIFunctionCallExprTest, OpenValidatesNativeStringAndJsonArrayCasts) {
 
 TEST_F(AIFunctionCallExprTest, EmbeddingOptionsCannotOverrideProviderInput) {
     ObjectPool pool;
-    auto wire = make_extended_ai_expression(200002, "ai_embed", TYPE_ARRAY_FLOAT,
+    auto wire = make_extended_ai_expression(200002, "ai_embed", TYPE_ARRAY_FLOAT_DESC,
                                             {varchar_type(), varchar_type(), varchar_type(), options_type()});
     auto created = AIFunctionCallExpr::create(&pool, wire.nodes.front());
     ASSERT_TRUE(created.ok()) << created.status();
@@ -1801,7 +1801,7 @@ TEST_F(AIFunctionCallExprTest, EmbeddingOptionsCannotOverrideProviderInput) {
 
 TEST_F(AIFunctionCallExprTest, CapabilityAndResultKindMatchTheDescriptor) {
     ObjectPool pool;
-    auto embedding = make_extended_ai_expression(200002, "ai_embed", TYPE_ARRAY_FLOAT, {varchar_type()});
+    auto embedding = make_extended_ai_expression(200002, "ai_embed", TYPE_ARRAY_FLOAT_DESC, {varchar_type()});
     auto created = AIFunctionCallExpr::create(&pool, embedding.nodes.front());
     ASSERT_TRUE(created.ok());
     EXPECT_EQ(AICapability::EMBEDDING, created.value()->capability());

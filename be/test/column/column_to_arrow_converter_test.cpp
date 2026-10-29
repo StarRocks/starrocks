@@ -512,7 +512,7 @@ void convert_to_arrow(const TypeDescriptor& type_desc, const ColumnPtr& column,
 }
 
 TEST_F(StarRocksColumnToArrowTest, testArrayColumn) {
-    auto column = ColumnHelper::create_column(TYPE_ARRAY_INT, false, false, 0, false);
+    auto column = ColumnHelper::create_column(TYPE_ARRAY_INT_DESC, false, false, 0, false);
 
     // [1, 2, 3]
     column->append_datum(DatumArray{1, 2, 3});
@@ -526,14 +526,14 @@ TEST_F(StarRocksColumnToArrowTest, testArrayColumn) {
     auto memory_pool = arrow::MemoryPool::CreateDefault();
     std::shared_ptr<arrow::DataType> arrow_type = arrow::list(arrow::int32());
     std::shared_ptr<arrow::Array> array;
-    convert_to_arrow(TYPE_ARRAY_INT, column, arrow_type, memory_pool.get(), &array);
+    convert_to_arrow(TYPE_ARRAY_INT_DESC, column, arrow_type, memory_pool.get(), &array);
 
     auto s = arrow::ArrayFromJSON(arrow_type, "[[1, 2, 3], [4, null, 5, 6], [], [null, null]]");
     ASSERT_TRUE(s->Equals(array));
 }
 
 TEST_F(StarRocksColumnToArrowTest, testNullableArrayColumn) {
-    auto column = ColumnHelper::create_column(TYPE_ARRAY_INT, true, false, 0, false);
+    auto column = ColumnHelper::create_column(TYPE_ARRAY_INT_DESC, true, false, 0, false);
 
     // [1, 2, 3]
     column->append_datum(DatumArray{1, 2, 3});
@@ -549,7 +549,7 @@ TEST_F(StarRocksColumnToArrowTest, testNullableArrayColumn) {
     auto memory_pool = arrow::MemoryPool::CreateDefault();
     std::shared_ptr<arrow::DataType> arrow_type = arrow::list(arrow::int32());
     std::shared_ptr<arrow::Array> array;
-    convert_to_arrow(TYPE_ARRAY_INT, column, arrow_type, memory_pool.get(), &array);
+    convert_to_arrow(TYPE_ARRAY_INT_DESC, column, arrow_type, memory_pool.get(), &array);
 
     std::shared_ptr<arrow::Array> expect_array;
     auto s = arrow::ArrayFromJSON(arrow_type, "[[1, 2, 3], null, [4, null, 5, 6], [], [null, null]]");

@@ -533,7 +533,7 @@ TEST_P(CSVScannerTest, test_nested_array_of_int) {
     range.__set_num_of_columns_from_file(1);
     ranges.push_back(range);
 
-    auto scanner = create_csv_scanner({TYPE_ARRAY_ARRAY_INT}, ranges);
+    auto scanner = create_csv_scanner({TYPE_ARRAY_ARRAY_INT_DESC}, ranges);
     EXPECT_NE(scanner, nullptr);
 
     Status st = scanner->open();

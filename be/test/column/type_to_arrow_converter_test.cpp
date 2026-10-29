@@ -35,7 +35,7 @@ TEST(TypeToArrowConverterTest, MapsScalarAndNestedTypes) {
     EXPECT_EQ(20, decimal_type->precision());
     EXPECT_EQ(4, decimal_type->scale());
 
-    ASSERT_OK(convert_to_arrow_type(TYPE_ARRAY_BIGINT, &type));
+    ASSERT_OK(convert_to_arrow_type(TYPE_ARRAY_BIGINT_DESC, &type));
     ASSERT_EQ(arrow::Type::LIST, type->id());
     auto list_type = std::static_pointer_cast<arrow::ListType>(type);
     EXPECT_EQ(arrow::Type::INT64, list_type->value_type()->id());
