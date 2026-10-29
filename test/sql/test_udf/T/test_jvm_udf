@@ -1,4 +1,4 @@
--- name: test_jvm_udf @no_arrow_flight_sql
+-- name: test_jvm_udf @no_arrow_flight_sql @slow
 
 set enable_group_execution = true;
 
