@@ -655,11 +655,9 @@ TEST_F(JsonScannerTest, test_invalid_json_path) {
 
 TEST_F(JsonScannerTest, test_one_level_array) {
     std::vector<TypeDescriptor> types;
-    const TypeDescriptor& t1 = TYPE_ARRAY_VARCHAR;
-    types.emplace_back(t1);
+    types.emplace_back(TYPE_ARRAY_VARCHAR);
 
-    const TypeDescriptor& t2 = TYPE_ARRAY_INT;
-    types.emplace_back(t2);
+    types.emplace_back(TYPE_ARRAY_INT);
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
@@ -784,8 +782,7 @@ TEST_F(JsonScannerTest, test_invalid_nested_level1) {
 TEST_F(JsonScannerTest, test_invalid_nested_level2) {
     // the nested level in schema is less than json
     std::vector<TypeDescriptor> types;
-    const TypeDescriptor& t1 = TYPE_ARRAY_LARGEINT;
-    types.emplace_back(t1);
+    types.emplace_back(TYPE_ARRAY_LARGEINT);
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;

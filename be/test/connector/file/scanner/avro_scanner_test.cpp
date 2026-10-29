@@ -824,8 +824,7 @@ TEST_F(AvroScannerTest, test_array) {
     types.emplace_back(TYPE_BOOLEAN);
     types.emplace_back(TYPE_BIGINT);
     types.emplace_back(TYPE_DOUBLE);
-    const TypeDescriptor& t = TYPE_ARRAY_BIGINT;
-    types.emplace_back(t);
+    types.emplace_back(TYPE_ARRAY_BIGINT);
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
@@ -912,8 +911,7 @@ TEST_F(AvroScannerTest, test_complex_schema) {
     std::vector<TypeDescriptor> types;
     types.emplace_back(TypeDescriptor::create_varchar_type(20));
     types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    const TypeDescriptor& t = TYPE_ARRAY_VARCHAR;
-    types.emplace_back(t);
+    types.emplace_back(TYPE_ARRAY_VARCHAR);
     types.emplace_back(TypeDescriptor::create_varchar_type(20));
 
     std::vector<TBrokerRangeDesc> ranges;
@@ -1102,8 +1100,7 @@ TEST_F(AvroScannerTest, test_complex_schema_null_data) {
     std::vector<TypeDescriptor> types;
     types.emplace_back(TypeDescriptor::create_varchar_type(20));
     types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    const TypeDescriptor& t = TYPE_ARRAY_VARCHAR;
-    types.emplace_back(t);
+    types.emplace_back(TYPE_ARRAY_VARCHAR);
     types.emplace_back(TypeDescriptor::create_varchar_type(20));
 
     std::vector<TBrokerRangeDesc> ranges;
@@ -1589,8 +1586,7 @@ TEST_F(AvroScannerTest, test_array_with_boolean) {
     ASSERT_TRUE(write_avro_data(avro_helper, data_path).ok());
 
     std::vector<TypeDescriptor> types;
-    const TypeDescriptor& t = TYPE_ARRAY_BOOLEAN;
-    types.emplace_back(t);
+    types.emplace_back(TYPE_ARRAY_BOOLEAN);
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
@@ -1659,8 +1655,7 @@ TEST_F(AvroScannerTest, test_array_of_nullable_string) {
         EXPECT_TRUE(write_avro_data(avro_helper, data_path).ok());
 
         std::vector<TypeDescriptor> types;
-        const TypeDescriptor& t = TYPE_ARRAY_VARCHAR;
-        types.emplace_back(t);
+        types.emplace_back(TYPE_ARRAY_VARCHAR);
 
         std::vector<TBrokerRangeDesc> ranges;
         TBrokerRangeDesc range;

@@ -444,20 +444,18 @@ PARALLEL_TEST(VariantColumnMergerTest, merge_shredded_array_conflict_hoist_varia
     auto src0_metadata = BinaryColumn::create();
     auto src0_remain = BinaryColumn::create();
     append_primitive_int8_row(src0_metadata.get(), src0_remain.get(), 1);
-    const TypeDescriptor& src0_array_type = TYPE_ARRAY_BIGINT;
     MutableColumns src0_typed;
     src0_typed.emplace_back(build_nullable_array_int64_column({{10, 20}}, {0}));
-    src0->set_shredded_columns({"a"}, {src0_array_type}, std::move(src0_typed), std::move(src0_metadata),
+    src0->set_shredded_columns({"a"}, {TYPE_ARRAY_BIGINT}, std::move(src0_typed), std::move(src0_metadata),
                                std::move(src0_remain));
 
     auto src1 = VariantColumn::create();
     auto src1_metadata = BinaryColumn::create();
     auto src1_remain = BinaryColumn::create();
     append_primitive_int8_row(src1_metadata.get(), src1_remain.get(), 2);
-    const TypeDescriptor& src1_array_type = TYPE_ARRAY_DOUBLE;
     MutableColumns src1_typed;
     src1_typed.emplace_back(build_nullable_array_double_column({{30.5}}, {0}));
-    src1->set_shredded_columns({"a"}, {src1_array_type}, std::move(src1_typed), std::move(src1_metadata),
+    src1->set_shredded_columns({"a"}, {TYPE_ARRAY_DOUBLE}, std::move(src1_typed), std::move(src1_metadata),
                                std::move(src1_remain));
 
     Columns inputs{src0, src1};
@@ -476,10 +474,9 @@ PARALLEL_TEST(VariantColumnMergerTest, merge_shredded_array_nonarray_conflict_ho
     auto src0_metadata = BinaryColumn::create();
     auto src0_remain = BinaryColumn::create();
     append_primitive_int8_row(src0_metadata.get(), src0_remain.get(), 1);
-    const TypeDescriptor& src0_array_type = TYPE_ARRAY_BIGINT;
     MutableColumns src0_typed;
     src0_typed.emplace_back(build_nullable_array_int64_column({{10, 20}}, {0}));
-    src0->set_shredded_columns({"a"}, {src0_array_type}, std::move(src0_typed), std::move(src0_metadata),
+    src0->set_shredded_columns({"a"}, {TYPE_ARRAY_BIGINT}, std::move(src0_typed), std::move(src0_metadata),
                                std::move(src0_remain));
 
     auto src1 = VariantColumn::create();

@@ -27,10 +27,9 @@ namespace starrocks::csv {
 // NOLINTNEXTLINE
 TEST(ArrayConverterTest, test_read_string01) {
     // ARRAY<TINYINT>
-    const TypeDescriptor& t = TYPE_ARRAY_TINYINT;
 
-    auto conv = csv::get_converter(t, false);
-    auto col = ColumnHelper::create_column(t, false);
+    auto conv = csv::get_converter(TYPE_ARRAY_TINYINT, false);
+    auto col = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, false);
 
     EXPECT_TRUE(conv->read_string(col.get(), "[]", Converter::Options()));
     EXPECT_TRUE(conv->read_string(col.get(), "[10]", Converter::Options()));
@@ -57,10 +56,9 @@ TEST(ArrayConverterTest, test_read_string01) {
 // NOLINTNEXTLINE
 TEST(ArrayConverterTest, test_read_string02) {
     // ARRAY<STRING>
-    const TypeDescriptor& t = TYPE_ARRAY_VARCHAR;
 
-    auto conv = csv::get_converter(t, false);
-    auto col = ColumnHelper::create_column(t, false);
+    auto conv = csv::get_converter(TYPE_ARRAY_VARCHAR, false);
+    auto col = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
 
     EXPECT_TRUE(conv->read_string(col.get(), "[]", Converter::Options()));
     EXPECT_TRUE(conv->read_string(col.get(), "[\"apple\",\"banana\",null]", Converter::Options()));
@@ -78,10 +76,9 @@ TEST(ArrayConverterTest, test_read_string02) {
 // NOLINTNEXTLINE
 TEST(ArrayConverterTest, test_read_string03) {
     // ARRAY<STRING>
-    const TypeDescriptor& t = TYPE_ARRAY_VARCHAR;
 
-    auto conv = csv::get_converter(t, false);
-    auto col = ColumnHelper::create_column(t, false);
+    auto conv = csv::get_converter(TYPE_ARRAY_VARCHAR, false);
+    auto col = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
 
     EXPECT_TRUE(conv->read_string(col.get(), "[\"a,b,c\",\"\",\"I\"\"m\"]", Converter::Options()));
 
@@ -96,10 +93,9 @@ TEST(ArrayConverterTest, test_read_string03) {
 // NOLINTNEXTLINE
 TEST(ArrayConverterTest, test_read_string04) {
     // ARRAY<STRING>
-    const TypeDescriptor& t = TYPE_ARRAY_VARCHAR;
 
-    auto conv = csv::get_converter(t, false);
-    auto col = ColumnHelper::create_column(t, false);
+    auto conv = csv::get_converter(TYPE_ARRAY_VARCHAR, false);
+    auto col = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
 
     EXPECT_FALSE(conv->read_string(col.get(), "[apple,banana]", Converter::Options()));
     EXPECT_FALSE(conv->read_string(col.get(), "[\"banana\"", Converter::Options()));
@@ -110,10 +106,9 @@ TEST(ArrayConverterTest, test_read_string04) {
 // NOLINTNEXTLINE
 TEST(ArrayConverterTest, test_read_string05) {
     // ARRAY<ARRAY<STRING>>
-    const TypeDescriptor& t = TYPE_ARRAY_ARRAY_VARCHAR;
 
-    auto conv = csv::get_converter(t, false);
-    auto col = ColumnHelper::create_column(t, false);
+    auto conv = csv::get_converter(TYPE_ARRAY_ARRAY_VARCHAR, false);
+    auto col = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_VARCHAR, false);
 
     EXPECT_TRUE(
             conv->read_string(col.get(), "[[],[null],[\"apple\",null],[\"banana\",\"pear\"]]", Converter::Options()));
@@ -143,10 +138,9 @@ TEST(ArrayConverterTest, test_read_string05) {
 // NOLINTNEXTLINE
 TEST(ArrayConverterTest, test_read_string06) {
     // ARRAY<DATE>
-    const TypeDescriptor& t = TYPE_ARRAY_DATE;
 
-    auto conv = csv::get_converter(t, false);
-    auto col = ColumnHelper::create_column(t, false);
+    auto conv = csv::get_converter(TYPE_ARRAY_DATE, false);
+    auto col = ColumnHelper::create_column(TYPE_ARRAY_DATE, false);
 
     EXPECT_TRUE(conv->read_string(col.get(), "[\"1990-11-25\",\"2021-02-22\"]", Converter::Options()));
     EXPECT_FALSE(conv->read_string(col.get(), "[1990-11-25,2021-02-22]", Converter::Options()));
@@ -160,7 +154,6 @@ TEST(ArrayConverterTest, test_read_string06) {
 // NOLINTNEXTLINE
 TEST(ArrayConverterTest, test_hive_read_string01) {
     // ARRAY<TINYINT>
-    const TypeDescriptor& t = TYPE_ARRAY_TINYINT;
 
     auto options = Converter::Options();
     options.array_format_type = ArrayFormatType::kHive;
@@ -168,8 +161,8 @@ TEST(ArrayConverterTest, test_hive_read_string01) {
     options.array_hive_nested_level = 1;
     options.array_hive_mapkey_delimiter = '\003';
 
-    auto conv = csv::get_converter(t, false);
-    auto col = ColumnHelper::create_column(t, false);
+    auto conv = csv::get_converter(TYPE_ARRAY_TINYINT, false);
+    auto col = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, false);
 
     EXPECT_TRUE(conv->read_string(col.get(), "", options));
     EXPECT_TRUE(conv->read_string(col.get(), "10", options));
@@ -196,7 +189,6 @@ TEST(ArrayConverterTest, test_hive_read_string01) {
 // NOLINTNEXTLINE
 TEST(ArrayConverterTest, test_hive_read_string02) {
     // ARRAY<STRING>
-    const TypeDescriptor& t = TYPE_ARRAY_VARCHAR;
 
     auto options = Converter::Options();
     options.array_format_type = ArrayFormatType::kHive;
@@ -204,8 +196,8 @@ TEST(ArrayConverterTest, test_hive_read_string02) {
     options.array_hive_nested_level = 1;
     options.array_hive_mapkey_delimiter = '\003';
 
-    auto conv = csv::get_converter(t, false);
-    auto col = ColumnHelper::create_column(t, false);
+    auto conv = csv::get_converter(TYPE_ARRAY_VARCHAR, false);
+    auto col = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
 
     EXPECT_TRUE(conv->read_string(col.get(), "", options));
     EXPECT_TRUE(conv->read_string(col.get(), "apple_banana_\\N", options));
@@ -223,7 +215,6 @@ TEST(ArrayConverterTest, test_hive_read_string02) {
 // NOLINTNEXTLINE
 TEST(ArrayConverterTest, test_hive_read_string03) {
     // ARRAY<ARRAY<STRING>>
-    const TypeDescriptor& t = TYPE_ARRAY_ARRAY_VARCHAR;
 
     auto options = Converter::Options();
     options.array_format_type = ArrayFormatType::kHive;
@@ -231,8 +222,8 @@ TEST(ArrayConverterTest, test_hive_read_string03) {
     options.array_hive_nested_level = 1;
     options.array_hive_mapkey_delimiter = ':';
 
-    auto conv = csv::get_converter(t, false);
-    auto col = ColumnHelper::create_column(t, false);
+    auto conv = csv::get_converter(TYPE_ARRAY_ARRAY_VARCHAR, false);
+    auto col = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_VARCHAR, false);
 
     // [[],[null],["apple",null],["banana","pear"]]
     EXPECT_TRUE(conv->read_string(col.get(), "_\\N_apple:\\N_banana:pear", options));
@@ -367,10 +358,9 @@ TEST(ArrayConverterTest, test_hive_read_string05) {
     }
     {
         // ARRAY<VARCHAR>
-        const TypeDescriptor& t = TYPE_ARRAY_VARCHAR;
 
-        auto conv = csv::get_converter(t, false);
-        auto col = ColumnHelper::create_column(t, false);
+        auto conv = csv::get_converter(TYPE_ARRAY_VARCHAR, false);
+        auto col = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
 
         // ["null", "a", null]
         EXPECT_TRUE(conv->read_string(col.get(), "null\002a\002\\N", options));
@@ -383,10 +373,9 @@ TEST(ArrayConverterTest, test_hive_read_string05) {
     }
     {
         // ARRAY<VARCHAR>
-        const TypeDescriptor& t = TYPE_ARRAY_VARCHAR;
 
-        auto conv = csv::get_converter(t, false);
-        auto col = ColumnHelper::create_column(t, false);
+        auto conv = csv::get_converter(TYPE_ARRAY_VARCHAR, false);
+        auto col = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
 
         // []
         EXPECT_TRUE(conv->read_string(col.get(), "", options));
@@ -435,10 +424,9 @@ TEST(ArrayConverterTest, test_get_collection_delimiter) {
 // NOLINTNEXTLINE
 TEST(ArrayConverterTest, test_write_string) {
     // ARRAY<DATE>
-    const TypeDescriptor& t = TYPE_ARRAY_DATE;
 
-    auto conv = csv::get_converter(t, false);
-    auto col = ColumnHelper::create_column(t, false);
+    auto conv = csv::get_converter(TYPE_ARRAY_DATE, false);
+    auto col = ColumnHelper::create_column(TYPE_ARRAY_DATE, false);
 
     formats::FormattedOutputStreamString buff;
     col->append_datum(DatumArray{});
