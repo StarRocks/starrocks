@@ -178,6 +178,15 @@ This topic introduces the following types of BE configurations:
 - Description: Gates aggregation hash-table software prefetch on L2 residency. Prefetch is enabled only once the bucket array spills L2, that is, when `bucket_count * slot_bytes >= L2_size * agg_prefetch_l2_ratio`, where the L2 size is detected at runtime (falling back to 1 MiB if detection fails). Below this point the table is L2-resident and prefetching is a net loss. Lower the ratio on contended deployments that run many drivers per core, where the effective per-table share of L2 is smaller than the nominal per-core size; raising it above 1.0 delays prefetch until the table is well past L2. See also `agg_hash_map_prefetch_dist`.
 - Introduced in: -
 
+### arrow_io_thread_pool_size
+
+- Default: 0
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The number of threads in the process-wide I/O thread pool of Apache Arrow, which runs Arrow's asynchronous I/O tasks. `0` keeps the size Arrow chooses at startup: the value of the environment variable `ARROW_IO_THREADS` if it is a positive integer, and 8 otherwise. A value greater than `0` overrides `ARROW_IO_THREADS`. Valid range: [0, 32768]. A change takes effect immediately without a restart: growing the pool starts threads for queued tasks at once, and shrinking it lets each excess thread exit after it finishes its current task. Setting the value back to `0` restores the size Arrow chose at startup. If the value in the configuration file is out of range, the BE logs a warning and keeps the size Arrow chose.
+- Introduced in: -
+
 ### clear_udf_cache_when_start
 
 - Default: false
