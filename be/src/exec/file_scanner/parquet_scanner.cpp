@@ -499,26 +499,7 @@ Status ParquetScanner::open_next_reader() {
             return st;
         }
         _conv_ctx.current_file = file->filename();
-<<<<<<< HEAD:be/src/exec/file_scanner/parquet_scanner.cpp
-        auto parquet_file = std::make_shared<ParquetChunkFile>(file, 0, _counter);
-=======
-        // Seed the Parquet rejected-record anchor fields so any
-        // type-conversion error this scanner fires can carry the
-        // `(file, row_in_file, file_size, file_mtime_ms)` tuple the
-        // `parquet_read_rows()` TVF needs to rehydrate the full row on
-        // replay. Reset per file.
-        _conv_ctx.current_batch_first_row_in_file = -1;
-        // TBrokerRangeDesc.modification_time is already in milliseconds:
-        // HiveConnectorScanRangeSource pipes FileStatus.getModificationTime()
-        // into it verbatim, and Hadoop's FileStatus specifies milliseconds.
-        // Consumers elsewhere in BE (cache_input_stream, datacache_options,
-        // page_reader) treat it the same way. Previously this code
-        // multiplied by 1000, which would have produced microseconds and
-        // broken any future TVF that compares the anchor's mtime against
-        // the live file's mtime.
-        _conv_ctx.file_mtime_ms = range_desc.__isset.modification_time ? range_desc.modification_time : -1;
         auto parquet_file = std::make_shared<ParquetChunkFile>(file, 0, _counter, _state);
->>>>>>> 84ecaf2 ([BugFix][RB-647] Read pre-buffered Parquet ranges on the scan thread (#81771)):be/src/connector/file/scanner/parquet_scanner.cpp
         auto parquet_reader = std::make_shared<ParquetReaderWrap>(std::move(parquet_file), _num_of_columns_from_file,
                                                                   range_desc.start_offset, range_desc.size);
         if (_scan_range.params.__isset.flexible_column_mapping && _scan_range.params.flexible_column_mapping) {
