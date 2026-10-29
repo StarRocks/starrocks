@@ -375,14 +375,12 @@ PARALLEL_TEST(MapFunctionsTest, test_map_filter_int_nullable) {
         map_column_not_nullable->append_datum(DatumMap());
     }
 
-    TypeDescriptor TYPE_ARRAY_BOOLEAN = array_type(TYPE_BOOLEAN);
-
     // [null, true, false]
     // []
     // [false]
     // [NULL]
     // [true]
-    MutableColumnPtr bool_array_not_nullable = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
+    MutableColumnPtr bool_array_not_nullable = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN_DESC, false);
     bool_array_not_nullable->append_datum(DatumArray{Datum(), true, false});
     bool_array_not_nullable->append_datum(DatumArray{});
     bool_array_not_nullable->append_datum(DatumArray{false});
@@ -394,7 +392,7 @@ PARALLEL_TEST(MapFunctionsTest, test_map_filter_int_nullable) {
     // [false]
     // [null]
     // [false, null]
-    MutableColumnPtr bool_array_nullable = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, true);
+    MutableColumnPtr bool_array_nullable = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN_DESC, true);
     bool_array_nullable->append_datum(DatumArray{Datum(), true, false});
     bool_array_nullable->append_datum(Datum{});
     bool_array_nullable->append_datum(DatumArray{false});

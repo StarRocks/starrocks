@@ -155,8 +155,7 @@ static MutableColumnPtr build_nullable_variant_column(const std::vector<VariantR
 
 static MutableColumnPtr build_nullable_int_array_column(const std::vector<DatumArray>& values,
                                                         const std::vector<uint8_t>& is_null) {
-    TypeDescriptor array_type = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_BIGINT));
-    auto col = ColumnHelper::create_column(array_type, true);
+    auto col = ColumnHelper::create_column(TYPE_ARRAY_BIGINT_DESC, true);
     DCHECK_EQ(values.size(), is_null.size());
     for (size_t i = 0; i < values.size(); ++i) {
         if (is_null[i] != 0) {
@@ -1078,8 +1077,7 @@ TEST_F(VariantFunctionsTest, variant_typeof_typed_only_array_under_key_object) {
 
     MutableColumns typed;
     typed.emplace_back(build_nullable_int_array_column({DatumArray{Datum(int64_t(1)), Datum(int64_t(2))}}, {0}));
-    variant_column->set_shredded_columns({"arr_root"}, {TypeDescriptor::create_array_type(TypeDescriptor(TYPE_BIGINT))},
-                                         std::move(typed), nullptr, nullptr);
+    variant_column->set_shredded_columns({"arr_root"}, {TYPE_ARRAY_BIGINT_DESC}, std::move(typed), nullptr, nullptr);
 
     Columns columns{variant_column};
     auto result = VariantFunctions::variant_typeof(ctx.get(), columns);
@@ -1185,8 +1183,7 @@ TEST_F(VariantFunctionsTest, get_variant_int_typed_only_array_non_root_index) {
 
     MutableColumns typed;
     typed.emplace_back(build_nullable_int_array_column({DatumArray{Datum(int64_t(1)), Datum(int64_t(2))}}, {0}));
-    variant_column->set_shredded_columns({"root"}, {TypeDescriptor::create_array_type(TypeDescriptor(TYPE_BIGINT))},
-                                         std::move(typed), nullptr, nullptr);
+    variant_column->set_shredded_columns({"root"}, {TYPE_ARRAY_BIGINT_DESC}, std::move(typed), nullptr, nullptr);
 
     auto path_column = BinaryColumn::create();
     path_column->append("$.root[1]");
@@ -1206,8 +1203,7 @@ TEST_F(VariantFunctionsTest, get_variant_int_typed_only_array_non_root_index_out
 
     MutableColumns typed;
     typed.emplace_back(build_nullable_int_array_column({DatumArray{Datum(int64_t(1)), Datum(int64_t(2))}}, {0}));
-    variant_column->set_shredded_columns({"root"}, {TypeDescriptor::create_array_type(TypeDescriptor(TYPE_BIGINT))},
-                                         std::move(typed), nullptr, nullptr);
+    variant_column->set_shredded_columns({"root"}, {TYPE_ARRAY_BIGINT_DESC}, std::move(typed), nullptr, nullptr);
 
     auto path_column = BinaryColumn::create();
     path_column->append("$.root[9]");

@@ -35,6 +35,7 @@
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
 #include "testutil/column_test_helper.h"
+#include "testutil/type_test_helper.h"
 
 namespace starrocks::formats {
 
@@ -834,7 +835,7 @@ TEST_F(OrcFileWriterTest, TestWriteArrayNotNull) {
 TEST_F(OrcFileWriterTest, TestWriteNestedArray) {
     std::vector<TypeDescriptor> type_descs;
     auto type_int_array_array = TypeDescriptor::from_logical_type(TYPE_ARRAY);
-    type_int_array_array.children.push_back(TYPE_INT_ARRAY_DESC);
+    type_int_array_array.children.push_back(TYPE_ARRAY_INT_DESC);
     type_descs.push_back(type_int_array_array);
 
     auto column_names = _make_type_names(type_descs);

@@ -21,6 +21,7 @@
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
+#include "testutil/type_test_helper.h"
 
 #ifndef __clang__
 DIAGNOSTIC_PUSH
@@ -88,9 +89,6 @@ TupleDescriptor* ScrollParserTest::_create_tuple_desc(SlotDesc* descs) {
 TEST_F(ScrollParserTest, ArrayTest) {
     std::unique_ptr<ScrollParser> scroll_parser = std::make_unique<ScrollParser>(false);
 
-    TypeDescriptor t(TYPE_ARRAY);
-    t.children.emplace_back(TYPE_TINYINT);
-
     auto get_parsed_column = [&scroll_parser](const rapidjson::Document& document, const TypeDescriptor& t,
                                               bool pure_doc_value) {
         MutableColumnPtr column = ColumnHelper::create_column(t, true);
@@ -123,8 +121,8 @@ TEST_F(ScrollParserTest, ArrayTest) {
         rapidjson::Document document;
         document.Parse(R"({"_source":{"array":1},"fields":{"array":[1]}})");
 
-        auto doc_column = get_parsed_column(document, t, true);
-        auto source_column = get_parsed_column(document, t, false);
+        auto doc_column = get_parsed_column(document, TYPE_ARRAY_TINYINT_DESC, true);
+        auto source_column = get_parsed_column(document, TYPE_ARRAY_TINYINT_DESC, false);
 
         validator(doc_column);
         validator(source_column);
@@ -151,8 +149,8 @@ TEST_F(ScrollParserTest, ArrayTest) {
         rapidjson::Document document;
         document.Parse(R"({"_source":{"array":[1,2,3]},"fields":{"array":[1,2,3]}})");
 
-        auto doc_column = get_parsed_column(document, t, true);
-        auto source_column = get_parsed_column(document, t, false);
+        auto doc_column = get_parsed_column(document, TYPE_ARRAY_TINYINT_DESC, true);
+        auto source_column = get_parsed_column(document, TYPE_ARRAY_TINYINT_DESC, false);
 
         validator(doc_column);
         validator(source_column);
@@ -179,8 +177,8 @@ TEST_F(ScrollParserTest, ArrayTest) {
         rapidjson::Document document;
         document.Parse(R"({"_source":{"array":[1,[2,3]]},"fields":{"array":[1,2,3]}})");
 
-        auto doc_column = get_parsed_column(document, t, true);
-        auto source_column = get_parsed_column(document, t, false);
+        auto doc_column = get_parsed_column(document, TYPE_ARRAY_TINYINT_DESC, true);
+        auto source_column = get_parsed_column(document, TYPE_ARRAY_TINYINT_DESC, false);
 
         validator(doc_column);
         validator(source_column);
@@ -206,8 +204,8 @@ TEST_F(ScrollParserTest, ArrayTest) {
         rapidjson::Document document;
         document.Parse(R"({"_source":{"array":[1,null,2]},"fields":{"array":[1,2]}})");
 
-        auto doc_column = get_parsed_column(document, t, true);
-        auto source_column = get_parsed_column(document, t, false);
+        auto doc_column = get_parsed_column(document, TYPE_ARRAY_TINYINT_DESC, true);
+        auto source_column = get_parsed_column(document, TYPE_ARRAY_TINYINT_DESC, false);
 
         validator(doc_column);
         validator(source_column);
@@ -231,8 +229,8 @@ TEST_F(ScrollParserTest, ArrayTest) {
         rapidjson::Document document;
         document.Parse(R"({"_source":{"array":null},"fields":{"array":[]}})");
 
-        auto doc_column = get_parsed_column(document, t, true);
-        auto source_column = get_parsed_column(document, t, false);
+        auto doc_column = get_parsed_column(document, TYPE_ARRAY_TINYINT_DESC, true);
+        auto source_column = get_parsed_column(document, TYPE_ARRAY_TINYINT_DESC, false);
 
         validator(doc_column);
         validator(source_column);

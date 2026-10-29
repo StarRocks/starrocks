@@ -49,6 +49,7 @@
 #include "platform/llm/ai_provider.h"
 #include "platform/llm/openai_compatible_provider.h"
 #include "runtime/runtime_state.h"
+#include "testutil/type_test_helper.h"
 #include "types/json_value.h"
 #include "types/type_descriptor.h"
 
@@ -1130,7 +1131,6 @@ struct AIOverloadCase {
 std::vector<AIOverloadCase> ai_overload_cases() {
     const TypeDescriptor text = varchar_type();
     const TypeDescriptor strings = TypeDescriptor::create_array_type(text);
-    const TypeDescriptor embedding = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_FLOAT));
     const TypeDescriptor json(TYPE_JSON);
     const TypeDescriptor similarity(TYPE_FLOAT);
     const TypeDescriptor boolean(TYPE_BOOLEAN);
@@ -1149,8 +1149,8 @@ std::vector<AIOverloadCase> ai_overload_cases() {
             {200010, "ai_similarity", similarity, {text, text, text, text}, Result::SIMILARITY, 3, 2},
             {200011, "ai_summarize", text, {text, text, text}, Result::STRING, 2, 1},
             {200012, "ai_filter", boolean, {text, text, text, text}, Result::BOOLEAN, 3, 2},
-            {200002, "ai_embed", embedding, {text, text, text, options}, Result::EMBEDDING, 2, 1},
-            {200003, "ai_embed", embedding, {file, text, text, options}, Result::EMBEDDING, 2, 1},
+            {200002, "ai_embed", TYPE_ARRAY_FLOAT_DESC, {text, text, text, options}, Result::EMBEDDING, 2, 1},
+            {200003, "ai_embed", TYPE_ARRAY_FLOAT_DESC, {file, text, text, options}, Result::EMBEDDING, 2, 1},
     };
 }
 
@@ -1244,9 +1244,7 @@ TEST_F(AIFunctionCallExprTest, FileEmbeddingIsNotAStringCastAndEnforcesInputLimi
     auto files = FileColumn::create();
     files->append_datum(FileDatumBuilder::make({}, {}, {}, Slice("image/png"), {}, Slice(png)));
     ObjectPool pool;
-    auto wire = make_extended_ai_expression(200003, "ai_embed",
-                                            TypeDescriptor::create_array_type(TypeDescriptor(TYPE_FLOAT)),
-                                            {TypeDescriptor(TYPE_FILE)});
+    auto wire = make_extended_ai_expression(200003, "ai_embed", TYPE_ARRAY_FLOAT_DESC, {TypeDescriptor(TYPE_FILE)});
     auto created = AIFunctionCallExpr::create(&pool, wire.nodes.front());
     ASSERT_TRUE(created.ok()) << created.status();
     auto* expression = created.value();
@@ -1304,9 +1302,7 @@ TEST_F(AIFunctionCallExprTest, MalformedInlineFilesFailOnlyTheirOwnRows) {
     files->append_datum(FileDatumBuilder::make({}, {}, {}, {}, {}, Slice("not-an-image")));
     files->append_datum(FileDatumBuilder::make({}, {}, {}, {}, {}, Slice(png)));
     ObjectPool pool;
-    auto wire = make_extended_ai_expression(200003, "ai_embed",
-                                            TypeDescriptor::create_array_type(TypeDescriptor(TYPE_FLOAT)),
-                                            {TypeDescriptor(TYPE_FILE)});
+    auto wire = make_extended_ai_expression(200003, "ai_embed", TYPE_ARRAY_FLOAT_DESC, {TypeDescriptor(TYPE_FILE)});
     auto created = AIFunctionCallExpr::create(&pool, wire.nodes.front());
     ASSERT_TRUE(created.ok()) << created.status();
     auto* expression = created.value();
@@ -1782,8 +1778,7 @@ TEST_F(AIFunctionCallExprTest, OpenValidatesNativeStringAndJsonArrayCasts) {
 
 TEST_F(AIFunctionCallExprTest, EmbeddingOptionsCannotOverrideProviderInput) {
     ObjectPool pool;
-    auto wire = make_extended_ai_expression(200002, "ai_embed",
-                                            TypeDescriptor::create_array_type(TypeDescriptor(TYPE_FLOAT)),
+    auto wire = make_extended_ai_expression(200002, "ai_embed", TYPE_ARRAY_FLOAT_DESC,
                                             {varchar_type(), varchar_type(), varchar_type(), options_type()});
     auto created = AIFunctionCallExpr::create(&pool, wire.nodes.front());
     ASSERT_TRUE(created.ok()) << created.status();
@@ -1806,8 +1801,7 @@ TEST_F(AIFunctionCallExprTest, EmbeddingOptionsCannotOverrideProviderInput) {
 
 TEST_F(AIFunctionCallExprTest, CapabilityAndResultKindMatchTheDescriptor) {
     ObjectPool pool;
-    const auto embedding_type = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_FLOAT));
-    auto embedding = make_extended_ai_expression(200002, "ai_embed", embedding_type, {varchar_type()});
+    auto embedding = make_extended_ai_expression(200002, "ai_embed", TYPE_ARRAY_FLOAT_DESC, {varchar_type()});
     auto created = AIFunctionCallExpr::create(&pool, embedding.nodes.front());
     ASSERT_TRUE(created.ok());
     EXPECT_EQ(AICapability::EMBEDDING, created.value()->capability());

@@ -21,6 +21,7 @@
 #include "base/testutil/assert.h"
 #include "formats/parquet/column_reader.h"
 #include "formats/parquet/complex_column_reader.h"
+#include "testutil/type_test_helper.h"
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
 

@@ -757,13 +757,10 @@ PARALLEL_TEST(VecStringFunctionsTest, splitChinese) {
     }
 }
 
-TypeDescriptor array_type(const LogicalType& child_type);
-
 PARALLEL_TEST(VecStringFunctionsTest, str_to_map_v1) {
     // input array<string>
     int chunk_size = 7;
-    TypeDescriptor TYPE_ARRAY_VARCHAR = array_type(TYPE_VARCHAR);
-    auto array_str_null = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
+    auto array_str_null = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR_DESC, true);
     // []
     // NULL
     // ['NULL']
@@ -781,7 +778,7 @@ PARALLEL_TEST(VecStringFunctionsTest, str_to_map_v1) {
     string_column->append_datum("a:b,c:d");
     string_column->append_datum("a:1,b:2");
 
-    auto array_str_notnull = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
+    auto array_str_notnull = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR_DESC, false);
     array_str_notnull->append_datum(Datum(DatumArray{}));
     array_str_notnull->append_datum(Datum(DatumArray{Datum("中国:shang海")}));
     array_str_notnull->append_datum(Datum(DatumArray{Datum()}));
