@@ -210,6 +210,55 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Bytes
 - Description: Memory used by jit compiled function cache.
 
+## `jvm_heap_size_bytes`
+
+- Unit: Bytes
+- Type: Instantaneous
+- Labels: `type` (`used`, `committed`, or `max`)
+- Description: Heap memory of the JVM embedded in the BE process. `used` is the memory occupied by objects, `committed` is the memory the JVM has reserved from the operating system, and `max` is the maximum heap size. FE nodes export metrics with the same name for their own JVM; this entry describes the BE metric.
+  - The BE JVM metrics (all `jvm_*_size_bytes` metrics in this section) are exported only when the BE configuration item `enable_jvm_metrics` is `true` (default) and the environment variable `JAVA_HOME` is set when BE starts.
+  - The BE does not start a JVM to collect these metrics. All values stay `0` until a JVM is created in the BE process, for example by HDFS access, a JNI-based scanner, or a Java UDF.
+  - The values are refreshed every 15 seconds when the BE configuration item `enable_metric_calculator` is `true` (default), and when the metrics are scraped otherwise.
+  - The committed heap and non-heap memory is also counted in the `jvm` memory tracker of the BE when `enable_jvm_memory_tracker` is `true` (default).
+
+## `jvm_non_heap_size_bytes`
+
+- Unit: Bytes
+- Type: Instantaneous
+- Labels: `type` (`used` or `committed`)
+- Description: Non-heap memory of the JVM embedded in the BE process, such as Metaspace and the code cache. No `max` value is exported. See [`jvm_heap_size_bytes`](#jvm_heap_size_bytes) for when the BE JVM metrics are exported.
+
+## `jvm_old_size_bytes`
+
+- Unit: Bytes
+- Type: Instantaneous
+- Labels: `type` (`used`, `committed`, `max`, `peak_used`, or `peak_max`)
+- Description: Old generation memory pool of the JVM embedded in the BE process. See [`jvm_young_size_bytes`](#jvm_young_size_bytes) for the meaning of each `type` and the supported garbage collectors.
+
+## `jvm_perm_size_bytes`
+
+- Unit: Bytes
+- Type: Instantaneous
+- Labels: `type` (`used`, `committed`, `max`, `peak_used`, or `peak_max`)
+- Description: Metaspace (permanent generation on Java 7 and earlier) of the JVM embedded in the BE process. Metaspace has no defined maximum unless the JVM option `-XX:MaxMetaspaceSize` is set, so `max` and `peak_max` are usually `-1`. See [`jvm_young_size_bytes`](#jvm_young_size_bytes) for the meaning of each `type`.
+
+## `jvm_survivor_size_bytes`
+
+- Unit: Bytes
+- Type: Instantaneous
+- Labels: `type` (`used`, `committed`, `max`, `peak_used`, or `peak_max`)
+- Description: Survivor space memory pool of the JVM embedded in the BE process. With the default G1 collector, `max` and `peak_max` are `-1`. See [`jvm_young_size_bytes`](#jvm_young_size_bytes) for the meaning of each `type` and the supported garbage collectors.
+
+## `jvm_young_size_bytes`
+
+- Unit: Bytes
+- Type: Instantaneous
+- Labels: `type` (`used`, `committed`, `max`, `peak_used`, or `peak_max`)
+- Description: Young generation (Eden space) memory pool of the JVM embedded in the BE process. With the default G1 collector, `max` and `peak_max` are `-1`. See [`jvm_heap_size_bytes`](#jvm_heap_size_bytes) for when the BE JVM metrics are exported.
+  - `used`, `committed`, and `max` are the current usage of the pool. `peak_used` and `peak_max` come from the peak usage that the JVM records for the pool (`MemoryPoolMXBean.getPeakUsage()`): `peak_used` is the highest `used` value, and `peak_max` is the `max` field of that peak usage record. `peak_max` is not a separately tracked high-water mark of `max`, so use `max`, not `peak_max`, to monitor the capacity of the pool. The peak usage is recorded since the JVM started or since it was last reset. The BE never resets it, so it is reset only when the BE restarts.
+  - A `max` or `peak_max` of `-1` means that the pool has no defined maximum size. It does not indicate an error.
+  - `jvm_young_size_bytes`, `jvm_survivor_size_bytes`, and `jvm_old_size_bytes` are populated only when the JVM uses the Serial, Parallel, CMS, or G1 garbage collector, because they are matched by the memory pool names of these collectors. Under ZGC or Shenandoah, they stay `0`. `jvm_heap_size_bytes` and `jvm_non_heap_size_bytes` are not affected.
+
 ## `lake_compaction_failed`
 
 - Unit: Count

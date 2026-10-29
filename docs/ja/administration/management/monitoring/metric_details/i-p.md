@@ -210,6 +210,55 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 - 単位: バイト
 - 説明: JITコンパイルされた関数キャッシュによって使用されるメモリ。
 
+## `jvm_heap_size_bytes`
+
+- 単位: バイト
+- タイプ: 瞬時値
+- ラベル: `type` (`used`、`committed`、または `max`)
+- 説明: BE プロセスに組み込まれた JVM のヒープメモリ。`used` はオブジェクトが占有しているメモリ、`committed` は JVM がオペレーティングシステムから確保しているメモリ、`max` はヒープサイズの上限です。FE ノードも自身の JVM について同じ名前のメトリクスをエクスポートしますが、ここでは BE のメトリクスについて説明します。
+  - BE の JVM メトリクス (このセクションのすべての `jvm_*_size_bytes` メトリクス) は、BE 設定項目 `enable_jvm_metrics` が `true` (デフォルト) で、BE 起動時に環境変数 `JAVA_HOME` が設定されている場合にのみエクスポートされます。
+  - BE はこれらのメトリクスを収集するために JVM を起動しません。BE プロセス内で JVM が作成されるまで (たとえば HDFS へのアクセス、JNI ベースのスキャナー、Java UDF の使用時)、すべての値は `0` のままです。
+  - BE 設定項目 `enable_metric_calculator` が `true` (デフォルト) の場合、値は 15 秒ごとに更新されます。それ以外の場合は、メトリクスの取得時に更新されます。
+  - `enable_jvm_memory_tracker` が `true` (デフォルト) の場合、コミット済みのヒープメモリと非ヒープメモリは BE の `jvm` メモリトラッカーにも計上されます。
+
+## `jvm_non_heap_size_bytes`
+
+- 単位: バイト
+- タイプ: 瞬時値
+- ラベル: `type` (`used` または `committed`)
+- 説明: BE プロセスに組み込まれた JVM の非ヒープメモリ (Metaspace やコードキャッシュなど)。`max` の値はエクスポートされません。BE の JVM メトリクスがエクスポートされる条件については、[`jvm_heap_size_bytes`](#jvm_heap_size_bytes) を参照してください。
+
+## `jvm_old_size_bytes`
+
+- 単位: バイト
+- タイプ: 瞬時値
+- ラベル: `type` (`used`、`committed`、`max`、`peak_used`、または `peak_max`)
+- 説明: BE プロセスに組み込まれた JVM の Old 世代メモリプール。各 `type` の意味とサポートされるガベージコレクターについては、[`jvm_young_size_bytes`](#jvm_young_size_bytes) を参照してください。
+
+## `jvm_perm_size_bytes`
+
+- 単位: バイト
+- タイプ: 瞬時値
+- ラベル: `type` (`used`、`committed`、`max`、`peak_used`、または `peak_max`)
+- 説明: BE プロセスに組み込まれた JVM の Metaspace (Java 7 以前では Permanent 世代)。JVM オプション `-XX:MaxMetaspaceSize` が設定されていない限り Metaspace には上限が定義されていないため、`max` と `peak_max` は通常 `-1` です。各 `type` の意味については、[`jvm_young_size_bytes`](#jvm_young_size_bytes) を参照してください。
+
+## `jvm_survivor_size_bytes`
+
+- 単位: バイト
+- タイプ: 瞬時値
+- ラベル: `type` (`used`、`committed`、`max`、`peak_used`、または `peak_max`)
+- 説明: BE プロセスに組み込まれた JVM の Survivor 領域メモリプール。デフォルトの G1 コレクターを使用する場合、`max` と `peak_max` は `-1` です。各 `type` の意味とサポートされるガベージコレクターについては、[`jvm_young_size_bytes`](#jvm_young_size_bytes) を参照してください。
+
+## `jvm_young_size_bytes`
+
+- 単位: バイト
+- タイプ: 瞬時値
+- ラベル: `type` (`used`、`committed`、`max`、`peak_used`、または `peak_max`)
+- 説明: BE プロセスに組み込まれた JVM の Young 世代 (Eden 領域) メモリプール。デフォルトの G1 コレクターを使用する場合、`max` と `peak_max` は `-1` です。BE の JVM メトリクスがエクスポートされる条件については、[`jvm_heap_size_bytes`](#jvm_heap_size_bytes) を参照してください。
+  - `used`、`committed`、`max` はメモリプールの現在の使用状況です。`peak_used` と `peak_max` は、JVM がメモリプールについて記録するピーク使用状況 (`MemoryPoolMXBean.getPeakUsage()`) から取得されます。`peak_used` は `used` の最大値で、`peak_max` はそのピーク使用状況の記録に含まれる `max` フィールドです。`peak_max` は `max` の最大値を別途追跡したものではないため、メモリプールの容量を監視するには `peak_max` ではなく `max` を使用してください。ピーク使用状況は、JVM の起動時または最後にリセットされた時点から記録されます。BE はピーク使用状況をリセットしないため、リセットされるのは BE の再起動時だけです。
+  - `max` または `peak_max` が `-1` の場合、そのメモリプールにはサイズの上限が定義されていないことを意味します。エラーを示すものではありません。
+  - `jvm_young_size_bytes`、`jvm_survivor_size_bytes`、`jvm_old_size_bytes` はメモリプール名で照合されるため、JVM が Serial、Parallel、CMS、または G1 ガベージコレクターを使用している場合にのみ値が設定されます。ZGC または Shenandoah では `0` のままです。`jvm_heap_size_bytes` と `jvm_non_heap_size_bytes` は影響を受けません。
+
 ## `lake_compaction_failed`
 
 - 単位: 件数
