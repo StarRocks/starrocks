@@ -197,6 +197,16 @@ void PersistentIndexSstableFileset::for_each_sstable(
     }
 }
 
+bool PersistentIndexSstableFileset::any_sstable(
+        const std::function<bool(const PersistentIndexSstablePB&)>& pred) const {
+    for (const auto& [key_pair, sstable] : _sstable_map) {
+        if (pred(sstable->sstable_pb())) {
+            return true;
+        }
+    }
+    return _standalone_sstable != nullptr && pred(_standalone_sstable->sstable_pb());
+}
+
 void PersistentIndexSstableFileset::print_debug_info(std::stringstream& ss) {
     ss << " Fileset ID: " << _fileset_id.to_string();
     ss << " Number of sstables: " << _sstable_map.size();

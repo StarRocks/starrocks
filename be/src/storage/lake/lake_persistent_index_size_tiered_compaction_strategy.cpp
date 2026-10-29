@@ -30,6 +30,51 @@
 
 namespace starrocks::lake {
 
+namespace {
+
+struct FilesetInfo {
+    std::vector<int> sstable_indices;
+    int64_t total_size = 0;
+    UniqueId fileset_id;
+};
+
+// Group sstables by fileset_id, in list order. Sstables of skip_fileset_id, when given, are left out.
+Status group_filesets(const PersistentIndexSstableMetaPB& sstable_meta, const UniqueId* skip_fileset_id,
+                      std::vector<FilesetInfo>* filesets) {
+    std::unordered_map<UniqueId, size_t> fileset_id_to_index;
+    for (int i = 0; i < sstable_meta.sstables_size(); ++i) {
+        const auto& sstable_pb = sstable_meta.sstables(i);
+        // Every sstable without an explicit fileset_id will be treated as belonging to a different fileset.
+        // That is because these sstable lack of key range info, and we cannot group them correctly.
+        UniqueId fileset_id = sstable_pb.has_fileset_id() ? sstable_pb.fileset_id() : UniqueId::gen_uid();
+        if (skip_fileset_id != nullptr && fileset_id == *skip_fileset_id) {
+            continue;
+        }
+
+        auto it = fileset_id_to_index.find(fileset_id);
+        if (it == fileset_id_to_index.end()) {
+            FilesetInfo info;
+            info.fileset_id = fileset_id;
+            info.sstable_indices.push_back(i);
+            info.total_size = sstable_pb.filesize();
+            fileset_id_to_index[fileset_id] = filesets->size();
+            filesets->push_back(std::move(info));
+        } else {
+            size_t index = it->second;
+            if ((*filesets)[index].sstable_indices.back() != i - 1) {
+                // Should not happen, filesets should be continuous in sstable list
+                LOG(ERROR) << fmt::format("Inconsistent fileset_id in sstables: {}", sstable_meta.ShortDebugString());
+                return Status::InternalError("inconsistent fileset_id in sstables");
+            }
+            (*filesets)[index].sstable_indices.push_back(i);
+            (*filesets)[index].total_size += sstable_pb.filesize();
+        }
+    }
+    return Status::OK();
+}
+
+} // namespace
+
 StatusOr<CompactionCandidateResult> LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(
         const PersistentIndexSstableMetaPB& sstable_meta) {
     CompactionCandidateResult result;
@@ -39,54 +84,17 @@ StatusOr<CompactionCandidateResult> LakePersistentIndexSizeTieredCompactionStrat
         return result;
     }
 
-    // Group sstables by fileset_id
-    // Key: fileset_id, Value: vector of sstable indices and total size
-    struct FilesetInfo {
-        std::vector<int> sstable_indices;
-        int64_t total_size = 0;
-        UniqueId fileset_id;
-    };
-
-    std::vector<FilesetInfo> filesets;
-    std::unordered_map<UniqueId, size_t> fileset_id_to_index;
-    UniqueId base_level_fileset_id; // fileset id of base level (the first fileset)
     // fileset id of active level (the last fileset)
     UniqueId active_fileset_id =
             sstable_meta.sstables(sstable_meta.sstables_size() - 1).has_fileset_id()
                     ? UniqueId(sstable_meta.sstables(sstable_meta.sstables_size() - 1).fileset_id())
                     : UniqueId::gen_uid();
-
-    for (int i = 0; i < sstable_meta.sstables_size(); ++i) {
-        const auto& sstable_pb = sstable_meta.sstables(i);
-        // Every sstable without an explicit fileset_id will be treated as belonging to a different fileset.
-        // That is because these sstable lack of key range info, and we cannot group them correctly.
-        UniqueId fileset_id = sstable_pb.has_fileset_id() ? sstable_pb.fileset_id() : UniqueId::gen_uid();
-        if (fileset_id == active_fileset_id) {
-            // Active fileset should not be compacted
-            continue;
-        }
-        if (i == 0) {
-            base_level_fileset_id = fileset_id;
-        }
-
-        auto it = fileset_id_to_index.find(fileset_id);
-        if (it == fileset_id_to_index.end()) {
-            FilesetInfo info;
-            info.fileset_id = fileset_id;
-            info.sstable_indices.push_back(i);
-            info.total_size = sstable_pb.filesize();
-            fileset_id_to_index[fileset_id] = filesets.size();
-            filesets.push_back(std::move(info));
-        } else {
-            size_t index = it->second;
-            if (filesets[index].sstable_indices.back() != i - 1) {
-                // Should not happen, filesets should be continuous in sstable list
-                LOG(ERROR) << fmt::format("Inconsistent fileset_id in sstables: {}", sstable_meta.ShortDebugString());
-                return Status::InternalError("inconsistent fileset_id in sstables");
-            }
-            filesets[index].sstable_indices.push_back(i);
-            filesets[index].total_size += sstable_pb.filesize();
-        }
+    // Active fileset should not be compacted
+    std::vector<FilesetInfo> filesets;
+    RETURN_IF_ERROR(group_filesets(sstable_meta, &active_fileset_id, &filesets));
+    UniqueId base_level_fileset_id; // fileset id of base level (the first fileset)
+    if (!filesets.empty() && filesets[0].sstable_indices[0] == 0) {
+        base_level_fileset_id = filesets[0].fileset_id;
     }
 
     // If only one fileset or no filesets, no compaction needed
@@ -215,6 +223,44 @@ StatusOr<CompactionCandidateResult> LakePersistentIndexSizeTieredCompactionStrat
     result.merge_base_level = merge_base_level;
     result.max_max_rss_rowid = max_max_rss_rowid;
 
+    return result;
+}
+
+StatusOr<CompactionCandidateResult> LakePersistentIndexSizeTieredCompactionStrategy::pick_unshare_candidates(
+        const PersistentIndexSstableMetaPB& sstable_meta, const SstSeekRange& tablet_range) {
+    CompactionCandidateResult result;
+    std::vector<FilesetInfo> filesets;
+    RETURN_IF_ERROR(group_filesets(sstable_meta, nullptr, &filesets));
+
+    // Rewrite the run of filesets from the first to the last one that holds an sstable the tablet cannot keep. The
+    // publish replaces a contiguous run of filesets, and a merge that leaves out the base level keeps its tombstones,
+    // so the run can start at the first fileset that needs a rewrite: a clean base in front of it, however large,
+    // stays as it is.
+    size_t first = filesets.size();
+    size_t last = 0;
+    for (size_t i = 0; i < filesets.size(); ++i) {
+        const auto& indices = filesets[i].sstable_indices;
+        if (std::any_of(indices.begin(), indices.end(), [&](int sstable_idx) {
+                return sstable_needs_rewrite(sstable_meta.sstables(sstable_idx), &tablet_range);
+            })) {
+            first = std::min(first, i);
+            last = i;
+        }
+    }
+    if (first == filesets.size()) {
+        return result;
+    }
+
+    for (size_t i = first; i <= last; ++i) {
+        std::vector<PersistentIndexSstablePB> fileset_sstables;
+        for (int sstable_idx : filesets[i].sstable_indices) {
+            const auto& sstable_pb = sstable_meta.sstables(sstable_idx);
+            fileset_sstables.push_back(sstable_pb);
+            result.max_max_rss_rowid = std::max(result.max_max_rss_rowid, sstable_pb.max_rss_rowid());
+        }
+        result.candidate_filesets.push_back(std::move(fileset_sstables));
+    }
+    result.merge_base_level = first == 0;
     return result;
 }
 

@@ -84,6 +84,40 @@ static bool use_cloud_native_pk_index(const TabletMetadata& metadata) {
            metadata.persistent_index_type() == PersistentIndexTypePB::CLOUD_NATIVE;
 }
 
+// Applies a compaction to the tablet metadata in its publish. A compaction moves the delete files of its input rowsets
+// above the index rebuild point into its output rowset, so a cold index rebuild can still replay them. After a range
+// split those delete files are shared with the sibling, and the output rowset would keep them shared, which stops the
+// tablet from being merged. So when an input rowset holds a shared delete file, the publish flushes the index first,
+// which persists every delete in its sstables, and moves no delete file. A tablet whose sort key is not its primary
+// key keeps moving them.
+static Status apply_opcompaction_to_metadata(const TabletMetadata& metadata, const TabletSchema& tablet_schema,
+                                             const TxnLogPB_OpCompaction& op_compaction, int64_t txn_id,
+                                             uint32_t max_rowset_id, LakePersistentIndex* index,
+                                             MetaFileBuilder* builder) {
+    bool persist_index = false;
+    if (use_cloud_native_pk_index(metadata) && !tablet_schema.has_separate_sort_key()) {
+        const std::unordered_set<uint32_t> input_ids(op_compaction.input_rowsets().begin(),
+                                                     op_compaction.input_rowsets().end());
+        size_t shared_dels = 0;
+        for (const auto& rowset : metadata.rowsets()) {
+            if (input_ids.count(rowset.id()) > 0) {
+                shared_dels += std::count_if(rowset.del_files().begin(), rowset.del_files().end(),
+                                             [](const DelfileWithRowsetId& del) { return del.shared(); });
+            }
+        }
+        if (shared_dels > 0) {
+            LOG(INFO) << fmt::format(
+                    "flush pk index in compaction publish instead of moving shared del files. tablet {}, txn {}, "
+                    "shared del files {}",
+                    metadata.id(), txn_id, shared_dels);
+            RETURN_IF_ERROR(
+                    index->sync_flush_all_memtables(config::pk_index_memtable_max_wait_flush_timeout_ms * 1000));
+            persist_index = true;
+        }
+    }
+    return builder->apply_opcompaction(op_compaction, max_rowset_id, tablet_schema.id(), persist_index);
+}
+
 PrimaryKeyManager::PrimaryKeyManager(std::shared_ptr<LocationProvider> location_provider, MemTracker* mem_tracker)
         : _index_cache(std::numeric_limits<size_t>::max()),
           _update_state_cache(std::numeric_limits<size_t>::max()),
@@ -2268,8 +2302,10 @@ Status PrimaryKeyManager::light_publish_primary_compaction(const TxnLogPB_OpComp
                                          delvec_page_pb, delvecs[i].second));
     }
     update_index_cache_size(index_entry);
-    // 5. update TabletMeta (in-memory metadata edit; not traced -- covered by the per-tablet total)
-    RETURN_IF_ERROR(builder->apply_opcompaction(op_compaction, max_rowset_id, tablet_schema->id()));
+    // 5. update TabletMeta (in-memory metadata edit; not traced -- covered by the per-tablet total). When sstables were
+    // ingested above, the ingest already flushed the memtables, and an index flush here writes no sstable.
+    RETURN_IF_ERROR(apply_opcompaction_to_metadata(*metadata, *tablet_schema, op_compaction, txn_id, max_rowset_id,
+                                                   &index, builder));
     RETURN_IF_ERROR(builder->update_num_del_stat(segment_id_to_add_dels));
     {
         // index.apply_opcompaction opens the output index sstable(s) (footer + bloom filter), so it can do I/O.
@@ -2373,7 +2409,8 @@ Status PrimaryKeyManager::publish_primary_compaction(const TxnLogPB_OpCompaction
     for (auto&& each : delvecs) {
         builder->append_delvec(each.second, each.first);
     }
-    RETURN_IF_ERROR(builder->apply_opcompaction(op_compaction, max_rowset_id, tablet_schema->id()));
+    RETURN_IF_ERROR(apply_opcompaction_to_metadata(*metadata, *tablet_schema, op_compaction, txn_id, max_rowset_id,
+                                                   &index, builder));
     RETURN_IF_ERROR(builder->update_num_del_stat(segment_id_to_add_dels));
 
     RETURN_IF_ERROR(index.apply_opcompaction(metadata, op_compaction));
@@ -2596,7 +2633,14 @@ void PrimaryKeyManager::preload_compaction_state(const TxnLog& txnlog, const Tab
 
 DEFINE_FAIL_POINT(fail_execute_index_major_compaction);
 
-Status PrimaryKeyManager::execute_index_major_compaction(const TabletMetadataPtr& metadata, TxnLogPB* txn_log) {
+Status PrimaryKeyManager::execute_index_major_compaction(const TabletMetadataPtr& metadata, TxnLogPB* txn_log,
+                                                         bool unshare) {
+    if (unshare && TabletSchema::create(metadata->schema())->has_separate_sort_key()) {
+        // With a sort key that is not the primary key, UNSHARE rewrites shared data files only.
+        // Rebuilding/major-compacting the cloud-native PK index in the same transaction adds
+        // substantial I/O and is unnecessary for the atomic query-layout cutover.
+        return Status::OK();
+    }
     // Test-only: inject an index major compaction failure so callers can exercise their
     // error-propagation paths.
     FAIL_POINT_TRIGGER_EXECUTE(fail_execute_index_major_compaction,
@@ -2604,7 +2648,7 @@ Status PrimaryKeyManager::execute_index_major_compaction(const TabletMetadataPtr
     if (_parallel_compact_mgr == nullptr) {
         return Status::InternalError("parallel compact manager is not initialized");
     }
-    return LakePersistentIndex::parallel_major_compact(_parallel_compact_mgr, _tablet_mgr, metadata, txn_log);
+    return LakePersistentIndex::parallel_major_compact(_parallel_compact_mgr, _tablet_mgr, metadata, txn_log, unshare);
 }
 
 bool PrimaryKeyManager::TEST_primary_index_refcnt(int64_t tablet_id, uint32_t expected_cnt) {

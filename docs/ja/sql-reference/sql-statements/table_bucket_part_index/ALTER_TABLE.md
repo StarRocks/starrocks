@@ -494,6 +494,7 @@ ALTER TABLE <table_name> MERGE { TABLET | TABLETS }
     - 自動マージは、マテリアライズドインデックス内のいずれかの隣接する 2 つの Tablet の合計サイズが `tablet_reshard_target_size` の 80%（すなわち `ceil(0.8 × tablet_reshard_target_size)`）を**下回る**と実行されます。この判定には FE 設定 `tablet_reshard_target_size` を使用します。デフォルトの 10 GB の場合、隣接する 2 つの Tablet の合計が 8 GB 未満になった時点でマージされます。
     - 自動マージと、Tablet ID を指定しない手動 MERGE は、同じ方法でマージ対象の Tablet を選択します。手動 MERGE では `PROPERTIES` で指定した値を使用します（指定しない場合は同じ FE 設定を使用します）。マージ対象となるのは `ceil(0.8 × tablet_reshard_target_size)` 未満の Tablet のみです。隣接するこれらの Tablet はレンジ順にグループ化され、各グループの合計サイズは `tablet_reshard_target_size` を超えません。間にこれより大きい Tablet がある場合、グループはそこで区切られます。マージによって、マテリアライズドインデックスの Tablet 数が並列度の下限を下回ることはありません。この下限は、ウェアハウスのコンピュートノード数（`tablet_reshard_max_split_count` を上限とし、2 以上）です。マージできる Tablet が 1 つもない場合、手動のステートメントは `No tablets need to merge in table ...` というエラーになります。
     - Tablet ID を指定した手動 MERGE は、Tablet のサイズや並列度の下限を確認せず、指定したグループをそのままマージします。各グループは、同じパーティションかつ同じマテリアライズドインデックス内の、連続する 2 つ以上の Tablet で構成する必要があります。
+    - 自動マージと手動 MERGE のいずれも、他の Tablet とデータファイルを共有しなくなった Tablet のみをマージします。SPLIT で生成された Tablet は、コンパクションで書き換えられるまで元の Tablet のデータファイルを共有するため、再びマージする前に、そのパーティションに対して `ALTER TABLE ... COMPACT` を実行してください。
     - いずれの場合も、現在 SPLIT または MERGE を実行中の Tablet 数が、FE 設定 `tablet_reshard_max_parallel_tablets`（デフォルト：10240）未満である必要があります。
 
 :::note
