@@ -530,6 +530,13 @@ CONF_mInt64(partial_update_memory_limit_per_worker, "2147483648"); // 2GB
 // touching query execution. A value <= 0 falls back to 4096 and a value above 65535 is capped at 65535. Rebuilding
 // the primary key index from segments does not use it.
 CONF_mInt32(pk_vector_chunk_size, "4096");
+// Column-mode partial update: partition the update rows by source segment into the local spill
+// directories (spill_local_storage_dir) once per column batch, so every update file is read from object storage once instead of once per
+// source segment. Applies when the update touches at least this many source segments: below that the
+// per-segment re-read costs the same remote reads and no local IO. <= 0 always uses the re-read.
+CONF_mInt32(lake_pk_column_mode_spill_min_source_segments, "2");
+// Memory the partition pass may buffer before flushing to the spill file.
+CONF_mInt64(lake_pk_column_mode_spill_buffer_bytes, "67108864"); // 64MB
 
 CONF_mInt32(repair_compaction_interval_seconds, "600"); // 10 min
 CONF_Int32(manual_compaction_threads, "4");
