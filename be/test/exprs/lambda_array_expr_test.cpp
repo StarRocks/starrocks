@@ -54,75 +54,70 @@ public:
     static std::vector<Expr*> create_lambda_expr(ObjectPool* pool);
 
     void create_array_expr() {
-        TypeDescriptor type_arr_int;
-        type_arr_int.type = LogicalType::TYPE_ARRAY;
-        type_arr_int.children.emplace_back();
-        type_arr_int.children.back().type = LogicalType::TYPE_INT;
-
         // [1,4]
         // [null,null]
         // [null,12]
-        auto array = ColumnHelper::create_column(type_arr_int, true);
+        auto array = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
         array->append_datum(DatumArray{Datum((int32_t)1), Datum((int32_t)4)}); // [1,4]
         array->append_datum(DatumArray{Datum(), Datum()});                     // [NULL, NULL]
         array->append_datum(DatumArray{Datum(), Datum((int32_t)12)});          // [NULL, 12]
-        auto* array_values = new_fake_const_expr(std::move(array), type_arr_int);
+        auto* array_values = new_fake_const_expr(std::move(array), TYPE_ARRAY_INT);
         _array_expr.push_back(array_values);
 
         // null
-        array = ColumnHelper::create_column(type_arr_int, true);
+        array = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
         array->append_datum(Datum{}); // null
-        auto* const_null = new_fake_const_expr(std::move(array), type_arr_int);
+        auto* const_null = new_fake_const_expr(std::move(array), TYPE_ARRAY_INT);
         _array_expr.push_back(const_null);
 
         // [null]
-        array = ColumnHelper::create_column(type_arr_int, true);
+        array = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
         array->append_datum(DatumArray{Datum()});
-        auto* null_array = new_fake_const_expr(std::move(array), type_arr_int);
+        auto* null_array = new_fake_const_expr(std::move(array), TYPE_ARRAY_INT);
         _array_expr.push_back(null_array);
 
         // []
-        array = ColumnHelper::create_column(type_arr_int, true);
+        array = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
         array->append_datum(DatumArray{}); // []
-        auto empty_array = new_fake_const_expr(std::move(array), type_arr_int);
+        auto empty_array = new_fake_const_expr(std::move(array), TYPE_ARRAY_INT);
         _array_expr.push_back(empty_array);
 
         // [null]
         // []
         // NULL
-        array = ColumnHelper::create_column(type_arr_int, true);
+        array = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
         array->append_datum(DatumArray{Datum()}); // [null]
         array->append_datum(DatumArray{});        // []
         array->append_datum(Datum{});             // NULL
-        auto* array_special = new_fake_const_expr(std::move(array), type_arr_int);
+        auto* array_special = new_fake_const_expr(std::move(array), TYPE_ARRAY_INT);
         _array_expr.push_back(array_special);
 
         // const([1,4]...)
-        array = ColumnHelper::create_column(type_arr_int, false);
+        array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
         array->append_datum(DatumArray{Datum((int32_t)1), Datum((int32_t)4)}); // [1,4]
         auto const_col = ConstColumn::create(std::move(array), 3);
-        auto* const_array = new_fake_const_expr(std::move(const_col), type_arr_int);
+        auto* const_array = new_fake_const_expr(std::move(const_col), TYPE_ARRAY_INT);
         _array_expr.push_back(const_array);
 
         // const(null...)
-        array = ColumnHelper::create_column(type_arr_int, true);
+        array = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
         array->append_datum(Datum{}); // null...
         const_col = ConstColumn::create(std::move(array), 3);
-        const_array = new_fake_const_expr(std::move(const_col), type_arr_int);
+        const_array = new_fake_const_expr(std::move(const_col), TYPE_ARRAY_INT);
         _array_expr.push_back(const_array);
 
         // const([null]...)
-        array = ColumnHelper::create_column(type_arr_int, false);
+        array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
         array->append_datum(DatumArray{Datum()}); // [null]...
         const_col = ConstColumn::create(std::move(array), 3);
-        const_array = new_fake_const_expr(std::move(const_col), type_arr_int);
+        const_array = new_fake_const_expr(std::move(const_col), TYPE_ARRAY_INT);
         _array_expr.push_back(const_array);
 
         // const([]...)
-        array = ColumnHelper::create_column(type_arr_int, false);
+        array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
         array->append_datum(DatumArray{}); // []...
         const_col = ConstColumn::create(std::move(array), 3);
-        const_array = new_fake_const_expr(std::move(const_col), type_arr_int);
+        const_array = new_fake_const_expr(std::move(const_col), TYPE_ARRAY_INT);
         _array_expr.push_back(const_array);
     }
 
@@ -246,7 +241,7 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_normal_array) {
     for (int i = 0; i < 1; ++i) {
         auto lambda_funcs = create_lambda_expr(&_objpool);
         for (int j = 0; j < lambda_funcs.size(); ++j) {
-            ArrayMapExpr array_map_expr(array_type(TYPE_INT));
+            ArrayMapExpr array_map_expr(TYPE_ARRAY_INT);
             array_map_expr.clear_children();
             array_map_expr.add_child(lambda_funcs[j]);
             array_map_expr.add_child(_array_expr[i]);
@@ -322,7 +317,7 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_special_array) {
     for (int i = 1; i < 5; ++i) {
         auto lambda_funcs = create_lambda_expr(&_objpool);
         for (int j = 0; j < lambda_funcs.size(); ++j) {
-            ArrayMapExpr array_map_expr(array_type(TYPE_INT));
+            ArrayMapExpr array_map_expr(TYPE_ARRAY_INT);
             array_map_expr.clear_children();
             array_map_expr.add_child(lambda_funcs[j]);
             array_map_expr.add_child(_array_expr[i]);
@@ -511,24 +506,20 @@ TEST_F(VectorizedLambdaFunctionExprTest, test_lambda_common_expr_slot_conflict) 
     cur_chunk->append_column(fake_col, 100002);
 
     // Create two array columns for testing
-    TypeDescriptor type_arr_int;
-    type_arr_int.type = LogicalType::TYPE_ARRAY;
-    type_arr_int.children.emplace_back();
-    type_arr_int.children.back().type = LogicalType::TYPE_INT;
 
     // col1: [1,2], [3,4], [5,6]
-    auto array1 = ColumnHelper::create_column(type_arr_int, false);
+    auto array1 = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
     array1->append_datum(DatumArray{Datum((int32_t)1), Datum((int32_t)2)});
     array1->append_datum(DatumArray{Datum((int32_t)3), Datum((int32_t)4)});
     array1->append_datum(DatumArray{Datum((int32_t)5), Datum((int32_t)6)});
-    auto* col1_expr = new_fake_const_expr(std::move(array1), type_arr_int);
+    auto* col1_expr = new_fake_const_expr(std::move(array1), TYPE_ARRAY_INT);
 
     // col2: [10,20], [30,40], [50,60]
-    auto array2 = ColumnHelper::create_column(type_arr_int, false);
+    auto array2 = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
     array2->append_datum(DatumArray{Datum((int32_t)10), Datum((int32_t)20)});
     array2->append_datum(DatumArray{Datum((int32_t)30), Datum((int32_t)40)});
     array2->append_datum(DatumArray{Datum((int32_t)50), Datum((int32_t)60)});
-    auto* col2_expr = new_fake_const_expr(std::move(array2), type_arr_int);
+    auto* col2_expr = new_fake_const_expr(std::move(array2), TYPE_ARRAY_INT);
 
     // Create lambda function: (x,y) -> x + y + length(z)
     TExprNode tlambda_func;
@@ -617,7 +608,7 @@ TEST_F(VectorizedLambdaFunctionExprTest, test_lambda_common_expr_slot_conflict) 
     lambda_func->add_child(col_y);     // argument y
 
     // Create ArrayMapExpr: array_map((x,y)->x + y + length(z), col1, col2)
-    ArrayMapExpr array_map_expr(array_type(TYPE_INT));
+    ArrayMapExpr array_map_expr(TYPE_ARRAY_INT);
     array_map_expr.clear_children();
     array_map_expr.add_child(lambda_func);
     array_map_expr.add_child(col1_expr);
@@ -666,9 +657,7 @@ TEST_F(VectorizedLambdaFunctionExprTest, test_lambda_common_expr_slot_conflict) 
 TEST_F(VectorizedLambdaFunctionExprTest, nested_array_map_captures_outer_arg_const_input) {
     const SlotId kOuterArg = 100000; // a : array<int>
     const SlotId kInnerArg = 100001; // b : int
-
-    TypeDescriptor type_arr_int = array_type(TYPE_INT);         // array<int>
-    TypeDescriptor type_arr_arr_int = array_type(type_arr_int); // array<array<int>>
+    TypeDescriptor type_arr_arr_int = array_type(TYPE_ARRAY_INT); // array<array<int>>
 
     // Outer input: const ARRAY<ARRAY<INT>>[[1, 2]] (one row).
     auto arr2 = ColumnHelper::create_column(type_arr_arr_int, true);
@@ -700,7 +689,7 @@ TEST_F(VectorizedLambdaFunctionExprTest, nested_array_map_captures_outer_arg_con
     len_node.fn.__isset.fid = true;
     len_node.fn.binary_type = TFunctionBinaryType::BUILTIN;
     auto* array_length_expr = _objpool.add(new VectorizedFunctionCallExpr(len_node));
-    array_length_expr->add_child(make_slot_ref(kOuterArg, type_arr_int));
+    array_length_expr->add_child(make_slot_ref(kOuterArg, TYPE_ARRAY_INT));
 
     TExprNode add_node;
     add_node.opcode = TExprOpcode::ADD;
@@ -728,10 +717,10 @@ TEST_F(VectorizedLambdaFunctionExprTest, nested_array_map_captures_outer_arg_con
     inner_lambda->add_child(make_slot_ref(kInnerArg, TypeDescriptor(TYPE_INT)));
 
     // inner array_map: array_map(b -> array_length(a) + b, a)
-    auto* inner_map = _objpool.add(new ArrayMapExpr(type_arr_int));
+    auto* inner_map = _objpool.add(new ArrayMapExpr(TYPE_ARRAY_INT));
     inner_map->clear_children();
     inner_map->add_child(inner_lambda);
-    inner_map->add_child(make_slot_ref(kOuterArg, type_arr_int));
+    inner_map->add_child(make_slot_ref(kOuterArg, TYPE_ARRAY_INT));
 
     // outer lambda: a -> inner_map
     TExprNode tlambda_outer;
@@ -741,10 +730,10 @@ TEST_F(VectorizedLambdaFunctionExprTest, nested_array_map_captures_outer_arg_con
     tlambda_outer.num_children = 2;
     tlambda_outer.__isset.opcode = true;
     tlambda_outer.__isset.child_type = true;
-    tlambda_outer.type = type_arr_int.to_thrift();
+    tlambda_outer.type = TYPE_ARRAY_INT.to_thrift();
     auto* outer_lambda = _objpool.add(new LambdaFunction(tlambda_outer));
     outer_lambda->add_child(inner_map);
-    outer_lambda->add_child(make_slot_ref(kOuterArg, type_arr_int));
+    outer_lambda->add_child(make_slot_ref(kOuterArg, TYPE_ARRAY_INT));
 
     // outer array_map: array_map(a -> ..., [[1,2]])
     ArrayMapExpr outer_map(type_arr_arr_int);

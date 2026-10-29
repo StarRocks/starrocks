@@ -31,6 +31,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "exprs/udf/java/java_udf.h"
+#include "testutil/type_test_helper.h"
 #include "types/date_value.h"
 #include "types/datum.h"
 #include "types/decimalv3.h"
@@ -83,8 +84,7 @@ TEST_F(DataConverterTest, cast_to_jval) {
     }
 
     {
-        TypeDescriptor tdesc(TYPE_ARRAY);
-        tdesc.children.emplace_back(TYPE_INT);
+        const TypeDescriptor& tdesc = TYPE_ARRAY_INT;
         auto i32c = Int32Column::create();
         auto& elements_data = i32c->get_data();
         elements_data.resize(20);
@@ -130,8 +130,7 @@ TEST_F(DataConverterTest, cast_to_jval) {
 
     {
         TypeDescriptor tdesc(TYPE_MAP);
-        TypeDescriptor ta(TYPE_ARRAY);
-        ta.children.emplace_back(TYPE_INT);
+        const TypeDescriptor& ta = TYPE_ARRAY_INT;
         tdesc.children.emplace_back(ta);
         tdesc.children.emplace_back(ta);
         auto c1 = ColumnHelper::create_column(tdesc, true);
@@ -195,8 +194,7 @@ TEST_F(DataConverterTest, convert_to_boxed_array) {
         args.emplace_back(type);
         context._arg_types = args;
         TypeDescriptor tdesc(TYPE_MAP);
-        TypeDescriptor ta(TYPE_ARRAY);
-        ta.children.emplace_back(TYPE_INT);
+        const TypeDescriptor& ta = TYPE_ARRAY_INT;
         tdesc.children.emplace_back(ta);
         tdesc.children.emplace_back(ta);
 
@@ -219,8 +217,7 @@ TEST_F(DataConverterTest, convert_to_boxed_array) {
 
 TEST_F(DataConverterTest, append_jvalue) {
     {
-        TypeDescriptor tdesc(TYPE_ARRAY);
-        tdesc.children.emplace_back(TYPE_INT);
+        const TypeDescriptor& tdesc = TYPE_ARRAY_INT;
         auto c1 = ColumnHelper::create_column(tdesc, true);
         auto c2 = ColumnHelper::create_column(tdesc, true);
         Datum datum = std::vector<Datum>{1, 2, 3};
@@ -796,7 +793,7 @@ TEST_F(DataConverterTest, convert_to_boxed_array_with_null_descs) {
     auto* env = JVMHelper::getInstance().getEnv();
 
     // ARRAY<INT> column with one populated row.
-    TypeDescriptor td = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_INT));
+    TypeDescriptor td = TYPE_ARRAY_INT;
     auto col = ColumnHelper::create_column(td, true);
     Datum datum = std::vector<Datum>{1, 2, 3};
     col->append_datum(datum);

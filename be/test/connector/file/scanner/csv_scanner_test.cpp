@@ -29,6 +29,7 @@
 #include "runtime/descriptors.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
+#include "testutil/type_test_helper.h"
 
 namespace starrocks {
 
@@ -525,9 +526,7 @@ TEST_P(CSVScannerTest, test_array_of_date) {
 }
 
 TEST_P(CSVScannerTest, test_nested_array_of_int) {
-    TypeDescriptor t(TYPE_ARRAY);
-    t.children.emplace_back(TYPE_ARRAY);
-    t.children.back().children.emplace_back(TYPE_INT);
+    const TypeDescriptor& t = TYPE_ARRAY_ARRAY_INT;
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;

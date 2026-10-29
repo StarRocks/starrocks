@@ -21,6 +21,7 @@
 #include "column/array_column.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
+#include "testutil/type_test_helper.h"
 #include "types/json_value.h"
 
 namespace starrocks {
@@ -101,7 +102,7 @@ TEST(AIFunctionResultTest, SentimentIsAValidatedNormalizedLabel) {
 }
 
 TEST(AIFunctionResultTest, EmbeddingAppendsNullableFloatElementsAndDoesNotPartiallyAppendInvalidValues) {
-    auto output = ColumnHelper::create_column(TypeDescriptor::create_array_type(TypeDescriptor(TYPE_FLOAT)), true);
+    auto output = ColumnHelper::create_column(TYPE_ARRAY_FLOAT, true);
     ASSERT_TRUE(
             append_ai_function_result(AIFunctionResultKind::EMBEDDING, std::vector<float>{0.25f, -0.5f}, output.get())
                     .ok());

@@ -51,6 +51,7 @@ DIAGNOSTIC_POP
 #include "column/arrow/arrow_type_traits.h"
 #include "column/column_helper.h"
 #include "column/runtime_type_traits.h"
+#include "testutil/type_test_helper.h"
 #include "types/type_descriptor.h"
 
 namespace starrocks {
@@ -511,7 +512,7 @@ void convert_to_arrow(const TypeDescriptor& type_desc, const ColumnPtr& column,
 }
 
 TEST_F(StarRocksColumnToArrowTest, testArrayColumn) {
-    auto array_type_desc = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_INT));
+    auto array_type_desc = TYPE_ARRAY_INT;
     auto column = ColumnHelper::create_column(array_type_desc, false, false, 0, false);
 
     // [1, 2, 3]
@@ -533,7 +534,7 @@ TEST_F(StarRocksColumnToArrowTest, testArrayColumn) {
 }
 
 TEST_F(StarRocksColumnToArrowTest, testNullableArrayColumn) {
-    auto array_type_desc = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_INT));
+    auto array_type_desc = TYPE_ARRAY_INT;
     auto column = ColumnHelper::create_column(array_type_desc, true, false, 0, false);
 
     // [1, 2, 3]

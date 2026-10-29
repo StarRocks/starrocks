@@ -73,6 +73,7 @@
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
 #include "runtime/service_contexts.h"
+#include "testutil/type_test_helper.h"
 #include "types/type_descriptor.h"
 
 namespace starrocks {
@@ -189,7 +190,7 @@ TExpr make_ai_file_call(TTupleId tuple_id, bool embedding) {
     file.__set_type(file_type);
     auto& call = expression.nodes.front();
     if (embedding) {
-        const auto result_type = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_FLOAT)).to_thrift();
+        const auto result_type = TYPE_ARRAY_FLOAT.to_thrift();
         call.fn.name.__set_function_name("ai_embed");
         call.fn.__set_fid(200003);
         call.fn.__set_arg_types({file_type, varchar_type().to_thrift(), varchar_type().to_thrift(),
@@ -716,7 +717,7 @@ protected:
         std::vector<AIProjectOutputSpec> outputs;
         for (size_t index = 0; index < options.size(); ++index) {
             auto call = make_ai_complete(_tuple_id, kPromptSlotId).nodes.front();
-            const auto result_type = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_FLOAT)).to_thrift();
+            const auto result_type = TYPE_ARRAY_FLOAT.to_thrift();
             call.__set_num_children(4);
             call.__set_type(result_type);
             call.__set_ai_provider_id("provider:embedding");
@@ -840,8 +841,7 @@ protected:
             const bool embedding = slot_id == kDefaultEmbeddingSlotId || slot_id == kProviderEmbeddingSlotId;
             tuple.add_slot(TSlotDescriptorBuilder()
                                    .id(slot_id)
-                                   .type(embedding ? TypeDescriptor::create_array_type(TypeDescriptor(TYPE_FLOAT))
-                                                   : varchar_type())
+                                   .type(embedding ? TYPE_ARRAY_FLOAT : varchar_type())
                                    .nullable(true)
                                    .build());
         }
@@ -871,7 +871,7 @@ protected:
             call.__set_ai_provider_id("provider:default_embedding");
         }
         if (embedding) {
-            const auto type = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_FLOAT)).to_thrift();
+            const auto type = TYPE_ARRAY_FLOAT.to_thrift();
             call.__set_type(type);
             call.fn.__set_ret_type(type);
         }
@@ -1647,7 +1647,7 @@ TEST_F(AIProjectPipelineTest, MixedDefaultAndExplicitProviderRoutesKeepCredentia
         expression.nodes[2].string_literal.__set_value(embedding ? "embed" : "chat");
         expression.nodes[3].string_literal.__set_value(embedding ? "explicit-embed-model" : "explicit-chat-model");
         if (embedding) {
-            const auto type = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_FLOAT)).to_thrift();
+            const auto type = TYPE_ARRAY_FLOAT.to_thrift();
             call.__set_type(type);
             call.fn.__set_ret_type(type);
         }

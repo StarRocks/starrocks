@@ -31,7 +31,7 @@ inline TypeDescriptor array_type(const LogicalType& child_type) {
     t.type = TYPE_ARRAY;
     t.children.resize(1);
     t.children[0].type = child_type;
-    t.children[0].len = child_type == TYPE_VARCHAR ? 10 : child_type == TYPE_CHAR ? 10 : -1;
+    t.children[0].len = child_type == TYPE_VARCHAR ? 128 : child_type == TYPE_CHAR ? 128 : -1;
     return t;
 }
 

@@ -671,19 +671,17 @@ public:
 TEST_F(VectorizedBinaryPredicateArrayTest, arrayGT) {
     expr_node.opcode = TExprOpcode::GT;
     std::unique_ptr<Expr> expr(VectorizedBinaryPredicateFactory::from_thrift(expr_node));
-
-    TypeDescriptor type_arr_int = array_type(TYPE_INT);
-    auto array0 = ColumnHelper::create_column(type_arr_int, true);
+    auto array0 = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
     array0->append_datum(DatumArray{Datum((int32_t)11), Datum((int32_t)4)}); // [11,4]
     array0->append_datum(DatumArray{Datum(), Datum()});                      // [NULL, NULL]
     array0->append_datum(DatumArray{Datum(), Datum((int32_t)1)});            // [NULL, 1]
-    auto array_expr0 = MockExpr(type_arr_int, std::move(array0));
+    auto array_expr0 = MockExpr(TYPE_ARRAY_INT, std::move(array0));
 
-    auto array1 = ColumnHelper::create_column(type_arr_int, false);
+    auto array1 = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
     array1->append_datum(DatumArray{Datum((int32_t)1), Datum((int32_t)4)}); // [1,4]
     array1->append_datum(DatumArray{Datum(), Datum()});                     // [NULL, NULL]
     array1->append_datum(DatumArray{Datum(), Datum((int32_t)1)});           // [NULL, 1]
-    auto array_expr1 = MockExpr(type_arr_int, std::move(array1));
+    auto array_expr1 = MockExpr(TYPE_ARRAY_INT, std::move(array1));
     expr->add_child(&array_expr0);
     expr->add_child(&array_expr1);
 
@@ -699,18 +697,16 @@ TEST_F(VectorizedBinaryPredicateArrayTest, arrayGT) {
 TEST_F(VectorizedBinaryPredicateArrayTest, arrayConstGT) {
     expr_node.opcode = TExprOpcode::GT;
     std::unique_ptr<Expr> expr(VectorizedBinaryPredicateFactory::from_thrift(expr_node));
-
-    TypeDescriptor type_arr_int = array_type(TYPE_INT);
-    auto array0 = ColumnHelper::create_column(type_arr_int, true);
+    auto array0 = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
     array0->append_datum(DatumArray{Datum((int32_t)11), Datum((int32_t)4)}); // [11,4]
     array0->append_datum(DatumArray{Datum(), Datum()});                      // [NULL, NULL]
     array0->append_datum(DatumArray{Datum(), Datum((int32_t)1)});            // [NULL, 1]
-    auto array_expr0 = MockExpr(type_arr_int, std::move(array0));
+    auto array_expr0 = MockExpr(TYPE_ARRAY_INT, std::move(array0));
 
-    auto array = ColumnHelper::create_column(type_arr_int, false);
+    auto array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
     array->append_datum(DatumArray{Datum((int32_t)1), Datum((int32_t)4)}); // [1,4]
     auto const_col = ConstColumn::create(std::move(array), 3);
-    auto* const_array = new_fake_const_expr(std::move(const_col), type_arr_int);
+    auto* const_array = new_fake_const_expr(std::move(const_col), TYPE_ARRAY_INT);
     expr->add_child(&array_expr0);
     expr->add_child(const_array);
 

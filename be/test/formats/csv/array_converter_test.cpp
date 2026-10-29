@@ -19,6 +19,7 @@
 #include "column/column_helper.h"
 #include "formats/csv/converter.h"
 #include "formats/io/formatted_output_stream_string.h"
+#include "testutil/type_test_helper.h"
 #include "types/type_descriptor.h"
 
 namespace starrocks::csv {
@@ -26,8 +27,7 @@ namespace starrocks::csv {
 // NOLINTNEXTLINE
 TEST(ArrayConverterTest, test_read_string01) {
     // ARRAY<TINYINT>
-    TypeDescriptor t(TYPE_ARRAY);
-    t.children.emplace_back(TYPE_TINYINT);
+    const TypeDescriptor& t = TYPE_ARRAY_TINYINT;
 
     auto conv = csv::get_converter(t, false);
     auto col = ColumnHelper::create_column(t, false);
@@ -57,9 +57,7 @@ TEST(ArrayConverterTest, test_read_string01) {
 // NOLINTNEXTLINE
 TEST(ArrayConverterTest, test_read_string02) {
     // ARRAY<STRING>
-    TypeDescriptor t(TYPE_ARRAY);
-    t.children.emplace_back(TYPE_VARCHAR);
-    t.children.back().len = 6000;
+    const TypeDescriptor& t = TYPE_ARRAY_VARCHAR;
 
     auto conv = csv::get_converter(t, false);
     auto col = ColumnHelper::create_column(t, false);
@@ -80,9 +78,7 @@ TEST(ArrayConverterTest, test_read_string02) {
 // NOLINTNEXTLINE
 TEST(ArrayConverterTest, test_read_string03) {
     // ARRAY<STRING>
-    TypeDescriptor t(TYPE_ARRAY);
-    t.children.emplace_back(TYPE_VARCHAR);
-    t.children.back().len = 6000;
+    const TypeDescriptor& t = TYPE_ARRAY_VARCHAR;
 
     auto conv = csv::get_converter(t, false);
     auto col = ColumnHelper::create_column(t, false);
@@ -100,9 +96,7 @@ TEST(ArrayConverterTest, test_read_string03) {
 // NOLINTNEXTLINE
 TEST(ArrayConverterTest, test_read_string04) {
     // ARRAY<STRING>
-    TypeDescriptor t(TYPE_ARRAY);
-    t.children.emplace_back(TYPE_VARCHAR);
-    t.children.back().len = 6000;
+    const TypeDescriptor& t = TYPE_ARRAY_VARCHAR;
 
     auto conv = csv::get_converter(t, false);
     auto col = ColumnHelper::create_column(t, false);
@@ -116,10 +110,7 @@ TEST(ArrayConverterTest, test_read_string04) {
 // NOLINTNEXTLINE
 TEST(ArrayConverterTest, test_read_string05) {
     // ARRAY<ARRAY<STRING>>
-    TypeDescriptor t(TYPE_ARRAY);
-    t.children.emplace_back(TYPE_ARRAY);
-    t.children.back().children.emplace_back(TYPE_VARCHAR);
-    t.children.back().children.back().len = 6000;
+    const TypeDescriptor& t = TYPE_ARRAY_ARRAY_VARCHAR;
 
     auto conv = csv::get_converter(t, false);
     auto col = ColumnHelper::create_column(t, false);
@@ -152,8 +143,7 @@ TEST(ArrayConverterTest, test_read_string05) {
 // NOLINTNEXTLINE
 TEST(ArrayConverterTest, test_read_string06) {
     // ARRAY<DATE>
-    TypeDescriptor t(TYPE_ARRAY);
-    t.children.emplace_back(TYPE_DATE);
+    const TypeDescriptor& t = TYPE_ARRAY_DATE;
 
     auto conv = csv::get_converter(t, false);
     auto col = ColumnHelper::create_column(t, false);
@@ -170,8 +160,7 @@ TEST(ArrayConverterTest, test_read_string06) {
 // NOLINTNEXTLINE
 TEST(ArrayConverterTest, test_hive_read_string01) {
     // ARRAY<TINYINT>
-    TypeDescriptor t(TYPE_ARRAY);
-    t.children.emplace_back(TYPE_TINYINT);
+    const TypeDescriptor& t = TYPE_ARRAY_TINYINT;
 
     auto options = Converter::Options();
     options.array_format_type = ArrayFormatType::kHive;
@@ -207,9 +196,7 @@ TEST(ArrayConverterTest, test_hive_read_string01) {
 // NOLINTNEXTLINE
 TEST(ArrayConverterTest, test_hive_read_string02) {
     // ARRAY<STRING>
-    TypeDescriptor t(TYPE_ARRAY);
-    t.children.emplace_back(TYPE_VARCHAR);
-    t.children.back().len = 6000;
+    const TypeDescriptor& t = TYPE_ARRAY_VARCHAR;
 
     auto options = Converter::Options();
     options.array_format_type = ArrayFormatType::kHive;
@@ -236,10 +223,7 @@ TEST(ArrayConverterTest, test_hive_read_string02) {
 // NOLINTNEXTLINE
 TEST(ArrayConverterTest, test_hive_read_string03) {
     // ARRAY<ARRAY<STRING>>
-    TypeDescriptor t(TYPE_ARRAY);
-    t.children.emplace_back(TYPE_ARRAY);
-    t.children.back().children.emplace_back(TYPE_VARCHAR);
-    t.children.back().children.back().len = 6000;
+    const TypeDescriptor& t = TYPE_ARRAY_ARRAY_VARCHAR;
 
     auto options = Converter::Options();
     options.array_format_type = ArrayFormatType::kHive;
@@ -383,9 +367,7 @@ TEST(ArrayConverterTest, test_hive_read_string05) {
     }
     {
         // ARRAY<VARCHAR>
-        TypeDescriptor t(TYPE_ARRAY);
-        t.children.emplace_back(TYPE_VARCHAR);
-        t.children.back().len = 5000;
+        const TypeDescriptor& t = TYPE_ARRAY_VARCHAR;
 
         auto conv = csv::get_converter(t, false);
         auto col = ColumnHelper::create_column(t, false);
@@ -401,9 +383,7 @@ TEST(ArrayConverterTest, test_hive_read_string05) {
     }
     {
         // ARRAY<VARCHAR>
-        TypeDescriptor t(TYPE_ARRAY);
-        t.children.emplace_back(TYPE_VARCHAR);
-        t.children.back().len = 5000;
+        const TypeDescriptor& t = TYPE_ARRAY_VARCHAR;
 
         auto conv = csv::get_converter(t, false);
         auto col = ColumnHelper::create_column(t, false);
@@ -455,8 +435,7 @@ TEST(ArrayConverterTest, test_get_collection_delimiter) {
 // NOLINTNEXTLINE
 TEST(ArrayConverterTest, test_write_string) {
     // ARRAY<DATE>
-    TypeDescriptor t(TYPE_ARRAY);
-    t.children.emplace_back(TYPE_DATE);
+    const TypeDescriptor& t = TYPE_ARRAY_DATE;
 
     auto conv = csv::get_converter(t, false);
     auto col = ColumnHelper::create_column(t, false);

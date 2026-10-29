@@ -2848,7 +2848,7 @@ static ColumnPtr make_root_typed_only_variant_bigint_column(const std::vector<in
 static ColumnPtr make_root_typed_only_variant_array_column(const std::vector<DatumArray>& values,
                                                            const std::vector<uint8_t>& is_null) {
     CHECK_EQ(values.size(), is_null.size());
-    TypeDescriptor array_type = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_INT));
+    TypeDescriptor array_type = TYPE_ARRAY_INT;
     auto array_col = ColumnHelper::create_column(array_type, true);
     for (size_t i = 0; i < values.size(); ++i) {
         if (is_null[i] != 0) {

@@ -30,6 +30,7 @@
 #include "exprs/agg/base_aggregate_test.h"
 #include "exprs/agg/map_agg.h"
 #include "exprs/struct_functions.h"
+#include "testutil/type_test_helper.h"
 
 namespace starrocks {
 struct FunctionHelperTest : public ::testing::Test {};
@@ -146,7 +147,7 @@ TEST_F(FunctionHelperTest, testCreateColumnScalarNullableAndNonNullable) {
 }
 
 TEST_F(FunctionHelperTest, testCreateColumnArray) {
-    TypeDescriptor array_type = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_INT));
+    TypeDescriptor array_type = TYPE_ARRAY_INT;
 
     auto array_column = FunctionHelper::create_column(array_type, false);
     ASSERT_NE(array_column, nullptr);
@@ -162,8 +163,7 @@ TEST_F(FunctionHelperTest, testCreateColumnArray) {
 
 TEST_F(FunctionHelperTest, testCreateColumnStruct) {
     std::vector<std::string> field_names{"c1", "c2"};
-    std::vector<TypeDescriptor> field_types{TypeDescriptor(TYPE_INT),
-                                            TypeDescriptor::create_array_type(TypeDescriptor(TYPE_INT))};
+    std::vector<TypeDescriptor> field_types{TypeDescriptor(TYPE_INT), TYPE_ARRAY_INT};
     TypeDescriptor struct_type = TypeDescriptor::create_struct_type(field_names, field_types);
 
     auto struct_column = FunctionHelper::create_column(struct_type, false);

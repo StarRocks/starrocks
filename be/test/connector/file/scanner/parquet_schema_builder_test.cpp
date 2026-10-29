@@ -19,6 +19,7 @@
 #include "formats/parquet/schema.h"
 #include "parquet/schema.h"
 #include "parquet/types.h"
+#include "testutil/type_test_helper.h"
 #include "types/type_descriptor.h"
 
 namespace starrocks {
@@ -640,7 +641,7 @@ TEST_F(ParquetSchemaBuilderTest, MapKeyOnly) {
     auto key = create_primitive_node("key", ::parquet::Repetition::REQUIRED, ::parquet::Type::INT32);
     auto kv = create_group_node("key_value", ::parquet::Repetition::REPEATED, {key});
     auto node = create_map_node("my_set", ::parquet::Repetition::OPTIONAL, {kv});
-    check_inferred_type(node, TypeDescriptor::create_array_type(TypeDescriptor(TYPE_INT)));
+    check_inferred_type(node, TYPE_ARRAY_INT);
 }
 
 TEST_F(ParquetSchemaBuilderTest, MapInvalidKeyValue) {
@@ -699,7 +700,7 @@ TEST_F(ParquetSchemaBuilderTest, TopLevelRepeatedFields) {
     // One-level list encoding: repeated int32 a;
     {
         auto node = create_primitive_node("a", ::parquet::Repetition::REPEATED, ::parquet::Type::INT32);
-        check_inferred_type(node, TypeDescriptor::create_array_type(TypeDescriptor(TYPE_INT)));
+        check_inferred_type(node, TYPE_ARRAY_INT);
     }
     // repeated group rg { required int32 x; optional binary y; }
     {
@@ -713,13 +714,12 @@ TEST_F(ParquetSchemaBuilderTest, TopLevelRepeatedFields) {
     {
         auto a = create_primitive_node("a", ::parquet::Repetition::REPEATED, ::parquet::Type::INT32);
         auto node = create_group_node("s", ::parquet::Repetition::OPTIONAL, {a});
-        check_inferred_type(node, TypeDescriptor::create_struct_type(
-                                          {"a"}, {TypeDescriptor::create_array_type(TypeDescriptor(TYPE_INT))}));
+        check_inferred_type(node, TypeDescriptor::create_struct_type({"a"}, {TYPE_ARRAY_INT}));
     }
 }
 
 TEST_F(ParquetSchemaBuilderTest, LegacyListEncodings) {
-    const auto int_array = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_INT));
+    const auto int_array = TYPE_ARRAY_INT;
 
     // Two-level encoding, the repeated primitive is the element (not a nested list):
     // optional group my_list (LIST) { repeated int32 element; }

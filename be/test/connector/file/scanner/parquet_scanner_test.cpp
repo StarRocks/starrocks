@@ -44,6 +44,7 @@
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
 #include "testutil/desc_tbl_helper.h"
+#include "testutil/type_test_helper.h"
 #include "types/type_descriptor.h"
 
 namespace starrocks {
@@ -1298,9 +1299,7 @@ TEST_F(ParquetScannerTest, test_nested_dictionary_string_parquet) {
     create_nested_dictionary_parquet("nested_dictionary.parquet", {{"a", "b"}, {"c"}}, &parquet_file_name);
     DeferOp defer([&]() { std::filesystem::remove(parquet_file_name); });
 
-    TypeDescriptor type_list(TYPE_ARRAY);
-    type_list.children.emplace_back(TYPE_VARCHAR);
-    type_list.children.back().len = 1048576;
+    const TypeDescriptor& type_list = TYPE_ARRAY_VARCHAR;
 
     SlotTypeDescInfoArray slot_infos = {{"nested_dict", type_list, true}};
     auto ranges = generate_ranges({parquet_file_name}, slot_infos.size(), {});

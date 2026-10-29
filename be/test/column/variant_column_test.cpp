@@ -31,6 +31,7 @@
 #include "column/serde/column_array_serde.h"
 #include "column/variant_encoder.h"
 #include "column/variant_path_parser.h"
+#include "testutil/type_test_helper.h"
 #include "types/datum.h"
 #include "types/logical_type.h"
 #include "types/variant.h"
@@ -80,7 +81,7 @@ static MutableColumnPtr build_nullable_varchar_column(const std::vector<std::str
 
 static MutableColumnPtr build_nullable_int_array_column(const std::vector<DatumArray>& values,
                                                         const std::vector<uint8_t>& is_null) {
-    TypeDescriptor array_type = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_BIGINT));
+    TypeDescriptor array_type = TYPE_ARRAY_BIGINT;
     auto col = ColumnHelper::create_column(array_type, true);
     DCHECK_EQ(values.size(), is_null.size());
     for (size_t i = 0; i < values.size(); ++i) {
@@ -580,8 +581,7 @@ PARALLEL_TEST(VariantColumnTest, test_reserve_skips_shredded_typed_columns) {
     append_json_variant_row(metadata.get(), remain.get(), R"({})");
     MutableColumns typed;
     typed.emplace_back(build_nullable_int_array_column({DatumArray{Datum(int64_t(1)), Datum(int64_t(2))}}, {0}));
-    column->set_shredded_columns({"a"}, {TypeDescriptor::create_array_type(TypeDescriptor(TYPE_BIGINT))},
-                                 std::move(typed), std::move(metadata), std::move(remain));
+    column->set_shredded_columns({"a"}, {TYPE_ARRAY_BIGINT}, std::move(typed), std::move(metadata), std::move(remain));
     const size_t typed_capacity_before = column->typed_columns()[0]->capacity();
 
     constexpr size_t kRows = 2048;
@@ -989,8 +989,7 @@ PARALLEL_TEST(VariantColumnTest, test_single_path_typed_only_array_materializati
     auto col = VariantColumn::create();
     MutableColumns typed;
     typed.emplace_back(build_nullable_int_array_column({DatumArray{Datum(int64_t(1)), Datum(int64_t(2))}}, {0}));
-    col->set_shredded_columns({"a"}, {TypeDescriptor::create_array_type(TypeDescriptor(TYPE_BIGINT))}, std::move(typed),
-                              nullptr, nullptr);
+    col->set_shredded_columns({"a"}, {TYPE_ARRAY_BIGINT}, std::move(typed), nullptr, nullptr);
 
     ASSERT_EQ(1, col->shredded_paths().size());
     ASSERT_EQ("a", col->shredded_paths()[0]);

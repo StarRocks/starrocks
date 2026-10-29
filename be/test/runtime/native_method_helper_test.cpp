@@ -34,6 +34,7 @@
 #include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
 #include "runtime/java/jni_env.h"
+#include "testutil/type_test_helper.h"
 #include "types/date_value.h"
 #include "types/logical_type.h"
 #include "types/timestamp_value.h"
@@ -165,8 +166,7 @@ TEST_F(NativeMethodHelperTest, get_addrs_int) {
     // test array/map
     // array with scalar types
     {
-        TypeDescriptor array_type(TYPE_ARRAY);
-        array_type.children.emplace_back(TYPE_INT);
+        const TypeDescriptor& array_type = TYPE_ARRAY_INT;
         auto column = ColumnHelper::create_column(array_type, true);
         column->resize(10);
         auto arr = NativeMethodHelperTestBridge::getAddrs(env, nullptr, reinterpret_cast<size_t>(column.get()));
@@ -220,8 +220,7 @@ TEST_F(NativeMethodHelperTest, get_column_logical_type) {
     // (UDFHelper.getResultFromListArray / getResultFromMapArray) calls back into
     // getColumnLogicalType on element/key/value columns to dispatch nested writes.
     {
-        TypeDescriptor array_type(TYPE_ARRAY);
-        array_type.children.emplace_back(TYPE_INT);
+        const TypeDescriptor& array_type = TYPE_ARRAY_INT;
         auto c = ColumnHelper::create_column(array_type, true);
         ASSERT_EQ(TYPE_ARRAY,
                   NativeMethodHelperTestBridge::getColumnLogicalType(env, nullptr, reinterpret_cast<size_t>(c.get())));

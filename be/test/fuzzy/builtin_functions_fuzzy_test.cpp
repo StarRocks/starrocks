@@ -32,6 +32,7 @@
 #include "exprs/function_context.h"
 #include "runtime/runtime_state.h"
 #include "testutil/init_test_env.h"
+#include "testutil/type_test_helper.h"
 #include "types/json_value.h"
 #include "types/logical_type.h"
 #include "types/percentile_value.h"
@@ -396,7 +397,7 @@ protected:
                 return TypeDescriptor::create_array_type(element_type);
             } else if (name_str.find("ANY_ARRAY") != std::string::npos) {
                 // TODO: randomize
-                return TypeDescriptor::create_array_type(TypeDescriptor(TYPE_INT));
+                return TYPE_ARRAY_INT;
             } else if (name_str.find("ANY_STRUCT") != std::string::npos) {
                 // TODO: randomize
                 // Create a struct type with two INT fields named "field1" and "field2"
