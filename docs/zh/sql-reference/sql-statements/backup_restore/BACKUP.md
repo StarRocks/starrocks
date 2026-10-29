@@ -68,7 +68,7 @@ TO <repository_name>
 | db_name         | 需要备份的数据所属的数据库名。                                   |
 | snapshot_name   | 指定数据快照名。全局范围内，快照名不可重复。                      |
 | repository_name | 仓库名。您可以通过 [CREATE REPOSITORY](./CREATE_REPOSITORY.md) 创建仓库。 |
-| ON              | 需要备份的表名。如不指定则备份整个数据库。                         |
+| ON              | 需要备份的表名。如不指定则备份整个数据库。异步物化视图仅在 FE 配置项 `enable_backup_materialized_view` 为 `true` 时才会被备份。 |
 | PARTITION       | 需要备份的分区名。如不指定则备份对应表的所有分区。                   |
 | PROPERTIES      | 数据快照属性。现支持以下属性：<ul><li>`type`：备份类型。当前仅支持 `FULL`，即全量备份。默认：`FULL`。</li><li>`timeout`：任务超时时间。单位：秒。默认：`86400`。</li><li>`ttl`：快照的保留时长，格式为 `<数字> <单位>`，单位可为 `SECOND`、`MINUTE`、`HOUR`、`DAY`、`WEEK`、`MONTH`、`YEAR`，例如 `7 DAY`。不指定该属性则永久保留。自 v4.2.0 起支持。</li></ul> |
 
@@ -106,7 +106,7 @@ backup_object ::= [
 | db_name.        | 待备份的对象或数据快照所属数据库的名称。只能指定 `DATABASE <db_name>` 或 `<db_name>.` 其中之一。 |
 | snapshot_name   | 指定数据快照名。全局范围内，快照名不可重复。                        |
 | repository_name | 仓库名。您可以通过 [CREATE REPOSITORY](./CREATE_REPOSITORY.md) 创建仓库。 |
-| ON              | 待备份的对象。如不指定则备份整个数据库。                           |
+| ON              | 待备份的对象。如不指定则备份整个数据库。异步物化视图仅在 FE 配置项 `enable_backup_materialized_view` 为 `true` 时才会被备份。 |
 | table_name      | 待备份的表的名称。                                             |
 | mv_name         | 待备份的物化视图的名称。                                        |
 | view_name       | 待备份的逻辑视图的名称。                                        |
@@ -209,7 +209,7 @@ BACKUP DATABASE sr_hub SNAPSHOT sr_mv2_backup
 TO test_repo
 ON (MATERIALIZED VIEW sr_mv1, MATERIALIZED VIEW sr_mv2);
 
--- 备份所有物化视图。
+-- 备份所有异步物化视图。需要 enable_backup_materialized_view 为 true，否则不会备份任何内容。
 BACKUP DATABASE sr_hub SNAPSHOT sr_mv3_backup
 TO test_repo
 ON (ALL MATERIALIZED VIEWS);
@@ -267,3 +267,8 @@ ON (ALL FUNCTIONS);
 - 如果恢复作业是一次覆盖操作（指定恢复数据到已经存在的表或分区中），那么从恢复作业的 COMMIT 阶段开始，当前集群上被覆盖的数据有可能不能再被还原。此时如果恢复作业失败或被取消，有可能造成之前的数据损坏且无法访问。这种情况下，只能通过再次执行恢复操作，并等待作业完成。因此，我们建议您，如无必要，不要使用覆盖的方式恢复数据，除非确认当前数据已不再使用。覆盖操作会检查快照和已存在的表或分区的元数据是否相同，包括 Schema 和 Rollup 等信息，如果不同则无法执行恢复操作。
 - 目前 StarRocks 暂不支持备份恢复用户、权限以及资源组配置相关数据。
 - StarRocks 不支持备份恢复表之间的 Colocate Join 关系。
+<<<<<<< HEAD
+=======
+- 除非将 FE 配置项 `enable_backup_materialized_view` 设置为 `true`，否则异步物化视图只有在 BACKUP 语句中按名称指定时才会被备份。默认值 `false` 下，备份整个数据库会跳过异步物化视图，`ON (ALL MATERIALIZED VIEWS)` 不会备份任何内容，作业仍会成功完成，不报错。
+- 增量物化视图（`refresh_mode` 为 `INCREMENTAL`，或为 `AUTO` 且没有按 PCT 创建）不支持备份。在备份语句中指定增量物化视图会报错；备份整个数据库或所有物化视图时会跳过增量物化视图。
+>>>>>>> 86d20c080db... [Doc] Document that database-level BACKUP skips asynchronous materialized views by default (#66957)
