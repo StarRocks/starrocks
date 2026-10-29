@@ -14,6 +14,14 @@
 
 #include "connector/hive/paimon/paimon_write_column_converter.h"
 
+#include <arrow/array.h>
+#include <arrow/builder.h>
+#include <arrow/memory_pool.h>
+#include <arrow/record_batch.h>
+#include <arrow/type.h>
+#include <arrow/util/key_value_metadata.h>
+#include <cctz/time_zone.h>
+
 #include <algorithm>
 #include <charconv>
 #include <chrono>
@@ -22,14 +30,6 @@
 #include <string_view>
 #include <unordered_set>
 #include <utility>
-
-#include <arrow/array.h>
-#include <arrow/builder.h>
-#include <arrow/memory_pool.h>
-#include <arrow/record_batch.h>
-#include <arrow/type.h>
-#include <arrow/util/key_value_metadata.h>
-#include <cctz/time_zone.h>
 
 #include "base/string/utf8_check.h"
 #include "base/time/timezone_utils.h"
@@ -377,13 +377,14 @@ StatusOr<Conversion> make_conversion(const TypeDescriptor& source, const std::sh
                     const auto& text = target->metadata()->value(index);
                     int precision = -1;
                     auto parsed = std::from_chars(text.data(), text.data() + text.size(), precision);
-                    if (parsed.ec != std::errc() || parsed.ptr != text.data() + text.size()
-                            || precision < 0 || precision > 9) {
+                    if (parsed.ec != std::errc() || parsed.ptr != text.data() + text.size() || precision < 0 ||
+                        precision > 9) {
                         return Status::InvalidArgument("Invalid native Paimon timestamp precision");
                     }
                     const auto unit = precision == 0 ? arrow::TimeUnit::SECOND
-                            : precision <= 3 ? arrow::TimeUnit::MILLI
-                            : precision <= 6 ? arrow::TimeUnit::MICRO : arrow::TimeUnit::NANO;
+                                                     : precision <= 3 ? arrow::TimeUnit::MILLI
+                                                                      : precision <= 6 ? arrow::TimeUnit::MICRO
+                                                                                       : arrow::TimeUnit::NANO;
                     if (timestamp.unit() != unit) {
                         return Status::InvalidArgument("Native Paimon timestamp precision and Arrow unit disagree");
                     }
@@ -417,8 +418,8 @@ StatusOr<Conversion> make_conversion(const TypeDescriptor& source, const std::sh
         compatible = id == arrow::Type::LIST && source.children.size() == 1;
         if (compatible) {
             const auto& list = static_cast<const arrow::ListType&>(*target->type());
-            ASSIGN_OR_RETURN(auto child, make_conversion(source.children[0], list.value_field(), time_zone, pool,
-                                                         depth + 1));
+            ASSIGN_OR_RETURN(auto child,
+                             make_conversion(source.children[0], list.value_field(), time_zone, pool, depth + 1));
             result.children.emplace_back(std::move(child));
         }
         break;
@@ -476,8 +477,8 @@ StatusOr<Conversion> make_conversion(const TypeDescriptor& source, const std::sh
             compatible = structure.num_fields() == 2 && structure.field(0)->name() == "value" &&
                          structure.field(1)->name() == "metadata" &&
                          structure.field(0)->type()->id() == arrow::Type::BINARY &&
-                         structure.field(1)->type()->id() == arrow::Type::BINARY &&
-                         !structure.field(0)->nullable() && !structure.field(1)->nullable() && marker >= 0 &&
+                         structure.field(1)->type()->id() == arrow::Type::BINARY && !structure.field(0)->nullable() &&
+                         !structure.field(1)->nullable() && marker >= 0 &&
                          metadata->value(marker) == "paimon.type.variant";
         }
         break;
@@ -526,8 +527,8 @@ Status append_inactive(const Conversion& conversion, arrow::ArrayBuilder* builde
     if (conversion.source.type == TYPE_VARIANT) {
         auto* structure = static_cast<arrow::StructBuilder*>(builder);
         RETURN_IF_ERROR(from_arrow(structure->Append(!is_null)));
-        RETURN_IF_ERROR(from_arrow(static_cast<arrow::BinaryBuilder*>(structure->field_builder(0))
-                                           ->Append(VariantValue::kEmptyValue)));
+        RETURN_IF_ERROR(from_arrow(
+                static_cast<arrow::BinaryBuilder*>(structure->field_builder(0))->Append(VariantValue::kEmptyValue)));
         return from_arrow(static_cast<arrow::BinaryBuilder*>(structure->field_builder(1))
                                   ->Append(VariantMetadata::kEmptyMetadata));
     }
@@ -658,10 +659,10 @@ Status append_variant(const Cell& cell, arrow::ArrayBuilder* builder) {
     RETURN_IF_ERROR(validate_variant(metadata, value));
     auto* structure = static_cast<arrow::StructBuilder*>(builder);
     RETURN_IF_ERROR(from_arrow(structure->Append()));
-    RETURN_IF_ERROR(from_arrow(static_cast<arrow::BinaryBuilder*>(structure->field_builder(0))->Append(
-            value.data(), value.size())));
-    return from_arrow(static_cast<arrow::BinaryBuilder*>(structure->field_builder(1))->Append(
-            metadata.data(), metadata.size()));
+    RETURN_IF_ERROR(from_arrow(
+            static_cast<arrow::BinaryBuilder*>(structure->field_builder(0))->Append(value.data(), value.size())));
+    return from_arrow(
+            static_cast<arrow::BinaryBuilder*>(structure->field_builder(1))->Append(metadata.data(), metadata.size()));
 }
 
 Status append_cell(const Column* column, size_t row, const Conversion& conversion, arrow::ArrayBuilder* builder) {
@@ -767,7 +768,7 @@ Status append_cell(const Column* column, size_t row, const Conversion& conversio
         RETURN_IF_ERROR(from_arrow(output->Append()));
         for (size_t i = 0; i < conversion.children.size(); ++i) {
             RETURN_IF_ERROR(append_cell(structure->field_column_raw_ptr(conversion.source_fields[i]), cell.row,
-                                       conversion.children[i], output->field_builder(i)));
+                                        conversion.children[i], output->field_builder(i)));
         }
         return Status::OK();
     }
@@ -778,9 +779,10 @@ Status append_cell(const Column* column, size_t row, const Conversion& conversio
     }
 }
 
-StatusOr<std::shared_ptr<arrow::RecordBatch>> columns_to_arrow(
-        size_t rows, const Columns& columns, const std::vector<TypeDescriptor>& types,
-        const std::shared_ptr<arrow::Schema>& target_schema, const std::string& time_zone, arrow::MemoryPool* pool) {
+StatusOr<std::shared_ptr<arrow::RecordBatch>> columns_to_arrow(size_t rows, const Columns& columns,
+                                                               const std::vector<TypeDescriptor>& types,
+                                                               const std::shared_ptr<arrow::Schema>& target_schema,
+                                                               const std::string& time_zone, arrow::MemoryPool* pool) {
     if (target_schema == nullptr || pool == nullptr || columns.size() != types.size() ||
         columns.size() != target_schema->num_fields() || rows > std::numeric_limits<int64_t>::max()) {
         return Status::InvalidArgument("Invalid Paimon write columns/types/schema/pool");

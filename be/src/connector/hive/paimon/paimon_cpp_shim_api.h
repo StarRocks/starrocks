@@ -51,11 +51,11 @@ using StarRocksPaimonCreateScannerFn = starrocks::HdfsScanner* (*)();
 // Independent, versioned capabilities: an older read-only shim must remain usable for scans.
 // These are BE C++ ABI entrypoints with C linkage for lookup, not a stable pure-C SDK ABI.
 #define STARROCKS_PAIMON_CREATE_SINK_SYMBOL "starrocks_paimon_create_sink_v1"
-using StarRocksPaimonCreateSinkFn = connector::ConnectorSink* (*)(
-        std::shared_ptr<connector::PaimonChunkSinkContext>, int32_t);
+using StarRocksPaimonCreateSinkFn = connector::ConnectorSink* (*)(std::shared_ptr<connector::PaimonChunkSinkContext>,
+                                                                  int32_t);
 
 #define STARROCKS_PAIMON_BUCKET_IDS_SYMBOL "starrocks_paimon_bucket_ids_v1"
-using StarRocksPaimonBucketIdsFn = StatusOr<std::vector<int32_t>> (*)(
-        const TPaimonTableSink&, const ChunkPtr&, const std::vector<ExprContext*>&);
+using StarRocksPaimonBucketIdsFn = StatusOr<std::vector<int32_t>> (*)(const TPaimonTableSink&, const ChunkPtr&,
+                                                                      const std::vector<ExprContext*>&);
 
 } // namespace starrocks

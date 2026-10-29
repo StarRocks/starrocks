@@ -1100,9 +1100,9 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, StructGurad<LT>> {
             if (!child_array.ok()) {
                 return Status::InternalError(child_array.status().ToString());
             }
-            RETURN_IF_ERROR(convert_arrow_array_to_column(conv_func->children[i].get(), num_elements, child_array->get(),
-                                                          child_col, array_start_idx, chunk_start_idx, chunk_filter,
-                                                          ctx));
+            RETURN_IF_ERROR(convert_arrow_array_to_column(conv_func->children[i].get(), num_elements,
+                                                          child_array->get(), child_col, array_start_idx,
+                                                          chunk_start_idx, chunk_filter, ctx));
         }
 
         return Status::OK();
@@ -1167,8 +1167,8 @@ static Status variant_converter(const arrow::Array* array, size_t array_start_id
         }
         auto st = VariantRowValue::validate_metadata(metadata_view);
         if (!st.ok()) {
-            return st.clone_and_prepend(fmt::format("The variant column ({}) has invalid metadata at row {}: ",
-                                                    current_column_name_or_null(ctx), idx));
+            return st.clone_and_prepend(fmt::format(
+                    "The variant column ({}) has invalid metadata at row {}: ", current_column_name_or_null(ctx), idx));
         }
         variant_column->append_shredded(Slice(metadata_view.data(), metadata_view.size()),
                                         Slice(value_view.data(), value_view.size()));

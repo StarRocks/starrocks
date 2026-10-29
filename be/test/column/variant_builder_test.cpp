@@ -495,14 +495,14 @@ PARALLEL_TEST(VariantBuilderTest, strict_rejects_malformed_base_before_root_repl
     // A scalar null with trailing bytes is not an encoded null value either.
     const char null_with_trailing[] = {0, 0};
     ASSERT_FALSE(VariantBuilder::validate_row_strict(VariantMetadata::kEmptyMetadata,
-                                                    std::string_view(null_with_trailing, 2))
+                                                     std::string_view(null_with_trailing, 2))
                          .ok());
 }
 
 PARALLEL_TEST(VariantBuilderTest, strict_keeps_array_offsets_in_index_order_and_bounds_nesting) {
     const char invalid_array[] = {3, 2, 1, 0, 2, 0, 0};
     ASSERT_FALSE(VariantBuilder::validate_row_strict(VariantMetadata::kEmptyMetadata,
-                                                    std::string_view(invalid_array, sizeof(invalid_array)))
+                                                     std::string_view(invalid_array, sizeof(invalid_array)))
                          .ok());
     std::string nested(VariantValue::kEmptyValue);
     for (size_t i = 0; i < VariantBuilder::kMaxStrictDepth + 1; ++i) {

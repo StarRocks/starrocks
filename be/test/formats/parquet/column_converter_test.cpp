@@ -909,8 +909,8 @@ TEST_F(ColumnConverterTest, Int96SignedNanosecondsRoundTrip) {
                 auto all_null = converter->create_src_column();
                 ASSERT_TRUE(all_null->append_nulls(1));
                 auto* all_null_nullable = down_cast<NullableColumn*>(all_null.get());
-                down_cast<FixedLengthColumn<int96_t>*>(all_null_nullable->data_column_raw_ptr())->get_data()[0] =
-                        {std::numeric_limits<uint64_t>::max(), std::numeric_limits<uint32_t>::max()};
+                down_cast<FixedLengthColumn<int96_t>*>(all_null_nullable->data_column_raw_ptr())->get_data()[0] = {
+                        std::numeric_limits<uint64_t>::max(), std::numeric_limits<uint32_t>::max()};
                 auto null_dst = ColumnHelper::create_column(type, true);
                 ASSERT_OK(converter->convert(all_null.get(), null_dst.get()));
                 ASSERT_EQ(1, null_dst->size());
@@ -1189,17 +1189,17 @@ TEST_F(ColumnConverterTest, Int32DaysToDateTimeMatchesReference) {
 // This test lives in the Format harness because create_arrow_column also builds the scanner's
 // expression; the core Column harness must not acquire Format/Expr/Runtime dependencies.
 TEST_F(ColumnConverterTest, ArrowNestedVariantParentNullSlicedAppend) {
-    const auto variant_type = arrow::struct_({arrow::field("value", arrow::binary(), false),
-                                              arrow::field("metadata", arrow::binary(), false)});
+    const auto variant_type = arrow::struct_(
+            {arrow::field("value", arrow::binary(), false), arrow::field("metadata", arrow::binary(), false)});
     const auto inner_type = arrow::struct_({arrow::field("payload", variant_type, false)});
     const auto arrow_type = arrow::struct_({arrow::field("inner", inner_type), arrow::field("keep", arrow::int32())});
     auto values = std::make_shared<arrow::BinaryBuilder>();
     auto metadata = std::make_shared<arrow::BinaryBuilder>();
-    auto variant = std::make_shared<arrow::StructBuilder>(
-            variant_type, arrow::default_memory_pool(),
-            std::vector<std::shared_ptr<arrow::ArrayBuilder>>{values, metadata});
-    auto inner = std::make_shared<arrow::StructBuilder>(
-            inner_type, arrow::default_memory_pool(), std::vector<std::shared_ptr<arrow::ArrayBuilder>>{variant});
+    auto variant =
+            std::make_shared<arrow::StructBuilder>(variant_type, arrow::default_memory_pool(),
+                                                   std::vector<std::shared_ptr<arrow::ArrayBuilder>>{values, metadata});
+    auto inner = std::make_shared<arrow::StructBuilder>(inner_type, arrow::default_memory_pool(),
+                                                        std::vector<std::shared_ptr<arrow::ArrayBuilder>>{variant});
     auto keep = std::make_shared<arrow::Int32Builder>();
     arrow::StructBuilder root(arrow_type, arrow::default_memory_pool(), {inner, keep});
     constexpr std::string_view kMetadata("\x01\x00\x00", 3);
@@ -1276,8 +1276,8 @@ TEST_F(ColumnConverterTest, ArrowNestedVariantParentNullSlicedAppend) {
     auto invalid_column = column->clone_empty();
     Filter invalid_filter(1, 1);
     auto invalid_slice = array->Slice(5, 1);
-    auto st = convert_arrow_array_to_column(&plan, 1, invalid_slice.get(), invalid_column.get(), 0, 0,
-                                            &invalid_filter, &ctx);
+    auto st = convert_arrow_array_to_column(&plan, 1, invalid_slice.get(), invalid_column.get(), 0, 0, &invalid_filter,
+                                            &ctx);
     ASSERT_FALSE(st.ok());
     EXPECT_NE(std::string::npos, st.message().find("empty value"));
     EXPECT_NE(std::string::npos, st.message().find("nested"));

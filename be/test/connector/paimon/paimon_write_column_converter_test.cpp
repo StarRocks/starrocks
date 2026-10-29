@@ -14,18 +14,18 @@
 
 #include "connector/hive/paimon/paimon_write_column_converter.h"
 
-#include <cstring>
-#include <limits>
-#include <string>
-#include <utility>
-#include <vector>
-
 #include <arrow/array.h>
 #include <arrow/memory_pool.h>
 #include <arrow/record_batch.h>
 #include <arrow/type.h>
 #include <arrow/util/key_value_metadata.h>
 #include <gtest/gtest.h>
+
+#include <cstring>
+#include <limits>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include "column/array_column.h"
 #include "column/binary_column.h"
@@ -56,16 +56,17 @@ ColumnPtr nullable(ColumnPtr data, std::initializer_list<uint8_t> nulls) {
 }
 
 std::shared_ptr<arrow::Field> variant_field(bool is_nullable = true) {
-    return arrow::field("v", arrow::struct_({arrow::field("value", arrow::binary(), false),
-                                           arrow::field("metadata", arrow::binary(), false)}),
+    return arrow::field("v",
+                        arrow::struct_({arrow::field("value", arrow::binary(), false),
+                                        arrow::field("metadata", arrow::binary(), false)}),
                         is_nullable, arrow::key_value_metadata({"paimon.extension.type"}, {"paimon.type.variant"}));
 }
 
-StatusOr<std::shared_ptr<arrow::RecordBatch>> convert_one(
-        ColumnPtr column, const TypeDescriptor& type, const std::shared_ptr<arrow::Field>& target,
-        const std::string& time_zone = "UTC") {
+StatusOr<std::shared_ptr<arrow::RecordBatch>> convert_one(ColumnPtr column, const TypeDescriptor& type,
+                                                          const std::shared_ptr<arrow::Field>& target,
+                                                          const std::string& time_zone = "UTC") {
     return paimon_write_columns_to_arrow({std::move(column)}, {type}, arrow::schema({target}), time_zone,
-                                          arrow::default_memory_pool());
+                                         arrow::default_memory_pool());
 }
 
 TEST(PaimonWriteColumnConverterTest, PreservesNumericWidthsTargetNamesAndMetadata) {
@@ -83,12 +84,12 @@ TEST(PaimonWriteColumnConverterTest, PreservesNumericWidthsTargetNamesAndMetadat
     real->append(1.25f);
     auto floating = DoubleColumn::create();
     floating->append(-3.5);
-    const auto schema = arrow::schema(
-            {arrow::field("BOOL", arrow::boolean(), false), arrow::field("Tiny", arrow::int8(), false),
-             arrow::field("Small", arrow::int16(), false), arrow::field("Int", arrow::int32(), false),
-             arrow::field("Big", arrow::int64(), false), arrow::field("Float", arrow::float32(), false),
-             arrow::field("Double", arrow::float64(), false)},
-            arrow::key_value_metadata({"paimon.test.schema"}, {"preserved"}));
+    const auto schema =
+            arrow::schema({arrow::field("BOOL", arrow::boolean(), false), arrow::field("Tiny", arrow::int8(), false),
+                           arrow::field("Small", arrow::int16(), false), arrow::field("Int", arrow::int32(), false),
+                           arrow::field("Big", arrow::int64(), false), arrow::field("Float", arrow::float32(), false),
+                           arrow::field("Double", arrow::float64(), false)},
+                          arrow::key_value_metadata({"paimon.test.schema"}, {"preserved"}));
     auto batch = paimon_write_columns_to_arrow(
             {boolean, tiny, small, integer, bigint, real, floating},
             {TypeDescriptor(TYPE_BOOLEAN), TypeDescriptor(TYPE_TINYINT), TypeDescriptor(TYPE_SMALLINT),
@@ -141,14 +142,15 @@ TEST(PaimonWriteColumnConverterTest, DecimalPrecisionScaleAndOverflow) {
     auto overflow = Decimal32Column::create(3, 0);
     overflow->append(1000);
     EXPECT_FALSE(convert_one(overflow, TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 3, 0),
-                             arrow::field("overflow", arrow::decimal128(3, 0))).ok());
+                             arrow::field("overflow", arrow::decimal128(3, 0)))
+                         .ok());
 }
 
 TEST(PaimonWriteColumnConverterTest, CharacterBinaryBoundsEmbeddedNulsAndUtf8) {
     auto text = BinaryColumn::create();
     text->append(Slice("ab"));
-    const auto field = arrow::field("C", arrow::utf8(), false,
-                                    arrow::key_value_metadata({"starrocks.paimon.length"}, {"2"}));
+    const auto field =
+            arrow::field("C", arrow::utf8(), false, arrow::key_value_metadata({"starrocks.paimon.length"}, {"2"}));
     auto batch = convert_one(text, TypeDescriptor::create_char_type(4), field);
     ASSERT_TRUE(batch.ok()) << batch.status().to_string();
     EXPECT_EQ(static_cast<const arrow::StringArray&>(*(*batch)->column(0)).GetString(0), "ab");
@@ -157,8 +159,8 @@ TEST(PaimonWriteColumnConverterTest, CharacterBinaryBoundsEmbeddedNulsAndUtf8) {
     const std::string payload("a\0b", 3);
     auto binary = BinaryColumn::create();
     binary->append(Slice(payload));
-    auto binary_batch = convert_one(binary, TypeDescriptor::create_varbinary_type(3),
-                                    arrow::field("b", arrow::binary(), false));
+    auto binary_batch =
+            convert_one(binary, TypeDescriptor::create_varbinary_type(3), arrow::field("b", arrow::binary(), false));
     ASSERT_TRUE(binary_batch.ok()) << binary_batch.status().to_string();
     EXPECT_EQ(static_cast<const arrow::BinaryArray&>(*(*binary_batch)->column(0)).GetString(0), payload);
     EXPECT_FALSE(
@@ -181,8 +183,8 @@ TEST(PaimonWriteColumnConverterTest, DateNtzLtzNegativeEpochAndCheckedNanos) {
     EXPECT_EQ(static_cast<const arrow::Date32Array&>(*(*date_batch)->column(0)).Value(0), -1);
     auto timestamp = TimestampColumn::create();
     timestamp->append(TimestampValue::create(1969, 12, 31, 23, 59, 59, 999999));
-    for (const auto unit : {arrow::TimeUnit::SECOND, arrow::TimeUnit::MILLI, arrow::TimeUnit::MICRO,
-                            arrow::TimeUnit::NANO}) {
+    for (const auto unit :
+         {arrow::TimeUnit::SECOND, arrow::TimeUnit::MILLI, arrow::TimeUnit::MICRO, arrow::TimeUnit::NANO}) {
         auto batch = convert_one(timestamp, TypeDescriptor(TYPE_DATETIME), arrow::field("t", arrow::timestamp(unit)),
                                  "Asia/Shanghai");
         ASSERT_TRUE(batch.ok()) << batch.status().to_string();
@@ -202,14 +204,17 @@ TEST(PaimonWriteColumnConverterTest, DateNtzLtzNegativeEpochAndCheckedNanos) {
     auto far = TimestampColumn::create();
     far->append(TimestampValue::create(9999, 12, 31, 23, 59, 59));
     EXPECT_FALSE(convert_one(far, TypeDescriptor(TYPE_DATETIME),
-                             arrow::field("nanos", arrow::timestamp(arrow::TimeUnit::NANO))).ok());
+                             arrow::field("nanos", arrow::timestamp(arrow::TimeUnit::NANO)))
+                         .ok());
     auto dst_gap = TimestampColumn::create();
     dst_gap->append(TimestampValue::create(2024, 3, 10, 2, 30, 0));
     EXPECT_FALSE(convert_one(dst_gap, TypeDescriptor(TYPE_DATETIME),
                              arrow::field("ltz", arrow::timestamp(arrow::TimeUnit::MICRO, "UTC")),
-                             "America/Los_Angeles").ok());
+                             "America/Los_Angeles")
+                         .ok());
     EXPECT_FALSE(convert_one(wall, TypeDescriptor(TYPE_DATETIME),
-                             arrow::field("ltz", arrow::timestamp(arrow::TimeUnit::MICRO, "bad/zone"))).ok());
+                             arrow::field("ltz", arrow::timestamp(arrow::TimeUnit::MICRO, "bad/zone")))
+                         .ok());
 }
 
 TEST(PaimonWriteColumnConverterTest, NativeTimestampPrecisionIsNotInferredOnlyFromArrowUnit) {
@@ -217,9 +222,10 @@ TEST(PaimonWriteColumnConverterTest, NativeTimestampPrecisionIsNotInferredOnlyFr
     timestamp->append(TimestampValue::create(1969, 12, 31, 23, 59, 59, 120000));
     for (int precision = 0; precision <= 9; ++precision) {
         auto unit = precision == 0 ? arrow::TimeUnit::SECOND
-                : precision <= 3 ? arrow::TimeUnit::MILLI
-                : precision <= 6 ? arrow::TimeUnit::MICRO : arrow::TimeUnit::NANO;
-        const auto target = arrow::field("t", arrow::timestamp(unit), true,
+                                   : precision <= 3 ? arrow::TimeUnit::MILLI
+                                                    : precision <= 6 ? arrow::TimeUnit::MICRO : arrow::TimeUnit::NANO;
+        const auto target = arrow::field(
+                "t", arrow::timestamp(unit), true,
                 arrow::key_value_metadata({"starrocks.paimon.timestamp.precision"}, {std::to_string(precision)}));
         auto result = convert_one(timestamp, TypeDescriptor(TYPE_DATETIME), target);
         if (precision < 2) {
@@ -230,11 +236,12 @@ TEST(PaimonWriteColumnConverterTest, NativeTimestampPrecisionIsNotInferredOnlyFr
     }
     auto fraction = TimestampColumn::create();
     fraction->append(TimestampValue::create(1969, 12, 31, 23, 59, 59, 999999));
-    const auto precision_five = arrow::field("t", arrow::timestamp(arrow::TimeUnit::MICRO), true,
-            arrow::key_value_metadata({"starrocks.paimon.timestamp.precision"}, {"5"}));
+    const auto precision_five =
+            arrow::field("t", arrow::timestamp(arrow::TimeUnit::MICRO), true,
+                         arrow::key_value_metadata({"starrocks.paimon.timestamp.precision"}, {"5"}));
     EXPECT_FALSE(convert_one(fraction, TypeDescriptor(TYPE_DATETIME), precision_five).ok());
     const auto wrong_unit = arrow::field("t", arrow::timestamp(arrow::TimeUnit::MICRO), true,
-            arrow::key_value_metadata({"starrocks.paimon.timestamp.precision"}, {"2"}));
+                                         arrow::key_value_metadata({"starrocks.paimon.timestamp.precision"}, {"2"}));
     EXPECT_FALSE(convert_one(timestamp, TypeDescriptor(TYPE_DATETIME), wrong_unit).ok());
 }
 
@@ -246,8 +253,10 @@ TEST(PaimonWriteColumnConverterTest, RecursiveStructNamesTargetOrderAndNullabili
     auto source = StructColumn::create(Columns{numbers, strings}, {"Number", "TEXT"});
     const auto type = TypeDescriptor::create_struct_type(
             {"Number", "TEXT"}, {TypeDescriptor(TYPE_INT), TypeDescriptor::create_varchar_type(8)});
-    const auto target = arrow::field("s", arrow::struct_({arrow::field("text", arrow::utf8(), false),
-                                                         arrow::field("NUMBER", arrow::int32(), false)}), false);
+    const auto target = arrow::field(
+            "s",
+            arrow::struct_({arrow::field("text", arrow::utf8(), false), arrow::field("NUMBER", arrow::int32(), false)}),
+            false);
     auto batch = convert_one(source, type, target);
     ASSERT_TRUE(batch.ok()) << batch.status().to_string();
     const auto& output = static_cast<const arrow::StructArray&>(*(*batch)->column(0));
@@ -257,7 +266,8 @@ TEST(PaimonWriteColumnConverterTest, RecursiveStructNamesTargetOrderAndNullabili
     EXPECT_FALSE(convert_one(source, TypeDescriptor::create_struct_type({"x", "X"}, type.children), target).ok());
     EXPECT_FALSE(convert_one(source, type,
                              arrow::field("s", arrow::struct_({arrow::field("x", arrow::utf8()),
-                                                              arrow::field("number", arrow::int32())}))).ok());
+                                                               arrow::field("number", arrow::int32())})))
+                         .ok());
 }
 
 TEST(PaimonWriteColumnConverterTest, NullAncestorSkipsInvalidRequiredChildrenWithoutMutation) {
@@ -269,8 +279,7 @@ TEST(PaimonWriteColumnConverterTest, NullAncestorSkipsInvalidRequiredChildrenWit
     const auto type = TypeDescriptor::create_struct_type({"required"}, {TypeDescriptor(TYPE_INT)});
     auto wrapped = nullable(source, {1});
     auto batch = convert_one(
-            wrapped, type,
-            arrow::field("s", arrow::struct_({arrow::field("REQUIRED", arrow::int32(), false)}), true));
+            wrapped, type, arrow::field("s", arrow::struct_({arrow::field("REQUIRED", arrow::int32(), false)}), true));
     ASSERT_TRUE(batch.ok()) << batch.status().to_string();
     const auto& result = static_cast<const arrow::StructArray&>(*(*batch)->column(0));
     EXPECT_TRUE(result.IsNull(0));
@@ -291,8 +300,8 @@ TEST(PaimonWriteColumnConverterTest, ArraysMapsEmptyContainersAndHiddenInvalidOf
     auto source = ArrayColumn::create(nullable(elements, {0, 0}), offsets);
     auto wrapped = nullable(source, {0, 0, 1});
     const auto type = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_INT));
-    auto batch = convert_one(wrapped, type,
-                             arrow::field("a", arrow::list(arrow::field("element", arrow::int32(), false))));
+    auto batch =
+            convert_one(wrapped, type, arrow::field("a", arrow::list(arrow::field("element", arrow::int32(), false))));
     ASSERT_TRUE(batch.ok()) << batch.status().to_string();
     const auto& result = static_cast<const arrow::ListArray&>(*(*batch)->column(0));
     EXPECT_EQ(result.value_length(0), 0);
@@ -357,15 +366,15 @@ TEST(PaimonWriteColumnConverterTest, VariantRejectsMalformedMetadataValuesAndUns
     const auto valid_metadata = std::string(VariantMetadata::kEmptyMetadata);
     const auto valid_object_metadata = bytes({0x11, 2, 0, 1, 2, 'a', 'b'});
     const std::vector<std::pair<std::string, std::string>> invalid = {
-            {bytes({1, 1, 0, 8, 'a'}), bytes({0})}, // metadata end offset outside bytes
-            {bytes({0x11, 2, 0, 1, 2, 'b', 'a'}), bytes({0})}, // sorted flag violated
-            {valid_metadata, bytes({12})}, // truncated int8
-            {valid_metadata, bytes({0, 0})}, // primitive trailing bytes
-            {valid_metadata, bytes({16 << 2, 1, 0, 0, 0, 0xff})}, // invalid UTF-8
-            {valid_metadata, bytes({17 << 2, 0, 0, 0, 0, 0, 0, 0, 0})}, // unsupported public TIME_NTZ
-            {valid_metadata, bytes({3, 1, 0, 2, 12})}, // malformed array extent
+            {bytes({1, 1, 0, 8, 'a'}), bytes({0})},                       // metadata end offset outside bytes
+            {bytes({0x11, 2, 0, 1, 2, 'b', 'a'}), bytes({0})},            // sorted flag violated
+            {valid_metadata, bytes({12})},                                // truncated int8
+            {valid_metadata, bytes({0, 0})},                              // primitive trailing bytes
+            {valid_metadata, bytes({16 << 2, 1, 0, 0, 0, 0xff})},         // invalid UTF-8
+            {valid_metadata, bytes({17 << 2, 0, 0, 0, 0, 0, 0, 0, 0})},   // unsupported public TIME_NTZ
+            {valid_metadata, bytes({3, 1, 0, 2, 12})},                    // malformed array extent
             {valid_object_metadata, bytes({2, 2, 0, 1, 0, 0, 2, 12, 1})}, // duplicate object offset
-            {valid_object_metadata, bytes({2, 1, 2, 0, 1, 0})}, // out-of-range dictionary id
+            {valid_object_metadata, bytes({2, 1, 2, 0, 1, 0})},           // out-of-range dictionary id
     };
     for (const auto& [metadata, value] : invalid) {
         auto variant = VariantColumn::create();
@@ -374,9 +383,11 @@ TEST(PaimonWriteColumnConverterTest, VariantRejectsMalformedMetadataValuesAndUns
     }
     auto valid = VariantColumn::create();
     valid->append(VariantRowValue::from_null());
-    const auto reversed = arrow::field("v", arrow::struct_({arrow::field("metadata", arrow::binary(), false),
-                                                            arrow::field("value", arrow::binary(), false)}), true,
-                                       arrow::key_value_metadata({"paimon.extension.type"}, {"paimon.type.variant"}));
+    const auto reversed =
+            arrow::field("v",
+                         arrow::struct_({arrow::field("metadata", arrow::binary(), false),
+                                         arrow::field("value", arrow::binary(), false)}),
+                         true, arrow::key_value_metadata({"paimon.extension.type"}, {"paimon.type.variant"}));
     EXPECT_FALSE(convert_one(valid, TypeDescriptor::create_variant_type(), reversed).ok());
 }
 
@@ -428,7 +439,8 @@ TEST(PaimonWriteColumnConverterTest, InvalidArgumentsAndZeroRows) {
     EXPECT_FALSE(
             paimon_write_columns_to_arrow({empty}, {}, arrow::schema({}), "UTC", arrow::default_memory_pool()).ok());
     EXPECT_FALSE(paimon_write_columns_to_arrow({empty}, {TypeDescriptor(TYPE_INT)}, nullptr, "UTC",
-                                               arrow::default_memory_pool()).ok());
+                                               arrow::default_memory_pool())
+                         .ok());
     EXPECT_FALSE(paimon_write_columns_to_arrow({empty}, {TypeDescriptor(TYPE_INT)},
                                                arrow::schema({arrow::field("i", arrow::int32())}), "UTC", nullptr)
                          .ok());

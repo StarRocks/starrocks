@@ -286,7 +286,8 @@ Status DataSink::decompose_data_sink_to_pipeline(pipeline::PipelineBuilderContex
 #endif
     } else if (typeid(*this) == typeid(PaimonTableSink)) {
         auto* paimon_table_sink = down_cast<PaimonTableSink*>(this);
-        RETURN_IF_ERROR(decompose_paimon_table_sink_to_pipeline(*paimon_table_sink, prev_operators, thrift_sink, context));
+        RETURN_IF_ERROR(
+                decompose_paimon_table_sink_to_pipeline(*paimon_table_sink, prev_operators, thrift_sink, context));
     } else if (typeid(*this) == typeid(HiveTableSink)) {
         auto* hive_table_sink = down_cast<HiveTableSink*>(this);
         RETURN_IF_ERROR(decompose_hive_table_sink_to_pipeline(*hive_table_sink, prev_operators, thrift_sink, context));

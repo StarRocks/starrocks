@@ -69,7 +69,7 @@ public:
     static Status validate_metadata_strict(std::string_view metadata);
     static Status validate_row_strict(std::string_view metadata, std::string_view value);
     static StatusOr<VariantRowValue> build_row_from_overlays_strict(std::optional<VariantRowRef> base,
-                                                                  std::vector<Overlay> overlays);
+                                                                    std::vector<Overlay> overlays);
     static constexpr size_t kMaxStrictDepth = 128;
     static constexpr size_t kMaxStrictWork = 1 << 20;
 

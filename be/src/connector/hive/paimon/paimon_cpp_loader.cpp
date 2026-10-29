@@ -86,9 +86,7 @@ public:
         if (_delegate == nullptr) return _status = Status::InternalError("Paimon shim returned a null writer");
         return _status = _delegate->init(poller, profile, memory);
     }
-    Status add(const ChunkPtr& chunk) override {
-        return _delegate ? _delegate->add(chunk) : uninitialized_status();
-    }
+    Status add(const ChunkPtr& chunk) override { return _delegate ? _delegate->add(chunk) : uninitialized_status(); }
     Status finish() override { return _delegate ? _delegate->finish() : uninitialized_status(); }
     void rollback() override {
         if (_delegate) _delegate->rollback();
@@ -121,8 +119,8 @@ std::unique_ptr<connector::ConnectorSink> create_paimon_cpp_chunk_sink(
     return std::make_unique<DeferredPaimonSink>(std::move(context), driver_id);
 }
 
-StatusOr<std::vector<int32_t>> calculate_paimon_cpp_bucket_ids(
-        const TPaimonTableSink& sink, const ChunkPtr& chunk, const std::vector<ExprContext*>& output_exprs) {
+StatusOr<std::vector<int32_t>> calculate_paimon_cpp_bucket_ids(const TPaimonTableSink& sink, const ChunkPtr& chunk,
+                                                               const std::vector<ExprContext*>& output_exprs) {
     ASSIGN_OR_RETURN(auto fn, load_capability(bucket_ids_fn, STARROCKS_PAIMON_BUCKET_IDS_SYMBOL, false));
     return fn(sink, chunk, output_exprs);
 }

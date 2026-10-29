@@ -100,12 +100,12 @@ protected:
             sink.__set_routing_bucket_slot_id(99);
             sink.__set_bucket_routed(true);
         }
-        const std::string fields =
-                partitioned ? R"({"id":0,"name":"id","type":"INT"},{"id":1,"name":"p","type":"STRING"})"
-                            : R"({"id":0,"name":"id","type":"INT"})";
-        const std::string schema = "{\"version\":3,\"id\":0,\"fields\":[" + fields + "],\"highestFieldId\":" +
-                                   (partitioned ? "1" : "0") + ",\"partitionKeys\":" +
-                                   (partitioned ? "[\"p\"]" : "[]") +
+        const std::string fields = partitioned
+                                           ? R"({"id":0,"name":"id","type":"INT"},{"id":1,"name":"p","type":"STRING"})"
+                                           : R"({"id":0,"name":"id","type":"INT"})";
+        const std::string schema = "{\"version\":3,\"id\":0,\"fields\":[" + fields +
+                                   "],\"highestFieldId\":" + (partitioned ? "1" : "0") +
+                                   ",\"partitionKeys\":" + (partitioned ? "[\"p\"]" : "[]") +
                                    ",\"primaryKeys\":[],\"options\":{\"bucket\":\"" + (fixed ? "8" : "-1") +
                                    "\",\"file.format\":\"parquet\"},\"timeMillis\":0}";
         sink.__set_schema_json(schema);
@@ -187,7 +187,7 @@ TEST_F(PaimonChunkSinkTest, FullRowsGroupedByActualPartitionAndPreparedFilesSurv
     ASSERT_FALSE(info.owned_files.empty());
     auto pool = paimon::GetDefaultPool();
     auto messages = paimon::CommitMessage::DeserializeList(info.serializer_version, info.commit_messages.data(),
-                                                          info.commit_messages.size(), pool);
+                                                           info.commit_messages.size(), pool);
     ASSERT_TRUE(messages.ok());
     EXPECT_EQ(3, messages.value().size());
     EXPECT_TRUE(std::filesystem::exists(root + "/p=a%2Fb%3Dc%25"));

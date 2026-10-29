@@ -73,7 +73,7 @@ static bool has_variant_descendant(const TypeDescriptor& type_desc) {
 }
 
 static StatusOr<VariantRowValue> materialize_row_strict_impl(const VariantColumn* column, size_t row, size_t depth,
-                                                            size_t* work);
+                                                             size_t* work);
 
 static Status consume_strict_variant_bytes(const VariantRowValue& value, size_t* bytes) {
     const size_t metadata_size = value.get_metadata().raw().size();
@@ -85,9 +85,11 @@ static Status consume_strict_variant_bytes(const VariantRowValue& value, size_t*
     return Status::OK();
 }
 
-static StatusOr<VariantColumn::EncodedVariantResult> encode_typed_row_as_variant_impl(
-        const Column* typed_column, size_t typed_row, const TypeDescriptor& type_desc, bool strict, size_t depth,
-        size_t* work) {
+static StatusOr<VariantColumn::EncodedVariantResult> encode_typed_row_as_variant_impl(const Column* typed_column,
+                                                                                      size_t typed_row,
+                                                                                      const TypeDescriptor& type_desc,
+                                                                                      bool strict, size_t depth,
+                                                                                      size_t* work) {
     using EncodedVariantState = VariantColumn::EncodedVariantState;
     using EncodedVariantResult = VariantColumn::EncodedVariantResult;
     if (strict) {
@@ -158,9 +160,9 @@ static StatusOr<VariantColumn::EncodedVariantResult> encode_typed_row_as_variant
             return Status::InvalidArgument("Strict VARIANT array work limit exceeded");
         }
         for (size_t i = 0; i < element_size; ++i) {
-            ASSIGN_OR_RETURN(auto element,
-                             encode_typed_row_as_variant_impl(array_column->elements_column_raw_ptr(), element_offset + i,
-                                                              type_desc.children[0], strict, depth + 1, work));
+            ASSIGN_OR_RETURN(auto element, encode_typed_row_as_variant_impl(array_column->elements_column_raw_ptr(),
+                                                                            element_offset + i, type_desc.children[0],
+                                                                            strict, depth + 1, work));
             if (strict) {
                 RETURN_IF_ERROR(consume_strict_variant_bytes(element.value, &bytes));
             }
@@ -1294,7 +1296,7 @@ bool VariantColumn::try_get_row_ref(size_t idx, VariantRowRef* out) const {
 }
 
 static StatusOr<VariantRowValue> materialize_row_strict_impl(const VariantColumn* column, size_t row, size_t depth,
-                                                            size_t* work) {
+                                                             size_t* work) {
     if (depth > VariantBuilder::kMaxStrictDepth || *work == 0) {
         return Status::InvalidArgument("Strict VARIANT materialization nesting/work limit exceeded");
     }
@@ -1353,9 +1355,8 @@ static StatusOr<VariantRowValue> materialize_row_strict_impl(const VariantColumn
         if (typed == nullptr || row >= typed->size()) {
             return Status::InvalidArgument("Missing strict VARIANT typed row");
         }
-        ASSIGN_OR_RETURN(auto encoded,
-                         encode_typed_row_as_variant_impl(typed, row, column->shredded_types()[i], true,
-                                                          depth + paths[i].segments.size(), work));
+        ASSIGN_OR_RETURN(auto encoded, encode_typed_row_as_variant_impl(typed, row, column->shredded_types()[i], true,
+                                                                        depth + paths[i].segments.size(), work));
         if (encoded.state == VariantColumn::EncodedVariantState::kValue) {
             RETURN_IF_ERROR(consume_strict_variant_bytes(encoded.value, &bytes));
             overlays.emplace_back(VariantBuilder::Overlay{.path = paths[i], .value = std::move(encoded.value)});

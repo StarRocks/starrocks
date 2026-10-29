@@ -14,18 +14,6 @@
 
 #include "connector/hive/paimon/paimon_chunk_sink.h"
 
-#include <algorithm>
-#include <atomic>
-#include <charconv>
-#include <cctype>
-#include <condition_variable>
-#include <limits>
-#include <map>
-#include <mutex>
-#include <set>
-#include <string_view>
-#include <utility>
-
 #include <arrow/api.h>
 #include <arrow/c/bridge.h>
 #include <fmt/format.h>
@@ -37,6 +25,18 @@
 #include <paimon/record_batch.h>
 #include <paimon/write_context.h>
 #include <rapidjson/document.h>
+
+#include <algorithm>
+#include <atomic>
+#include <cctype>
+#include <charconv>
+#include <condition_variable>
+#include <limits>
+#include <map>
+#include <mutex>
+#include <set>
+#include <string_view>
+#include <utility>
 
 #include "base/uid_util.h"
 #include "base/utility/defer_op.h"
@@ -195,10 +195,10 @@ Status validate_contract(const TPaimonTableSink& sink, bool writing) {
         return Status::NotSupported("Paimon writer protocol must be 1; upgrade FE and BE together");
     }
     if (!sink.__isset.location || sink.location.empty() || !sink.__isset.table_identity ||
-        sink.table_identity.empty() ||
-        !sink.__isset.schema_id || sink.schema_id < 0 || !sink.__isset.schema_json || sink.schema_json.empty() ||
-        !sink.__isset.column_names || sink.column_names.empty() || !sink.__isset.partition_columns ||
-        !sink.__isset.bucket_columns || !sink.__isset.primary_key_columns || !sink.__isset.bucket_count) {
+        sink.table_identity.empty() || !sink.__isset.schema_id || sink.schema_id < 0 || !sink.__isset.schema_json ||
+        sink.schema_json.empty() || !sink.__isset.column_names || sink.column_names.empty() ||
+        !sink.__isset.partition_columns || !sink.__isset.bucket_columns || !sink.__isset.primary_key_columns ||
+        !sink.__isset.bucket_count) {
         return Status::InvalidArgument("Paimon sink is missing its frozen table/schema contract");
     }
     if (writing && (!sink.__isset.operation_id || sink.operation_id.empty() || !sink.__isset.commit_user ||
@@ -230,7 +230,7 @@ Status validate_contract(const TPaimonTableSink& sink, bool writing) {
 // SDK Arrow erases CHAR/VARCHAR/BINARY length. Reattach those bounds from the already-validated
 // complete native schema JSON, recursively, without rebuilding native field ids/nullability.
 StatusOr<std::shared_ptr<arrow::Field>> add_length_bounds(const std::shared_ptr<arrow::Field>& field,
-                                                        const rapidjson::Value& native_type) {
+                                                          const rapidjson::Value& native_type) {
     auto result = field;
     if (native_type.IsString()) {
         std::string_view type(native_type.GetString(), native_type.GetStringLength());
@@ -251,8 +251,8 @@ StatusOr<std::shared_ptr<arrow::Field>> add_length_bounds(const std::shared_ptr<
             result = field->WithMetadata(std::move(metadata));
         }
         if (open != std::string_view::npos &&
-            (type.substr(0, open) == "CHAR" || type.substr(0, open) == "VARCHAR" ||
-             type.substr(0, open) == "BINARY" || type.substr(0, open) == "VARBINARY")) {
+            (type.substr(0, open) == "CHAR" || type.substr(0, open) == "VARCHAR" || type.substr(0, open) == "BINARY" ||
+             type.substr(0, open) == "VARBINARY")) {
             const auto close = type.find(')', open);
             int32_t length = 0;
             if (close == std::string_view::npos) return Status::InvalidArgument("Malformed Paimon length bound");
@@ -300,7 +300,8 @@ StatusOr<std::shared_ptr<arrow::Field>> add_length_bounds(const std::shared_ptr<
             result = field->WithType(arrow::struct_(children));
             break;
         }
-        default: break;
+        default:
+            break;
         }
     }
     return result;
@@ -332,8 +333,8 @@ StatusOr<FrozenSchema> load_frozen_schema(const TPaimonTableSink& sink, const st
     // GetJsonSchema() reserializes Arrow types and loses native string/binary lengths in 0.3.
     // Compare the complete immutable native schema file instead; the ID comes from LatestSchema.
     std::string json;
-    auto schema_path = sink.location + (sink.location.back() == '/' ? "" : "/") +
-                       "schema/schema-" + std::to_string(native->Id());
+    auto schema_path =
+            sink.location + (sink.location.back() == '/' ? "" : "/") + "schema/schema-" + std::to_string(native->Id());
     RETURN_IF_ERROR(native_status(fs->ReadFile(schema_path, &json), "read complete native schema"));
     rapidjson::Document expected;
     rapidjson::Document actual;
@@ -393,33 +394,35 @@ StatusOr<FrozenSchema> load_frozen_schema(const TPaimonTableSink& sink, const st
         case arrow::Type::INT32:
         case arrow::Type::INT64:
         case arrow::Type::STRING:
-        case arrow::Type::DATE32: break;
-        default: return Status::NotSupported("Pinned Paimon SDK supports only boolean/integer/string/date partitions");
+        case arrow::Type::DATE32:
+            break;
+        default:
+            return Status::NotSupported("Pinned Paimon SDK supports only boolean/integer/string/date partitions");
         }
     }
     return FrozenSchema{std::move(native), std::move(result_schema), std::move(bucket_keys)};
 }
 
 StatusOr<std::vector<int32_t>> bucket_ids(const TPaimonTableSink& sink, const FrozenSchema& schema,
-                                         const std::shared_ptr<arrow::RecordBatch>& batch,
-                                         const std::shared_ptr<paimon::MemoryPool>& pool) {
+                                          const std::shared_ptr<arrow::RecordBatch>& batch,
+                                          const std::shared_ptr<paimon::MemoryPool>& pool) {
     std::vector<int32_t> ids(batch->num_rows(), 0);
     if (ids.empty() || sink.bucket_count == -1 || sink.bucket_count == 1) return ids;
     const auto function = schema.native->Options().find("bucket-function");
     const auto function_name = function == schema.native->Options().end() ? "default" : function->second;
     std::unique_ptr<paimon::BucketIdCalculator> calculator;
     if (function_name == "default" || function_name == "DEFAULT") {
-        ASSIGN_OR_RETURN(calculator, native_result(paimon::BucketIdCalculator::Create(
-                !sink.primary_key_columns.empty(), sink.bucket_count, pool), "create native bucket calculator"));
+        ASSIGN_OR_RETURN(calculator, native_result(paimon::BucketIdCalculator::Create(!sink.primary_key_columns.empty(),
+                                                                                      sink.bucket_count, pool),
+                                                   "create native bucket calculator"));
     } else if (function_name == "mod" || function_name == "MOD") {
         if (schema.bucket_keys.size() != 1) return Status::InvalidArgument("Paimon MOD bucket function needs one key");
         ASSIGN_OR_RETURN(auto key_type,
                          native_result(schema.native->GetFieldType(schema.bucket_keys[0]), "bucket key type"));
-        ASSIGN_OR_RETURN(
-                calculator,
-                native_result(paimon::BucketIdCalculator::CreateMod(
-                                      !sink.primary_key_columns.empty(), sink.bucket_count, key_type, pool),
-                              "create native MOD bucket calculator"));
+        ASSIGN_OR_RETURN(calculator,
+                         native_result(paimon::BucketIdCalculator::CreateMod(!sink.primary_key_columns.empty(),
+                                                                             sink.bucket_count, key_type, pool),
+                                       "create native MOD bucket calculator"));
     } else if (function_name == "hive" || function_name == "HIVE") {
         std::vector<paimon::HiveFieldInfo> fields;
         for (const auto& name : schema.bucket_keys) {
@@ -433,11 +436,10 @@ StatusOr<std::vector<int32_t>> bucket_ids(const TPaimonTableSink& sink, const Fr
                 fields.emplace_back(type);
             }
         }
-        ASSIGN_OR_RETURN(
-                calculator,
-                native_result(paimon::BucketIdCalculator::CreateHive(
-                                      !sink.primary_key_columns.empty(), sink.bucket_count, fields, pool),
-                              "create native Hive bucket calculator"));
+        ASSIGN_OR_RETURN(calculator,
+                         native_result(paimon::BucketIdCalculator::CreateHive(!sink.primary_key_columns.empty(),
+                                                                              sink.bucket_count, fields, pool),
+                                       "create native Hive bucket calculator"));
     } else {
         return Status::NotSupported("Unsupported Paimon native bucket-function");
     }
@@ -467,10 +469,14 @@ StatusOr<std::string> partition_value(const std::shared_ptr<arrow::Array>& array
     switch (array->type_id()) {
     case arrow::Type::BOOL:
         return std::string(std::static_pointer_cast<arrow::BooleanArray>(array)->Value(row) ? "true" : "false");
-    case arrow::Type::INT8: return std::to_string(std::static_pointer_cast<arrow::Int8Array>(array)->Value(row));
-    case arrow::Type::INT16: return std::to_string(std::static_pointer_cast<arrow::Int16Array>(array)->Value(row));
-    case arrow::Type::INT32: return std::to_string(std::static_pointer_cast<arrow::Int32Array>(array)->Value(row));
-    case arrow::Type::INT64: return std::to_string(std::static_pointer_cast<arrow::Int64Array>(array)->Value(row));
+    case arrow::Type::INT8:
+        return std::to_string(std::static_pointer_cast<arrow::Int8Array>(array)->Value(row));
+    case arrow::Type::INT16:
+        return std::to_string(std::static_pointer_cast<arrow::Int16Array>(array)->Value(row));
+    case arrow::Type::INT32:
+        return std::to_string(std::static_pointer_cast<arrow::Int32Array>(array)->Value(row));
+    case arrow::Type::INT64:
+        return std::to_string(std::static_pointer_cast<arrow::Int64Array>(array)->Value(row));
     case arrow::Type::DATE32: {
         ASSIGN_OR_RETURN(auto scalar, arrow_result(array->GetScalar(row)));
         return scalar->ToString(); // ISO yyyy-mm-dd; SDK parses DATE from this, even in legacy path mode.
@@ -521,10 +527,14 @@ StatusOr<int64_t> memory_size(std::string text) {
             unit += std::tolower(static_cast<unsigned char>(text[i]));
     }
     int64_t multiplier = 1;
-    if (unit == "k" || unit == "kb" || unit == "kibibytes") multiplier = 1024;
-    else if (unit == "m" || unit == "mb" || unit == "mebibytes") multiplier = 1024 * 1024;
-    else if (unit == "g" || unit == "gb" || unit == "gibibytes") multiplier = 1024L * 1024 * 1024;
-    else if (unit == "t" || unit == "tb" || unit == "tebibytes") multiplier = 1024L * 1024 * 1024 * 1024;
+    if (unit == "k" || unit == "kb" || unit == "kibibytes")
+        multiplier = 1024;
+    else if (unit == "m" || unit == "mb" || unit == "mebibytes")
+        multiplier = 1024 * 1024;
+    else if (unit == "g" || unit == "gb" || unit == "gibibytes")
+        multiplier = 1024L * 1024 * 1024;
+    else if (unit == "t" || unit == "tb" || unit == "tebibytes")
+        multiplier = 1024L * 1024 * 1024 * 1024;
     else if (!unit.empty() && unit != "b" && unit != "bytes")
         return Status::InvalidArgument("Invalid Paimon memory size unit");
     if (parsed.ec != std::errc() || value <= 0 || value > std::numeric_limits<int64_t>::max() / multiplier) {
@@ -548,16 +558,15 @@ private:
 
 } // namespace
 
-StatusOr<std::vector<int32_t>> calculate_paimon_bucket_ids_in_shim(
-        const TPaimonTableSink& sink, const ChunkPtr& chunk, const std::vector<ExprContext*>& output_exprs) {
+StatusOr<std::vector<int32_t>> calculate_paimon_bucket_ids_in_shim(const TPaimonTableSink& sink, const ChunkPtr& chunk,
+                                                                   const std::vector<ExprContext*>& output_exprs) {
     try {
         RETURN_IF_ERROR(validate_contract(sink, false));
         if (chunk == nullptr || output_exprs.size() != sink.column_names.size()) {
             return Status::InvalidArgument("Paimon routing requires a full-schema chunk expression list");
         }
-        ASSIGN_OR_RETURN(
-                std::shared_ptr<FileSystem> fs,
-                FileSystemFactory::CreateUniqueFromString(sink.location, FSOptions(&sink.cloud_configuration)));
+        ASSIGN_OR_RETURN(std::shared_ptr<FileSystem> fs, FileSystemFactory::CreateUniqueFromString(
+                                                                 sink.location, FSOptions(&sink.cloud_configuration)));
         auto native_fs = std::make_shared<PaimonFileSystem>(fs.get(), DataCacheOptions{});
         ASSIGN_OR_RETURN(auto schema, load_frozen_schema(sink, native_fs));
         auto* tracker = CurrentThread::mem_tracker();
@@ -566,8 +575,8 @@ StatusOr<std::vector<int32_t>> calculate_paimon_bucket_ids_in_shim(
         auto budget = std::make_shared<WriteMemoryBudget>(max_memory);
         auto native_pool = std::make_shared<WriteNativePool>(tracker, budget);
         WriteArrowPool arrow_pool(tracker, budget);
-        ASSIGN_OR_RETURN(auto batch, paimon_write_chunk_to_arrow(chunk, output_exprs, schema.arrow,
-                                                                sink.time_zone, &arrow_pool));
+        ASSIGN_OR_RETURN(auto batch,
+                         paimon_write_chunk_to_arrow(chunk, output_exprs, schema.arrow, sink.time_zone, &arrow_pool));
         return bucket_ids(sink, schema, batch, native_pool);
     } catch (const std::bad_alloc&) {
         return Status::MemoryLimitExceeded("Paimon routing allocation failed");
@@ -704,8 +713,8 @@ public:
         std::shared_ptr<arrow::RecordBatch> batch;
         {
             SCOPED_TIMER(convert_time);
-            ASSIGN_OR_RETURN(batch, paimon_write_chunk_to_arrow(chunk, exprs, schema.arrow,
-                                                                context->sink.time_zone, arrow_pool.get()));
+            ASSIGN_OR_RETURN(batch, paimon_write_chunk_to_arrow(chunk, exprs, schema.arrow, context->sink.time_zone,
+                                                                arrow_pool.get()));
         }
         RETURN_IF_ERROR(check_memory());
         ASSIGN_OR_RETURN(auto ids, bucket_ids(context->sink, schema, batch, native_pool));
@@ -795,9 +804,8 @@ public:
         ASSIGN_OR_RETURN(auto fresh, load_frozen_schema(context->sink, native_fs));
         SCOPED_TIMER(prepare_time);
         ASSIGN_OR_RETURN(auto messages, native_result(writer->PrepareCommit(), "prepare commit"));
-        ASSIGN_OR_RETURN(auto serialized,
-                         native_result(paimon::CommitMessage::SerializeList(messages, native_pool),
-                                       "serialize commit list"));
+        ASSIGN_OR_RETURN(auto serialized, native_result(paimon::CommitMessage::SerializeList(messages, native_pool),
+                                                        "serialize commit list"));
         RETURN_IF_ERROR(native_status(writer->Close(), "close prepared writer"));
         writer.reset();
         native_executor->ShutdownNow();
@@ -1021,9 +1029,15 @@ void PaimonChunkSink::rollback() {
         _impl->set_status(Status::IOError("Paimon unpublished writer cleanup failed"));
     }
 }
-bool PaimonChunkSink::is_finished() { return _impl->finished(); }
-Status PaimonChunkSink::status() { return _impl->get_status(); }
-SinkOperatorMemoryManager* PaimonChunkSink::op_mem_mgr() const { return _impl->memory; }
+bool PaimonChunkSink::is_finished() {
+    return _impl->finished();
+}
+Status PaimonChunkSink::status() {
+    return _impl->get_status();
+}
+SinkOperatorMemoryManager* PaimonChunkSink::op_mem_mgr() const {
+    return _impl->memory;
+}
 
 } // namespace connector
 } // namespace starrocks

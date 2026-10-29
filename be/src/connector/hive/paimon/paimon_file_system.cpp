@@ -202,14 +202,14 @@ public:
         }
         auto status = _file->append(Slice(buffer, static_cast<size_t>(size)));
         if (!status.ok()) {
-            _error = paimon::Status::IOError(fmt::format("Failed to write Paimon file {}, reason: {}", _path,
-                                                       status.detailed_message()));
+            _error = paimon::Status::IOError(
+                    fmt::format("Failed to write Paimon file {}, reason: {}", _path, status.detailed_message()));
             return _error;
         }
         const auto expected_size = static_cast<uint64_t>(_pos + size);
         if (_file->size() != expected_size) {
             _error = paimon::Status::IOError(fmt::format("Incomplete write to Paimon file {}: expected size {}, got {}",
-                                                       _path, expected_size, _file->size()));
+                                                         _path, expected_size, _file->size()));
             return _error;
         }
         _pos += size;
@@ -228,8 +228,8 @@ public:
         }
         auto status = _file->flush(WritableFile::FLUSH_SYNC);
         if (!status.ok()) {
-            _error = paimon::Status::IOError(fmt::format("Failed to flush Paimon file {}, reason: {}", _path,
-                                                       status.detailed_message()));
+            _error = paimon::Status::IOError(
+                    fmt::format("Failed to flush Paimon file {}, reason: {}", _path, status.detailed_message()));
         }
         return _error;
     }
@@ -570,7 +570,7 @@ std::shared_ptr<PaimonFileSystem> PaimonFileSystem::create_for_write(std::shared
 }
 
 paimon::Result<std::unique_ptr<paimon::OutputStream>> PaimonFileSystem::Create(const std::string& path,
-                                                                           bool overwrite) const {
+                                                                               bool overwrite) const {
     if (_write_tracker == nullptr) {
         return paimon::Status::NotImplemented("Paimon reader file system does not support Create");
     }
@@ -745,7 +745,7 @@ paimon::Result<std::unique_ptr<paimon::FileStatus>> PaimonFileSystem::GetFileSta
         auto size_result = _file_system->get_file_size(path);
         if (!size_result.ok()) {
             return paimon::Status::IOError(fmt::format("Failed to get file size for {}, reason: {}", path,
-                                                     size_result.status().detailed_message()));
+                                                       size_result.status().detailed_message()));
         }
         size = size_result.value();
     }
@@ -756,7 +756,7 @@ paimon::Result<std::unique_ptr<paimon::FileStatus>> PaimonFileSystem::GetFileSta
     }
     // StarRocks file systems report modification time in seconds, paimon::FileStatus wants ms.
     return std::make_unique<PaimonFileStatus>(path, size, modification_time_result.value() * 1000,
-                                            directory_result.value());
+                                              directory_result.value());
 }
 
 paimon::Status PaimonFileSystem::ListDir(

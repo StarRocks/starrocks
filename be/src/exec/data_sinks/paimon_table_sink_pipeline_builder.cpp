@@ -34,8 +34,8 @@
 namespace starrocks {
 
 Status decompose_paimon_table_sink_to_pipeline(const PaimonTableSink& sink, pipeline::OpFactories prev_operators,
-                                              const TDataSink& thrift_sink,
-                                              pipeline::PipelineBuilderContext* context) {
+                                               const TDataSink& thrift_sink,
+                                               pipeline::PipelineBuilderContext* context) {
     if (!thrift_sink.__isset.paimon_table_sink) return Status::InvalidArgument("Missing Paimon table sink");
     const auto& target = thrift_sink.paimon_table_sink;
     auto* state = context->runtime_state();
@@ -75,8 +75,8 @@ Status decompose_paimon_table_sink_to_pipeline(const PaimonTableSink& sink, pipe
         }
         std::vector<ExprContext*> keys;
         RETURN_IF_ERROR(ExprFactory::create_expr_trees(state->obj_pool(), partition_exprs, &keys, state));
-        keys.push_back(state->obj_pool()->add(new ExprContext(state->obj_pool()->add(
-                new ColumnRef(TypeDescriptor(TYPE_INT), target.routing_bucket_slot_id)))));
+        keys.push_back(state->obj_pool()->add(new ExprContext(
+                state->obj_pool()->add(new ColumnRef(TypeDescriptor(TYPE_INT), target.routing_bucket_slot_id)))));
         // Force a fixed hash exchange on (native partition values, native bucket id) even when
         // the upstream source reports already-shuffled. Never use writer scaling/key-adaptive
         // exchange: either can create two native writers for one PK partition/bucket.
@@ -84,14 +84,13 @@ Status decompose_paimon_table_sink_to_pipeline(const PaimonTableSink& sink, pipe
         auto memory = std::make_shared<pipeline::ChunkBufferMemoryManager>(
                 dop, config::local_exchange_buffer_mem_limit_per_driver);
         auto source = std::make_shared<pipeline::LocalExchangeSourceOperatorFactory>(context->next_operator_id(),
-                                                                                      node_id, memory);
+                                                                                     node_id, memory);
         source->set_runtime_state(state);
         context->inherit_upstream_source_properties(source.get(), context->source_operator(prev_operators));
         source->set_could_local_shuffle(false);
         source->set_degree_of_parallelism(dop);
-        auto exchange = std::make_shared<pipeline::PartitionExchanger>(memory, source.get(),
-                                                                       TPartitionType::HASH_PARTITIONED, keys,
-                                                                       std::vector<TBucketProperty>{});
+        auto exchange = std::make_shared<pipeline::PartitionExchanger>(
+                memory, source.get(), TPartitionType::HASH_PARTITIONED, keys, std::vector<TBucketProperty>{});
         prev_operators.emplace_back(std::make_shared<pipeline::LocalExchangeSinkOperatorFactory>(
                 context->next_operator_id(), node_id, exchange));
         context->add_pipeline(prev_operators);
@@ -100,8 +99,8 @@ Status decompose_paimon_table_sink_to_pipeline(const PaimonTableSink& sink, pipe
     } else {
         // Force the requested number of sink drivers even for empty/VALUES sources. Every
         // driver must report a terminal producer marker; scaling would invalidate FE's set.
-        auto operators = pipeline::builder::maybe_interpolate_local_passthrough_exchange(
-                context, state, node_id, prev_operators, dop, true);
+        auto operators = pipeline::builder::maybe_interpolate_local_passthrough_exchange(context, state, node_id,
+                                                                                         prev_operators, dop, true);
         operators.emplace_back(std::move(sink_operator));
         context->add_pipeline(operators);
     }

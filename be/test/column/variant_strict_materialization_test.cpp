@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "column/variant_column.h"
-
 #include <gtest/gtest.h>
 
 #include <limits>
@@ -27,6 +25,7 @@
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "column/variant_builder.h"
+#include "column/variant_column.h"
 #include "column/variant_encoder.h"
 
 namespace starrocks {
@@ -46,8 +45,8 @@ MutableColumnPtr nullable_bigint(int64_t value, bool is_null = false) {
     return NullableColumn::create(std::move(data), std::move(nulls));
 }
 
-VariantColumn::MutablePtr single_path(std::string_view metadata, std::string_view residual,
-                                      MutableColumnPtr typed, TypeDescriptor type = TypeDescriptor(TYPE_BIGINT),
+VariantColumn::MutablePtr single_path(std::string_view metadata, std::string_view residual, MutableColumnPtr typed,
+                                      TypeDescriptor type = TypeDescriptor(TYPE_BIGINT),
                                       MutableColumnPtr fallback = nullptr) {
     auto column = VariantColumn::create();
     MutableColumns typed_columns;
@@ -112,9 +111,9 @@ PARALLEL_TEST(VariantStrictMaterializationTest, nonmonotonic_residual_and_false_
     const char residual[] = {2, 2, 0, 1, 1, 0, 5, 0, 13, 'x', 'y', 'z'};
     auto typed = BooleanColumn::create();
     typed->append(0);
-    auto column = single_path(std::string_view(metadata, sizeof(metadata)),
-                              std::string_view(residual, sizeof(residual)), std::move(typed),
-                              TypeDescriptor(TYPE_BOOLEAN));
+    auto column =
+            single_path(std::string_view(metadata, sizeof(metadata)), std::string_view(residual, sizeof(residual)),
+                        std::move(typed), TypeDescriptor(TYPE_BOOLEAN));
     auto result = column->materialize_row_strict(0);
     ASSERT_TRUE(result.ok()) << result.status();
     auto a = field(result.value(), "a");
@@ -180,8 +179,8 @@ PARALLEL_TEST(VariantStrictMaterializationTest, malformed_base_or_overlay_does_n
     ASSERT_FALSE(bad_base->materialize_row_strict(0).ok());
 
     const char invalid_dictionary[] = {0x11, 1, 0, 9, 'a'};
-    auto bad_metadata = single_path(std::string_view(invalid_dictionary, sizeof(invalid_dictionary)), {},
-                                    nullable_bigint(9));
+    auto bad_metadata =
+            single_path(std::string_view(invalid_dictionary, sizeof(invalid_dictionary)), {}, nullable_bigint(9));
     ASSERT_FALSE(bad_metadata->materialize_row_strict(0).ok());
 
     auto bad_overlay = VariantColumn::create();
@@ -195,8 +194,8 @@ PARALLEL_TEST(VariantStrictMaterializationTest, malformed_base_or_overlay_does_n
 PARALLEL_TEST(VariantStrictMaterializationTest, explicit_variant_null_is_not_sql_null_or_missing) {
     auto typed_variant = VariantColumn::create();
     typed_variant->append(VariantRowValue::from_null());
-    auto column = single_path(VariantMetadata::kEmptyMetadata, {}, std::move(typed_variant),
-                              TypeDescriptor(TYPE_VARIANT));
+    auto column =
+            single_path(VariantMetadata::kEmptyMetadata, {}, std::move(typed_variant), TypeDescriptor(TYPE_VARIANT));
     auto result = column->materialize_row_strict(0);
     ASSERT_TRUE(result.ok()) << result.status();
     ASSERT_EQ(1, result->get_value().num_elements().value());

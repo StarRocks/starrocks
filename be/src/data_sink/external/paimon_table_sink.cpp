@@ -35,8 +35,8 @@ Status PaimonTableSink::init(const TDataSink& sink, RuntimeState* state) {
 Status PaimonTableSink::prepare(RuntimeState* state) {
     if (_profile != nullptr) return Status::OK();
     RETURN_IF_ERROR(DataSink::prepare(state));
-    _profile = _pool->add(
-            new RuntimeProfile("PaimonTableSink (frag_id=" + print_id(state->fragment_instance_id()) + ")"));
+    _profile =
+            _pool->add(new RuntimeProfile("PaimonTableSink (frag_id=" + print_id(state->fragment_instance_id()) + ")"));
     return Status::OK();
 }
 

@@ -77,7 +77,8 @@ Status ProjectNode::init(const TPlanNode& tnode, RuntimeState* state) {
             tnode.project_node.slot_map.size() != routing.schema_exprs.size() ||
             record_desc().slots().size() != routing.schema_exprs.size() + 1 ||
             !tnode.project_node.common_slot_map.empty()) {
-            return Status::InvalidArgument("Paimon native bucket must be a new nonnullable INT slot outside the schema");
+            return Status::InvalidArgument(
+                    "Paimon native bucket must be a new nonnullable INT slot outside the schema");
         }
         _paimon_bucket_sink = std::make_unique<TPaimonTableSink>(std::move(sink));
         std::set<SlotId> schema_slots;

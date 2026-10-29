@@ -45,7 +45,7 @@ std::unique_ptr<connector::ConnectorSink> create_paimon_cpp_chunk_sink(
 // Used by the pre-exchange routing operator. The shim performs conversion and native hashing;
 // neither bundled Arrow objects nor SDK objects cross the dynamic-library boundary.
 // output_exprs describe every native field, in the frozen column_names order.
-StatusOr<std::vector<int32_t>> calculate_paimon_cpp_bucket_ids(
-        const TPaimonTableSink& sink, const ChunkPtr& chunk, const std::vector<ExprContext*>& output_exprs);
+StatusOr<std::vector<int32_t>> calculate_paimon_cpp_bucket_ids(const TPaimonTableSink& sink, const ChunkPtr& chunk,
+                                                               const std::vector<ExprContext*>& output_exprs);
 
 } // namespace starrocks

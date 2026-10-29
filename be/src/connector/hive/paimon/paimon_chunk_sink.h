@@ -28,8 +28,8 @@ class ExprContext;
 class PriorityThreadPool;
 
 // Shim-side implementation of the SDK-free routing entrypoint (also used by focused SDK UTs).
-StatusOr<std::vector<int32_t>> calculate_paimon_bucket_ids_in_shim(
-        const TPaimonTableSink& sink, const ChunkPtr& chunk, const std::vector<ExprContext*>& output_exprs);
+StatusOr<std::vector<int32_t>> calculate_paimon_bucket_ids_in_shim(const TPaimonTableSink& sink, const ChunkPtr& chunk,
+                                                                   const std::vector<ExprContext*>& output_exprs);
 
 namespace connector {
 
@@ -64,8 +64,7 @@ private:
 // returned from create_sink(): ConnectorSinkOperatorFactory currently calls create_sink().value().
 class PaimonChunkSinkProvider final : public ConnectorSinkProvider {
 public:
-    explicit PaimonChunkSinkProvider(std::shared_ptr<PaimonChunkSinkContext> context)
-            : _context(std::move(context)) {}
+    explicit PaimonChunkSinkProvider(std::shared_ptr<PaimonChunkSinkContext> context) : _context(std::move(context)) {}
     StatusOr<std::unique_ptr<ConnectorSink>> create_sink(int32_t driver_id) override;
 
 private:

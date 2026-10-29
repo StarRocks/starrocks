@@ -305,8 +305,7 @@ StatusOr<std::vector<std::string_view>> strict_metadata_keys(std::string_view ra
             return Status::InvalidArgument("Invalid VARIANT dictionary offset");
         }
         const auto key = raw.substr(data_start + begin, end - begin);
-        if (!validate_utf8(key.data(), key.size()) ||
-            ((header & 0x10) != 0 && !keys.empty() && keys.back() >= key)) {
+        if (!validate_utf8(key.data(), key.size()) || ((header & 0x10) != 0 && !keys.empty() && keys.back() >= key)) {
             return Status::InvalidArgument("Invalid VARIANT dictionary string/order");
         }
         keys.emplace_back(key);
@@ -376,8 +375,7 @@ Status strict_variant_value(std::string_view raw, const std::vector<std::string_
         case VariantType::BINARY:
         case VariantType::STRING:
             if (raw.size() < 5 || read_variant_uint(raw, 1, 4) != raw.size() - 5 ||
-                (info == static_cast<uint8_t>(VariantType::STRING) &&
-                 !validate_utf8(raw.data() + 5, raw.size() - 5))) {
+                (info == static_cast<uint8_t>(VariantType::STRING) && !validate_utf8(raw.data() + 5, raw.size() - 5))) {
                 return Status::InvalidArgument("Invalid VARIANT binary/string extent");
             }
             return Status::OK();
@@ -477,7 +475,7 @@ Status VariantBuilder::validate_row_strict(std::string_view metadata, std::strin
 }
 
 StatusOr<VariantRowValue> VariantBuilder::build_row_from_overlays_strict(std::optional<VariantRowRef> base,
-                                                                       std::vector<Overlay> overlays) {
+                                                                         std::vector<Overlay> overlays) {
     if (!base.has_value() && overlays.empty()) {
         return Status::InvalidArgument("Missing VARIANT residual and effective overlays");
     }

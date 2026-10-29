@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "connector/hive/paimon/paimon_file_system.h"
-
 #include <gtest/gtest.h>
 
 #include <cstdlib>
@@ -23,6 +21,7 @@
 #include <vector>
 
 #include "base/testutil/assert.h"
+#include "connector/hive/paimon/paimon_file_system.h"
 #include "fs/fs.h"
 
 namespace starrocks {
@@ -92,18 +91,18 @@ public:
 
     Type type() const override { return reported_type; }
     StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const SequentialFileOptions& options,
-                                                                 const std::string& path) override {
+                                                                  const std::string& path) override {
         return _fs->new_sequential_file(options, path);
     }
     StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& options,
-                                                                     const std::string& path) override {
+                                                                       const std::string& path) override {
         return _fs->new_random_access_file(options, path);
     }
     StatusOr<std::unique_ptr<WritableFile>> new_writable_file(const std::string& path) override {
         return new_writable_file(WritableFileOptions{}, path);
     }
     StatusOr<std::unique_ptr<WritableFile>> new_writable_file(const WritableFileOptions& options,
-                                                             const std::string& path) override {
+                                                              const std::string& path) override {
         ++create_calls;
         last_mode = options.mode;
         EXPECT_TRUE(options.sync_on_close);
