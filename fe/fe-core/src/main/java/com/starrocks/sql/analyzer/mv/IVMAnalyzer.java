@@ -171,7 +171,7 @@ public class IVMAnalyzer {
     private final ConnectContext connectContext;
     private final CreateMaterializedViewStatement statement;
     private final QueryStatement queryStatement;
-    // null at CREATE -> deduce per keys; non-null at refresh -> use the MV's pinned version.
+    // null at CREATE or in a nested block -> deduce per keys; non-null at refresh -> use the MV's pinned version.
     private Integer pinnedEncodeRowIdVersion;
 
     public IVMAnalyzer(ConnectContext connectContext,
@@ -351,7 +351,7 @@ public class IVMAnalyzer {
         } else if (relation instanceof QueryRelation) {
             // If the inner relation is a QueryRelation, we need to rewrite it recursively.
             QueryRelation innerQueryRelation = (QueryRelation) relation;
-            return rewriteImpl(innerQueryRelation);
+            return rewriteNestedQuery(innerQueryRelation);
         } else {
             if (!(relation instanceof TableRelation)) {
                 // If the inner relation is not a JoinRelation or QueryRelation, we cannot handle it.
@@ -367,6 +367,74 @@ public class IVMAnalyzer {
         }
     }
 
+<<<<<<< HEAD
+=======
+    /**
+     * Only the output block's {@code __ROW_ID__} is stored, so only it takes and records the MV's pinned encode
+     * version. A nested block's row id encodes from its own keys at CREATE and at refresh alike.
+     */
+    private boolean rewriteNestedQuery(QueryRelation nestedQuery) throws AnalysisException {
+        Integer outputPinnedVersion = pinnedEncodeRowIdVersion;
+        Integer outputVersion = statement != null ? statement.getEncodeRowIdVersion() : null;
+        pinnedEncodeRowIdVersion = null;
+        try {
+            return rewriteImpl(nestedQuery);
+        } finally {
+            pinnedEncodeRowIdVersion = outputPinnedVersion;
+            if (outputVersion != null) {
+                statement.setEncodeRowIdVersion(outputVersion);
+            }
+        }
+    }
+
+    private static void rejectOrderByAndLimit(QueryRelation queryRelation) {
+        if (CollectionUtils.isNotEmpty(queryRelation.getOrderBy())) {
+            String orderBy = queryRelation.getOrderBy().stream()
+                    .map(element -> ExprToSql.toSqlWithoutTbl(element.getExpr()) + (element.getIsAsc() ? "" : " DESC"))
+                    .collect(Collectors.joining(", "));
+            throw new SemanticException("Incremental refresh does not support ORDER BY in the query: ORDER BY %s",
+                    orderBy);
+        }
+        if (queryRelation.hasLimit()) {
+            LimitElement limit = queryRelation.getLimit();
+            throw new SemanticException("Incremental refresh does not support LIMIT: LIMIT %d%s", limit.getLimit(),
+                    limit.hasOffset() ? " OFFSET " + limit.getOffset() : "");
+        }
+    }
+
+    private static String describeRelation(Relation relation) {
+        if (relation instanceof ViewRelation viewRelation) {
+            return "a view as a base table: " + viewRelation.getName().getTbl()
+                    + "; reference the view's base tables directly";
+        }
+        if (relation instanceof CTERelation cteRelation) {
+            return "a WITH clause (CTE): " + cteRelation.getName() + "; write it as a derived table";
+        }
+        if (relation instanceof TableFunctionRelation tableFunction) {
+            return "the table function " + tableFunction.getFunctionName().getFunction();
+        }
+        if (relation instanceof IntersectRelation) {
+            return "INTERSECT";
+        }
+        if (relation instanceof ExceptRelation) {
+            return "EXCEPT";
+        }
+        if (relation instanceof ValuesRelation) {
+            return "a VALUES list";
+        }
+        return relation.getClass().getSimpleName();
+    }
+
+    static String relationName(Relation relation) {
+        TableName name = relation.getAlias() != null ? relation.getAlias() : relation.getResolveTableName();
+        return name != null ? name.getTbl() : relation.getClass().getSimpleName();
+    }
+
+    private static String toSql(List<? extends Expr> exprs) {
+        return exprs.stream().map(ExprToSql::toSqlWithoutTbl).collect(Collectors.joining(", "));
+    }
+
+>>>>>>> 11636f58806... [BugFix][RB-846] Pin an IVM aggregate's row-id encoding from its own group keys, not its derived table's primary key (#67319)
     private boolean rewriteAggregate(SelectRelation selectRelation) throws AnalysisException {
         List<FunctionCallExpr> aggregateExprs = selectRelation.getAggregate();
         List<Expr> groupByExprs = selectRelation.getGroupBy();
