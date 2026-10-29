@@ -16,6 +16,7 @@ package com.starrocks.scheduler;
 
 
 import com.starrocks.persist.OperationType;
+import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.scheduler.persist.TaskSchedule;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterEach;
@@ -25,6 +26,9 @@ import org.junit.jupiter.api.Test;
 
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.spy;
 
 public class TaskManagerEditLogTest {
     private TaskManager masterTaskManager;
@@ -192,5 +196,39 @@ public class TaskManagerEditLogTest {
         Assertions.assertEquals(Constants.TaskState.ACTIVE, resumedTask.getState());
         Assertions.assertNotNull(masterTaskManager.getPeriodFutureMap().get(resumedTask.getId()),
                 "Resuming a periodical task should re-register the scheduler future");
+    }
+
+    @Test
+    public void testReplayPendingToRunningKeepsProcessStartTime() throws Exception {
+        Task task = new Task("process_start_time_task");
+        task.setType(Constants.TaskType.MANUAL);
+        task.setDefinition("SELECT 1");
+        task.setDbName("test_db");
+        task.setCatalogName("test_catalog");
+        masterTaskManager.createTask(task, false);
+        long taskId = task.getId();
+        String queryId = "process_start_time_query";
+
+        TaskRun leaderTaskRun = spy(TaskRunBuilder.newBuilder(task).build());
+        leaderTaskRun.setTaskId(taskId);
+        leaderTaskRun.initStatus(queryId, System.currentTimeMillis());
+        doReturn(Constants.TaskRunState.SUCCESS).when(leaderTaskRun).executeTaskRun();
+        masterTaskManager.getTaskRunScheduler().addPendingTaskRun(leaderTaskRun);
+        masterTaskManager.getTaskRunManager().scheduledPendingTaskRun();
+        long leaderProcessStartTime = leaderTaskRun.getStatus().getProcessStartTime();
+        Assertions.assertTrue(leaderProcessStartTime > 0);
+
+        TaskManager followerTaskManager = new TaskManager();
+        TaskRun followerTaskRun = TaskRunBuilder.newBuilder(task).build();
+        followerTaskRun.setTaskId(taskId);
+        followerTaskRun.initStatus(queryId, leaderTaskRun.getStatus().getCreateTime());
+        followerTaskManager.getTaskRunScheduler().addPendingTaskRun(followerTaskRun);
+
+        TaskRunStatusChange statusChange = (TaskRunStatusChange) UtFrameUtils.PseudoJournalReplayer
+                .replayNextJournal(OperationType.OP_UPDATE_TASK_RUN);
+        followerTaskManager.replayUpdateTaskRun(statusChange);
+
+        Assertions.assertEquals(Constants.TaskRunState.RUNNING, followerTaskRun.getStatus().getState());
+        Assertions.assertEquals(leaderProcessStartTime, followerTaskRun.getStatus().getProcessStartTime());
     }
 }
