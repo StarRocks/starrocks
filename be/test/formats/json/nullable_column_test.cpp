@@ -256,7 +256,7 @@ TEST_F(AddNullableColumnTest, add_boolean_array) {
 
 TEST_F(AddNullableColumnTest, test_add_struct) {
     TypeDescriptor type_desc = TypeDescriptor::create_struct_type(
-            {"key1", "key2"}, {TypeDescriptor::create_varchar_type(10), TypeDescriptor::create_varchar_type(10)});
+            {"key1", "key2"}, {TYPE_VARCHAR_DESC, TYPE_VARCHAR_DESC});
     auto column = ColumnHelper::create_column(type_desc, true);
 
     simdjson::ondemand::parser parser;
@@ -271,7 +271,7 @@ TEST_F(AddNullableColumnTest, test_add_struct) {
 
 TEST_F(AddNullableColumnTest, test_add_struct_null) {
     TypeDescriptor type_desc = TypeDescriptor::create_struct_type(
-            {"key1", "key2"}, {TypeDescriptor::create_varchar_type(10), TypeDescriptor::create_varchar_type(10)});
+            {"key1", "key2"}, {TYPE_VARCHAR_DESC, TYPE_VARCHAR_DESC});
     auto column = ColumnHelper::create_column(type_desc, true);
 
     simdjson::ondemand::parser parser;
@@ -285,8 +285,8 @@ TEST_F(AddNullableColumnTest, test_add_struct_null) {
 }
 
 TEST_F(AddNullableColumnTest, test_add_map) {
-    TypeDescriptor type_desc = TypeDescriptor::create_map_type(TypeDescriptor::create_varchar_type(10),
-                                                               TypeDescriptor::create_varchar_type(10));
+    TypeDescriptor type_desc = TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC,
+                                                               TYPE_VARCHAR_DESC);
 
     auto column = ColumnHelper::create_column(type_desc, true);
 
@@ -301,8 +301,8 @@ TEST_F(AddNullableColumnTest, test_add_map) {
 }
 
 TEST_F(AddNullableColumnTest, test_add_map_partial_append_rolled_back) {
-    TypeDescriptor type_desc = TypeDescriptor::create_map_type(TypeDescriptor::create_varchar_type(10),
-                                                               TypeDescriptor::create_varchar_type(10));
+    TypeDescriptor type_desc = TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC,
+                                                               TYPE_VARCHAR_DESC);
 
     auto column = ColumnHelper::create_column(type_desc, true);
 
@@ -335,8 +335,8 @@ TEST_F(AddNullableColumnTest, test_add_map_partial_append_rolled_back) {
 }
 
 TEST_F(AddNullableColumnTest, test_add_map_null) {
-    TypeDescriptor type_desc = TypeDescriptor::create_map_type(TypeDescriptor::create_varchar_type(10),
-                                                               TypeDescriptor::create_varchar_type(10));
+    TypeDescriptor type_desc = TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC,
+                                                               TYPE_VARCHAR_DESC);
 
     auto column = ColumnHelper::create_column(type_desc, true);
 

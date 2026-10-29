@@ -134,7 +134,6 @@ ColumnPtr cast_single_test_case(CastTestCase const& test_case, size_t front_fill
 
     [[maybe_unused]] auto output_precision = std::get<3>(test_case);
     [[maybe_unused]] auto output_scale = std::get<4>(test_case);
-    TypeDescriptor string_type = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
     TypeDescriptor from_type = TypeDescriptor::from_logical_type(FromType, TypeDescriptor::MAX_VARCHAR_LENGTH,
                                                                  input_precision, input_scale);
     TypeDescriptor to_type = TypeDescriptor::from_logical_type(ToType, TypeDescriptor::MAX_VARCHAR_LENGTH,
@@ -142,9 +141,9 @@ ColumnPtr cast_single_test_case(CastTestCase const& test_case, size_t front_fill
 
     auto s = Slice{input_value.c_str(), input_value.size()};
     auto from_column =
-            cast<TYPE_VARCHAR, FromType, PackedType>(s, string_type, from_type, front_fill_size, rear_fill_size);
+            cast<TYPE_VARCHAR, FromType, PackedType>(s, TYPE_VARCHAR_DESC, from_type, front_fill_size, rear_fill_size);
     auto to_column = cast<FromType>(from_column, from_type, to_type);
-    auto str_column = cast<ToType>(to_column, to_type, string_type);
+    auto str_column = cast<ToType>(to_column, to_type, TYPE_VARCHAR_DESC);
     return str_column;
 }
 

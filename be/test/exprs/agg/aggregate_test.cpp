@@ -1871,8 +1871,7 @@ TEST_F(AggregateTest, test_array_aggV2) {
 
     // nullable columns input
     {
-        auto char_type = TypeDescriptor::create_varchar_type(30);
-        MutableColumnPtr char_column = ColumnHelper::create_column(char_type, true);
+        MutableColumnPtr char_column = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
         char_column->append_datum(Datum());
         char_column->append_datum("bcd");
         char_column->append_datum("cdrdfe");
@@ -1942,8 +1941,7 @@ TEST_F(AggregateTest, test_array_aggV2) {
     // not nullable columns input
     state = ManagedAggrState::create(local_ctx.get(), array_agg_func);
     {
-        auto char_type = TypeDescriptor::create_varchar_type(30);
-        MutableColumnPtr char_column = ColumnHelper::create_column(char_type, false);
+        MutableColumnPtr char_column = ColumnHelper::create_column(TYPE_VARCHAR_DESC, false);
         char_column->append_datum("");
         char_column->append_datum("bcd");
         char_column->append_datum("cdrdfe");
@@ -2119,8 +2117,7 @@ TEST_F(AggregateTest, test_array_aggV2) {
 
     // append nullable columns input
     {
-        auto char_type = TypeDescriptor::create_varchar_type(30);
-        MutableColumnPtr char_column = ColumnHelper::create_column(char_type, true);
+        MutableColumnPtr char_column = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
         char_column->append_datum(Datum());
         char_column->append_datum("bcd");
         char_column->append_datum("cdrdfe");
@@ -2196,8 +2193,7 @@ TEST_F(AggregateTest, test_array_aggV2) {
     // nullable columns input with cancelled
     {
         auto state = ManagedAggrState::create(local_ctx.get(), array_agg_func);
-        auto char_type = TypeDescriptor::create_varchar_type(30);
-        MutableColumnPtr char_column = ColumnHelper::create_column(char_type, true);
+        MutableColumnPtr char_column = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
         char_column->append_datum(Datum());
         char_column->append_datum("bcd");
         char_column->append_datum("cdrdfe");
@@ -2284,8 +2280,7 @@ TEST_F(AggregateTest, test_array_aggV2_cancelled_keeps_nullable_result_consisten
     const AggregateFunction* array_agg_func = get_aggregate_function("array_agg2", TYPE_BIGINT, TYPE_ARRAY, false);
     auto state = ManagedAggrState::create(local_ctx.get(), array_agg_func);
 
-    auto char_type = TypeDescriptor::create_varchar_type(30);
-    MutableColumnPtr char_column = ColumnHelper::create_column(char_type, true);
+    MutableColumnPtr char_column = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
     char_column->append_datum("a");
     char_column->append_datum("b");
 
@@ -2345,8 +2340,7 @@ TEST_F(AggregateTest, test_array_aggV2_multi_order_by) {
         // - Then by varchar_col2 ASC (for same int_col):
         //   * NULL("w") -> 20("x") -> 20("z") -> 10("x") -> 10("y")
         // Result: ["e", "c", "d", "a", "b"]
-        auto char_type = TypeDescriptor::create_varchar_type(30);
-        MutableColumnPtr char_column = ColumnHelper::create_column(char_type, true);
+        MutableColumnPtr char_column = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
         char_column->append_datum("a");
         char_column->append_datum("b");
         char_column->append_datum("c");
@@ -2361,7 +2355,7 @@ TEST_F(AggregateTest, test_array_aggV2_multi_order_by) {
         int_column->append_datum(20);
         int_column->append_datum(Datum());
 
-        MutableColumnPtr char_column2 = ColumnHelper::create_column(char_type, false);
+        MutableColumnPtr char_column2 = ColumnHelper::create_column(TYPE_VARCHAR_DESC, false);
         char_column2->append_datum("x");
         char_column2->append_datum("y");
         char_column2->append_datum("x");
@@ -2454,8 +2448,7 @@ TEST_F(AggregateTest, test_array_aggV2_multi_order_by) {
 
         state = ManagedAggrState::create(local_ctx.get(), array_agg_func);
 
-        auto char_type = TypeDescriptor::create_varchar_type(30);
-        MutableColumnPtr char_column = ColumnHelper::create_column(char_type, false);
+        MutableColumnPtr char_column = ColumnHelper::create_column(TYPE_VARCHAR_DESC, false);
         // Add duplicate values: "a" appears twice, "b" appears twice, "c" appears once
         char_column->append_datum("a");
         char_column->append_datum("a"); // duplicate
@@ -2475,7 +2468,7 @@ TEST_F(AggregateTest, test_array_aggV2_multi_order_by) {
         int_column->append_datum(10);
         int_column->append_datum(15); // same order by value for duplicate "d"
 
-        MutableColumnPtr char_column2 = ColumnHelper::create_column(char_type, false);
+        MutableColumnPtr char_column2 = ColumnHelper::create_column(TYPE_VARCHAR_DESC, false);
         char_column2->append_datum("xx");
         char_column2->append_datum("yy");
         char_column2->append_datum("zz");
@@ -2568,8 +2561,7 @@ TEST_F(AggregateTest, test_group_concatV2) {
 
     // nullable columns input
     {
-        auto char_type = TypeDescriptor::create_varchar_type(30);
-        MutableColumnPtr char_column = ColumnHelper::create_column(char_type, true);
+        MutableColumnPtr char_column = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
         char_column->append_datum(Datum());
         char_column->append_datum("bcd");
         char_column->append_datum("cdrdfe");
@@ -2635,7 +2627,7 @@ TEST_F(AggregateTest, test_group_concatV2) {
                   "[NULL, {vchar:['bcd'],sep:[','],int:[9]}, {vchar:['cdrdfe'],sep:[','],int:[NULL]}, "
                   "NULL, {vchar:['esfg'],sep:[','],int:[6]}]");
 
-        MutableColumnPtr res_col = ColumnHelper::create_column(char_type, false);
+        MutableColumnPtr res_col = ColumnHelper::create_column(TYPE_VARCHAR_DESC, false);
         gc_func->finalize_to_column(local_ctx.get(), state->state(), res_col.get());
         ASSERT_EQ(res_col->debug_string(), "['cdrdfe,bcd,esfg']");
     }
@@ -2643,8 +2635,7 @@ TEST_F(AggregateTest, test_group_concatV2) {
     gc_func = get_aggregate_function("group_concat2", TYPE_BIGINT, TYPE_VARCHAR, false);
     state = ManagedAggrState::create(local_ctx.get(), gc_func);
     {
-        auto char_type = TypeDescriptor::create_varchar_type(30);
-        MutableColumnPtr char_column = ColumnHelper::create_column(char_type, false);
+        MutableColumnPtr char_column = ColumnHelper::create_column(TYPE_VARCHAR_DESC, false);
         char_column->append_datum("");
         char_column->append_datum("bcd");
         char_column->append_datum("cdrdfe");
@@ -2710,7 +2701,7 @@ TEST_F(AggregateTest, test_group_concatV2) {
                   "[{vchar:[''],sep:[','],int:[2]}, {vchar:['bcd'],sep:[','],int:[9]}, "
                   "{vchar:['cdrdfe'],sep:[','],int:[5]}, {vchar:['Datum()'],sep:[','],int:[7]}, "
                   "{vchar:['esfg'],sep:[','],int:[6]}]");
-        MutableColumnPtr res_col = ColumnHelper::create_column(char_type, false);
+        MutableColumnPtr res_col = ColumnHelper::create_column(TYPE_VARCHAR_DESC, false);
         gc_func->finalize_to_column(local_ctx.get(), state->state(), res_col.get());
         ASSERT_EQ(res_col->debug_string(), "['bcd,Datum(),esfg,cdrdfe,']");
     }
@@ -2777,8 +2768,7 @@ TEST_F(AggregateTest, test_group_concatV2) {
 
     // nullable columns input with cancelled
     {
-        auto char_type = TypeDescriptor::create_varchar_type(30);
-        MutableColumnPtr char_column = ColumnHelper::create_column(char_type, true);
+        MutableColumnPtr char_column = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
         char_column->append_datum(Datum());
         char_column->append_datum("bcd");
         char_column->append_datum("cdrdfe");
@@ -2844,7 +2834,7 @@ TEST_F(AggregateTest, test_group_concatV2) {
                   "[NULL, {vchar:['bcd'],sep:[','],int:[9]}, {vchar:['cdrdfe'],sep:[','],int:[NULL]}, "
                   "NULL, {vchar:['esfg'],sep:[','],int:[6]}]");
 
-        MutableColumnPtr res_col = ColumnHelper::create_column(char_type, false);
+        MutableColumnPtr res_col = ColumnHelper::create_column(TYPE_VARCHAR_DESC, false);
         local_ctx->state()->set_is_cancelled(true);
         gc_func->finalize_to_column(local_ctx.get(), state->state(), res_col.get());
         ASSERT_TRUE(local_ctx->has_error());
@@ -3016,8 +3006,7 @@ TEST_F(AggregateTest, test_array_aggV2_max_array_length) {
 
     const AggregateFunction* array_agg_func = get_aggregate_function("array_agg2", TYPE_BIGINT, TYPE_ARRAY, false);
 
-    auto char_type = TypeDescriptor::create_varchar_type(30);
-    MutableColumnPtr char_column = ColumnHelper::create_column(char_type, true);
+    MutableColumnPtr char_column = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
     char_column->append_datum("bcd");
     char_column->append_datum(Datum());
     char_column->append_datum("esfg");
@@ -3074,8 +3063,7 @@ TEST_F(AggregateTest, test_array_aggV2_max_array_length_distinct) {
 
     const AggregateFunction* array_agg_func = get_aggregate_function("array_agg2", TYPE_BIGINT, TYPE_ARRAY, false);
 
-    auto char_type = TypeDescriptor::create_varchar_type(30);
-    MutableColumnPtr char_column = ColumnHelper::create_column(char_type, true);
+    MutableColumnPtr char_column = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
     // 6 input rows, 2 distinct values after DISTINCT.
     char_column->append_datum("a");
     char_column->append_datum("a");

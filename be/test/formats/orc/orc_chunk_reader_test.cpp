@@ -2470,7 +2470,7 @@ TEST_F(OrcChunkReaderTest, GetFileSchema) {
               {"col_bigint", TypeDescriptor::from_logical_type(TYPE_BIGINT)},
               {"col_float", TypeDescriptor::from_logical_type(TYPE_FLOAT)},
               {"col_double", TypeDescriptor::from_logical_type(TYPE_DOUBLE)},
-              {"col_string", TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH)},
+              {"col_string", TYPE_VARCHAR_DESC},
               {"col_char", TypeDescriptor::create_char_type(10)},
               {"col_varchar", TypeDescriptor::create_varchar_type(10)},
               {"col_binary", TypeDescriptor::create_varbinary_type(TypeDescriptor::MAX_VARCHAR_LENGTH)},
@@ -2483,26 +2483,26 @@ TEST_F(OrcChunkReaderTest, GetFileSchema) {
               {"col_list_list_int", TypeDescriptor::create_array_type(TypeDescriptor::create_array_type(
                                             TypeDescriptor::from_logical_type(TYPE_INT)))},
               {"col_map_string_int",
-               TypeDescriptor::create_map_type(TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH),
+               TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC,
                                                TypeDescriptor::from_logical_type(TYPE_INT))},
               {"col_map_string_map_string_int",
                TypeDescriptor::create_map_type(
-                       TypeDescriptor::create_varchar_type(1048576),
+                       TYPE_VARCHAR_DESC,
                        TypeDescriptor::create_map_type(
-                               TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH),
+                               TYPE_VARCHAR_DESC,
                                TypeDescriptor::from_logical_type(TYPE_INT)))},
               {"col_struct_string_int",
                TypeDescriptor::create_struct_type(
                        {"field_string", "field_int"},
-                       {TypeDescriptor::create_varchar_type(1048576), TypeDescriptor::from_logical_type(TYPE_INT)})},
+                       {TYPE_VARCHAR_DESC, TypeDescriptor::from_logical_type(TYPE_INT)})},
               {"col_struct_struct_string_int_string",
                TypeDescriptor::create_struct_type(
                        {"filed_struct", "field_string2"},
                        {TypeDescriptor::create_struct_type(
                                 {"field_string1", "field_int"},
-                                {TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH),
+                                {TYPE_VARCHAR_DESC,
                                  TypeDescriptor::from_logical_type(TYPE_INT)}),
-                        TypeDescriptor::create_varchar_type(1048576)})}}}};
+                        TYPE_VARCHAR_DESC})}}}};
 
     for (const auto& test_case : test_cases) {
         check_schema(test_case.first, test_case.second);

@@ -231,9 +231,9 @@ TEST_F(AvroScannerTest, test_basic_type) {
     types.emplace_back(TYPE_INT);
     types.emplace_back(TYPE_BIGINT);
     types.emplace_back(TYPE_DOUBLE);
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
@@ -368,7 +368,7 @@ TEST_F(AvroScannerTest, test_basic_type_to_json_or_string) {
     {
         config::avro_ignore_union_type_tag = false;
 
-        auto scanner = create_avro_scanner({TypeDescriptor::create_varchar_type(300)}, ranges, {"jsontype"},
+        auto scanner = create_avro_scanner({TYPE_VARCHAR_DESC}, ranges, {"jsontype"},
                                            avro_helper.schema_text);
 
         Status st = scanner->open();
@@ -389,7 +389,7 @@ TEST_F(AvroScannerTest, test_basic_type_to_json_or_string) {
     {
         config::avro_ignore_union_type_tag = true;
 
-        auto scanner = create_avro_scanner({TypeDescriptor::create_varchar_type(300)}, ranges, {"jsontype"},
+        auto scanner = create_avro_scanner({TYPE_VARCHAR_DESC}, ranges, {"jsontype"},
                                            avro_helper.schema_text);
 
         Status st = scanner->open();
@@ -468,7 +468,7 @@ TEST_F(AvroScannerTest, test_jsonpaths) {
     types.emplace_back(TYPE_BOOLEAN);
     types.emplace_back(TYPE_BIGINT);
     types.emplace_back(TYPE_DOUBLE);
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
     types.emplace_back(TYPE_BIGINT);
 
     std::vector<TBrokerRangeDesc> ranges;
@@ -550,7 +550,7 @@ TEST_F(AvroScannerTest, test_json_type) {
     types.emplace_back(TYPE_BOOLEAN);
     types.emplace_back(TYPE_BIGINT);
     types.emplace_back(TYPE_DOUBLE);
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
     types.emplace_back(TYPE_JSON);
 
     std::vector<TBrokerRangeDesc> ranges;
@@ -619,7 +619,7 @@ TEST_F(AvroScannerTest, test_union_type_null) {
     types.emplace_back(TYPE_BOOLEAN);
     types.emplace_back(TYPE_BIGINT);
     types.emplace_back(TYPE_DOUBLE);
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
@@ -687,7 +687,7 @@ TEST_F(AvroScannerTest, test_union_type_null_without_jsonpath) {
     types.emplace_back(TYPE_BOOLEAN);
     types.emplace_back(TYPE_BIGINT);
     types.emplace_back(TYPE_DOUBLE);
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
@@ -752,7 +752,7 @@ TEST_F(AvroScannerTest, test_union_type_basic) {
     types.emplace_back(TYPE_BOOLEAN);
     types.emplace_back(TYPE_BIGINT);
     types.emplace_back(TYPE_DOUBLE);
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
@@ -909,10 +909,10 @@ TEST_F(AvroScannerTest, test_complex_schema) {
     write_avro_data(avro_helper, data_path);
 
     std::vector<TypeDescriptor> types;
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
     types.emplace_back(TYPE_ARRAY_VARCHAR_DESC);
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
@@ -1098,10 +1098,10 @@ TEST_F(AvroScannerTest, test_complex_schema_null_data) {
     write_avro_data(avro_helper, data_path);
 
     std::vector<TypeDescriptor> types;
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
     types.emplace_back(TYPE_ARRAY_VARCHAR_DESC);
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
@@ -1413,7 +1413,7 @@ TEST_F(AvroScannerTest, test_map_type) {
         types.emplace_back(TYPE_BOOLEAN);
         types.emplace_back(TYPE_BIGINT);
         types.emplace_back(TYPE_DOUBLE);
-        types.emplace_back(TypeDescriptor::create_map_type(TypeDescriptor::create_varchar_type(65533),
+        types.emplace_back(TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC,
                                                            TypeDescriptor(TYPE_BIGINT)));
 
         std::vector<TBrokerRangeDesc> ranges;
@@ -1442,7 +1442,7 @@ TEST_F(AvroScannerTest, test_map_type) {
     // load avro map natively into a MAP<VARCHAR, BIGINT> column selected via jsonpaths
     {
         std::vector<TypeDescriptor> types;
-        types.emplace_back(TypeDescriptor::create_map_type(TypeDescriptor::create_varchar_type(65533),
+        types.emplace_back(TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC,
                                                            TypeDescriptor(TYPE_BIGINT)));
 
         std::vector<TBrokerRangeDesc> ranges;
@@ -1511,8 +1511,8 @@ TEST_F(AvroScannerTest, test_struct_type) {
 
         std::vector<TypeDescriptor> types;
         types.emplace_back(TypeDescriptor::create_struct_type(
-                {"f_int", "f_str", "f_opt"}, {TypeDescriptor(TYPE_INT), TypeDescriptor::create_varchar_type(50),
-                                              TypeDescriptor::create_varchar_type(50)}));
+                {"f_int", "f_str", "f_opt"}, {TypeDescriptor(TYPE_INT), TYPE_VARCHAR_DESC,
+                                              TYPE_VARCHAR_DESC}));
 
         std::vector<TBrokerRangeDesc> ranges;
         TBrokerRangeDesc range;
@@ -1735,7 +1735,7 @@ TEST_F(AvroScannerTest, test_array_of_map) {
 
     std::vector<TypeDescriptor> types;
     types.emplace_back(TypeDescriptor::create_array_type(
-            TypeDescriptor::create_map_type(TypeDescriptor::create_varchar_type(20), TypeDescriptor(TYPE_INT))));
+            TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TypeDescriptor(TYPE_INT))));
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
@@ -1792,7 +1792,7 @@ TEST_F(AvroScannerTest, test_map_of_array) {
     ASSERT_TRUE(write_avro_data(avro_helper, data_path).ok());
 
     std::vector<TypeDescriptor> types;
-    types.emplace_back(TypeDescriptor::create_map_type(TypeDescriptor::create_varchar_type(20), TYPE_ARRAY_INT_DESC));
+    types.emplace_back(TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TYPE_ARRAY_INT_DESC));
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
@@ -1853,7 +1853,7 @@ TEST_F(AvroScannerTest, test_array_of_struct) {
 
     std::vector<TypeDescriptor> types;
     types.emplace_back(TypeDescriptor::create_array_type(TypeDescriptor::create_struct_type(
-            {"a", "b"}, {TypeDescriptor(TYPE_INT), TypeDescriptor::create_varchar_type(20)})));
+            {"a", "b"}, {TypeDescriptor(TYPE_INT), TYPE_VARCHAR_DESC})));
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
@@ -1909,7 +1909,7 @@ TEST_F(AvroScannerTest, test_struct_with_map) {
     types.emplace_back(TypeDescriptor::create_struct_type(
             {"id", "m"},
             {TypeDescriptor(TYPE_INT),
-             TypeDescriptor::create_map_type(TypeDescriptor::create_varchar_type(20), TypeDescriptor(TYPE_INT))}));
+             TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TypeDescriptor(TYPE_INT))}));
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
@@ -1984,8 +1984,8 @@ TEST_F(AvroScannerTest, test_deep_nested) {
     std::vector<TypeDescriptor> types;
     types.emplace_back(TypeDescriptor::create_array_type(TypeDescriptor::create_struct_type(
             {"k", "m"},
-            {TypeDescriptor::create_varchar_type(20),
-             TypeDescriptor::create_map_type(TypeDescriptor::create_varchar_type(20), TYPE_ARRAY_INT_DESC)})));
+            {TYPE_VARCHAR_DESC,
+             TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TYPE_ARRAY_INT_DESC)})));
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
@@ -2088,17 +2088,17 @@ void AvroScannerTest::test_map_nested_struct() {
     ASSERT_TRUE(w_st.ok()) << w_st;
 
     std::vector<TypeDescriptor> types;
-    types.emplace_back(TypeDescriptor::create_varchar_type(255)); // headers
-    types.emplace_back(TypeDescriptor::create_varchar_type(255)); // headers.user-agent
-    types.emplace_back(TypeDescriptor::create_varchar_type(255)); // headers.user-agent[1]
-    types.emplace_back(TypeDescriptor::create_varchar_type(255)); // headers.x-forwarded-for
-    types.emplace_back(TypeDescriptor::create_varchar_type(255)); // headers.x-forwoarded-for[0]
-    types.emplace_back(TypeDescriptor::create_varchar_type(255)); // headers.x-forwoarded-for[3]
-    types.emplace_back(TypeDescriptor::create_varchar_type(255)); // cookies
-    types.emplace_back(TypeDescriptor::create_varchar_type(255)); // cookies.session
-    types.emplace_back(TypeDescriptor::create_varchar_type(255)); // cookies.session[0]
-    types.emplace_back(TypeDescriptor::create_varchar_type(255)); // cookies.session[0].value
-    types.emplace_back(TypeDescriptor::create_varchar_type(255)); // cookies.session[1].value
+    types.emplace_back(TYPE_VARCHAR_DESC); // headers
+    types.emplace_back(TYPE_VARCHAR_DESC); // headers.user-agent
+    types.emplace_back(TYPE_VARCHAR_DESC); // headers.user-agent[1]
+    types.emplace_back(TYPE_VARCHAR_DESC); // headers.x-forwarded-for
+    types.emplace_back(TYPE_VARCHAR_DESC); // headers.x-forwoarded-for[0]
+    types.emplace_back(TYPE_VARCHAR_DESC); // headers.x-forwoarded-for[3]
+    types.emplace_back(TYPE_VARCHAR_DESC); // cookies
+    types.emplace_back(TYPE_VARCHAR_DESC); // cookies.session
+    types.emplace_back(TYPE_VARCHAR_DESC); // cookies.session[0]
+    types.emplace_back(TYPE_VARCHAR_DESC); // cookies.session[0].value
+    types.emplace_back(TYPE_VARCHAR_DESC); // cookies.session[1].value
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
@@ -2275,8 +2275,8 @@ TEST_F(AvroScannerTest, test_root_array) {
     types.emplace_back(TYPE_BOOLEAN);
     types.emplace_back(TYPE_BIGINT);
     types.emplace_back(TYPE_DOUBLE);
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
@@ -2343,13 +2343,13 @@ TEST_F(AvroScannerTest, test_source_metadata_fill) {
     {
         std::vector<TypeDescriptor> types;
         types.emplace_back(TYPE_BIGINT);                             // id (payload)
-        types.emplace_back(TypeDescriptor::create_varchar_type(20)); // payload
-        types.emplace_back(TypeDescriptor::create_varchar_type(64)); // topic (meta, slot 2)
+        types.emplace_back(TYPE_VARCHAR_DESC); // payload
+        types.emplace_back(TYPE_VARCHAR_DESC); // topic (meta, slot 2)
         types.emplace_back(TYPE_INT);                                // partition (meta, slot 3)
         types.emplace_back(TYPE_BIGINT);                             // offset (meta, slot 4)
         types.emplace_back(
-                TypeDescriptor::create_map_type(TypeDescriptor::create_varchar_type(64),
-                                                TypeDescriptor::create_varchar_type(64))); // headers (slot 5)
+                TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC,
+                                                TYPE_VARCHAR_DESC)); // headers (slot 5)
 
         std::vector<TRoutineLoadMetaColumn> meta_cols = {
                 meta_desc(2, TStreamSourceMetaKind::TOPIC), meta_desc(3, TStreamSourceMetaKind::PARTITION),
@@ -2384,8 +2384,8 @@ TEST_F(AvroScannerTest, test_source_metadata_fill) {
     {
         std::vector<TypeDescriptor> types;
         types.emplace_back(TYPE_BIGINT);                             // id (payload, jsonpath[0])
-        types.emplace_back(TypeDescriptor::create_varchar_type(64)); // topic (meta, slot 1)
-        types.emplace_back(TypeDescriptor::create_varchar_type(20)); // payload (payload, jsonpath[1])
+        types.emplace_back(TYPE_VARCHAR_DESC); // topic (meta, slot 1)
+        types.emplace_back(TYPE_VARCHAR_DESC); // payload (payload, jsonpath[1])
 
         std::vector<TRoutineLoadMetaColumn> meta_cols = {meta_desc(1, TStreamSourceMetaKind::TOPIC)};
 
@@ -2415,8 +2415,8 @@ TEST_F(AvroScannerTest, test_source_metadata_fill) {
     {
         std::vector<TypeDescriptor> types;
         types.emplace_back(TYPE_BIGINT);
-        types.emplace_back(TypeDescriptor::create_varchar_type(20));
-        types.emplace_back(TypeDescriptor::create_varchar_type(64));
+        types.emplace_back(TYPE_VARCHAR_DESC);
+        types.emplace_back(TYPE_VARCHAR_DESC);
 
         std::vector<TRoutineLoadMetaColumn> meta_cols = {meta_desc(2, TStreamSourceMetaKind::TOPIC)};
 

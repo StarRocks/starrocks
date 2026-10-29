@@ -1119,14 +1119,13 @@ TEST(ParquetScalarColumnReaderGuardTest, FillAndRestoreRejectNonTemporarySource)
     ColumnReaderOptions opts;
     ParquetField field;
     tparquet::ColumnChunk chunk_meta;
-    TypeDescriptor varchar_type = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
     GlobalDictMap dict;
     auto make_int_col = [] { return ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true); };
 
     // LowCardColumnReader::fill_dst_column: when src is not _code_column
     // (PHYSICAL dict codes), it is treated as already LOGICAL → swap directly.
     {
-        ScalarColumnReader base(&field, &chunk_meta, &varchar_type, opts);
+        ScalarColumnReader base(&field, &chunk_meta, &TYPE_VARCHAR_DESC, opts);
         LowCardColumnReader reader(base, &dict, /*slot_id=*/1);
         ColumnPtr dst = make_int_col();
         ColumnPtr src = make_int_col();
@@ -1135,7 +1134,7 @@ TEST(ParquetScalarColumnReaderGuardTest, FillAndRestoreRejectNonTemporarySource)
 
     // LowRowsColumnReader::fill_dst_column: same LOGICAL fallback.
     {
-        ScalarColumnReader base(&field, &chunk_meta, &varchar_type, opts);
+        ScalarColumnReader base(&field, &chunk_meta, &TYPE_VARCHAR_DESC, opts);
         LowRowsColumnReader reader(base, &dict, /*slot_id=*/1);
         ColumnPtr dst = make_int_col();
         ColumnPtr src = make_int_col();
@@ -1145,7 +1144,7 @@ TEST(ParquetScalarColumnReaderGuardTest, FillAndRestoreRejectNonTemporarySource)
     // RawColumnReader::_restore_physical_column errors when a PHYSICAL column
     // is still the caller-visible column but _logical_dst was lost.
     {
-        ScalarColumnReader base(&field, &chunk_meta, &varchar_type, opts);
+        ScalarColumnReader base(&field, &chunk_meta, &TYPE_VARCHAR_DESC, opts);
         LowCardColumnReader reader(base, &dict, /*slot_id=*/1);
         ColumnPtr code = make_int_col();
         reader._code_column = code;

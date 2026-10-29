@@ -288,7 +288,7 @@ TEST_F(ArrowConverterTest, BuildArrowColumnConvertPlanMap) {
     auto arrow_type = arrow::map(arrow::int32(), arrow::utf8());
     TypeDescriptor type_desc(TYPE_MAP);
     type_desc.children.emplace_back(TYPE_INT);
-    type_desc.children.emplace_back(TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH));
+    type_desc.children.emplace_back(TYPE_VARCHAR_DESC);
     TypeDescriptor raw_type_desc;
     ConvertFuncTree conv_func;
     bool need_cast = false;
@@ -307,7 +307,7 @@ TEST_F(ArrowConverterTest, BuildArrowColumnConvertPlanStruct) {
     auto arrow_type = arrow::struct_({arrow::field("c0", arrow::int32()), arrow::field("c1", arrow::utf8())});
     TypeDescriptor type_desc(TYPE_STRUCT);
     type_desc.children.emplace_back(TYPE_INT);
-    type_desc.children.emplace_back(TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH));
+    type_desc.children.emplace_back(TYPE_VARCHAR_DESC);
     type_desc.field_names = {"c0", "c1"};
     TypeDescriptor raw_type_desc;
     ConvertFuncTree conv_func;

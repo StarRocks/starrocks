@@ -2482,41 +2482,28 @@ TEST_F(FileReaderTest, CheckDictOutofBouds) {
     auto file_reader = _create_file_reader(filepath);
 
     // --------------init context---------------
-    TypeDescriptor type_vin = TYPE_VARCHAR_DESC;
-    TypeDescriptor type_log_domain = TYPE_VARCHAR_DESC;
-    TypeDescriptor type_file_name = TYPE_VARCHAR_DESC;
     TypeDescriptor type_is_collection = TYPE_INT_DESC;
     TypeDescriptor type_is_center = TYPE_INT_DESC;
     TypeDescriptor type_is_cloud = TYPE_INT_DESC;
-    TypeDescriptor type_collection_time = TYPE_VARCHAR_DESC;
-    TypeDescriptor type_center_time = TYPE_VARCHAR_DESC;
-    TypeDescriptor type_cloud_time = TYPE_VARCHAR_DESC;
-    TypeDescriptor type_error_collection_tips = TYPE_VARCHAR_DESC;
-    TypeDescriptor type_error_center_tips = TYPE_VARCHAR_DESC;
-    TypeDescriptor type_error_cloud_tips = TYPE_VARCHAR_DESC;
-    TypeDescriptor type_error_collection_time = TYPE_VARCHAR_DESC;
-    TypeDescriptor type_error_center_time = TYPE_VARCHAR_DESC;
-    TypeDescriptor type_error_cloud_time = TYPE_VARCHAR_DESC;
-    TypeDescriptor type_original_time = TYPE_VARCHAR_DESC;
     TypeDescriptor type_is_original = TYPE_INT_DESC;
 
     Utils::SlotDesc slot_descs[] = {
-            {"vin", type_vin},
-            {"type_log_domain", type_log_domain},
-            {"file_name", type_file_name},
+            {"vin", TYPE_VARCHAR_DESC},
+            {"TYPE_VARCHAR_DESC", TYPE_VARCHAR_DESC},
+            {"file_name", TYPE_VARCHAR_DESC},
             {"is_collection", type_is_collection},
             {"is_center", type_is_center},
             {"is_cloud", type_is_cloud},
-            {"collection_time", type_collection_time},
-            {"center_time", type_center_time},
-            {"cloud_time", type_cloud_time},
-            {"error_collection_tips", type_error_collection_tips},
-            {"error_center_tips", type_error_center_tips},
-            {"error_cloud_tips", type_error_cloud_tips},
-            {"error_collection_time", type_error_collection_time},
-            {"error_center_time", type_error_center_time},
-            {"error_cloud_time", type_error_cloud_time},
-            {"original_time", type_original_time},
+            {"collection_time", TYPE_VARCHAR_DESC},
+            {"center_time", TYPE_VARCHAR_DESC},
+            {"cloud_time", TYPE_VARCHAR_DESC},
+            {"error_collection_tips", TYPE_VARCHAR_DESC},
+            {"error_center_tips", TYPE_VARCHAR_DESC},
+            {"error_cloud_tips", TYPE_VARCHAR_DESC},
+            {"error_collection_time", TYPE_VARCHAR_DESC},
+            {"error_center_time", TYPE_VARCHAR_DESC},
+            {"error_cloud_time", TYPE_VARCHAR_DESC},
+            {"original_time", TYPE_VARCHAR_DESC},
             {"is_original", type_is_original},
             {""},
     };
@@ -2529,22 +2516,22 @@ TEST_F(FileReaderTest, CheckDictOutofBouds) {
     ASSERT_TRUE(status.ok());
 
     auto chunk = std::make_shared<Chunk>();
-    chunk->append_column(ColumnHelper::create_column(type_vin, true), chunk->num_columns());
-    chunk->append_column(ColumnHelper::create_column(type_log_domain, true), chunk->num_columns());
-    chunk->append_column(ColumnHelper::create_column(type_file_name, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_VARCHAR_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_VARCHAR_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_VARCHAR_DESC, true), chunk->num_columns());
     chunk->append_column(ColumnHelper::create_column(type_is_collection, true), chunk->num_columns());
     chunk->append_column(ColumnHelper::create_column(type_is_center, true), chunk->num_columns());
     chunk->append_column(ColumnHelper::create_column(type_is_cloud, true), chunk->num_columns());
-    chunk->append_column(ColumnHelper::create_column(type_collection_time, true), chunk->num_columns());
-    chunk->append_column(ColumnHelper::create_column(type_center_time, true), chunk->num_columns());
-    chunk->append_column(ColumnHelper::create_column(type_cloud_time, true), chunk->num_columns());
-    chunk->append_column(ColumnHelper::create_column(type_error_collection_tips, true), chunk->num_columns());
-    chunk->append_column(ColumnHelper::create_column(type_error_center_tips, true), chunk->num_columns());
-    chunk->append_column(ColumnHelper::create_column(type_error_cloud_tips, true), chunk->num_columns());
-    chunk->append_column(ColumnHelper::create_column(type_error_collection_time, true), chunk->num_columns());
-    chunk->append_column(ColumnHelper::create_column(type_error_center_time, true), chunk->num_columns());
-    chunk->append_column(ColumnHelper::create_column(type_error_cloud_time, true), chunk->num_columns());
-    chunk->append_column(ColumnHelper::create_column(type_original_time, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_VARCHAR_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_VARCHAR_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_VARCHAR_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_VARCHAR_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_VARCHAR_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_VARCHAR_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_VARCHAR_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_VARCHAR_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_VARCHAR_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_VARCHAR_DESC, true), chunk->num_columns());
     chunk->append_column(ColumnHelper::create_column(type_is_original, true), chunk->num_columns());
 
     size_t total_row_nums = 0;
@@ -5299,7 +5286,7 @@ TEST_F(FileReaderTest, test_read_variant_shredding_full_column_ignores_extended_
     // describes that virtual column, not `data`: the full `data` column must not be narrowed to it.
     TColumnAccessPath tleaf;
     tleaf.__set_type(TAccessPathType::FIELD);
-    tleaf.__set_type_desc(TypeDescriptor::create_varchar_type(1048576).to_thrift());
+    tleaf.__set_type_desc(TYPE_VARCHAR_DESC.to_thrift());
     TColumnAccessPath tcommit;
     tcommit.__set_type(TAccessPathType::FIELD);
     tcommit.__set_children({tleaf});

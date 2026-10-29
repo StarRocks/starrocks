@@ -1737,11 +1737,10 @@ TEST_F(TimeFunctionsTest, str_to_date) {
     TimestampValue ts1 = TimestampValue::create(2013, 5, 1, 0, 0, 0);
     TimestampValue ts2 = TimestampValue::create(2020, 6, 24, 17, 10, 25);
 
-    const auto& varchar_type_desc = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
     // nullable
     {
-        auto str_col = ColumnHelper::create_column(varchar_type_desc, true);
-        auto fmt_col = ColumnHelper::create_column(varchar_type_desc, true);
+        auto str_col = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
+        auto fmt_col = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
         str_col->append_datum(Slice(str1)); // str1 <=> fmt1
         fmt_col->append_datum(Slice(fmt1));
         str_col->append_datum(Slice(str2)); // str2 <=> fmt2
@@ -1784,7 +1783,7 @@ TEST_F(TimeFunctionsTest, str_to_date) {
     }
     // const <=> non-const
     {
-        auto str_col = ColumnHelper::create_column(varchar_type_desc, true);
+        auto str_col = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
         auto fmt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(fmt1, 1);
         str_col->append_datum(Slice(str1));
         (void)str_col->append_nulls(1);
@@ -1812,10 +1811,9 @@ TEST_F(TimeFunctionsTest, str_to_date_of_dateformat) {
     const char* str1 = "2013-05-01";
     const char* fmt1 = "%Y-%m-%d";
     TimestampValue ts1 = TimestampValue::create(2013, 5, 1, 0, 0, 0);
-    const auto& varchar_type_desc = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
     // const <=> non-const
     {
-        auto str_col = ColumnHelper::create_column(varchar_type_desc, true);
+        auto str_col = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
         auto fmt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(fmt1, 1);
         str_col->append_datum(Slice(str1));
         (void)str_col->append_nulls(1);
@@ -1891,10 +1889,9 @@ TEST_F(TimeFunctionsTest, str_to_date_of_datetimeformat) {
     const char* fmt1 = "%Y-%m-%d %H:%i:%s";
     TimestampValue ts1 = TimestampValue::create(2013, 5, 1, 11, 12, 13);
     [[maybe_unused]] TimestampValue ts2 = TimestampValue::create(2020, 6, 24, 17, 10, 25);
-    const auto& varchar_type_desc = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
     // const <=> non-const
     {
-        auto str_col = ColumnHelper::create_column(varchar_type_desc, true);
+        auto str_col = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
         auto fmt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(fmt1, 1);
         str_col->append_datum(Slice(str1));
         (void)str_col->append_nulls(1);
@@ -1926,10 +1923,9 @@ TEST_F(TimeFunctionsTest, str_to_date_microsecond) {
     auto ptr = std::unique_ptr<FunctionContext>(ctx);
 
     const char* fmt = "%Y-%m-%dT%H:%i:%s.%f";
-    const auto& varchar_type_desc = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
     // const fmt <=> non-const input (simulates Routine Load / Stream Load column mapping)
     {
-        auto str_col = ColumnHelper::create_column(varchar_type_desc, true);
+        auto str_col = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
         auto fmt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(fmt, 1);
         (void)str_col->append_nulls(1);
         str_col->append_datum(Slice("2026-02-09T00:15:01.535569"));
@@ -3617,11 +3613,10 @@ TEST_F(TimeFunctionsTest, str2date) {
     DateValue ts1 = DateValue::create(2013, 5, 1);
     DateValue ts2 = DateValue::create(2020, 6, 24);
 
-    const auto& varchar_type_desc = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
     // nullable
     {
-        auto str_col = ColumnHelper::create_column(varchar_type_desc, true);
-        auto fmt_col = ColumnHelper::create_column(varchar_type_desc, true);
+        auto str_col = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
+        auto fmt_col = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
         str_col->append_datum(Slice(str1)); // str1 <=> fmt1
         fmt_col->append_datum(Slice(fmt1));
         str_col->append_datum(Slice(str2)); // str2 <=> fmt2
@@ -3664,7 +3659,7 @@ TEST_F(TimeFunctionsTest, str2date) {
     }
     // const <=> non-const
     {
-        auto str_col = ColumnHelper::create_column(varchar_type_desc, true);
+        auto str_col = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
         auto fmt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(fmt1, 1);
         str_col->append_datum(Slice(str1));
         (void)str_col->append_nulls(1);
@@ -3692,10 +3687,9 @@ TEST_F(TimeFunctionsTest, str2date_of_dateformat) {
     const char* str1 = "2013-05-01";
     const char* fmt1 = "%Y-%m-%d";
     DateValue ts1 = DateValue::create(2013, 5, 1);
-    const auto& varchar_type_desc = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
     // const <=> non-const
     {
-        auto str_col = ColumnHelper::create_column(varchar_type_desc, true);
+        auto str_col = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
         auto fmt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(fmt1, 1);
         str_col->append_datum(Slice(str1));
         (void)str_col->append_nulls(1);
@@ -3730,10 +3724,9 @@ TEST_F(TimeFunctionsTest, str2date_of_datetimeformat) {
     const char* fmt1 = "%Y-%m-%d %H:%i:%s";
     DateValue ts1 = DateValue::create(2013, 5, 1);
     [[maybe_unused]] DateValue ts2 = DateValue::create(2020, 6, 24);
-    const auto& varchar_type_desc = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
     // const <=> non-const
     {
-        auto str_col = ColumnHelper::create_column(varchar_type_desc, true);
+        auto str_col = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
         auto fmt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(fmt1, 1);
         str_col->append_datum(Slice(str1));
         (void)str_col->append_nulls(1);
