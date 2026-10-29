@@ -28,6 +28,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.iceberg.IcebergPartitionKeyResolver;
 import com.starrocks.mv.pct.BaseToMVPartitionMapping;
+import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.common.PCellSortedSet;
@@ -306,8 +307,20 @@ public class MVPartitionCellBuilder {
                                                  PartitionUtil.DateTimeInterval dateTimeInterval,
                                                  PrimitiveType partitionColumnPrimitiveType)
             throws AnalysisException {
-        LiteralExpr literalExpr = PartitionUtil.addOffsetForLiteral(
-                currentPartitionKey.getKeys().get(0), 1, dateTimeInterval);
+        LiteralExpr lowerBound = currentPartitionKey.getKeys().get(0);
+        LiteralExpr literalExpr;
+        if (dateTimeInterval == PartitionUtil.DateTimeInterval.NONE
+                && partitionColumnPrimitiveType == PrimitiveType.DATETIME && lowerBound instanceof DateLiteral) {
+            // An identity partition on a DATETIME column (Iceberg's, which has no granularity) holds one
+            // instant, so its range ends just past it. Stretched to a day, as for a DATE, two values on the
+            // same day overlapped and every refresh of a view partitioned on the column failed. One second,
+            // not one microsecond: a view partition bound keeps whole seconds, and a microsecond later
+            // would read back equal to the lower bound.
+            literalExpr = new DateLiteral(((DateLiteral) lowerBound).toLocalDateTime().plusSeconds(1),
+                    lowerBound.getType());
+        } else {
+            literalExpr = PartitionUtil.addOffsetForLiteral(lowerBound, 1, dateTimeInterval);
+        }
         PartitionKey nextPartitionKey = new PartitionKey();
         nextPartitionKey.pushColumn(literalExpr, partitionColumnPrimitiveType);
         return nextPartitionKey;
