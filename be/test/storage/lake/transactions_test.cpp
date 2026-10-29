@@ -130,7 +130,9 @@ TEST(TransactionsLoadIdsTest, AnyOtherErrorShouldFail_RealApiWithMockMgr) {
     }
 }
 
-TEST(TransactionsLoadIdsTest, AllMissingReturnsEmptyVectorOk_RealApiWithMockMgr) {
+// A tablet published for a multi-statement transaction was loaded by at least one of its statements, so no log
+// under any load id is reported like a missing single txn log rather than as nothing to apply.
+TEST(TransactionsLoadIdsTest, AllMissingReturnsNotFound_RealApiWithMockMgr) {
     auto location_provider = std::make_shared<FixedLocationProvider>("/tmp/test_lake");
     TabletManager mgr(location_provider, 1);
     const int64_t tablet_id = 1004; // Use different tablet_id
@@ -140,8 +142,8 @@ TEST(TransactionsLoadIdsTest, AllMissingReturnsEmptyVectorOk_RealApiWithMockMgr)
     // Don't create any files, all missing
     auto info = make_txn_info(txn_id, load_ids);
     auto st = load_txn_log(&mgr, tablet_id, info);
-    ASSERT_TRUE(st.ok()) << st.status();
-    ASSERT_EQ(st.value()->size(), 0);
+    ASSERT_TRUE(st.status().is_not_found()) << st.status();
+    ASSERT_NE(std::string::npos, st.status().message().find(std::to_string(tablet_id))) << st.status();
 }
 
 TEST(TransactionsLoadIdsTest, SingleTxnLogWithoutLoadIds_RealApiWithMockMgr) {

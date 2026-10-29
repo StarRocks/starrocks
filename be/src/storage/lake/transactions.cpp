@@ -143,6 +143,13 @@ StatusOr<TxnLogVectorPtr> load_txn_log(TabletManager* tablet_mgr, int64_t tablet
                 return txn_log.status();
             }
         }
+        // A statement writes txn logs only for the tablets it loads, so a load id without a log is expected.
+        // A tablet without any log is not: FE commits a partition only after all of its tablets finished
+        // loading. Report it like a missing single txn log rather than let the caller apply no statement.
+        if (txn_logs->empty()) {
+            return Status::NotFound(fmt::format("no txn log of tablet {} for any of the {} load ids of txn {}",
+                                                tablet_id, txn_info.load_ids_size(), txn_info.txn_id()));
+        }
         return txn_logs;
     } else if (!txn_info.combined_txn_log()) {
         auto log_path = tablet_mgr->txn_log_location(tablet_id, txn_info.txn_id());
@@ -490,8 +497,15 @@ Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, std::sp
             auto txn_id = txn_infos[i].txn_id();
             auto log_version = log_versions[i];
             auto expected_count = txn_infos[i].load_ids_size();
-            ASSIGN_OR_RETURN(auto txn_logs_ptr, load_txn_log(tablet_mgr, tablet_id, txn_infos[i]));
-            auto& txn_logs = *txn_logs_ptr;
+            auto txn_logs_or = load_txn_log(tablet_mgr, tablet_id, txn_infos[i]);
+            // NotFound means no per-load_id file is left, the fully consumed case of the shortfall below.
+            if (!txn_logs_or.ok() && !txn_logs_or.status().is_not_found()) {
+                return txn_logs_or.status();
+            }
+            TxnLogVector txn_logs;
+            if (txn_logs_or.ok()) {
+                txn_logs = std::move(*txn_logs_or.value());
+            }
 
             if (static_cast<int>(txn_logs.size()) < expected_count) {
                 // load_txn_log silently skips per-load_id files that are NotFound, so any

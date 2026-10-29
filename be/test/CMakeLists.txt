@@ -356,6 +356,7 @@ set(EXEC_FILES
     ./storage/lake/lake_primary_key_recover_test.cpp
         ./storage/lake/spill_mem_table_sink_test.cpp
         ./storage/lake/transactions_test.cpp
+        ./storage/lake/lake_multi_statement_publish_test.cpp
         ./storage/lake/lake_meta_reader_test.cpp
         ./storage/load_spill_block_manager_test.cpp
         ./storage/load_chunk_spiller_test.cpp
