@@ -124,8 +124,14 @@ subprojects {
             implementation("com.github.oshi:oshi-core:6.2.1")
             implementation("com.github.seancfoley:ipaddress:5.4.2")
             implementation("com.google.cloud.bigdataoss:gcs-connector:${project.ext["gcs.connector.version"]}")
+<<<<<<< HEAD
             implementation("com.google.code.gson:gson:2.8.9")
             implementation("com.google.guava:guava:32.0.1-jre")
+=======
+            implementation("com.google.code.findbugs:jsr305:3.0.2")
+            implementation("com.google.code.gson:gson:${project.ext["gson.version"]}")
+            implementation("com.google.guava:guava:33.7.2-jre")
+>>>>>>> 61c23e17775... [BugFix][RB-833][CVE] Bump guava to 33.7.2 and snappy-java to 1.1.10.9 (#67288)
             implementation("com.google.protobuf:protobuf-java:${project.ext["protobuf-java.version"]}")
             implementation("com.google.protobuf:protobuf-java-util:${project.ext["protobuf-java.version"]}")
             implementation("com.microsoft.sqlserver:mssql-jdbc:12.4.2.jre11")
@@ -264,7 +270,7 @@ subprojects {
             implementation("org.roaringbitmap:RoaringBitmap:0.8.13")
             implementation("org.scala-lang:scala-library:2.12.10")
             implementation("org.slf4j:slf4j-api:1.7.30")
-            implementation("org.xerial.snappy:snappy-java:1.1.10.5")
+            implementation("org.xerial.snappy:snappy-java:1.1.10.9")
             implementation("software.amazon.awssdk:dynamodb:${project.ext["aws-v2-sdk.version"]}")
             implementation("software.amazon.awssdk:glue:${project.ext["aws-v2-sdk.version"]}")
             implementation("software.amazon.awssdk:kms:${project.ext["aws-v2-sdk.version"]}")

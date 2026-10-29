@@ -11,7 +11,7 @@
     <packaging>jar</packaging>
 
     <properties>
-        <guava.version>32.0.1-jre</guava.version>
+        <guava.version>33.7.2-jre</guava.version>
         <java-extensions.home>${basedir}/../</java-extensions.home>
         <avro.version>1.11.4</avro.version>
     </properties>
