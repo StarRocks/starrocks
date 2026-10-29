@@ -56,6 +56,7 @@
 #include "service/service_metrics.h"
 #include "storage/flat_json_metrics.h"
 #include "storage/index/vector/vector_index_cache_metrics.h"
+#include "storage/lake/metacache_metrics.h"
 #include "storage/storage_metrics.h"
 
 namespace starrocks {
@@ -278,6 +279,7 @@ void BackendMetricsInitializer::initialize(ProcessMetricsRegistry* process_metri
     DataCacheMetrics::instance()->install(registry);
     VectorIndexCacheMetrics::instance()->install(registry);
     StorageMetrics::instance()->install(registry);
+    lake::MetacacheMetrics::instance()->install(registry);
     KeyCache::instance().install_metrics(registry);
 }
 

@@ -109,3 +109,29 @@ StarRocks BE 中的内存分为以下几类。
 |  --- |  --- | --- |
 | query_mem_limit | 0 | 各 BE 节点上单个查询的内存限制，单位是 Byte。建议设置为 17179869184（16GB）以上。 |
 | load_mem_limit| 0| 各 BE 节点上单个导入任务的内存限制，单位是 Byte。如果设置为 `0`，StarRocks 采用 `exec_mem_limit` 作为内存限制。 |
+
+## Lake 元数据内存 {#lake-metadata-memory}
+
+存算分离集群中，`lake_metadata_cache_limit` 只限制每个 CN 的元数据 LRU 缓存，不限制 `metadata` Tracker 报告的全部内存。查询和 Compaction 可以在 LRU 淘汰后继续持有 Segment，也可以不填充缓存而加载元数据；这些对象会一直存活到最后一个持有者释放它们。因此，调小缓存上限无法限制运行中任务持有的元数据内存。
+
+CN 的 `/metrics` 导出以下 Gauge，不依赖 `dump_metrics_with_bvar`：
+
+- `starrocks_be_lake_metacache_usage_bytes`：缓存当前计费，含 LRU key 和 handle 开销。
+- `starrocks_be_lake_metacache_capacity_bytes`：缓存当前实际容量。
+- `starrocks_be_lake_metacache_payload_bytes{type="segment"}`：缓存内 Segment 的 payload 计费。其他 `type` 值为 `tablet_metadata`, `txn_log`, `schema`, `delvec`, `combined_txn_log`, `bundled_metadata_marker`。
+
+`/mem_tracker` 页面（包括 `?type=metadata`）在独立诊断表中展示相同的缓存数据。这些是有重叠的观测视图，不是可与总内存相加的额外 Tracker 子节点。
+
+对每个 CN，可以用以下表达式估算 `metadata` 中无法由缓存内 Segment 解释的部分：
+
+```promql
+clamp_min(
+  starrocks_be_metadata_mem_bytes
+  - ignoring(type) starrocks_be_lake_metacache_payload_bytes{type="segment"},
+  0
+)
+```
+
+这是估算值，不是已淘汰 Segment 的精确字节数：其中还包含其他元数据、计费口径差异，以及批量更新 Segment 缓存计费时的暂时差异；各 Gauge 也非同时采样。应与空闲基线比较，并观察查询或 Compaction 运行及结束时的变化。缓存用量接近容量而估算值继续增长，说明 Segment 缓存外的元数据正在增长。对于持有输入 Segment 的 Compaction，可结合 `starrocks_be_lake_compaction_held_segment_bytes` 进一步归因。不要用 `metadata` 减去 metacache 总用量，因为缓存还计入了其他统计口径的对象和开销。
+
+查询打开 Segment 时的内存分配还会通过 allocation hook 计入该查询的 instance/query Tracker，因此 `metadata` 与 `query_pool` 有重叠，**不能相加**。process Tracker 对同一次分配只计一次。metadata 使用单独观测视图，并不表示这些分配不参与查询内存限制或准入计数。

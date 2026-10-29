@@ -44,6 +44,7 @@
 #include "platform/http/http_channel.h"
 #include "platform/http/http_request.h"
 #include "platform/http/http_response.h"
+#include "storage/lake/metacache_metrics.h"
 #ifdef USE_STAROS
 #include "metrics/metrics.h"
 #endif
@@ -141,6 +142,31 @@ TEST_F(MetricsActionTest, prometheus_output) {
     HttpRequest request(_evhttp_req);
     MetricsAction action(&registry, &mock_send_reply);
     action.handle(&request);
+}
+
+TEST_F(MetricsActionTest, metacache_is_exported_without_bvar) {
+    ProcessMetricsRegistry registry("starrocks_be");
+    registry.root_registry()->set_collect_hook_enabled(false);
+    lake::MetacacheMetrics metrics;
+    metrics.install(registry.root_registry());
+    lake::Metacache cache(1024 * 1024);
+    cache.cache_bundled_metadata_marker("marker");
+    metrics.refresh(&cache);
+    ASSERT_FALSE(config::dump_metrics_with_bvar);
+    std::string response;
+    s_captured_response = &response;
+    HttpRequest request(_evhttp_req);
+    MetricsAction action(&registry, &mock_capture_reply);
+    action.handle(&request);
+    s_captured_response = nullptr;
+    EXPECT_NE(std::string::npos, response.find("# TYPE starrocks_be_lake_metacache_usage_bytes gauge\n"));
+    EXPECT_NE(std::string::npos,
+              response.find("starrocks_be_lake_metacache_capacity_bytes " + std::to_string(cache.capacity()) + "\n"));
+    for (auto* type : lake::kMetacacheTypes) {
+        const auto value = std::string_view(type) == "bundled_metadata_marker" ? sizeof(bool) : 0;
+        EXPECT_NE(std::string::npos, response.find(std::string("starrocks_be_lake_metacache_payload_bytes{type=\"") +
+                                                   type + "\"} " + std::to_string(value) + "\n"));
+    }
 }
 
 TEST_F(MetricsActionTest, prometheus_no_prefix) {

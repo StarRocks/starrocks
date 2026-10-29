@@ -146,6 +146,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：是否在写入存算分离集群的 Tablet 元数据和事务日志文件时附加 Adler-32 校验和，以便在读取时检测这些文件是否损坏。无论该配置项如何设置，读取端在文件包含校验和时都会自动识别并校验；该配置项仅控制写入格式。仅当集群仍可能降级到不支持该校验和格式的版本时，才将该配置项设置为 `false`。在滚动升级或降级期间，旧版本的 BE 或 CN 使用旧的读取逻辑，无法解析新格式写入的文件。
 - 引入版本：v4.2
 
+### lake_metadata_cache_limit
+
+- 默认值：2147483648
+- 类型：Int64
+- 单位：字节
+- 是否动态：是
+- 描述：每个 CN 上存算分离元数据 LRU 缓存的容量，默认为 2 GiB。该参数只约束缓存计费，不限制元数据总内存。运行中的扫描和 Compaction 可在缓存外持有元数据，包括已被 LRU 淘汰的 Segment 对象；调低该参数不会释放仍被任务持有的对象。新指标和内存计数规则见[Lake 元数据内存](../../management/resource_management/Memory_management.md#lake-metadata-memory)。
+- 引入版本：-
+
 ### lake_pk_compaction_max_input_rowsets
 
 - 默认值：500

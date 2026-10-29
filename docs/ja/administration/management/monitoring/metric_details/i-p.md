@@ -305,6 +305,25 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 - 単位: 件数
 - 説明: 成功したストレージ・コンピュート分離（lake）コンパクションジョブのカウンタ。
 
+## `lake_metacache_capacity_bytes`
+
+- 単位: バイト
+- タイプ: Gauge
+- 説明: CN の Lake メタデータ LRU キャッシュの現在の実効容量。実行中のクエリやコンパクションが保持するメモリではなく、キャッシュ計上量を制限します。
+
+## `lake_metacache_payload_bytes`
+
+- 単位: バイト
+- タイプ: Gauge
+- ラベル: `type` (`tablet_metadata`, `txn_log`, `schema`, `delvec`, `segment`, `combined_txn_log`, `bundled_metadata_marker`)
+- 説明: `type` 別の Lake メタデータキャッシュのペイロード計上量。LRU キーとハンドルは含みません。Segment サイズのバッチ更新を含む既存の計上規則に従い、存続中オブジェクトのヒープ総量ではありません。
+
+## `lake_metacache_usage_bytes`
+
+- 単位: バイト
+- タイプ: Gauge
+- 説明: LRU キーとハンドルを含む Lake メタデータキャッシュの現在の計上量。キャッシュ外で保持されるオブジェクトは含みません。
+
 ## `lake_pk_index_cache_delvec_bytes`
 
 - 単位: バイト

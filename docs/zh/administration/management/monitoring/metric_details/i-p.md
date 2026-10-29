@@ -305,6 +305,25 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 - 单位：计数
 - 描述：成功的存算分离（lake）压缩任务计数。
 
+## `lake_metacache_capacity_bytes`
+
+- 单位: 字节
+- 类型: Gauge
+- 描述: CN 上 Lake 元数据 LRU 缓存当前实际容量。只限制缓存计费，不限制运行中查询或 Compaction 持有的元数据。
+
+## `lake_metacache_payload_bytes`
+
+- 单位: 字节
+- 类型: Gauge
+- 标签: `type` (`tablet_metadata`, `txn_log`, `schema`, `delvec`, `segment`, `combined_txn_log`, `bundled_metadata_marker`)
+- 描述: 按 `type` 拆分的 Lake 元数据缓存 payload 计费，不含 LRU key 和 handle。沿用现有缓存计费（含 Segment 大小的批量更新），不是全部存活对象的堆内存统计。
+
+## `lake_metacache_usage_bytes`
+
+- 单位: 字节
+- 类型: Gauge
+- 描述: Lake 元数据缓存当前计费，包含 LRU key 和 handle，不包含缓存外被持有的对象。
+
 ## `lake_pk_index_cache_delvec_bytes`
 
 - 单位：字节

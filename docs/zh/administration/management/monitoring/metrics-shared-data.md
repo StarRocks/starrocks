@@ -55,6 +55,8 @@ Shared-data Dashboard 包括以下监控指标类别：
 
 - 描述 Metacache 利用率。
 
+CN 的 `/metrics` 导出 `starrocks_be_lake_metacache_usage_bytes`、`starrocks_be_lake_metacache_capacity_bytes` 和 `starrocks_be_lake_metacache_payload_bytes{type="segment"}`（也支持其他类型），`/mem_tracker` 也展示这些数据。缓存上限只限制缓存计费，运行中的任务可在缓存外持有元数据。缓存外部分的估算及 `metadata` 与 `query_pool` 的重叠关系见 [Lake 元数据内存](../resource_management/Memory_management.md#lake-metadata-memory)。
+
 #### Delvec Cache Miss Per Minute
 
 - 描述 Delvec Cache 每分钟 Miss 的次数。

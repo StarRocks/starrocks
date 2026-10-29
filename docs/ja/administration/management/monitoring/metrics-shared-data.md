@@ -55,6 +55,8 @@ Shared-data Dashboard には、次のカテゴリの監視メトリクスが含�
 
 - 説明: Metacache の利用率。
 
+CN の `/metrics` は `starrocks_be_lake_metacache_usage_bytes`、`starrocks_be_lake_metacache_capacity_bytes`、`starrocks_be_lake_metacache_payload_bytes{type="segment"}`（他の型も利用可能）を公開し、`/mem_tracker` にも表示します。キャッシュ上限はキャッシュ計上量のみを制限し、実行中のタスクはキャッシュ外のメタデータを保持できます。推定方法と `metadata` と `query_pool` の重複については [Lake メタデータメモリ](../resource_management/Memory_management.md#lake-metadata-memory)を参照してください。
+
 #### Delvec Cache Miss Per Minute
 
 - 説明: Delvec Cache における 1 分あたりのキャッシュミスの数。

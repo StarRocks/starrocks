@@ -76,3 +76,29 @@ curl -XGET http://be_ip:be_http_port/metrics | grep 'column_pool'
 ~~~
 
 The value of metrics is updated every 10 seconds. It is possible to monitor some of the memory statistics with older versions.
+
+## Lake metadata memory {#lake-metadata-memory}
+
+In a shared-data cluster, `lake_metadata_cache_limit` limits only the metadata LRU cache on each CN. It does not limit all memory reported by the `metadata` tracker. Queries and compactions can retain Segment objects after LRU eviction, or load metadata without filling the cache. These objects remain alive until their last owner releases them. A smaller cache limit therefore does not impose a bound on metadata held by running tasks.
+
+The CN `/metrics` endpoint exports these gauges independently of `dump_metrics_with_bvar`:
+
+- `starrocks_be_lake_metacache_usage_bytes`: current cache charges, including LRU keys and handles.
+- `starrocks_be_lake_metacache_capacity_bytes`: current effective cache capacity.
+- `starrocks_be_lake_metacache_payload_bytes{type="segment"}`: Segment payload charged to the cache. The other `type` values are `tablet_metadata`, `txn_log`, `schema`, `delvec`, `combined_txn_log`, `bundled_metadata_marker`.
+
+The `/mem_tracker` page (also with `?type=metadata`) shows the same cache measurements in a separate diagnostic table. They are overlapping views, not extra memory tracker children to add to the total.
+
+For each CN, estimate the part of `metadata` not explained by cached Segments with:
+
+```promql
+clamp_min(
+  starrocks_be_metadata_mem_bytes
+  - ignoring(type) starrocks_be_lake_metacache_payload_bytes{type="segment"},
+  0
+)
+```
+
+This is an estimate, not an exact measure of evicted Segment bytes: it also includes other metadata, differences in accounting, and temporary differences while Segment cache charges are updated in batches. The gauges are sampled independently. Compare the estimate with its idle baseline and follow it through query/compaction execution and completion. Cache usage near capacity while the estimate grows indicates metadata held outside the Segment cache. For compactions that hold their input segments, `starrocks_be_lake_compaction_held_segment_bytes` provides additional attribution. Do not subtract total metacache usage from `metadata`: cache charges also include objects and overhead with different accounting scopes.
+
+Allocations made while a query opens segments are also charged to that query's instance/query trackers by the allocation hooks. Consequently, `metadata` and `query_pool` overlap and **must not be added**. The process tracker counts an allocation once. The separate metadata view does not mean query memory limits or admission accounting exclude these allocations.

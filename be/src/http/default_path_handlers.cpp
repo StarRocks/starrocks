@@ -59,7 +59,10 @@
 #include "jemalloc/jemalloc.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_env.h"
+#include "storage/lake/metacache.h"
+#include "storage/lake/tablet_manager.h"
 #include "storage/storage_engine.h"
+#include "storage/storage_env.h"
 #include "storage/update_manager.h"
 
 namespace starrocks {
@@ -210,6 +213,33 @@ void MemTrackerWebPageHandler::handle(const RuntimeEnv& runtime_env, MemTracker*
     }
 
     (*output) << "</tbody></table>\n";
+
+    auto* manager = StorageEnv::GetInstance()->lake_tablet_manager();
+    if (manager != nullptr && (start_mem_tracker == runtime_env.process_mem_tracker() ||
+                               start_mem_tracker == runtime_env.metadata_mem_tracker())) {
+        auto* cache = manager->metacache();
+        const auto payload = cache->payload_bytes();
+        const auto segment_type = lake::CacheValue(std::shared_ptr<Segment>{}).index();
+        const auto residual =
+                std::max<int64_t>(0, runtime_env.metadata_mem_tracker()->consumption() - payload[segment_type]);
+        (*output) << "<h2>Lake metadata cache</h2>\n"
+                  << "<p>Diagnostic views overlap with the trackers above. Metadata and query_pool can count "
+                     "the same allocations; do not add them. The process tracker counts an allocation once.</p>\n"
+                  << "<p>lake_metadata_cache_limit limits cache charges only. Queries and compactions can keep "
+                     "metadata alive outside the cache, including after LRU eviction.</p>\n"
+                  << "<table class='table "
+                     "table-striped'><thead><tr><th>Measurement</th><th>Bytes</th></tr></thead><tbody>\n"
+                  << "<tr><td>Cache usage (including LRU keys and handles)</td><td>" << cache->memory_usage()
+                  << "</td></tr>\n<tr><td>Cache capacity</td><td>" << cache->capacity() << "</td></tr>\n";
+        for (size_t i = 0; i < payload.size(); ++i) {
+            (*output) << "<tr><td>Cached payload: " << lake::kMetacacheTypes[i] << "</td><td>" << payload[i]
+                      << "</td></tr>\n";
+        }
+        (*output) << "<tr><td>Metadata minus cached Segment payload (estimate)</td><td>" << residual
+                  << "</td></tr></tbody></table>\n"
+                  << "<p>The estimate also includes other metadata and accounting/sampling differences. "
+                     "It is not an exact count of evicted Segment bytes.</p>\n";
+    }
 }
 
 void malloc_stats_write_cb(void* opaque, const char* data) {

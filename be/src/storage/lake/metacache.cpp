@@ -98,17 +98,38 @@ static bvar::PassiveStatus<size_t> g_metacache_capacity("lake", "metacache_capac
 static bvar::PassiveStatus<size_t> g_metacache_usage("lake", "metacache_usage", get_metacache_usage, nullptr);
 #endif
 
+// One entry owns one payload charge, even when readers retain the shared object
+// after eviction. Mutating payload_size is protected by the underlying shard lock.
+struct Metacache::Entry {
+    Entry(CacheValue v, size_t size, Metacache* owner)
+            : value(std::move(v)), payload_size(size), bytes(&owner->_payload_bytes[value.index()]) {
+        bytes->fetch_add(payload_size, std::memory_order_relaxed);
+    }
+    ~Entry() { bytes->fetch_sub(payload_size, std::memory_order_relaxed); }
+
+    void update_size(size_t size) {
+        bytes->fetch_add(static_cast<int64_t>(size) - static_cast<int64_t>(payload_size), std::memory_order_relaxed);
+        payload_size = size;
+    }
+
+    CacheValue value;
+    size_t payload_size;
+    std::atomic<int64_t>* bytes;
+};
+
 Metacache::Metacache(int64_t cache_capacity) : _cache(new_lru_cache(cache_capacity)) {}
 
 Metacache::~Metacache() = default;
 
 void Metacache::cache_value_deleter(const CacheKey& /*key*/, void* value) {
-    TEST_SYNC_POINT_CALLBACK("lake::Metacache::cache_value_deleter", value);
-    delete static_cast<CacheValue*>(value);
+    auto* entry = static_cast<Entry*>(value);
+    TEST_SYNC_POINT_CALLBACK("lake::Metacache::cache_value_deleter", &entry->value);
+    delete entry;
 }
 
-void Metacache::insert(std::string_view key, CacheValue* ptr, size_t size) {
-    Cache::Handle* handle = _cache->insert(CacheKey(key), ptr, size, cache_value_deleter);
+void Metacache::insert(std::string_view key, CacheValue value, size_t size) {
+    auto entry = std::make_unique<Entry>(std::move(value), size, this);
+    Cache::Handle* handle = _cache->insert(CacheKey(key), entry.release(), size, cache_value_deleter);
     _cache->release(handle);
 }
 
@@ -121,7 +142,7 @@ std::shared_ptr<const TabletMetadataPB> Metacache::lookup_tablet_metadata(std::s
     DeferOp defer([this, handle]() { _cache->release(handle); });
 
     try {
-        auto value = static_cast<CacheValue*>(_cache->value(handle));
+        auto value = &static_cast<Entry*>(_cache->value(handle))->value;
         auto metadata = std::get<std::shared_ptr<const TabletMetadataPB>>(*value);
         g_metadata_cache_hit << 1;
         return metadata;
@@ -139,7 +160,7 @@ std::shared_ptr<const TxnLogPB> Metacache::lookup_txn_log(std::string_view key) 
     DeferOp defer([this, handle]() { _cache->release(handle); });
 
     try {
-        auto value = static_cast<CacheValue*>(_cache->value(handle));
+        auto value = &static_cast<Entry*>(_cache->value(handle))->value;
         auto log = std::get<std::shared_ptr<const TxnLogPB>>(*value);
         g_txnlog_cache_hit << 1;
         return log;
@@ -157,7 +178,7 @@ std::shared_ptr<const CombinedTxnLogPB> Metacache::lookup_combined_txn_log(std::
     DeferOp defer([this, handle]() { _cache->release(handle); });
 
     try {
-        auto value = static_cast<CacheValue*>(_cache->value(handle));
+        auto value = &static_cast<Entry*>(_cache->value(handle))->value;
         auto log = std::get<std::shared_ptr<const CombinedTxnLogPB>>(*value);
         g_txnlog_cache_hit << 1;
         return log;
@@ -175,7 +196,7 @@ std::shared_ptr<const TabletSchema> Metacache::lookup_tablet_schema(std::string_
     DeferOp defer([this, handle]() { _cache->release(handle); });
 
     try {
-        auto value = static_cast<CacheValue*>(_cache->value(handle));
+        auto value = &static_cast<Entry*>(_cache->value(handle))->value;
         auto schema = std::get<std::shared_ptr<const TabletSchema>>(*value);
         g_schema_cache_hit << 1;
         return schema;
@@ -192,7 +213,7 @@ std::shared_ptr<Segment> Metacache::lookup_segment(std::string_view key) {
     }
     DeferOp defer([this, handle]() { _cache->release(handle); });
 
-    auto* segment = std::get_if<std::shared_ptr<Segment>>(static_cast<CacheValue*>(_cache->value(handle)));
+    auto* segment = std::get_if<std::shared_ptr<Segment>>(&static_cast<Entry*>(_cache->value(handle))->value);
     if (segment == nullptr) {
         return nullptr;
     }
@@ -209,7 +230,7 @@ std::shared_ptr<const DelVector> Metacache::lookup_delvec(std::string_view key) 
     DeferOp defer([this, handle]() { _cache->release(handle); });
 
     try {
-        auto value = static_cast<CacheValue*>(_cache->value(handle));
+        auto value = &static_cast<Entry*>(_cache->value(handle))->value;
         auto delvec = std::get<std::shared_ptr<const DelVector>>(*value);
         g_dv_cache_hit << 1;
         return delvec;
@@ -227,7 +248,7 @@ bool Metacache::lookup_bundled_metadata_marker(std::string_view key) {
     DeferOp defer([this, handle]() { _cache->release(handle); });
 
     try {
-        auto value = static_cast<CacheValue*>(_cache->value(handle));
+        auto value = &static_cast<Entry*>(_cache->value(handle))->value;
         auto is_bundled_metadata = std::get<bool>(*value);
         g_aggregate_partition_cache_hit << 1;
         return is_bundled_metadata;
@@ -238,15 +259,14 @@ bool Metacache::lookup_bundled_metadata_marker(std::string_view key) {
 
 void Metacache::cache_segment(std::string_view key, std::shared_ptr<Segment> segment) {
     auto mem_cost = segment->mem_usage();
-    auto value = std::make_unique<CacheValue>(std::move(segment));
-    insert(key, value.release(), mem_cost);
+    insert(key, std::move(segment), mem_cost);
 }
 
 std::shared_ptr<Segment> Metacache::cache_segment_if_absent(std::string_view key,
                                                             const std::shared_ptr<Segment>& segment) {
     auto mem_cost = segment->mem_usage();
     // Destroyed on return unless the cache adopts it, i.e. never under a cache lock.
-    auto value = std::make_unique<CacheValue>(segment);
+    auto value = std::make_unique<Entry>(segment, mem_cost, this);
     bool inserted = false;
     auto* handle = _cache->insert_if_absent(CacheKey(key), value.get(), mem_cost, cache_value_deleter, &inserted);
     if (handle == nullptr) {
@@ -259,27 +279,41 @@ std::shared_ptr<Segment> Metacache::cache_segment_if_absent(std::string_view key
         return segment;
     }
     // Another thread won the race, return the segment that is actually cached.
-    auto* cached = std::get_if<std::shared_ptr<Segment>>(static_cast<CacheValue*>(_cache->value(handle)));
+    auto* cached = std::get_if<std::shared_ptr<Segment>>(&static_cast<Entry*>(_cache->value(handle))->value);
     return cached != nullptr ? *cached : nullptr;
 }
 
-namespace {
-// Invoked while the cache shard lock is held, so it does nothing but compare identity.
-bool segment_ptr_matches(void* value, const void* ctx) {
-    auto* cached = std::get_if<std::shared_ptr<Segment>>(static_cast<CacheValue*>(value));
-    return cached != nullptr && cached->get() == static_cast<const Segment*>(ctx);
-}
-} // namespace
-
 bool Metacache::update_segment_cache_size(std::string_view key, size_t mem_cost, const Segment* segment) {
-    return _cache->update_charge_if(CacheKey(key), mem_cost, segment_ptr_matches, segment);
+    struct Context {
+        const Segment* segment;
+        size_t size;
+    } ctx{segment, mem_cost};
+    return _cache->update_charge_if(
+            CacheKey(key), mem_cost,
+            [](void* value, const void* context) {
+                auto* entry = static_cast<Entry*>(value);
+                auto* ctx = static_cast<const Context*>(context);
+                auto* cached = std::get_if<std::shared_ptr<Segment>>(&entry->value);
+                if (cached == nullptr || cached->get() != ctx->segment) {
+                    return false;
+                }
+                entry->update_size(ctx->size);
+                return true;
+            },
+            &ctx);
 }
 
 bool Metacache::replace_segment_if_matches(std::string_view key, const Segment* expected,
                                            const std::shared_ptr<Segment>& replacement) {
     const auto mem_cost = replacement->mem_usage();
-    auto value = std::make_unique<CacheValue>(replacement);
-    if (!_cache->replace_if(CacheKey(key), value.get(), mem_cost, cache_value_deleter, segment_ptr_matches, expected)) {
+    auto value = std::make_unique<Entry>(replacement, mem_cost, this);
+    if (!_cache->replace_if(
+                CacheKey(key), value.get(), mem_cost, cache_value_deleter,
+                [](void* value, const void* ctx) {
+                    auto* cached = std::get_if<std::shared_ptr<Segment>>(&static_cast<Entry*>(value)->value);
+                    return cached != nullptr && cached->get() == static_cast<const Segment*>(ctx);
+                },
+                expected)) {
         return false;
     }
     (void)value.release(); // ownership moved into the cache
@@ -288,33 +322,27 @@ bool Metacache::replace_segment_if_matches(std::string_view key, const Segment* 
 
 void Metacache::cache_delvec(std::string_view key, std::shared_ptr<const DelVector> delvec) {
     auto mem_cost = delvec->memory_usage();
-    auto value = std::make_unique<CacheValue>(std::move(delvec));
-    insert(key, value.release(), mem_cost);
+    insert(key, std::move(delvec), mem_cost);
 }
 
 void Metacache::cache_tablet_metadata(std::string_view key, std::shared_ptr<const TabletMetadataPB> metadata) {
-    auto value_ptr = std::make_unique<CacheValue>(metadata);
-    insert(key, value_ptr.release(), metadata->SpaceUsedLong());
+    insert(key, metadata, metadata->SpaceUsedLong());
 }
 
 void Metacache::cache_txn_log(std::string_view key, std::shared_ptr<const TxnLogPB> log) {
-    auto value_ptr = std::make_unique<CacheValue>(log);
-    insert(key, value_ptr.release(), log->SpaceUsedLong());
+    insert(key, log, log->SpaceUsedLong());
 }
 
 void Metacache::cache_combined_txn_log(std::string_view key, std::shared_ptr<const CombinedTxnLogPB> log) {
-    auto value_ptr = std::make_unique<CacheValue>(log);
-    insert(key, value_ptr.release(), log->SpaceUsedLong());
+    insert(key, log, log->SpaceUsedLong());
 }
 
 void Metacache::cache_tablet_schema(std::string_view key, std::shared_ptr<const TabletSchema> schema, size_t size) {
-    auto cache_value = std::make_unique<CacheValue>(schema);
-    insert(key, cache_value.release(), size);
+    insert(key, std::move(schema), size);
 }
 
 void Metacache::cache_bundled_metadata_marker(std::string_view key) {
-    auto cache_value = std::make_unique<CacheValue>(true);
-    insert(key, cache_value.release(), sizeof(bool));
+    insert(key, true, sizeof(bool));
 }
 
 void Metacache::erase(std::string_view key) {
@@ -340,6 +368,14 @@ size_t Metacache::memory_usage() const {
 
 size_t Metacache::capacity() const {
     return _cache->get_capacity();
+}
+
+MetacachePayloadBytes Metacache::payload_bytes() const {
+    MetacachePayloadBytes result;
+    for (size_t i = 0; i < result.size(); ++i) {
+        result[i] = _payload_bytes[i].load(std::memory_order_relaxed);
+    }
+    return result;
 }
 
 } // namespace starrocks::lake

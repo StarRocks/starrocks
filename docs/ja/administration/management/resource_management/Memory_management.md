@@ -76,3 +76,29 @@ curl -XGET http://be_ip:be_http_port/metrics | grep 'column_pool'
 ~~~
 
 metrics の値は10秒ごとに更新されます。古いバージョンで一部のメモリ統計を監視することが可能です。
+
+## Lake メタデータメモリ {#lake-metadata-memory}
+
+共有データクラスタの `lake_metadata_cache_limit` が制限するのは、各 CN のメタデータ LRU キャッシュだけです。`metadata` トラッカーが報告する総メモリの上限ではありません。クエリとコンパクションは、LRU から削除された Segment を保持したり、キャッシュに追加せずにメタデータをロードしたりできます。オブジェクトは最後の所有者が解放するまで存続するため、キャッシュ上限を下げても実行中のタスクが保持するメモリは制限できません。
+
+CN の `/metrics` は `dump_metrics_with_bvar` に依存せず、次の Gauge を公開します。
+
+- `starrocks_be_lake_metacache_usage_bytes`: LRU キーとハンドルを含むキャッシュ計上量。
+- `starrocks_be_lake_metacache_capacity_bytes`: 現在の実効キャッシュ容量。
+- `starrocks_be_lake_metacache_payload_bytes{type="segment"}`: キャッシュ内 Segment のペイロード計上量。他の `type` 値は `tablet_metadata`, `txn_log`, `schema`, `delvec`, `combined_txn_log`, `bundled_metadata_marker` です。
+
+`/mem_tracker`（`?type=metadata` を含む）は、同じ値を独立した診断テーブルに表示します。これらは重複する観測値であり、総メモリに加算するトラッカーの子ではありません。
+
+CN ごとに、キャッシュ内 Segment で説明できない `metadata` の部分を次の式で推定できます。
+
+```promql
+clamp_min(
+  starrocks_be_metadata_mem_bytes
+  - ignoring(type) starrocks_be_lake_metacache_payload_bytes{type="segment"},
+  0
+)
+```
+
+これは削除済み Segment の正確なバイト数ではありません。他のメタデータ、計上範囲の違い、Segment のキャッシュ計上量をバッチ更新する際の一時的な差も含み、各 Gauge のサンプリングも独立しています。アイドル時の基準値と比較し、クエリやコンパクションの実行中と終了後の変化を確認してください。キャッシュが容量に達している間も推定値が増える場合、Segment キャッシュ外のメタデータが増加しています。入力 Segment を保持するコンパクションについては、`starrocks_be_lake_compaction_held_segment_bytes` も参照できます。metacache の総量には異なる範囲のオブジェクトやオーバーヘッドも含まれるため、それを `metadata` から直接差し引かないでください。
+
+クエリが Segment を開く際の割り当ては allocation hook によって instance/query トラッカーにも計上されます。そのため `metadata` と `query_pool` は重複し、**加算できません**。process トラッカーは同じ割り当てを 1 回だけ数えます。metadata が独立した診断ビューであることは、これらの割り当てがクエリのメモリ制限やアドミッションの計上から除外されることを意味しません。

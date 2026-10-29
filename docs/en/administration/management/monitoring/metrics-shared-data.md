@@ -55,6 +55,8 @@ Shared-data Dashboard includes the following categories of monitoring metrics:
 
 - Description: Metacache utilization rate.
 
+The CN `/metrics` endpoint exports `starrocks_be_lake_metacache_usage_bytes`, `starrocks_be_lake_metacache_capacity_bytes`, and `starrocks_be_lake_metacache_payload_bytes{type="segment"}` (with other types available). They are also shown on `/mem_tracker`. The cache limit applies only to cache charges; running tasks can hold metadata outside the cache. See [Lake metadata memory](../resource_management/Memory_management.md#lake-metadata-memory) for the residual estimate and the overlap between `metadata` and `query_pool`.
+
 #### Delvec Cache Miss Per Minute
 
 - Description: Number of cache misses in Delvec Cache per minute.

@@ -149,6 +149,15 @@ This topic introduces the following types of BE configurations:
 - Description: Whether to write tablet metadata and transaction log files of a shared-data cluster with an Adler-32 checksum, so that corruption of these files can be detected when they are read. Regardless of this item, readers always detect and verify the checksum automatically when it is present; this item only controls the write format. Set it to `false` only while the cluster may still be downgraded to a version that predates the checksummed format. During a rolling upgrade or a downgrade, an earlier BE or CN uses the legacy reader and cannot parse files written in the new format.
 - Introduced in: v4.2
 
+### lake_metadata_cache_limit
+
+- Default: 2147483648
+- Type: Int64
+- Unit: Bytes
+- Is mutable: Yes
+- Description: Capacity of the shared-data metadata LRU cache on each CN (2 GiB by default). This limits cache charges, not total metadata memory. Running scans and compactions can retain metadata outside the cache, including Segment objects that have already been evicted. Lowering this limit does not release objects still held by those tasks. See [Lake metadata memory](../../management/resource_management/Memory_management.md#lake-metadata-memory) for the cache metrics and memory accounting rules.
+- Introduced in: -
+
 ### lake_pk_compaction_max_input_rowsets
 
 - Default: 500

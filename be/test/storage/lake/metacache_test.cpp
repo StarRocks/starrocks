@@ -36,6 +36,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/logging.h"
 #include "storage/chunk_helper.h"
+#include "storage/lake/metacache_metrics.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/tablet_writer.h"
@@ -348,6 +349,7 @@ TEST_F(LakeMetacacheTest, test_cache_segment_if_absent_concurrency) {
             EXPECT_EQ(final_result, res);
         }
     }
+    EXPECT_EQ(final_result->mem_usage(), metacache->payload_bytes()[CacheValue(final_result).index()]);
 }
 
 static uint32_t cache_shard(std::string_view key) {
@@ -584,6 +586,87 @@ TEST_F(LakeMetacacheTest, test_combined_txn_log_cache) {
 
     auto log4 = metacache->lookup_combined_txn_log("meta1");
     ASSERT_TRUE(log4 == nullptr);
+}
+
+// Check every payload type, replacement across types, and destruction with readers
+// still holding the shared object. The cache charges must disappear on eviction,
+// independently of the object's lifetime.
+TEST_F(LakeMetacacheTest, payload_accounting) {
+    Metacache cache(1024 * 1024);
+    auto metadata = std::make_shared<TabletMetadataPB>();
+    auto log = std::make_shared<TxnLogPB>();
+    auto combined = std::make_shared<CombinedTxnLogPB>();
+    auto delvec = std::make_shared<DelVector>();
+    cache.cache_tablet_metadata("metadata", metadata);
+    cache.cache_txn_log("log", log);
+    cache.cache_combined_txn_log("combined", combined);
+    cache.cache_tablet_schema("schema", _tablet_schema, 123);
+    cache.cache_delvec("delvec", delvec);
+    cache.cache_bundled_metadata_marker("marker");
+    auto segment = std::make_shared<Segment>(nullptr, FileInfo{"payload.dat"}, 0, _tablet_schema, _tablet_mgr.get());
+    cache.cache_segment("segment", segment);
+    const MetacachePayloadBytes expected = {static_cast<int64_t>(metadata->SpaceUsedLong()),
+                                            static_cast<int64_t>(log->SpaceUsedLong()),
+                                            123,
+                                            static_cast<int64_t>(delvec->memory_usage()),
+                                            static_cast<int64_t>(segment->mem_usage()),
+                                            static_cast<int64_t>(combined->SpaceUsedLong()),
+                                            sizeof(bool)};
+    EXPECT_EQ(expected, cache.payload_bytes());
+    cache.cache_tablet_schema("metadata", _tablet_schema, 456);
+    EXPECT_EQ(0, cache.payload_bytes()[0]);
+    EXPECT_EQ(579, cache.payload_bytes()[2]);
+    cache.erase("schema");
+    EXPECT_EQ(456, cache.payload_bytes()[2]);
+    cache.prune();
+    EXPECT_EQ(MetacachePayloadBytes{}, cache.payload_bytes());
+    EXPECT_EQ(0, cache.memory_usage());
+    EXPECT_EQ(1, segment.use_count());
+}
+
+TEST_F(LakeMetacacheTest, segment_payload_updates_and_conditional_replacement) {
+    Metacache cache(1024 * 1024);
+    auto segment = std::make_shared<Segment>(nullptr, FileInfo{"payload.dat"}, 0, _tablet_schema, _tablet_mgr.get());
+    auto replacement =
+            std::make_shared<Segment>(nullptr, FileInfo{"replacement.dat"}, 0, _tablet_schema, _tablet_mgr.get());
+    const auto type = CacheValue(segment).index();
+    cache.cache_segment("key", segment);
+    EXPECT_EQ(segment, cache.cache_segment_if_absent("key", replacement));
+    EXPECT_EQ(segment->mem_usage(), cache.payload_bytes()[type]);
+    EXPECT_FALSE(cache.replace_segment_if_matches("key", replacement.get(), replacement));
+    EXPECT_FALSE(cache.update_segment_cache_size("key", 10000, replacement.get()));
+    EXPECT_EQ(segment->mem_usage(), cache.payload_bytes()[type]);
+    ASSERT_TRUE(cache.update_segment_cache_size("key", 10000, segment.get()));
+    EXPECT_EQ(10000, cache.payload_bytes()[type]);
+    ASSERT_TRUE(cache.replace_segment_if_matches("key", segment.get(), replacement));
+    EXPECT_EQ(replacement->mem_usage(), cache.payload_bytes()[type]);
+    EXPECT_FALSE(cache.update_segment_cache_size("key", 20000, segment.get()));
+    cache.update_capacity(0);
+    EXPECT_EQ(MetacachePayloadBytes{}, cache.payload_bytes());
+    EXPECT_EQ(1, replacement.use_count());
+    EXPECT_FALSE(cache.update_segment_cache_size("key", 20000, replacement.get()));
+    // An entry too large for its shard is evicted when its insertion handle is released.
+    cache.cache_segment("oversized", segment);
+    EXPECT_EQ(MetacachePayloadBytes{}, cache.payload_bytes());
+}
+
+TEST_F(LakeMetacacheTest, payload_metrics_refresh_and_reset) {
+    MetricRegistry registry("starrocks_be");
+    MetacacheMetrics metrics;
+    metrics.install(&registry);
+    Metacache cache(1024 * 1024);
+    cache.cache_tablet_schema("schema", _tablet_schema, 789);
+    metrics.refresh(&cache);
+    EXPECT_EQ(cache.memory_usage(), metrics.lake_metacache_usage_bytes.value());
+    EXPECT_EQ(cache.capacity(), metrics.lake_metacache_capacity_bytes.value());
+    auto* schema_metric = registry.get_metric("lake_metacache_payload_bytes", MetricLabels().add("type", "schema"));
+    ASSERT_NE(nullptr, schema_metric);
+    EXPECT_EQ("789", schema_metric->to_string());
+    EXPECT_EQ(MetricUnit::BYTES, schema_metric->unit());
+    metrics.refresh(nullptr);
+    EXPECT_EQ(0, metrics.lake_metacache_usage_bytes.value());
+    EXPECT_EQ(0, metrics.lake_metacache_capacity_bytes.value());
+    EXPECT_EQ("0", schema_metric->to_string());
 }
 
 } // namespace starrocks::lake

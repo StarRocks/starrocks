@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <array>
+#include <atomic>
 #include <memory>
 #include <string_view>
 #include <variant>
@@ -36,6 +38,12 @@ namespace starrocks::lake {
 using CacheValue = std::variant<std::shared_ptr<const TabletMetadataPB>, std::shared_ptr<const TxnLogPB>,
                                 std::shared_ptr<const TabletSchema>, std::shared_ptr<const DelVector>,
                                 std::shared_ptr<Segment>, std::shared_ptr<const CombinedTxnLogPB>, bool>;
+
+// Keep these labels in CacheValue variant order. Labels are bounded and shared by
+// the Prometheus metrics and the memory diagnostic page.
+inline constexpr std::array<const char*, std::variant_size_v<CacheValue>> kMetacacheTypes = {
+        "tablet_metadata", "txn_log", "schema", "delvec", "segment", "combined_txn_log", "bundled_metadata_marker"};
+using MetacachePayloadBytes = std::array<int64_t, kMetacacheTypes.size()>;
 
 class Metacache {
 public:
@@ -97,10 +105,19 @@ public:
 
     size_t capacity() const;
 
+    // Cached payload charges, excluding LRU key/handle overhead. Like memory_usage(),
+    // this is a diagnostic sample, not a transactionally consistent cache snapshot.
+    MetacachePayloadBytes payload_bytes() const;
+
 private:
+    struct Entry;
+
     static void cache_value_deleter(const CacheKey& key, void* value);
 
-    void insert(std::string_view key, CacheValue* ptr, size_t size);
+    void insert(std::string_view key, CacheValue value, size_t size);
+
+    // Must outlive _cache: entry destruction releases its payload charge.
+    std::array<std::atomic<int64_t>, kMetacacheTypes.size()> _payload_bytes{};
 
     // No metacache-level lock: conditional replacement, the compare-and-insert needed by cache_segment_if_absent()
     // and the in-place charge update needed by update_segment_cache_size() are provided

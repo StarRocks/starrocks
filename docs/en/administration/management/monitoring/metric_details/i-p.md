@@ -305,6 +305,25 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Count
 - Description: Counter of successful lake compaction jobs.
 
+## `lake_metacache_capacity_bytes`
+
+- Unit: Bytes
+- Type: Gauge
+- Description: Current effective capacity of the CN lake metadata LRU cache. It bounds cache charges, not metadata held by running queries or compactions.
+
+## `lake_metacache_payload_bytes`
+
+- Unit: Bytes
+- Type: Gauge
+- Labels: `type` (`tablet_metadata`, `txn_log`, `schema`, `delvec`, `segment`, `combined_txn_log`, `bundled_metadata_marker`)
+- Description: Payload bytes charged to the lake metadata cache, split by `type`. Excludes LRU keys and handles. Charges follow existing cache accounting, including batched Segment size updates; this is not a live-object heap census.
+
+## `lake_metacache_usage_bytes`
+
+- Unit: Bytes
+- Type: Gauge
+- Description: Current lake metadata cache charges, including LRU keys and handles. Objects retained outside the cache are excluded.
+
 ## `lake_pk_index_cache_delvec_bytes`
 
 - Unit: Bytes
