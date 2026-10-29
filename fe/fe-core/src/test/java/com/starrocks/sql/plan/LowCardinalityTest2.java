@@ -2543,6 +2543,62 @@ public class LowCardinalityTest2 extends PlanTestBase {
     }
 
     @Test
+    public void testMinWithPartialTopN() throws Exception {
+        assertStringAggregateWithPartialTopN("min");
+    }
+
+    @Test
+    public void testMaxWithPartialTopN() throws Exception {
+        assertStringAggregateWithPartialTopN("max");
+    }
+
+    private void assertStringAggregateWithPartialTopN(String aggregate) throws Exception {
+        int previousAggStage = connectContext.getSessionVariable().getNewPlannerAggStage();
+        long previousTopNLimit = connectContext.getSessionVariable().getCboPushDownTopNLimit();
+        int previousTopNMode = connectContext.getSessionVariable().getTopNPushDownAggMode();
+        StatisticStorage previousStorage = connectContext.getGlobalStateMgr().getStatisticStorage();
+        boolean previousRunningUnitTest = FeConstants.runningUnitTest;
+        try {
+            FeConstants.runningUnitTest = true;
+            connectContext.getSessionVariable().setNewPlanerAggStage(2);
+            connectContext.getSessionVariable().setCboPushDownTopNLimit(1000);
+            connectContext.getSessionVariable().setEnablePreAggTopNPushDown(0);
+            CachedStatisticStorage storage = new CachedStatisticStorage();
+            connectContext.getGlobalStateMgr().setStatisticStorage(storage);
+            for (boolean nullable : List.of(false, true)) {
+                String tableName = "dict_aggregate_topn";
+                starRocksAssert.withTable("CREATE TABLE " + tableName + " (k BIGINT, v VARCHAR(100) " +
+                        (nullable ? "NULL" : "NOT NULL") + ") DUPLICATE KEY(k) " +
+                        "DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES (\"replication_num\"=\"1\")");
+                try {
+                    OlapTable table = getOlapTable(tableName);
+                    setTableStatistics(table, 10000);
+                    storage.addColumnStatistic(table, "k", ColumnStatistic.builder().setMinValue(0).setMaxValue(999)
+                            .setNullsFraction(0).setAverageRowSize(8).setDistinctValuesCount(1000).build());
+                    storage.addColumnStatistic(table, "v", ColumnStatistic.builder().setNullsFraction(nullable ? 0.1 : 0)
+                            .setAverageRowSize(3).setDistinctValuesCount(2).build());
+                    String sql = "SELECT k, " + aggregate + "(v) FROM " + tableName +
+                            " GROUP BY k ORDER BY k LIMIT 50";
+                    String plan = getVerboseExplain(sql);
+                    assertContains(plan, "dict_col=v", "AGGREGATE (update serialize)", "AGGREGATE (merge finalize)");
+                    int localTopN = plan.lastIndexOf("TOP-N");
+                    int localAggregate = plan.indexOf("AGGREGATE (update serialize)");
+                    Assertions.assertTrue(localTopN > plan.indexOf("TOP-N"), plan);
+                    Assertions.assertTrue(localTopN < localAggregate, plan);
+                } finally {
+                    starRocksAssert.dropTable(tableName);
+                }
+            }
+        } finally {
+            FeConstants.runningUnitTest = previousRunningUnitTest;
+            connectContext.getGlobalStateMgr().setStatisticStorage(previousStorage);
+            connectContext.getSessionVariable().setNewPlanerAggStage(previousAggStage);
+            connectContext.getSessionVariable().setCboPushDownTopNLimit(previousTopNLimit);
+            connectContext.getSessionVariable().setEnablePreAggTopNPushDown(previousTopNMode);
+        }
+    }
+
+    @Test
     public void testPartitionTopNChildProjectKeepsLowCardinalityPartitionColumns() throws Exception {
         boolean enablePipelineEngine = connectContext.getSessionVariable().isEnablePipelineEngine();
         starRocksAssert.withTable("CREATE TABLE `wat_topn_basic` (\n" +
