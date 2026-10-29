@@ -48,7 +48,7 @@ TEST(LocalPassThroughBufferTest, context_outlives_chunk_buffer) {
     const TUniqueId fragment_instance_id = make_id(2023, 1122);
     const PlanNodeId dest_node_id = 7;
 
-    mgr.open_fragment_instance(query_id);
+    mgr.open_fragment_instance(query_id, nullptr);
     PassThroughChunkBuffer* buffer = mgr.get(query_id);
     ASSERT_NE(nullptr, buffer);
 
@@ -84,8 +84,8 @@ TEST(LocalPassThroughBufferTest, channel_shared_across_fragment_references) {
     const TUniqueId fragment_instance_id = make_id(2023, 2122);
     const PlanNodeId dest_node_id = 9;
 
-    mgr.open_fragment_instance(query_id);
-    mgr.open_fragment_instance(query_id);
+    mgr.open_fragment_instance(query_id, nullptr);
+    mgr.open_fragment_instance(query_id, nullptr);
     PassThroughChunkBuffer* buffer = mgr.get(query_id);
     ASSERT_NE(nullptr, buffer);
 
@@ -167,12 +167,12 @@ protected:
         _sender_scope = std::make_unique<CurrentThreadMemTrackerSetter>(_sender.get());
         _column_scope = std::make_unique<ThreadLocalColumnAllocatorSetter>(&_allocator);
 
-        _manager.open_fragment_instance(_query_id);
+        _manager.open_fragment_instance(_query_id, _query);
         auto* buffer = _manager.get(_query_id);
         _sink = std::make_unique<PassThroughContext>(buffer, make_id(2026, 2), 7);
         _source = std::make_unique<PassThroughContext>(buffer, make_id(2026, 2), 7);
-        _sink->init(_query);
-        _source->init(_query);
+        _sink->init();
+        _source->init();
 
         _input = std::make_unique<Chunk>();
         auto column = Int64Column::create();
@@ -254,6 +254,22 @@ TEST_F(LocalPassThroughMemoryTest, buffered_chunks_remain_in_query_and_process_b
     EXPECT_EQ(_before_buffering + buffered_bytes, _process->consumption());
     EXPECT_EQ(_sender_input_bytes, _sender->consumption());
     EXPECT_EQ(0, _receiver->consumption());
+}
+
+// The receiver may be the first to touch a sender channel, e.g. for a pass-through request that carries no
+// chunk. The sender channel it creates must still park later appends on the query tracker.
+TEST_F(LocalPassThroughMemoryTest, sender_channel_created_by_receiver_parks_on_query_tracker) {
+    ChunkUniquePtrVector chunks;
+    std::vector<size_t> bytes;
+    _source->pull_chunks(0, &chunks, &bytes);
+    ASSERT_TRUE(chunks.empty());
+
+    const int64_t buffered_bytes = append();
+    ASSERT_GT(buffered_bytes, 0);
+    EXPECT_EQ(_initial_passthrough_bytes + buffered_bytes, _passthrough->consumption());
+    EXPECT_EQ(_query_before_buffering + buffered_bytes, _query->consumption());
+    EXPECT_EQ(_before_buffering + buffered_bytes, _process->consumption());
+    EXPECT_EQ(_sender_input_bytes, _sender->consumption());
 }
 
 TEST_F(LocalPassThroughMemoryTest, append_with_pending_tls_charge_does_not_double_count) {
@@ -463,7 +479,7 @@ TEST_F(LocalPassThroughMemoryTest, buffered_memory_triggers_query_limit_checks) 
     EXPECT_EQ(_query_before_buffering, _query->consumption());
 }
 
-// Without a query tracker (e.g. a context initialized without one), the bytes are parked on the process
+// Without a query tracker (e.g. a buffer opened without one), the bytes are parked on the process
 // tracker: the instance trackers stay balanced, the process tracker keeps counting the parked bytes, and
 // the passthrough tracker mirrors them.
 TEST(LocalPassThroughBufferTest, falls_back_to_process_tracker_without_query_tracker) {
@@ -478,7 +494,7 @@ TEST(LocalPassThroughBufferTest, falls_back_to_process_tracker_without_query_tra
         ThreadLocalColumnAllocatorSetter column_scope(&allocator);
         PassThroughChunkBufferManager mgr;
         const TUniqueId query_id = make_id(2026, 11);
-        mgr.open_fragment_instance(query_id);
+        mgr.open_fragment_instance(query_id, nullptr);
         PassThroughContext sink(mgr.get(query_id), make_id(2026, 12), 3);
         PassThroughContext source(mgr.get(query_id), make_id(2026, 12), 3);
         sink.init();
