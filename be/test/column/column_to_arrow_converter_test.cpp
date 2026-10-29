@@ -287,9 +287,8 @@ TEST_F(StarRocksColumnToArrowTest, testStringColumn) {
     for (auto& s : strings) {
         data.emplace_back(s);
     }
-    auto type_desc = TypeDescriptor::create_varchar_type(10000);
-    NotNullableColumnTester<TYPE_VARCHAR, ArrowTypeId::STRING>::apply(997, data, type_desc);
-    NotNullableColumnTester<TYPE_CHAR, ArrowTypeId::STRING>::apply(997, data, type_desc);
+    NotNullableColumnTester<TYPE_VARCHAR, ArrowTypeId::STRING>::apply(997, data, TYPE_VARCHAR_DESC);
+    NotNullableColumnTester<TYPE_CHAR, ArrowTypeId::STRING>::apply(997, data, TYPE_VARCHAR_DESC);
 }
 
 TEST_F(StarRocksColumnToArrowTest, testLargeIntColumn) {
@@ -410,10 +409,9 @@ TEST_F(StarRocksColumnToArrowTest, testNullableStringColumn) {
     for (auto& s : strings) {
         data.emplace_back(s);
     }
-    auto type_desc = TypeDescriptor::create_varchar_type(10000);
     std::set<size_t> null_index{1, 99, 100, 111, 252, 900, 993};
-    NullableColumnTester<TYPE_VARCHAR, ArrowTypeId::STRING>::apply(997, null_index, data, type_desc);
-    NullableColumnTester<TYPE_CHAR, ArrowTypeId::STRING>::apply(997, null_index, data, type_desc);
+    NullableColumnTester<TYPE_VARCHAR, ArrowTypeId::STRING>::apply(997, null_index, data, TYPE_VARCHAR_DESC);
+    NullableColumnTester<TYPE_CHAR, ArrowTypeId::STRING>::apply(997, null_index, data, TYPE_VARCHAR_DESC);
 }
 
 TEST_F(StarRocksColumnToArrowTest, testNullableLargeIntColumn) {
@@ -496,8 +494,7 @@ TEST_F(StarRocksColumnToArrowTest, testConstDateTimeColumn) {
 }
 
 TEST_F(StarRocksColumnToArrowTest, testConstNullColumn) {
-    auto varchar_type_desc = TypeDescriptor::create_varchar_type(10000);
-    ConstNullColumnTester<TYPE_VARCHAR, ArrowTypeId::STRING>::apply(997, varchar_type_desc);
+    ConstNullColumnTester<TYPE_VARCHAR, ArrowTypeId::STRING>::apply(997, TYPE_VARCHAR_DESC);
     auto decimal128_type_desc = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 27, 9);
     ConstNullColumnTester<TYPE_DECIMAL128, ArrowTypeId::DECIMAL>::apply(997, decimal128_type_desc);
 }

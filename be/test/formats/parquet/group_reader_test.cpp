@@ -1111,7 +1111,7 @@ TEST_F(GroupReaderTest, FixedValueColumnReaderTest) {
     col1->collect_column_io_range(nullptr, nullptr, ColumnIOType::PAGES, true);
     SparseRange<uint64_t> sparse_range;
     col1->select_offset_index(sparse_range, 100);
-    ColumnPtr column = ColumnHelper::create_column(TypeDescriptor::create_varchar_type(100), true);
+    ColumnPtr column = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
     Range<uint64_t> range(0, 100);
     ASSERT_TRUE(col1->read_range(range, nullptr, column).ok());
 
@@ -4063,7 +4063,7 @@ TEST_F(GroupReaderTest, GetVariantShreddedHintsReturnsEmptyWhenFullColumnAccessI
 TEST_F(GroupReaderTest, GetVariantShreddedHintsSkipsExtendedAccessPathUnlessIncluded) {
     TColumnAccessPath tleaf;
     tleaf.__set_type(TAccessPathType::FIELD);
-    tleaf.__set_type_desc(TypeDescriptor::create_varchar_type(1048576).to_thrift());
+    tleaf.__set_type_desc(TYPE_VARCHAR_DESC.to_thrift());
     TColumnAccessPath troot;
     troot.__set_type(TAccessPathType::ROOT);
     troot.__set_extended(true);

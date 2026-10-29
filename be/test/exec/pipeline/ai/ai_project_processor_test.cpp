@@ -165,7 +165,7 @@ public:
     }
 
     std::optional<size_t> throw_on_prepare_call;
-    TypeDescriptor result_type = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+    TypeDescriptor result_type = TYPE_VARCHAR_DESC;
     AIFunctionResultKind result_kind = AIFunctionResultKind::STRING;
     PrepareException prepare_exception = PrepareException::NONE;
     std::optional<size_t> output_chunk_rows;

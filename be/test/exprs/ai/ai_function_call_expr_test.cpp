@@ -137,7 +137,7 @@ private:
 };
 
 TypeDescriptor varchar_type() {
-    return TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+    return TYPE_VARCHAR_DESC;
 }
 
 TypeDescriptor options_type() {

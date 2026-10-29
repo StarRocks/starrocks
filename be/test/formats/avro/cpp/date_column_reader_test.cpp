@@ -175,8 +175,8 @@ TEST_F(DateColumnReaderTest, test_datetime_dst_timezone_matches_cctz) {
 
             // generic datums, as DATETIME and as VARCHAR
             for (LogicalType type : {TYPE_DATETIME, TYPE_VARCHAR}) {
-                auto type_desc = type == TYPE_VARCHAR ? TypeDescriptor::create_varchar_type(64)
-                                                      : TypeDescriptor::from_logical_type(TYPE_DATETIME);
+                auto type_desc =
+                        type == TYPE_VARCHAR ? TYPE_VARCHAR_DESC : TypeDescriptor::from_logical_type(TYPE_DATETIME);
                 auto column = create_adaptive_nullable_column(type_desc);
                 auto reader = get_column_reader(type_desc, timezone, false);
                 for (int64_t v : values) {

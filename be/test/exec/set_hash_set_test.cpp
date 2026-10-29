@@ -49,7 +49,7 @@ public:
                                                         &exec_env->query_execution_services(), exec_env);
         _runtime_state->init_mem_trackers(TUniqueId());
         _runtime_state->set_chunk_size(kChunkSize);
-        _varchar_type = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+        _varchar_type = TYPE_VARCHAR_DESC;
         _slot_ref = _pool.add(new ColumnRef(_varchar_type, 0));
         _exprs.emplace_back(_pool.add(new ExprContext(_slot_ref)));
         ASSERT_OK(ExprExecutor::prepare(_exprs, _runtime_state.get()));

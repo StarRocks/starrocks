@@ -108,7 +108,7 @@ protected:
                                  const std::vector<std::string>& jsonpaths) {
         std::vector<TypeDescriptor> types;
         for (int i = 0; i < columns; i++) {
-            types.emplace_back(TypeDescriptor::create_varchar_type(1024));
+            types.emplace_back(TYPE_VARCHAR_DESC);
         }
 
         std::vector<TBrokerRangeDesc> ranges;
@@ -333,9 +333,9 @@ TEST_F(JsonScannerTest, test_array_json) {
 
 TEST_F(JsonScannerTest, test_json_without_path) {
     std::vector<TypeDescriptor> types;
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
     types.emplace_back(TYPE_DOUBLE);
 
     std::vector<TBrokerRangeDesc> ranges;
@@ -375,7 +375,7 @@ TEST_F(JsonScannerTest, test_debezium_json_load) {
 
     std::vector<TypeDescriptor> types;
     types.emplace_back(TYPE_INT);
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
     types.emplace_back(TYPE_TINYINT); // for __op
 
     std::vector<TBrokerRangeDesc> ranges;
@@ -412,7 +412,7 @@ TEST_F(JsonScannerTest, test_debezium_json_load_with_jsonpath_shorter_than_slots
 
     std::vector<TypeDescriptor> types;
     types.emplace_back(TYPE_INT);
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
     types.emplace_back(TYPE_TINYINT); // for __op
 
     std::vector<TBrokerRangeDesc> ranges;
@@ -445,7 +445,7 @@ TEST_F(JsonScannerTest, test_debezium_json_load_with_missing_op_jsonpath) {
 
     std::vector<TypeDescriptor> types;
     types.emplace_back(TYPE_INT);
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
     types.emplace_back(TYPE_TINYINT); // for __op
 
     std::vector<TBrokerRangeDesc> ranges;
@@ -473,8 +473,8 @@ TEST_F(JsonScannerTest, test_debezium_json_load_with_missing_op_jsonpath) {
 TEST_F(JsonScannerTest, test_json_path_with_asterisk_basic) {
     std::vector<TypeDescriptor> types;
     types.emplace_back(TYPE_INT);
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
@@ -504,8 +504,8 @@ TEST_F(JsonScannerTest, test_json_path_with_asterisk_basic) {
 TEST_F(JsonScannerTest, test_json_path_with_asterisk_null) {
     std::vector<TypeDescriptor> types;
     types.emplace_back(TYPE_INT);
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
@@ -535,8 +535,8 @@ TEST_F(JsonScannerTest, test_json_path_with_asterisk_null) {
 TEST_F(JsonScannerTest, test_json_path_with_asterisk_record) {
     std::vector<TypeDescriptor> types;
     types.emplace_back(TYPE_INT);
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
@@ -566,8 +566,8 @@ TEST_F(JsonScannerTest, test_json_path_with_asterisk_record) {
 TEST_F(JsonScannerTest, test_json_path_with_asterisk_array) {
     std::vector<TypeDescriptor> types;
     types.emplace_back(TYPE_INT);
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
@@ -596,9 +596,9 @@ TEST_F(JsonScannerTest, test_json_path_with_asterisk_array) {
 
 TEST_F(JsonScannerTest, test_json_with_path) {
     std::vector<TypeDescriptor> types;
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
     types.emplace_back(TYPE_INT);
 
     std::vector<TBrokerRangeDesc> ranges;
@@ -629,9 +629,9 @@ TEST_F(JsonScannerTest, test_json_with_path) {
 
 TEST_F(JsonScannerTest, test_invalid_json_path) {
     std::vector<TypeDescriptor> types;
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
     types.emplace_back(TYPE_INT);
 
     std::vector<TBrokerRangeDesc> ranges;
@@ -807,8 +807,8 @@ TEST_F(JsonScannerTest, test_invalid_nested_level2) {
 
 TEST_F(JsonScannerTest, test_json_with_long_string) {
     std::vector<TypeDescriptor> types;
-    types.emplace_back(TypeDescriptor::create_varchar_type(100));
-    types.emplace_back(TypeDescriptor::create_varchar_type(100));
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
@@ -836,9 +836,9 @@ TEST_F(JsonScannerTest, test_json_with_long_string) {
 
 TEST_F(JsonScannerTest, test_ndjson) {
     std::vector<TypeDescriptor> types;
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
     types.emplace_back(TYPE_INT);
 
     std::vector<TBrokerRangeDesc> ranges;
@@ -871,9 +871,9 @@ TEST_F(JsonScannerTest, test_ndjson) {
 
 TEST_F(JsonScannerTest, test_ndjson_with_jsonpath) {
     std::vector<TypeDescriptor> types;
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
     types.emplace_back(TYPE_INT);
 
     std::vector<TBrokerRangeDesc> ranges;
@@ -907,9 +907,9 @@ TEST_F(JsonScannerTest, test_ndjson_with_jsonpath) {
 
 TEST_F(JsonScannerTest, test_json_new_parser) {
     std::vector<TypeDescriptor> types;
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
     types.emplace_back(TYPE_INT);
 
     std::vector<TBrokerRangeDesc> ranges;
@@ -950,9 +950,9 @@ TEST_F(JsonScannerTest, test_json_new_parser) {
 
 TEST_F(JsonScannerTest, test_adaptive_nullable_column) {
     std::vector<TypeDescriptor> types;
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
     types.emplace_back(TYPE_INT);
 
     std::vector<TBrokerRangeDesc> ranges;
@@ -987,9 +987,9 @@ TEST_F(JsonScannerTest, test_adaptive_nullable_column) {
 
 TEST_F(JsonScannerTest, test_adaptive_nullable_column_2) {
     std::vector<TypeDescriptor> types;
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
     types.emplace_back(TYPE_INT);
 
     std::vector<TBrokerRangeDesc> ranges;
@@ -1047,7 +1047,7 @@ TEST_F(JsonScannerTest, test_multi_type) {
     types.emplace_back(TYPE_FLOAT);
     types.emplace_back(TYPE_DOUBLE);
 
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
     types.emplace_back(TYPE_DATE);
     types.emplace_back(TYPE_DATETIME);
     types.emplace_back(TYPE_ARRAY_INT_DESC);
@@ -1055,10 +1055,9 @@ TEST_F(JsonScannerTest, test_multi_type) {
     types.emplace_back(TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 27, 9));
     types.emplace_back(TypeDescriptor::create_char_type(20));
     types.emplace_back(TYPE_TIME);
-    types.emplace_back(TypeDescriptor::create_struct_type(
-            {"f_int", "f_string"}, {TypeDescriptor(TYPE_INT), TypeDescriptor::create_varchar_type(20)}));
     types.emplace_back(
-            TypeDescriptor::create_map_type(TypeDescriptor::create_varchar_type(20), TypeDescriptor(TYPE_DOUBLE)));
+            TypeDescriptor::create_struct_type({"f_int", "f_string"}, {TypeDescriptor(TYPE_INT), TYPE_VARCHAR_DESC}));
+    types.emplace_back(TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TypeDescriptor(TYPE_DOUBLE)));
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
@@ -1094,9 +1093,9 @@ TEST_F(JsonScannerTest, test_multi_type) {
 
 TEST_F(JsonScannerTest, test_cast_type) {
     std::vector<TypeDescriptor> types;
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
     types.emplace_back(TYPE_DOUBLE);
     types.emplace_back(TYPE_INT);
 
@@ -1321,8 +1320,8 @@ TEST_F(JsonScannerTest, test_native_json_single_column) {
 
 TEST_F(JsonScannerTest, test_expanded_with_json_root) {
     std::vector<TypeDescriptor> types;
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
     types.emplace_back(TypeDescriptor::create_json_type());
 
     std::vector<TBrokerRangeDesc> ranges;
@@ -1359,8 +1358,8 @@ TEST_F(JsonScannerTest, test_expanded_with_json_root) {
 
 TEST_F(JsonScannerTest, test_ndjson_expanded_with_json_root) {
     std::vector<TypeDescriptor> types;
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
     types.emplace_back(TypeDescriptor::create_json_type());
 
     std::vector<TBrokerRangeDesc> ranges;
@@ -1398,13 +1397,13 @@ TEST_F(JsonScannerTest, test_ndjson_expanded_with_json_root) {
 // this test covers json_scanner.cpp:_construct_row_in_object_order.
 TEST_F(JsonScannerTest, test_construct_row_in_object_order) {
     std::vector<TypeDescriptor> types;
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
     types.emplace_back(TYPE_DOUBLE);
     types.emplace_back(TYPE_DOUBLE);
     types.emplace_back(TYPE_INT);
@@ -1438,8 +1437,8 @@ TEST_F(JsonScannerTest, test_construct_row_in_object_order) {
 
 TEST_F(JsonScannerTest, test_jsonroot_with_jsonpath) {
     std::vector<TypeDescriptor> types;
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
@@ -1475,8 +1474,8 @@ TEST_F(JsonScannerTest, test_jsonroot_with_jsonpath) {
 
 TEST_F(JsonScannerTest, test_expanded_with_jsonroot_and_extracted_by_jsonpath) {
     std::vector<TypeDescriptor> types;
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
@@ -1512,8 +1511,8 @@ TEST_F(JsonScannerTest, test_expanded_with_jsonroot_and_extracted_by_jsonpath) {
 
 TEST_F(JsonScannerTest, test_ndjson_expaned_with_jsonroot_and_extracted_by_jsonpath) {
     std::vector<TypeDescriptor> types;
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
@@ -1549,9 +1548,9 @@ TEST_F(JsonScannerTest, test_ndjson_expaned_with_jsonroot_and_extracted_by_jsonp
 
 TEST_F(JsonScannerTest, test_illegal_input) {
     std::vector<TypeDescriptor> types;
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
     types.emplace_back(TYPE_DOUBLE);
     types.emplace_back(TYPE_INT);
 
@@ -1577,9 +1576,9 @@ TEST_F(JsonScannerTest, test_illegal_input) {
 
 TEST_F(JsonScannerTest, test_illegal_input_with_jsonpath) {
     std::vector<TypeDescriptor> types;
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
     types.emplace_back(TYPE_DOUBLE);
     types.emplace_back(TYPE_INT);
 
@@ -1605,13 +1604,13 @@ TEST_F(JsonScannerTest, test_illegal_input_with_jsonpath) {
 // See more: https://github.com/StarRocks/starrocks/issues/11054
 TEST_F(JsonScannerTest, test_column_2x_than_columns_with_json_root) {
     std::vector<TypeDescriptor> types;
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
     types.emplace_back(TypeDescriptor::create_json_type());
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
@@ -1653,9 +1652,9 @@ TEST_F(JsonScannerTest, test_column_2x_than_columns_with_json_root) {
 
 TEST_F(JsonScannerTest, test_null_with_jsonpath) {
     std::vector<TypeDescriptor> types;
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
     types.emplace_back(TYPE_INT);
 
     std::vector<TBrokerRangeDesc> ranges;
@@ -1835,9 +1834,9 @@ TEST_F(JsonScannerTest, test_duplicate_key) {
 
 TEST_F(JsonScannerTest, test_gzip_compressed_json_with_compression_type) {
     std::vector<TypeDescriptor> types;
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
     types.emplace_back(TYPE_DOUBLE);
 
     std::vector<TBrokerRangeDesc> ranges;
@@ -1863,9 +1862,9 @@ TEST_F(JsonScannerTest, test_gzip_compressed_json_with_compression_type) {
 
 TEST_F(JsonScannerTest, test_gzip_compressed_json_with_suffix_inference) {
     std::vector<TypeDescriptor> types;
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
     types.emplace_back(TYPE_DOUBLE);
 
     std::vector<TBrokerRangeDesc> ranges;
@@ -1907,14 +1906,14 @@ TEST_F(JsonScannerTest, test_large_compressed_json_large) {
     EXPECT_GE(file_size, 1 * 1024 * 1024);
 
     std::vector<TypeDescriptor> types;
-    types.emplace_back(TypeDescriptor::create_varchar_type(100)); // id
-    types.emplace_back(TypeDescriptor::create_varchar_type(100)); // name
-    types.emplace_back(TYPE_DOUBLE);                              // value
-    types.emplace_back(TYPE_BIGINT);                              // timestamp
-    types.emplace_back(TypeDescriptor::create_varchar_type(50));  // category
-    types.emplace_back(TYPE_DOUBLE);                              // score
-    types.emplace_back(TYPE_BOOLEAN);                             // active
-    types.emplace_back(TypeDescriptor::create_json_type());       // tags
+    types.emplace_back(TYPE_VARCHAR_DESC);                  // id
+    types.emplace_back(TYPE_VARCHAR_DESC);                  // name
+    types.emplace_back(TYPE_DOUBLE);                        // value
+    types.emplace_back(TYPE_BIGINT);                        // timestamp
+    types.emplace_back(TYPE_VARCHAR_DESC);                  // category
+    types.emplace_back(TYPE_DOUBLE);                        // score
+    types.emplace_back(TYPE_BOOLEAN);                       // active
+    types.emplace_back(TypeDescriptor::create_json_type()); // tags
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
@@ -2002,14 +2001,13 @@ TEST_F(JsonScannerTest, test_source_metadata_fill) {
     // by-name path (no jsonpath): metadata slots follow the two payload columns, filled from meta.
     {
         std::vector<TypeDescriptor> types;
-        types.emplace_back(TYPE_BIGINT);                             // id (payload)
-        types.emplace_back(TypeDescriptor::create_varchar_type(20)); // payload
-        types.emplace_back(TypeDescriptor::create_varchar_type(64)); // topic (meta, slot 2)
-        types.emplace_back(TYPE_INT);                                // partition (meta, slot 3)
-        types.emplace_back(TYPE_BIGINT);                             // offset (meta, slot 4)
-        types.emplace_back(
-                TypeDescriptor::create_map_type(TypeDescriptor::create_varchar_type(64),
-                                                TypeDescriptor::create_varchar_type(64))); // headers (slot 5)
+        types.emplace_back(TYPE_BIGINT);       // id (payload)
+        types.emplace_back(TYPE_VARCHAR_DESC); // payload
+        types.emplace_back(TYPE_VARCHAR_DESC); // topic (meta, slot 2)
+        types.emplace_back(TYPE_INT);          // partition (meta, slot 3)
+        types.emplace_back(TYPE_BIGINT);       // offset (meta, slot 4)
+        types.emplace_back(TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC,
+                                                           TYPE_VARCHAR_DESC)); // headers (slot 5)
 
         std::vector<TRoutineLoadMetaColumn> meta_cols = {
                 json_meta_desc(2, TStreamSourceMetaKind::TOPIC), json_meta_desc(3, TStreamSourceMetaKind::PARTITION),
@@ -2042,9 +2040,9 @@ TEST_F(JsonScannerTest, test_source_metadata_fill) {
     // slot->jsonpath mapping must skip it (meta_count shift) for the payload columns to stay aligned.
     {
         std::vector<TypeDescriptor> types;
-        types.emplace_back(TYPE_BIGINT);                             // id (payload, jsonpath[0])
-        types.emplace_back(TypeDescriptor::create_varchar_type(64)); // topic (meta, slot 1)
-        types.emplace_back(TypeDescriptor::create_varchar_type(20)); // payload (payload, jsonpath[1])
+        types.emplace_back(TYPE_BIGINT);       // id (payload, jsonpath[0])
+        types.emplace_back(TYPE_VARCHAR_DESC); // topic (meta, slot 1)
+        types.emplace_back(TYPE_VARCHAR_DESC); // payload (payload, jsonpath[1])
 
         std::vector<TRoutineLoadMetaColumn> meta_cols = {json_meta_desc(1, TStreamSourceMetaKind::TOPIC)};
 
@@ -2072,8 +2070,8 @@ TEST_F(JsonScannerTest, test_source_metadata_fill) {
     // must win and the payload field must not overwrite it (object-order skip path).
     {
         std::vector<TypeDescriptor> types;
-        types.emplace_back(TYPE_BIGINT);                             // id (payload)
-        types.emplace_back(TypeDescriptor::create_varchar_type(64)); // payload (meta TOPIC, slot 1)
+        types.emplace_back(TYPE_BIGINT);       // id (payload)
+        types.emplace_back(TYPE_VARCHAR_DESC); // payload (meta TOPIC, slot 1)
 
         std::vector<TRoutineLoadMetaColumn> meta_cols = {json_meta_desc(1, TStreamSourceMetaKind::TOPIC)};
 
