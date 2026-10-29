@@ -18,10 +18,8 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -180,8 +178,7 @@ public class StatisticsCalcUtils {
         }
 
         // partition rows
-        Map<Long, Long> partitionRows =
-                getPartitionRows(table, basicStatsMeta, selectedPartitions, getSelectedIndexMetaId(node));
+        Map<Long, Long> partitionRows = getPartitionRows(table, basicStatsMeta, selectedPartitions);
 
         Map<Long, Statistics> result = Maps.newHashMap();
         Map<String, ColumnRefOperator> columnNameMap =
@@ -219,8 +216,7 @@ public class StatisticsCalcUtils {
     }
 
     private static Map<Long, Long> getPartitionRows(Table table, BasicStatsMeta basicStatsMeta,
-                                                    Collection<Partition> selectedPartitions,
-                                                    long selectedIndexMetaId) {
+                                                    Collection<Partition> selectedPartitions) {
         // The basicStatsMeta.getUpdateRows() interface can get the number of
         // loaded rows in the table since the last statistics update. But this number is at the table level.
         // So here we can count the number of partitions that have changed since the last statistics update,
@@ -247,7 +243,7 @@ public class StatisticsCalcUtils {
 
             boolean needDelta;
             if (tableStatistic.isEmpty()) {
-                partitionRowCount = getSelectedIndexRowCount(partition, selectedIndexMetaId);
+                partitionRowCount = partition.getRowCount();
                 // tablet stats collection is async on both FE and BE.  Each BE and leader FE synchronize every 5 minutes by default.
                 // That is, BE collects all tablet information in the BE node's cache every 5 minutes, and then FE accesses
                 // all BE nodes every 5 minutes to obtain tablet information. There is a situation where FE sends a tablet stats
@@ -284,10 +280,9 @@ public class StatisticsCalcUtils {
                     GlobalStateMgr.getCurrentState().getAnalyzeMgr().getTableBasicStatsMeta(table.getId());
             StatsConstants.AnalyzeType analyzeType = basicStatsMeta == null ? null : basicStatsMeta.getType();
             LocalDateTime lastWorkTimestamp = GlobalStateMgr.getCurrentState().getTabletStatMgr().getLastWorkTimestamp();
-            long selectedIndexMetaId = getSelectedIndexMetaId(node);
             if (StatsConstants.AnalyzeType.FULL == analyzeType) {
                 Map<Long, Long> partitionRows =
-                        getPartitionRows(table, basicStatsMeta, selectedPartitions, selectedIndexMetaId);
+                        getPartitionRows(table, basicStatsMeta, selectedPartitions);
                 for (var partition : selectedPartitions) {
                     long partitionRowCount = partitionRows.get(partition.getId());
                     updateQueryDumpInfo(optimizerContext, table, partition.getName(), partitionRowCount);
@@ -297,9 +292,8 @@ public class StatisticsCalcUtils {
             }
 
             for (Partition partition : selectedPartitions) {
-                long partitionRowCount = getSelectedIndexRowCount(partition, selectedIndexMetaId);
-                rowCount += partitionRowCount;
-                updateQueryDumpInfo(optimizerContext, table, partition.getName(), partitionRowCount);
+                rowCount += partition.getRowCount();
+                updateQueryDumpInfo(optimizerContext, table, partition.getName(), partition.getRowCount());
             }
 
             // attempt use updateRows from basicStatsMeta to adjust estimated row counts
@@ -347,30 +341,6 @@ public class StatisticsCalcUtils {
         return selectedPartitions;
     }
 
-    private static long getSelectedIndexMetaId(Operator node) {
-        return node.isLogical() ? ((LogicalOlapScanOperator) node).getSelectedIndexMetaId()
-                : ((PhysicalOlapScanOperator) node).getSelectedIndexMetaId();
-    }
-
-    /**
-     * Row count of the index the scan reads, summed over the partition's sub-partitions.
-     * Falls back to the base index when the index has no row count yet, e.g. a new rollup whose tablet stats
-     * have not been collected by TabletStatMgr.
-     */
-    private static long getSelectedIndexRowCount(Partition partition, long indexMetaId) {
-        long rowCount = 0;
-        for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-            MaterializedIndex index = physicalPartition.getQueryableIndex(indexMetaId);
-            if (index != null && index.getRowCount() == 0) {
-                index = physicalPartition.getLatestBaseIndexOrNull();
-            }
-            if (index != null) {
-                rowCount += index.getRowCount();
-            }
-        }
-        return rowCount;
-    }
-
     private static void updateQueryDumpInfo(OptimizerContext optimizerContext, Table table,
                                             String partitionName, long rowCount) {
         if (optimizerContext != null && optimizerContext.getDumpInfo() != null) {
@@ -383,7 +353,6 @@ public class StatisticsCalcUtils {
     }
 
     private static long deltaRows(Table table, long totalRowCount) {
-        long baseIndexMetaId = ((OlapTable) table).getBaseIndexMetaId();
         long tblRowCount = 0L;
         Map<Long, Optional<Long>> tableStatisticMap = GlobalStateMgr.getCurrentState().getStatisticStorage()
                 .getTableStatistics(table.getId(), table.getPartitions());
@@ -391,7 +360,7 @@ public class StatisticsCalcUtils {
         for (Partition partition : table.getPartitions()) {
             long partitionRowCount;
             Optional<Long> statistic = tableStatisticMap.getOrDefault(partition.getId(), Optional.empty());
-            partitionRowCount = statistic.orElseGet(() -> getSelectedIndexRowCount(partition, baseIndexMetaId));
+            partitionRowCount = statistic.orElseGet(partition::getRowCount);
             tblRowCount += partitionRowCount;
         }
         if (tblRowCount < totalRowCount) {

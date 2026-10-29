@@ -249,11 +249,10 @@ public class StatisticsCalcUtilsTest {
     }
 
     /**
-     * A scan reads exactly one index, so the row count should come from the selected index only and not from the
-     * sum of the base index and its rollups.
+     * The row count should come from the base index only and not from the sum of the base index and its rollups,
      */
     @Test
-    public void testGetTableRowCountUsesSelectedIndex() throws Exception {
+    public void testGetTableRowCountUsesBaseIndex() throws Exception {
         // the rollup job only waits for the replicas to be created when not running as a unit test
         FeConstants.runningUnitTest = true;
         try {
@@ -273,7 +272,7 @@ public class StatisticsCalcUtilsTest {
 
         Assertions.assertEquals(3000, StatisticsCalcUtils.getTableRowCount(
                 table, scan(table, baseMetaId), optimizerContext));
-        Assertions.assertEquals(30, StatisticsCalcUtils.getTableRowCount(
+        Assertions.assertEquals(3000, StatisticsCalcUtils.getTableRowCount(
                 table, scan(table, rollupMetaId), optimizerContext));
     }
 
