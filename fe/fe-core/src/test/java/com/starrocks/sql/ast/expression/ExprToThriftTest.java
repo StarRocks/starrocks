@@ -77,6 +77,34 @@ public class ExprToThriftTest {
     }
 
     @Test
+    public void testOnlyExplicitDecimalCastThatMayGiveNullChecksPrecision() {
+        Type decimal52 = TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL32, 5, 2);
+        SlotRef source = new SlotRef(new SlotDescriptor(new SlotId(0), "n", IntegerType.BIGINT, true));
+        CastExpr assignment = new CastExpr(decimal52, source);
+        Assertions.assertFalse(convert(assignment).isSetCast_decimal_check_precision());
+
+        CastExpr explicit = new CastExpr(decimal52, source);
+        explicit.setImplicit(false);
+        Assertions.assertTrue(convert(explicit).isCast_decimal_check_precision());
+
+        // The BE checks the elements of an ARRAY as the outer cast says
+        SlotRef array = new SlotRef(new SlotDescriptor(new SlotId(1), "a", new ArrayType(IntegerType.BIGINT), true));
+        CastExpr explicitArray = new CastExpr(new ArrayType(decimal52), array);
+        explicitArray.setImplicit(false);
+        Assertions.assertTrue(convert(explicitArray).isCast_decimal_check_precision());
+
+        // The planner takes a cast between fully compatible types for one that gives no NULL
+        SlotRef decimal = new SlotRef(new SlotDescriptor(new SlotId(2), "d", decimal52, true));
+        CastExpr widening = new CastExpr(TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 10, 2), decimal);
+        widening.setImplicit(false);
+        Assertions.assertFalse(convert(widening).isSetCast_decimal_check_precision());
+
+        CastExpr toInt = new CastExpr(IntegerType.INT, source);
+        toInt.setImplicit(false);
+        Assertions.assertFalse(convert(toInt).isSetCast_decimal_check_precision());
+    }
+
+    @Test
     public void testLoadSlotConversionPreservesAssignmentSemantics() throws Exception {
         SlotRef source = new SlotRef(new SlotDescriptor(new SlotId(0), "n", IntegerType.BIGINT, true));
         // ScanNode.castToSlot uses the same helper for file and stream load destination columns.

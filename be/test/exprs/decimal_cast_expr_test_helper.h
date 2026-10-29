@@ -94,9 +94,10 @@ ColumnPtr create_column(RunTimeCppType<Type> value, size_t front_fill_size, size
     return std::move(column);
 }
 
-// vectorized cast
+// vectorized cast; check_decimal_precision: an explicit cast, which the FE marks to check the precision of a DECIMAL
 template <LogicalType FromType>
-ColumnPtr cast(ColumnPtr from_column, TypeDescriptor const& from_type, TypeDescriptor const& to_type) {
+ColumnPtr cast(ColumnPtr from_column, TypeDescriptor const& from_type, TypeDescriptor const& to_type,
+               bool check_decimal_precision = false) {
     TExprNode from_node;
     from_node.node_type = TExprNodeType::CAST_EXPR;
     from_type.to_thrift(&from_node.type);
@@ -105,6 +106,9 @@ ColumnPtr cast(ColumnPtr from_column, TypeDescriptor const& from_type, TypeDescr
     cast_node.node_type = TExprNodeType::CAST_EXPR;
     to_type.to_thrift(&cast_node.type);
     cast_node.child_type = to_thrift(FromType);
+    if (check_decimal_precision) {
+        cast_node.__set_cast_decimal_check_precision(true);
+    }
     auto cast_expr = std::unique_ptr<Expr>(VectorizedCastExprFactory::from_thrift(cast_node));
     cast_expr->add_child(&from_expr);
     return cast_expr->evaluate(nullptr, nullptr);
@@ -142,7 +146,9 @@ ColumnPtr cast_single_test_case(CastTestCase const& test_case, size_t front_fill
     auto s = Slice{input_value.c_str(), input_value.size()};
     auto from_column =
             cast<TYPE_VARCHAR, FromType, PackedType>(s, TYPE_VARCHAR_DESC, from_type, front_fill_size, rear_fill_size);
-    auto to_column = cast<FromType>(from_column, from_type, to_type);
+    // The cast under test is explicit. The conversions from and to strings around it keep every value, as the
+    // implicit casts of a load do.
+    auto to_column = cast<FromType>(from_column, from_type, to_type, true);
     auto str_column = cast<ToType>(to_column, to_type, TYPE_VARCHAR_DESC);
     return str_column;
 }

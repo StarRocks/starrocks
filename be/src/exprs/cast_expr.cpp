@@ -532,9 +532,12 @@ Expr* VectorizedCastExprFactory::create_primitive_cast(ObjectPool* pool, const T
 StatusOr<Expr*> VectorizedCastExprFactory::create_cast_expr(ObjectPool* pool, const TExprNode& node,
                                                             const TypeDescriptor& from_type,
                                                             const TypeDescriptor& to_type, bool allow_throw_exception) {
+    // The casts of the elements of an ARRAY, MAP or STRUCT check the precision of a DECIMAL as the outer cast does
+    const bool check_decimal_precision = node.__isset.cast_decimal_check_precision && node.cast_decimal_check_precision;
     if (from_type.is_array_type() && to_type.is_array_type()) {
         ASSIGN_OR_RETURN(auto* child_cast,
-                         create_cast_expr(pool, from_type.children[0], to_type.children[0], allow_throw_exception));
+                         create_cast_expr(pool, from_type.children[0], to_type.children[0], allow_throw_exception,
+                                          /*cast_by_name=*/false, check_decimal_precision));
         pool->add(child_cast);
         auto child_input = create_slot_ref(from_type.children[0]);
         child_cast->add_child(child_input.get());
@@ -544,14 +547,16 @@ StatusOr<Expr*> VectorizedCastExprFactory::create_cast_expr(ObjectPool* pool, co
     }
     if (from_type.is_map_type() && to_type.is_map_type()) {
         ASSIGN_OR_RETURN(auto* key_cast,
-                         create_cast_expr(pool, from_type.children[0], to_type.children[0], allow_throw_exception));
+                         create_cast_expr(pool, from_type.children[0], to_type.children[0], allow_throw_exception,
+                                          /*cast_by_name=*/false, check_decimal_precision));
         pool->add(key_cast);
         auto key_input = create_slot_ref(from_type.children[0]);
         key_cast->add_child(key_input.get());
         pool->add(key_input.release());
 
         ASSIGN_OR_RETURN(auto* value_cast,
-                         create_cast_expr(pool, from_type.children[1], to_type.children[1], allow_throw_exception));
+                         create_cast_expr(pool, from_type.children[1], to_type.children[1], allow_throw_exception,
+                                          /*cast_by_name=*/false, check_decimal_precision));
         pool->add(value_cast);
         auto value_input = create_slot_ref(from_type.children[1]);
         value_cast->add_child(value_input.get());
@@ -583,9 +588,9 @@ StatusOr<Expr*> VectorizedCastExprFactory::create_cast_expr(ObjectPool* pool, co
                 }
                 int source_idx = it->second;
                 source_field_indices[i] = source_idx;
-                ASSIGN_OR_RETURN(field_casts[i],
-                                 create_cast_expr(pool, from_type.children[source_idx], to_type.children[i],
-                                                  allow_throw_exception, /*cast_by_name=*/true));
+                ASSIGN_OR_RETURN(field_casts[i], create_cast_expr(pool, from_type.children[source_idx],
+                                                                  to_type.children[i], allow_throw_exception,
+                                                                  /*cast_by_name=*/true, check_decimal_precision));
                 pool->add(field_casts[i]);
                 auto cast_input = create_slot_ref(from_type.children[source_idx]);
                 field_casts[i]->add_child(cast_input.get());
@@ -603,7 +608,8 @@ StatusOr<Expr*> VectorizedCastExprFactory::create_cast_expr(ObjectPool* pool, co
             for (int i = 0; i < (int)to_type.children.size(); ++i) {
                 source_field_indices[i] = i;
                 ASSIGN_OR_RETURN(field_casts[i], create_cast_expr(pool, from_type.children[i], to_type.children[i],
-                                                                  allow_throw_exception));
+                                                                  allow_throw_exception, /*cast_by_name=*/false,
+                                                                  check_decimal_precision));
                 pool->add(field_casts[i]);
                 auto cast_input = create_slot_ref(from_type.children[i]);
                 field_casts[i]->add_child(cast_input.get());
@@ -642,7 +648,7 @@ Expr* VectorizedCastExprFactory::from_thrift(ObjectPool* pool, const TExprNode& 
 // Need add result to pool by caller.
 StatusOr<Expr*> VectorizedCastExprFactory::create_cast_expr(ObjectPool* pool, const TypeDescriptor& from_type,
                                                             const TypeDescriptor& to_type, bool allow_throw_exception,
-                                                            bool cast_by_name) {
+                                                            bool cast_by_name, bool check_decimal_precision) {
     TExprNode cast_node;
     cast_node.node_type = TExprNodeType::CAST_EXPR;
     cast_node.type = to_type.to_thrift();
@@ -650,6 +656,9 @@ StatusOr<Expr*> VectorizedCastExprFactory::create_cast_expr(ObjectPool* pool, co
     cast_node.__set_child_type_desc(from_type.to_thrift());
     if (cast_by_name) {
         cast_node.__set_cast_struct_by_name(true);
+    }
+    if (check_decimal_precision) {
+        cast_node.__set_cast_decimal_check_precision(true);
     }
     return create_cast_expr(pool, cast_node, from_type, to_type, allow_throw_exception);
 }

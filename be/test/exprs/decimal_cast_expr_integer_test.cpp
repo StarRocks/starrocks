@@ -3783,4 +3783,22 @@ PARALLEL_TEST(VectorizedDecimalCastExprIntegerTest, testCastFromIntToDecimal32p5
     test_cast_all_fail<TYPE_INT, TYPE_DECIMAL32>(past_precision);
 }
 
+// An implicit cast, as to the type of a column in a load, keeps a value with more digits than the precision of the
+// target for the sink to check
+PARALLEL_TEST(VectorizedDecimalCastExprIntegerTest, testImplicitCastFromIntToDecimal32p5s2PastPrecision) {
+    TypeDescriptor from_type(TYPE_INT);
+    TypeDescriptor to_type = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 5, 2);
+    for (int32_t value : {100003, -2147483}) {
+        ColumnPtr from_column = create_column<TYPE_INT, ColumnPackedType::SIMPLE>(value, 0, 0);
+        ColumnPtr to_column = cast<TYPE_INT>(from_column, from_type, to_type);
+        ColumnPtr str_column = cast<TYPE_DECIMAL32>(to_column, to_type, TYPE_VARCHAR_DESC);
+        ASSERT_FALSE(str_column->is_nullable());
+        ASSERT_EQ(std::to_string(value) + ".00",
+                  ColumnHelper::cast_to_raw<TYPE_VARCHAR>(str_column)->get_slice(0).to_string());
+
+        ColumnPtr explicit_column = cast<TYPE_INT>(from_column, from_type, to_type, true);
+        ASSERT_TRUE(explicit_column->is_nullable() && explicit_column->is_null(0));
+    }
+}
+
 } // namespace starrocks

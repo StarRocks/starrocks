@@ -147,6 +147,13 @@ public final class ExprToThrift {
         return result;
     }
 
+    // Whether a cast turns a DECIMAL value with more digits than its precision, also one in an ARRAY, MAP or
+    // STRUCT, into NULL. Only an explicit cast does: an implicit one keeps the value for the sink to check. Nor does
+    // a cast between fully compatible types, which the planner takes for one that gives no NULL.
+    static boolean castChecksDecimalPrecision(Type childType, Type type, boolean isImplicit) {
+        return !isImplicit && (type.isDecimalV3() || type.isComplexType()) && !childType.isFullyCompatible(type);
+    }
+
     public static TJoinOp joinOperatorToThrift(JoinOperator joinOperator) {
         Preconditions.checkNotNull(joinOperator, "Join operator should not be null");
         switch (joinOperator) {
@@ -573,6 +580,9 @@ public final class ExprToThrift {
             }
             msg.setOpcode(ExprOpcodeRegistry.getCastOpcode());
             Type childType = node.getChild(0).getType();
+            if (castChecksDecimalPrecision(childType, node.getType(), node.isImplicit())) {
+                msg.setCast_decimal_check_precision(true);
+            }
             if (childType.isComplexType() || childType.isDecimalOfAnyVersion() || childType.isChar()
                     || childType.isVarchar()) {
                 msg.setChild_type_desc(TypeSerializer.toThrift(childType));

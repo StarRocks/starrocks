@@ -678,8 +678,9 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
         }
         Optional<ConstantOperator> result = castTo(desc);
         // A DECIMAL holds as many digits as its precision: castTo checks only the range of the type's storage
-        // (checkLiteralOverflowInBinaryStyle), where the BE casts a value with more to NULL
-        if (desc.isDecimalV3() && result.isPresent() && !result.get().isNull()
+        // (checkLiteralOverflowInBinaryStyle), where the BE casts a value with more to NULL. As in the BE, a cast
+        // between fully compatible types is not checked, since the planner takes it for one that gives no NULL.
+        if (desc.isDecimalV3() && !getType().isFullyCompatible(desc) && result.isPresent() && !result.get().isNull()
                 && !DecimalLiteral.checkLiteralOverflowInDecimalStyle(result.get().getDecimal(), (ScalarType) desc)) {
             return Optional.of(ConstantOperator.createNull(desc));
         }

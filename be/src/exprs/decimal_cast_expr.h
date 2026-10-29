@@ -30,7 +30,8 @@ UNION_VALUE_GUARD(LogicalType, FixedNonDecimalTypeGuard, lt_is_fixed_non_decimal
 
 template <OverflowMode overflow_mode, LogicalType Type, LogicalType ResultType>
 struct DecimalDecimalCast {
-    static inline ColumnPtr evaluate(const ColumnPtr& column, int to_precision, int to_scale) {
+    // check_precision: an explicit cast gives NULL, or an error, for a value with more digits than to_precision
+    static inline ColumnPtr evaluate(const ColumnPtr& column, int to_precision, int to_scale, bool check_precision) {
         using FromCppType = RunTimeCppType<Type>;
         using FromColumnType = RunTimeColumnType<Type>;
         using ToCppType = RunTimeCppType<ResultType>;
@@ -39,14 +40,14 @@ struct DecimalDecimalCast {
         auto data_column = ColumnHelper::cast_to_raw<Type>(column);
         int from_scale = data_column->scale();
 
-        // A value has more digits than the target's precision where the target has fewer integer digits, or as
-        // many and a lower scale, to which a value can round up
-        const bool check_precision =
-                check_overflow<overflow_mode> && to_precision - to_scale <= data_column->precision() - from_scale;
+        // A value can have more digits than the target's precision where the target has fewer integer digits, or
+        // as many and a lower scale, to which a value can round up
+        const bool check_digits = check_precision && check_overflow<overflow_mode> &&
+                                  to_precision - to_scale <= data_column->precision() - from_scale;
 
         // source type and target type has the same logical type and scale, and every value fits the target
         if (to_scale == from_scale && Type == ResultType &&
-            (!check_precision || to_precision >= data_column->precision())) {
+            (!check_digits || to_precision >= data_column->precision())) {
             auto result = column->clone();
             ColumnHelper::cast_to_raw<Type>(result.get())->set_precision(to_precision);
             return result;
@@ -72,7 +73,7 @@ struct DecimalDecimalCast {
                     (void)DecimalV3Cast::to_decimal_trivial<FromCppType, ToCppType, check_overflow<overflow_mode>>(
                             data[i], &result_data[i]);
                     if constexpr (check_overflow<overflow_mode>) {
-                        if (check_precision && DecimalV3Cast::exceeds_precision(result_data[i], to_precision)) {
+                        if (check_digits && DecimalV3Cast::exceeds_precision(result_data[i], to_precision)) {
                             if constexpr (error_if_overflow<overflow_mode>) {
                                 throw std::overflow_error("The type cast from decimal to decimal overflows");
                             } else {
@@ -90,7 +91,7 @@ struct DecimalDecimalCast {
                                     data[i], &result_data[i]);
                     if constexpr (check_overflow<overflow_mode>) {
                         overflow = overflow ||
-                                   (check_precision && DecimalV3Cast::exceeds_precision(result_data[i], to_precision));
+                                   (check_digits && DecimalV3Cast::exceeds_precision(result_data[i], to_precision));
                         if (overflow) {
                             if constexpr (error_if_overflow<overflow_mode>) {
                                 throw std::overflow_error("The type cast from decimal to decimal overflows");
@@ -111,7 +112,7 @@ struct DecimalDecimalCast {
                                                                                          &result_data[i]);
                 if constexpr (check_overflow<overflow_mode>) {
                     overflow = overflow ||
-                               (check_precision && DecimalV3Cast::exceeds_precision(result_data[i], to_precision));
+                               (check_digits && DecimalV3Cast::exceeds_precision(result_data[i], to_precision));
                     if (overflow) {
                         if constexpr (error_if_overflow<overflow_mode>) {
                             throw std::overflow_error("The type cast from decimal to decimal overflows");
@@ -131,7 +132,7 @@ struct DecimalDecimalCast {
                                                                                          &result_data[i]);
                 if constexpr (check_overflow<overflow_mode>) {
                     overflow = overflow ||
-                               (check_precision && DecimalV3Cast::exceeds_precision(result_data[i], to_precision));
+                               (check_digits && DecimalV3Cast::exceeds_precision(result_data[i], to_precision));
                     if (overflow) {
                         if constexpr (error_if_overflow<overflow_mode>) {
                             throw std::overflow_error("The type cast from decimal to decimal overflows");
@@ -164,16 +165,17 @@ struct DecimalNonDecimalCast<overflow_mode, DecimalType, NonDecimalType, Decimal
     using NonDecimalCppType = RunTimeCppType<NonDecimalType>;
     using NonDecimalColumnType = RunTimeColumnType<NonDecimalType>;
 
-    static inline ColumnPtr decimal_from(const ColumnPtr& column, int precision, int scale) {
+    // check_precision: an explicit cast gives NULL, or an error, for a value with more digits than the precision
+    static inline ColumnPtr decimal_from(const ColumnPtr& column, int precision, int scale, bool check_precision) {
         if (scale == 0) {
-            return _decimal_from<true>(column, precision, scale);
+            return _decimal_from<true>(column, precision, scale, check_precision);
         } else {
-            return _decimal_from<false>(column, precision, scale);
+            return _decimal_from<false>(column, precision, scale, check_precision);
         }
     }
 
     template <bool ZeroScale>
-    static inline ColumnPtr _decimal_from(const ColumnPtr& column, int precision, int scale) {
+    static inline ColumnPtr _decimal_from(const ColumnPtr& column, int precision, int scale, bool check_precision) {
         const auto num_rows = column->size();
         typename DecimalColumnType::MutablePtr result = DecimalColumnType::create(precision, scale, num_rows);
         const auto data = &ColumnHelper::cast_to_raw<NonDecimalType>(column.get())->immutable_data().front();
@@ -248,7 +250,7 @@ struct DecimalNonDecimalCast<overflow_mode, DecimalType, NonDecimalType, Decimal
             }
 
             if constexpr (check_overflow<overflow_mode>) {
-                overflow = overflow || DecimalV3Cast::exceeds_precision(result_data[i], precision);
+                overflow = overflow || (check_precision && DecimalV3Cast::exceeds_precision(result_data[i], precision));
                 if (overflow) {
                     if constexpr (error_if_overflow<overflow_mode>) {
                         throw std::overflow_error("The type cast from other types to decimal overflows");
@@ -386,7 +388,8 @@ struct DecimalNonDecimalCast<overflow_mode, DecimalType, StringType, DecimalLTGu
     using StringCppType = RunTimeCppType<StringType>;
     using StringColumnType = RunTimeColumnType<StringType>;
 
-    static inline ColumnPtr decimal_from(const ColumnPtr& column, int precision, int scale) {
+    // check_precision: an explicit cast gives NULL, or an error, for a value with more digits than the precision
+    static inline ColumnPtr decimal_from(const ColumnPtr& column, int precision, int scale, bool check_precision) {
         const auto num_rows = column->size();
         typename DecimalColumnType::MutablePtr result = DecimalColumnType::create(precision, scale, num_rows);
         auto result_data = &ColumnHelper::cast_to_raw<DecimalType>(result.get())->get_data().front();
@@ -404,7 +407,7 @@ struct DecimalNonDecimalCast<overflow_mode, DecimalType, StringType, DecimalLTGu
             auto overflow = DecimalV3Cast::from_string<DecimalCppType>(
                     &result_data[i], decimal_precision_limit<DecimalCppType>, scale, slice.data, slice.size);
             if constexpr (check_overflow<overflow_mode>) {
-                overflow = overflow || DecimalV3Cast::exceeds_precision(result_data[i], precision);
+                overflow = overflow || (check_precision && DecimalV3Cast::exceeds_precision(result_data[i], precision));
                 if (overflow) {
                     if constexpr (error_if_overflow<overflow_mode>) {
                         throw std::overflow_error("The type cast from string to decimal overflows");
@@ -468,9 +471,10 @@ inline static bool convert_variant_decimal(SrcType src_value, int src_scale, Dst
     }
 }
 
+// check_precision: an explicit cast also overflows for a value with more digits than the precision
 template <typename DecimalCppType>
 inline static StatusOr<bool> cast_variant_to_decimal(DecimalCppType* dst_value, const VariantValue& variant,
-                                                     int precision, int scale) {
+                                                     int precision, int scale, bool check_precision = false) {
     if (scale < 0 || precision <= 0 || scale > precision || scale > decimal_precision_limit<DecimalCppType> ||
         precision > decimal_precision_limit<DecimalCppType>) {
         return Status::InvalidArgument(
@@ -572,7 +576,7 @@ inline static StatusOr<bool> cast_variant_to_decimal(DecimalCppType* dst_value, 
                                                 logical_type_to_string(decimal_type)));
     }
 
-    return overflow || DecimalV3Cast::exceeds_precision(*dst_value, precision);
+    return overflow || (check_precision && DecimalV3Cast::exceeds_precision(*dst_value, precision));
 }
 template <OverflowMode overflow_mode, LogicalType DecimalType, LogicalType VariantType>
 struct DecimalNonDecimalCast<overflow_mode, DecimalType, VariantType, DecimalLTGuard<DecimalType>,
@@ -580,7 +584,8 @@ struct DecimalNonDecimalCast<overflow_mode, DecimalType, VariantType, DecimalLTG
     using DecimalCppType = RunTimeCppType<DecimalType>;
     using DecimalColumnType = RunTimeColumnType<DecimalType>;
 
-    static inline ColumnPtr decimal_from(const ColumnPtr& column, int precision, int scale) {
+    // check_precision: an explicit cast gives NULL, or an error, for a value with more digits than the precision
+    static inline ColumnPtr decimal_from(const ColumnPtr& column, int precision, int scale, bool check_precision) {
         const auto num_rows = column->size();
         typename DecimalColumnType::MutablePtr result = DecimalColumnType::create(precision, scale, num_rows);
         auto result_data = &ColumnHelper::cast_to_raw<DecimalType>(result.get())->get_data().front();
@@ -620,7 +625,8 @@ struct DecimalNonDecimalCast<overflow_mode, DecimalType, VariantType, DecimalLTG
                 }
             }
 
-            auto overflow = cast_variant_to_decimal<DecimalCppType>(&result_data[i], value, precision, scale);
+            auto overflow =
+                    cast_variant_to_decimal<DecimalCppType>(&result_data[i], value, precision, scale, check_precision);
             if (!overflow.ok()) {
                 throw std::runtime_error(overflow.status().to_string());
             }
@@ -647,21 +653,23 @@ struct DecimalNonDecimalCast<overflow_mode, DecimalType, VariantType, DecimalLTG
     }
 };
 
-template <OverflowMode overflow_mode>
+// check_precision: an explicit cast, which gives NULL, or an error, for a value with more digits than the precision
+template <OverflowMode overflow_mode, bool check_precision>
 struct DecimalToDecimal {
     template <LogicalType Type, LogicalType ResultType, typename... Args>
     static inline ColumnPtr evaluate(const ColumnPtr& column, Args&&... args) {
-        return DecimalDecimalCast<overflow_mode, Type, ResultType>::evaluate(column, std::forward<Args>(args)...);
+        return DecimalDecimalCast<overflow_mode, Type, ResultType>::evaluate(column, std::forward<Args>(args)...,
+                                                                             check_precision);
     }
 };
 
 // cast: convert to decimal type from other types
-template <OverflowMode overflow_mode>
+template <OverflowMode overflow_mode, bool check_precision>
 struct DecimalFrom {
     template <LogicalType Type, LogicalType ResultType, typename... Args>
     static inline ColumnPtr evaluate(const ColumnPtr& column, Args&&... args) {
-        return DecimalNonDecimalCast<overflow_mode, ResultType, Type>::decimal_from(column,
-                                                                                    std::forward<Args>(args)...);
+        return DecimalNonDecimalCast<overflow_mode, ResultType, Type>::decimal_from(column, std::forward<Args>(args)...,
+                                                                                    check_precision);
     }
 };
 

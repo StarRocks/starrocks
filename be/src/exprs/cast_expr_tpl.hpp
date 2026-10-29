@@ -1197,7 +1197,12 @@ class VectorizedCastExpr final : public Expr
 #endif
 {
 public:
-    DEFINE_CAST_CONSTRUCT(VectorizedCastExpr);
+    explicit VectorizedCastExpr(const TExprNode& node)
+            : Expr(node),
+              _check_decimal_precision(node.__isset.cast_decimal_check_precision && node.cast_decimal_check_precision) {
+    }
+    Expr* clone(ObjectPool* pool) const override { return pool->add(new VectorizedCastExpr(*this)); }
+
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
         ASSIGN_OR_RETURN(ColumnPtr column, _children[0]->evaluate_checked(context, ptr));
 
@@ -1205,7 +1210,6 @@ public:
         if (col_size != 0 && ColumnHelper::count_nulls(column) == col_size) {
             return ColumnHelper::create_const_null_column(col_size);
         }
-        const TypeDescriptor& to_type = this->type();
 
         ColumnPtr result_column;
         // NOTE
@@ -1227,26 +1231,13 @@ public:
             }
         } else if constexpr (FromType == TYPE_VARIANT || ToType == TYPE_VARIANT) {
             if constexpr (lt_is_decimal<ToType>) {
-                if (context != nullptr && context->error_if_overflow()) {
-                    return VectorizedUnaryFunction<DecimalFrom<OverflowMode::REPORT_ERROR>>::evaluate<FromType, ToType>(
-                            column, to_type.precision, to_type.scale);
-                } else {
-                    return VectorizedUnaryFunction<DecimalFrom<OverflowMode::OUTPUT_NULL>>::evaluate<FromType, ToType>(
-                            column, to_type.precision, to_type.scale);
-                }
+                return _cast_to_decimal(context, column);
             } else {
                 result_column =
                         CastFn<FromType, ToType, AllowThrowException>::cast_fn(std::move(column))->as_mutable_ptr();
             }
         } else if constexpr (lt_is_decimal<FromType> && lt_is_decimal<ToType>) {
-            if (context != nullptr && context->error_if_overflow()) {
-                return VectorizedUnaryFunction<DecimalToDecimal<OverflowMode::REPORT_ERROR>>::evaluate<FromType,
-                                                                                                       ToType>(
-                        column, to_type.precision, to_type.scale);
-            } else {
-                return VectorizedUnaryFunction<DecimalToDecimal<OverflowMode::OUTPUT_NULL>>::evaluate<FromType, ToType>(
-                        column, to_type.precision, to_type.scale);
-            }
+            return _cast_to_decimal(context, column);
         } else if constexpr (lt_is_decimal<FromType>) {
             if (context != nullptr && context->error_if_overflow()) {
                 return VectorizedUnaryFunction<DecimalTo<OverflowMode::REPORT_ERROR>>::evaluate<FromType, ToType>(
@@ -1256,13 +1247,7 @@ public:
                         column);
             }
         } else if constexpr (lt_is_decimal<ToType>) {
-            if (context != nullptr && context->error_if_overflow()) {
-                return VectorizedUnaryFunction<DecimalFrom<OverflowMode::REPORT_ERROR>>::evaluate<FromType, ToType>(
-                        column, to_type.precision, to_type.scale);
-            } else {
-                return VectorizedUnaryFunction<DecimalFrom<OverflowMode::OUTPUT_NULL>>::evaluate<FromType, ToType>(
-                        column, to_type.precision, to_type.scale);
-            }
+            return _cast_to_decimal(context, column);
         } else if constexpr (lt_is_string<FromType> && lt_is_binary<ToType>) {
             result_column = Column::mutate(std::move(column));
         } else {
@@ -1350,6 +1335,34 @@ public:
         out << "VectorizedCastExpr ("
             << "from=" << _children[0]->type().debug_string() << ", to expr=" << expr_debug_string << ")";
         return out.str();
+    }
+
+private:
+    // Set by the FE on an explicit cast that may give NULL: a value with more digits than the precision of the
+    // target DECIMAL is NULL, or an error. Otherwise only one past the range of its storage type is.
+    const bool _check_decimal_precision;
+
+    ColumnPtr _cast_to_decimal(ExprContext* context, const ColumnPtr& column) const {
+        if (context != nullptr && context->error_if_overflow()) {
+            return _check_decimal_precision ? _cast_to_decimal<OverflowMode::REPORT_ERROR, true>(column)
+                                            : _cast_to_decimal<OverflowMode::REPORT_ERROR, false>(column);
+        } else {
+            return _check_decimal_precision ? _cast_to_decimal<OverflowMode::OUTPUT_NULL, true>(column)
+                                            : _cast_to_decimal<OverflowMode::OUTPUT_NULL, false>(column);
+        }
+    }
+
+    template <OverflowMode overflow_mode, bool check_precision>
+    ColumnPtr _cast_to_decimal(const ColumnPtr& column) const {
+        const TypeDescriptor& to_type = this->type();
+        if constexpr (lt_is_decimal<FromType>) {
+            return VectorizedUnaryFunction<DecimalToDecimal<overflow_mode, check_precision>>::template evaluate<
+                    FromType, ToType>(column, to_type.precision, to_type.scale);
+        } else {
+            return VectorizedUnaryFunction<DecimalFrom<overflow_mode, check_precision>>::template evaluate<FromType,
+                                                                                                           ToType>(
+                    column, to_type.precision, to_type.scale);
+        }
     }
 };
 

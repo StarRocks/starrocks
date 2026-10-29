@@ -174,6 +174,12 @@ public class FoldConstantsRuleTest {
         // An implicit cast keeps the value, for the sink to check
         assertEquals(ConstantOperator.createDecimal(new BigDecimal("99999"), decimal3),
                 rule.apply(new CastOperator(decimal3, ConstantOperator.createVarchar("99999"), true), null));
+        // As in the BE, a cast between fully compatible types is not checked: the planner takes it for one that
+        // gives no NULL
+        Type decimal53 = TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL32, 5, 3);
+        assertEquals(ConstantOperator.createDecimal(new BigDecimal("999.99"), decimal53),
+                rule.apply(new CastOperator(decimal53,
+                        ConstantOperator.createDecimal(new BigDecimal("999.99"), decimal5)), null));
     }
 
     @Test

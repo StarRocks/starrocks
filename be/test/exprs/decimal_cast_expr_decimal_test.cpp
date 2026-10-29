@@ -14,6 +14,8 @@
 
 #include <gtest/gtest.h>
 
+#include "column/array_column.h"
+#include "common/object_pool.h"
 #include "exprs/decimal_cast_expr_test_helper.h"
 #include "types/logical_type.h"
 #include "types/time_types.h"
@@ -5491,6 +5493,62 @@ PARALLEL_TEST(VectorizedDecimalCastExprDecimalTest, testCastFromDecimal64p6s3ToD
     test_cast_all<TYPE_DECIMAL64, TYPE_DECIMAL32>(test_cases);
     CastTestCaseArray past_precision = {{6, 3, "999.995", 5, 2, "", "true"}, {6, 3, "-999.995", 5, 2, "", "true"}};
     test_cast_all_fail<TYPE_DECIMAL64, TYPE_DECIMAL32>(past_precision);
+}
+
+// An implicit cast, as to the type of a column in a load, keeps a value with more digits than the precision of the
+// target for the sink to check
+PARALLEL_TEST(VectorizedDecimalCastExprDecimalTest, testImplicitCastFromDecimal32p9s2ToDecimal32p5s2PastPrecision) {
+    TypeDescriptor from_type = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 9, 2);
+    TypeDescriptor to_type = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 5, 2);
+    for (const std::string value : {"1000.00", "-1234567.89"}) {
+        ColumnPtr from_column = cast<TYPE_VARCHAR, TYPE_DECIMAL32, ColumnPackedType::SIMPLE>(
+                Slice{value.c_str(), value.size()}, TYPE_VARCHAR_DESC, from_type, 0, 0);
+        ColumnPtr to_column = cast<TYPE_DECIMAL32>(from_column, from_type, to_type);
+        ColumnPtr str_column = cast<TYPE_DECIMAL32>(to_column, to_type, TYPE_VARCHAR_DESC);
+        ASSERT_FALSE(str_column->is_nullable());
+        ASSERT_EQ(value, ColumnHelper::cast_to_raw<TYPE_VARCHAR>(str_column)->get_slice(0).to_string());
+
+        ColumnPtr explicit_column = cast<TYPE_DECIMAL32>(from_column, from_type, to_type, true);
+        ASSERT_TRUE(explicit_column->is_nullable() && explicit_column->is_null(0));
+    }
+}
+
+// The elements of an ARRAY are checked against the precision when the cast of the ARRAY is explicit
+PARALLEL_TEST(VectorizedDecimalCastExprDecimalTest, testCastDecimalArrayPastPrecision) {
+    TypeDescriptor from_type =
+            TypeDescriptor::create_array_type(TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 9, 2));
+    TypeDescriptor to_type =
+            TypeDescriptor::create_array_type(TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 5, 2));
+    // [999.99, 1000.00]
+    auto elements = NullableColumn::create(RunTimeColumnType<TYPE_DECIMAL32>::create(9, 2), NullColumn::create());
+    elements->append_datum(Datum(int32_t(99999)));
+    elements->append_datum(Datum(int32_t(100000)));
+    auto offsets = UInt32Column::create();
+    offsets->append(0);
+    offsets->append(2);
+    ColumnPtr array = ArrayColumn::create(std::move(elements), std::move(offsets));
+    for (bool check_decimal_precision : {false, true}) {
+        TExprNode from_node;
+        from_node.node_type = TExprNodeType::CAST_EXPR;
+        from_type.to_thrift(&from_node.type);
+        VerbatimVectorizedExpr<TYPE_ARRAY> from_expr(from_node, array);
+        TExprNode cast_node;
+        cast_node.node_type = TExprNodeType::CAST_EXPR;
+        to_type.to_thrift(&cast_node.type);
+        cast_node.__set_child_type_desc(from_type.to_thrift());
+        if (check_decimal_precision) {
+            cast_node.__set_cast_decimal_check_precision(true);
+        }
+        ObjectPool pool;
+        Expr* cast_expr = VectorizedCastExprFactory::from_thrift(&pool, cast_node);
+        ASSERT_TRUE(cast_expr != nullptr);
+        pool.add(cast_expr);
+        cast_expr->add_child(&from_expr);
+        ColumnPtr result = cast_expr->evaluate(nullptr, nullptr);
+        const auto* casted = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(result.get()));
+        ASSERT_FALSE(casted->elements_column()->is_null(0));
+        ASSERT_EQ(check_decimal_precision, casted->elements_column()->is_null(1));
+    }
 }
 
 } // namespace starrocks
