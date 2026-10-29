@@ -155,7 +155,9 @@ public class DatabaseTransactionMgr {
 
     // head txn id -> txn ids of a lake publish batch that failed. The retry from that head publishes
     // exactly these txns, so every partition keeps the new version of the failed attempt instead of
-    // growing with txns committed since. Written by publish executor threads without transactionLock.
+    // growing with txns committed since. An entry is added under the read lock and only for a running
+    // head, and removed under the write lock when the head reaches a final status, on whichever path
+    // (batch or single-txn publish, abort, replay), so none outlives its head txn.
     // In memory only: losing it on failover just lets the retry batch grow again.
     private final Map<Long, List<Long>> frozenPublishBatches = new ConcurrentHashMap<>();
 
@@ -1031,12 +1033,7 @@ public class DatabaseTransactionMgr {
         readLock();
 
         try {
-            if (Config.lake_enable_batch_publish_retry_freeze) {
-                // A frozen batch whose head txn is no longer running (finished by another path, or its db
-                // dropped) will never be retried.
-                frozenPublishBatches.keySet().removeIf(
-                        headTxnId -> !idToRunningTransactionState.containsKey(headTxnId));
-            } else if (!frozenPublishBatches.isEmpty()) {
+            if (!Config.lake_enable_batch_publish_retry_freeze && !frozenPublishBatches.isEmpty()) {
                 // The policy was turned off: every batch, frozen ones included, is rebuilt as before.
                 frozenPublishBatches.clear();
             }
@@ -1158,7 +1155,18 @@ public class DatabaseTransactionMgr {
             return;
         }
         long headTxnId = txnIds.get(0);
-        List<Long> previous = frozenPublishBatches.put(headTxnId, txnIds);
+        List<Long> previous;
+        // Under the lock that applies final statuses: a head that has already finished is never frozen,
+        // since nothing would remove its entry afterwards.
+        readLock();
+        try {
+            if (!idToRunningTransactionState.containsKey(headTxnId)) {
+                return;
+            }
+            previous = frozenPublishBatches.put(headTxnId, txnIds);
+        } finally {
+            readUnlock();
+        }
         if (!txnIds.equals(previous)) {
             LOG.info("freeze lake publish batch db:{} head txn:{} size:{} txns:{}",
                     dbId, headTxnId, txnIds.size(), txnIds);
@@ -1787,6 +1795,7 @@ public class DatabaseTransactionMgr {
                         .removeFromStartupActiveCompactionTransactionMap(transactionState.getTransactionId());
             }
             transactionGraph.remove(transactionState.getTransactionId());
+            frozenPublishBatches.remove(transactionState.getTransactionId());
             // A transaction may reach a final status more than once (a duplicated finish, a replayed edit
             // log, an image load). The deque is what removeExpiredTxns walks and it must hold every
             // transaction exactly once: a second entry is popped after its label mapping was already
@@ -1840,6 +1849,7 @@ public class DatabaseTransactionMgr {
                         .removeFromStartupActiveCompactionTransactionMap(transactionState.getTransactionId());
             }
             transactionGraph.remove(transactionState.getTransactionId());
+            frozenPublishBatches.remove(transactionState.getTransactionId());
             // See unprotectUpsertTransactionState(): enqueue a transaction at most once.
             if (idToFinalStatusTransactionState.put(transactionState.getTransactionId(), transactionState) == null) {
                 finalStatusTransactionStateDeque.add(transactionState);
@@ -2714,7 +2724,6 @@ public class DatabaseTransactionMgr {
         }
 
         LOG.info("finish transaction {} batch successfully", copiedStateBatch);
-        frozenPublishBatches.remove(copiedStateBatch.getTransactionStates().get(0).getTransactionId());
         for (TransactionState transactionState : copiedStateBatch.getTransactionStates()) {
             updateTransactionMetrics(transactionState);
         }

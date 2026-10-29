@@ -1519,14 +1519,50 @@ public class DatabaseTransactionMgrTest {
     }
 
     @Test
-    public void testFrozenPublishBatchOfAFinishedHeadTxnIsDropped() throws AnalysisException {
+    public void testFreezeOfAFinishedHeadTxnIsIgnored() throws AnalysisException {
         DatabaseTransactionMgr masterDbTransMgr = dbTransMgrWithThreeBatchableTxns();
-        // txn 1 is already VISIBLE, so a batch frozen at it can never be retried.
+        // txn 1 is already VISIBLE, so a batch frozen at it can never be retried and nothing would remove it.
         long txnId1 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable1);
         long txnId6 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable6);
         masterDbTransMgr.freezePublishBatch(List.of(txnId1, txnId6));
-        masterDbTransMgr.getReadyToPublishTxnListBatch();
         assertNull(masterDbTransMgr.getFrozenPublishBatch(txnId1));
+    }
+
+    @Test
+    public void testFrozenPublishBatchIsClearedWhenItsHeadFinishesWithoutBatchPublish() throws StarRocksException {
+        boolean oldBatchPublish = Config.lake_enable_batch_publish_version;
+        try {
+            DatabaseTransactionMgr masterDbTransMgr = dbTransMgrWithThreeBatchableTxns();
+            long txnId6 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable6);
+            long txnId7 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable7);
+            masterDbTransMgr.freezePublishBatch(List.of(txnId6, txnId7));
+            assertEquals(List.of(txnId6, txnId7), masterDbTransMgr.getFrozenPublishBatch(txnId6));
+
+            // Batch publish turned off after the failure: no batch is built again, and the txns finish one by
+            // one through the single-transaction path.
+            Config.lake_enable_batch_publish_version = false;
+            masterTransMgr.finishTransaction(GlobalStateMgrTestUtil.testDbId1, txnId6, null);
+            assertEquals(TransactionStatus.VISIBLE,
+                    masterDbTransMgr.getTransactionState(txnId6).getTransactionStatus());
+            assertNull(masterDbTransMgr.getFrozenPublishBatch(txnId6));
+        } finally {
+            Config.lake_enable_batch_publish_version = oldBatchPublish;
+        }
+    }
+
+    @Test
+    public void testFrozenPublishBatchIsClearedWhenItsHeadIsReplayedFinal() throws AnalysisException {
+        DatabaseTransactionMgr masterDbTransMgr = dbTransMgrWithThreeBatchableTxns();
+        long txnId6 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable6);
+        long txnId7 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable7);
+        masterDbTransMgr.freezePublishBatch(List.of(txnId6, txnId7));
+
+        // A demoted leader keeps its entries and from then on only replays the edit log.
+        TransactionState visible = masterDbTransMgr.getTransactionState(txnId6);
+        visible.setFinishTime(System.currentTimeMillis());
+        visible.setTransactionStatus(TransactionStatus.VISIBLE);
+        masterDbTransMgr.replayUpsertTransactionState(visible);
+        assertNull(masterDbTransMgr.getFrozenPublishBatch(txnId6));
     }
 
     @Test
