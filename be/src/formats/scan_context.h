@@ -126,6 +126,10 @@ struct FormatScannerStats {
     int64_t page_index_ns = 0;
     int64_t total_row_groups = 0;
     int64_t filtered_row_groups = 0;
+    // Row groups / ORC stripes / data files whose rows are all in the deletion bitmap, skipped before any IO.
+    int64_t deleted_row_groups_skipped = 0;
+    int64_t deleted_stripes_skipped = 0;
+    int64_t deleted_files_skipped = 0;
 
     // late materialize round-by-round
     int64_t group_min_round_cost = 0;

@@ -81,19 +81,16 @@ bool same_point(const OverlayPoint& a, const OverlayPoint& b) {
 
 StatusOr<WkbGeometry> intersection_contacts(WkbGeometry area, const OverlayMultiPolygon& left,
                                             const OverlayMultiPolygon& right, const OverlayMultiPolygon& areas,
-                                            const OverlayMultiPolygon& rounded_areas, WkbCoordinate origin,
-                                            const std::function<Status()>& check) {
+                                            const OverlayMultiPolygon& rounded_areas, WkbCoordinate origin) {
     // Polygon output alone omits shared edges and isolated vertex contacts.
     // Clip boundary overlaps against the area, then remove covered/duplicate points.
     auto a = boundary(left), b = boundary(right);
     OverlayMultiLine overlaps, lines;
     bg::intersection(a, b, overlaps);
-    RETURN_IF_ERROR(check());
     if (areas.empty()) {
         lines = std::move(overlaps);
     } else {
         bg::difference(overlaps, areas, lines);
-        RETURN_IF_ERROR(check());
     }
     for (auto& line : lines) line.erase(std::unique(line.begin(), line.end(), same_point), line.end());
     lines.erase(std::remove_if(lines.begin(), lines.end(), [](const auto& line) { return line.size() < 2; }),
@@ -104,7 +101,6 @@ StatusOr<WkbGeometry> intersection_contacts(WkbGeometry area, const OverlayMulti
     }
     OverlayMultiPoint points;
     bg::intersection(a, b, points);
-    RETURN_IF_ERROR(check());
     std::sort(points.begin(), points.end(), [](const auto& x, const auto& y) {
         return std::pair{x.x(), x.y()} < std::pair{y.x(), y.y()};
     });
@@ -129,7 +125,6 @@ StatusOr<WkbGeometry> intersection_contacts(WkbGeometry area, const OverlayMulti
     if (!lines.empty()) {
         std::vector<WkbGeometry> children;
         for (auto& line : lines) {
-            RETURN_IF_ERROR(check());
             WkbGeometry child;
             child.type = WkbGeometryType::LINESTRING;
             PlanarLine rounded;
@@ -153,7 +148,6 @@ StatusOr<WkbGeometry> intersection_contacts(WkbGeometry area, const OverlayMulti
     if (!points.empty()) {
         std::vector<WkbGeometry> children;
         for (const auto& point : points) {
-            RETURN_IF_ERROR(check());
             ASSIGN_OR_RETURN(auto value, coordinate(point));
             // Independent Boost crossings can differ before rounding. Classify
             // against the coordinates actually emitted in WKB, in the local frame.
@@ -230,11 +224,8 @@ StatusOr<std::unique_ptr<PreparedGeoPolygon>> PreparedGeoPolygon::prepare(Slice 
     }
 }
 
-StatusOr<WkbGeometry> PreparedGeoPolygon::overlay(const PreparedGeoPolygon& right, GeoOverlayKind kind,
-                                                  const std::function<Status()>& checkpoint) const {
+StatusOr<WkbGeometry> PreparedGeoPolygon::overlay(const PreparedGeoPolygon& right, GeoOverlayKind kind) const {
     try {
-        auto check = [&]() { return checkpoint ? checkpoint() : Status::OK(); };
-        RETURN_IF_ERROR(check());
         const auto n = _impl->coordinates;
         const auto m = right._impl->coordinates;
         if (n * n + m * m + n * m > kGeoOverlayMaxWork) {
@@ -255,7 +246,6 @@ StatusOr<WkbGeometry> PreparedGeoPolygon::overlay(const PreparedGeoPolygon& righ
         if (!valid(right_model)) {
             return Status::InvalidArgument("Polygon overlay operand loses topology during coordinate translation");
         }
-        RETURN_IF_ERROR(check());
         OverlayMultiPolygon output;
         switch (kind) {
         case GeoOverlayKind::INTERSECTION:
@@ -269,17 +259,14 @@ StatusOr<WkbGeometry> PreparedGeoPolygon::overlay(const PreparedGeoPolygon& righ
             break;
         case GeoOverlayKind::SYMMETRIC_DIFFERENCE: {
             // Boost 1.80 sym_difference computes two differences followed by a union.
-            // Use those public primitives explicitly to bound the intermediate pair
-            // and observe query cancellation/memory limits between the three calls.
+            // Use those public primitives explicitly to bound the intermediate pair.
             OverlayMultiPolygon left_only, right_only;
             bg::difference(_impl->polygons, right_model, left_only);
-            RETURN_IF_ERROR(check());
             const auto left_count = bg::num_points(left_only);
             if (left_count > kGeoOverlayMaxOutputCoordinates) {
                 return Status::InvalidArgument("Polygon overlay intermediate exceeds coordinate limit");
             }
             bg::difference(right_model, _impl->polygons, right_only);
-            RETURN_IF_ERROR(check());
             const auto right_count = bg::num_points(right_only);
             if (right_count > kGeoOverlayMaxOutputCoordinates ||
                 left_count * left_count + right_count * right_count + left_count * right_count > kGeoOverlayMaxWork) {
@@ -289,7 +276,6 @@ StatusOr<WkbGeometry> PreparedGeoPolygon::overlay(const PreparedGeoPolygon& righ
             break;
         }
         }
-        RETURN_IF_ERROR(check());
         if (bg::num_points(output) > kGeoOverlayMaxOutputCoordinates) {
             return Status::InvalidArgument("Polygon overlay result exceeds coordinate limit");
         }
@@ -337,7 +323,7 @@ StatusOr<WkbGeometry> PreparedGeoPolygon::overlay(const PreparedGeoPolygon& righ
         }
         if (kind == GeoOverlayKind::INTERSECTION) {
             return intersection_contacts(std::move(result), _impl->polygons, right_model, output, rounded_output,
-                                         origin, check);
+                                         origin);
         }
         return result;
     } catch (const std::bad_alloc&) {

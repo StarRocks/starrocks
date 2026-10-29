@@ -46,6 +46,7 @@ import java.util.stream.Collectors;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
 /**
@@ -451,6 +452,70 @@ public class RangeRewriteRoutingTest {
                 "a sort key equal to the primary key leaves range routing unchanged");
     }
 
+
+    @Test
+    public void testPrimaryKeyNonKeyAutoIncrementNotRouted() throws Exception {
+        starRocksAssert.withTable("create table t_route_pk_autoinc_val"
+                + " (k1 int not null, k2 int not null, id bigint not null auto_increment, v1 int)\n"
+                + "primary key(k1, k2)\n"
+                + "order by(k1, k2)\n"
+                + "properties('replication_num' = '1');");
+        OlapTable table = table("t_route_pk_autoinc_val");
+        AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(
+                "alter table t_route_pk_autoinc_val order by (k1, k2)", connectContext);
+        assertFalse(SchemaChangeHandler.needsRangeRewriteSchemaChange(table, stmt.getAlterClauseList().get(0)),
+                "a PRIMARY KEY table with a non-key AUTO_INCREMENT column must not route");
+        DdlException e = assertThrowsDdlException(() ->
+                createJob("t_route_pk_autoinc_val", "alter table t_route_pk_autoinc_val order by (k1, k2)"));
+        assertTrue(e.getMessage().contains("PRIMARY KEY table with a non-key AUTO_INCREMENT column"),
+                "the rejection must name the reason, got: " + e.getMessage());
+    }
+
+    @Test
+    public void testPrimaryKeyAutoIncrementKeyRoutes() throws Exception {
+        starRocksAssert.withTable("create table t_route_pk_autoinc_key"
+                + " (id bigint not null auto_increment, k2 int not null, v1 int)\n"
+                + "primary key(id, k2)\n"
+                + "order by(id, k2)\n"
+                + "properties('replication_num' = '1');");
+        OlapTable table = table("t_route_pk_autoinc_key");
+        AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(
+                "alter table t_route_pk_autoinc_key order by (id, k2)", connectContext);
+        assertTrue(SchemaChangeHandler.needsRangeRewriteSchemaChange(table, stmt.getAlterClauseList().get(0)),
+                "an AUTO_INCREMENT primary-key column keeps the primary key, so the reorder routes");
+        assertInstanceOf(LakeRangeRewriteSchemaChangeJob.class,
+                createJob("t_route_pk_autoinc_key", "alter table t_route_pk_autoinc_key order by (id, k2)"));
+    }
+
+    @Test
+    public void testAggregateAutoIncrementKeyReorderRoutes() throws Exception {
+        starRocksAssert.withTable("create table t_route_agg_autoinc"
+                + " (k1 int not null, k2 int not null, id bigint not null auto_increment, v bigint sum)\n"
+                + "aggregate key(k1, k2, id)\n"
+                + "order by(k1, k2, id)\n"
+                + "properties('replication_num' = '1');");
+        OlapTable table = table("t_route_agg_autoinc");
+        AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(
+                "alter table t_route_agg_autoinc order by (k2, k1, id)", connectContext);
+        assertTrue(SchemaChangeHandler.needsRangeRewriteSchemaChange(table, stmt.getAlterClauseList().get(0)));
+        assertInstanceOf(LakeRangeRewriteSchemaChangeJob.class,
+                createJob("t_route_agg_autoinc", "alter table t_route_agg_autoinc order by (k2, k1, id)"));
+    }
+
+    @Test
+    public void testUniqueAutoIncrementReorderRoutes() throws Exception {
+        starRocksAssert.withTable("create table t_route_uniq_autoinc"
+                + " (k1 int not null, k2 int not null, id bigint not null auto_increment)\n"
+                + "unique key(k1, k2)\n"
+                + "order by(k1, k2)\n"
+                + "properties('replication_num' = '1');");
+        OlapTable table = table("t_route_uniq_autoinc");
+        AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(
+                "alter table t_route_uniq_autoinc order by (k2, k1)", connectContext);
+        assertTrue(SchemaChangeHandler.needsRangeRewriteSchemaChange(table, stmt.getAlterClauseList().get(0)));
+        assertInstanceOf(LakeRangeRewriteSchemaChangeJob.class,
+                createJob("t_route_uniq_autoinc", "alter table t_route_uniq_autoinc order by (k2, k1)"));
+    }
 
     /**
      * (l'') The same divergence, reached through MODIFY COLUMN rather than a reorder.

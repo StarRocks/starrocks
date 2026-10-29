@@ -142,7 +142,9 @@ TEST(TransactionsLoadIdsTest, AnyOtherErrorShouldFail_RealApiWithMockMgr) {
     }
 }
 
-TEST(TransactionsLoadIdsTest, AllMissingReturnsEmptyVectorOk_RealApiWithMockMgr) {
+// A tablet published for a multi-statement transaction was loaded by at least one of its statements, so no log
+// under any load id is reported like a missing single txn log rather than as nothing to apply.
+TEST(TransactionsLoadIdsTest, AllMissingReturnsNotFound_RealApiWithMockMgr) {
     auto location_provider = std::make_shared<FixedLocationProvider>("/tmp/test_lake");
     TabletManager mgr(location_provider, 1);
     const int64_t tablet_id = 1004; // Use different tablet_id
@@ -152,9 +154,32 @@ TEST(TransactionsLoadIdsTest, AllMissingReturnsEmptyVectorOk_RealApiWithMockMgr)
     // Don't create any files, all missing
     auto info = make_txn_info(txn_id, load_ids);
     auto st = load_txn_log(&mgr, {tablet_id}, info);
-    ASSERT_TRUE(st.ok()) << st.status();
-    ASSERT_EQ(st->size(), 1);
-    ASSERT_EQ((*st)[0].size(), 0);
+    ASSERT_TRUE(st.status().is_not_found()) << st.status();
+}
+
+TEST(TransactionsLoadIdsTest, TabletWithoutAnyLogReturnsNotFound_RealApiWithMockMgr) {
+    auto location_provider = std::make_shared<FixedLocationProvider>("/tmp/test_lake");
+    TabletManager mgr(location_provider, 1);
+    const int64_t tablet_id_1 = 1012;
+    const int64_t tablet_id_2 = 1013;
+    const int64_t txn_id = 2010;
+    std::vector<std::pair<int64_t, int64_t>> load_ids = {{9, 90}, {10, 100}};
+
+    // Only tablet_id_1 has logs, one per statement.
+    for (const auto& [hi, lo] : load_ids) {
+        PUniqueId load_id;
+        load_id.set_hi(hi);
+        load_id.set_lo(lo);
+        auto log = make_txn_log(tablet_id_1, txn_id);
+        log->mutable_load_id()->CopyFrom(load_id);
+        auto put_st = put_txn_log_with_dir(&mgr, log, mgr.txn_log_location(tablet_id_1, txn_id, load_id));
+        ASSERT_TRUE(put_st.ok()) << put_st.to_string();
+    }
+
+    auto info = make_txn_info(txn_id, load_ids);
+    auto st = load_txn_log(&mgr, {tablet_id_1, tablet_id_2}, info);
+    ASSERT_TRUE(st.status().is_not_found()) << st.status();
+    ASSERT_NE(std::string::npos, st.status().message().find(std::to_string(tablet_id_2))) << st.status();
 }
 
 TEST(TransactionsLoadIdsTest, SingleTxnLogWithoutLoadIds_RealApiWithMockMgr) {

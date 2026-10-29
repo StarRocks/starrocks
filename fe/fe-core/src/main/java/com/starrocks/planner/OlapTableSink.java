@@ -238,7 +238,7 @@ public class OlapTableSink extends DataSink {
         tSink.setTxn_id(txnId);
         tSink.setNull_expr_in_auto_increment(nullExprInAutoIncrement);
         tSink.setMiss_auto_increment_column(missAutoIncrementColumn);
-        tSink.setAuto_increment_slot_id(autoIncrementSlotId);
+        tSink.setAuto_increment_slot_id(autoIncrementSlotIdForWrite());
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         TransactionState explicitTxnState = globalTransactionMgr.reserveExplicitTransactionLayout(
                 txnId, dbId, dstTable.getId());
@@ -552,6 +552,20 @@ public class OlapTableSink extends DataSink {
 
     public void setTargetWriteIndexId(Long targetWriteIndexId) {
         this.targetWriteIndexId = targetWriteIndexId;
+    }
+
+    // A write that persists only a target index which does not store the AUTO_INCREMENT column must not fill it:
+    // filling would allocate ids from the table's counter and discard them.
+    private int autoIncrementSlotIdForWrite() {
+        if (autoIncrementSlotId == -1 || targetWriteIndexId == null) {
+            return autoIncrementSlotId;
+        }
+        String columnName = tupleDescriptor.getSlot(autoIncrementSlotId).getColumn().getName();
+        MaterializedIndexMeta indexMeta = dstTable.getIndexMetaByMetaId(targetWriteIndexId);
+        if (indexMeta != null && indexMeta.getSchema().stream().noneMatch(c -> c.getName().equalsIgnoreCase(columnName))) {
+            return -1;
+        }
+        return autoIncrementSlotId;
     }
 
     public void complete(String mergeCondition) throws StarRocksException {
