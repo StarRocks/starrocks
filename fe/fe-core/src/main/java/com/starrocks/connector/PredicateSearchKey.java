@@ -87,7 +87,12 @@ public class PredicateSearchKey {
 
     @Override
     public int hashCode() {
-        return Objects.hash(databaseName, tableName, getVersion(), getPredicate(), params.isEnableColumnStats());
+        // getPredicate()'s hashCode is id-sensitive (e.g. ColumnRefOperator hashes on id) while equals()
+        // above compares predicates via equivalent() (which ignores id). Hashing on the predicate would
+        // violate the hashCode/equals contract: keys that are equals() could land in different buckets.
+        // Hash only the fields compared with plain equals() here; predicate equality is still enforced by
+        // equals(), so lookups stay correct, just with coarser (but safe) bucketing.
+        return Objects.hash(databaseName, tableName, getVersion(), params.isEnableColumnStats());
     }
 
     @Override
