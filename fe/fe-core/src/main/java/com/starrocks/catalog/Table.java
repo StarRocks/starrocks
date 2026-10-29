@@ -708,6 +708,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
             case VIEW:
             case MATERIALIZED_VIEW:
             case CLOUD_NATIVE_MATERIALIZED_VIEW:
+            case ICEBERG_VIEW:
                 return "VIEW";
             case SCHEMA:
                 return "SYSTEM VIEW";

@@ -52,6 +52,9 @@ public class ExternalCatalogTableBasicInfo implements BasicTable {
 
     @Override
     public String getMysqlType() {
+        if (tableType == Table.TableType.ICEBERG_VIEW) {
+            return "VIEW";
+        }
         return "BASE TABLE";
     }
 
