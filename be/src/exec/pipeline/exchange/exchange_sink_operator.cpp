@@ -154,7 +154,7 @@ bool ExchangeSinkOperator::Channel::_check_use_pass_through() {
 }
 
 void ExchangeSinkOperator::Channel::_prepare_pass_through(RuntimeState* state) {
-    _pass_through_context.init(state->query_mem_tracker_ptr());
+    _pass_through_context.init();
     _use_pass_through = _check_use_pass_through();
 }
 
