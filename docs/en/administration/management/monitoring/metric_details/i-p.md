@@ -210,8 +210,6 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Bytes
 - Description: Memory used by jit compiled function cache.
 
-<<<<<<< HEAD
-=======
 ## `jvm_heap_size_bytes`
 
 - Unit: Bytes
@@ -261,13 +259,6 @@ For more information on how to build a monitoring service for your StarRocks clu
   - A `max` or `peak_max` of `-1` means that the pool has no defined maximum size. It does not indicate an error.
   - `jvm_young_size_bytes`, `jvm_survivor_size_bytes`, and `jvm_old_size_bytes` are populated only when the JVM uses the Serial, Parallel, CMS, or G1 garbage collector, because they are matched by the memory pool names of these collectors. Under ZGC or Shenandoah, they stay `0`. `jvm_heap_size_bytes` and `jvm_non_heap_size_bytes` are not affected.
 
-## `lake_compaction_held_segment_bytes`
-
-- Unit: Bytes
-- Type: Instantaneous
-- Description: Segment metadata currently pinned by running lake compaction tasks that hold their input segments (`lake_compaction_hold_input_segments`). Unlike the metadata cache, this memory is not managed by an LRU and is released when the holding task ends, so a persistently high value indicates long-running compactions rather than a cache that needs resizing.
-
->>>>>>> b7ff6bd ([Doc] Document BE JVM memory metrics (#81845))
 ## `lake_compaction_failed`
 
 - Unit: Count

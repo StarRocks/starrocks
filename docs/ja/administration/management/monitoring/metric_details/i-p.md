@@ -210,8 +210,6 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 - 単位: バイト
 - 説明: JITコンパイルされた関数キャッシュによって使用されるメモリ。
 
-<<<<<<< HEAD
-=======
 ## `jvm_heap_size_bytes`
 
 - 単位: バイト
@@ -261,13 +259,6 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
   - `max` または `peak_max` が `-1` の場合、そのメモリプールにはサイズの上限が定義されていないことを意味します。エラーを示すものではありません。
   - `jvm_young_size_bytes`、`jvm_survivor_size_bytes`、`jvm_old_size_bytes` はメモリプール名で照合されるため、JVM が Serial、Parallel、CMS、または G1 ガベージコレクターを使用している場合にのみ値が設定されます。ZGC または Shenandoah では `0` のままです。`jvm_heap_size_bytes` と `jvm_non_heap_size_bytes` は影響を受けません。
 
-## `lake_compaction_held_segment_bytes`
-
-- 単位: バイト
-- タイプ: 瞬時値
-- 説明: 入力セグメントを保持する実行中の lake compaction タスクが現在ピン留めしているセグメントメタデータのサイズ（`lake_compaction_hold_input_segments` で制御）。メタデータキャッシュとは異なり、このメモリは LRU の管理下になく、保持しているタスクの終了時に解放されます。値が継続的に高い場合は、キャッシュのサイズ不足ではなく長時間実行中の compaction を示します。
-
->>>>>>> b7ff6bd ([Doc] Document BE JVM memory metrics (#81845))
 ## `lake_compaction_failed`
 
 - 単位: 件数

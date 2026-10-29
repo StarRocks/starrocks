@@ -210,8 +210,6 @@ description: "Alphabetical i - p"
 - 单位：字节
 - 描述：JIT 编译函数缓存使用的内存。
 
-<<<<<<< HEAD
-=======
 ## `jvm_heap_size_bytes`
 
 - 单位：字节
@@ -261,13 +259,6 @@ description: "Alphabetical i - p"
   - `max` 或 `peak_max` 为 `-1` 表示该内存池没有确定的上限，并不表示出错。
   - `jvm_young_size_bytes`、`jvm_survivor_size_bytes` 和 `jvm_old_size_bytes` 按照内存池名称匹配，因此仅在 JVM 使用 Serial、Parallel、CMS 或 G1 垃圾回收器时才有取值。使用 ZGC 或 Shenandoah 时，这些指标保持为 `0`。`jvm_heap_size_bytes` 和 `jvm_non_heap_size_bytes` 不受影响。
 
-## `lake_compaction_held_segment_bytes`
-
-- 单位：字节
-- 类型：瞬时值
-- 描述：正在运行的存算分离（lake）压缩任务当前持有的输入 Segment 元数据大小（由 `lake_compaction_hold_input_segments` 控制）。与元数据缓存不同，这部分内存不受 LRU 管理，随持有它的任务结束而释放；因此该值长期偏高说明存在长时间运行的压缩任务，而不是缓存需要调大。
-
->>>>>>> b7ff6bd ([Doc] Document BE JVM memory metrics (#81845))
 ## `lake_compaction_failed`
 
 - 单位：计数
