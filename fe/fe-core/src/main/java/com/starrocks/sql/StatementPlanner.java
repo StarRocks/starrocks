@@ -85,6 +85,7 @@ import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.optimizer.transformer.TransformerContext;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
+import com.starrocks.sql.plan.RangeScanExecutionValidator;
 import com.starrocks.sql.spm.SPMPlanner;
 import com.starrocks.thrift.TAuthenticateParams;
 import com.starrocks.thrift.TResultSinkType;
@@ -141,6 +142,7 @@ public class StatementPlanner {
         try (var guard = session.bindScope()) {
             // Analyze
             analyzeStatement(stmt, session, plannerMetaLocker);
+            RangeScanExecutionValidator.validateStatement(stmt, session);
 
             // Whether planning will run off private snapshots is decided here, before the authorization
             // check, and when it will the snapshots are taken and the lock dropped first. The check is not
@@ -654,6 +656,7 @@ public class StatementPlanner {
              * currently only used in Spark/Flink Connector
              * Because the connector sends only simple queries, it only needs to remove the output fragment
              */
+            RangeScanExecutionValidator.validatePhysicalPlan(optimizedPlan, queryStmt, session);
             ExecPlan execPlan = PlanFragmentBuilder.createPhysicalPlan(
                     optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory, colNames,
                     resultSinkType,
@@ -744,6 +747,7 @@ public class StatementPlanner {
                     // SingleNodeExecPlan is set in TableQueryPlanAction to generate a single-node Plan,
                     // currently only used in Spark/Flink Connector
                     // Because the connector sends only simple queries, it only needs to remove the output fragment
+                    RangeScanExecutionValidator.validatePhysicalPlan(optimizedPlan, queryStmt, session);
                     ExecPlan plan = PlanFragmentBuilder.createPhysicalPlan(
                             optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory, colNames,
                             resultSinkType,
