@@ -2489,7 +2489,7 @@ TEST_F(FileReaderTest, CheckDictOutofBouds) {
 
     Utils::SlotDesc slot_descs[] = {
             {"vin", TYPE_VARCHAR_DESC},
-            {"TYPE_VARCHAR_DESC", TYPE_VARCHAR_DESC},
+            {"type_log_domain", TYPE_VARCHAR_DESC},
             {"file_name", TYPE_VARCHAR_DESC},
             {"is_collection", type_is_collection},
             {"is_center", type_is_center},
