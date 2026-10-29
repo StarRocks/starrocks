@@ -41,7 +41,7 @@ public:
     LanceNativeReader();
     virtual ~LanceNativeReader();
     virtual Status open(RuntimeState* state, const TupleDescriptor* tuple, const std::string& uri,
-                        const TCloudConfiguration& cloud);
+                        const TCloudConfiguration& cloud, bool empty_projection = false);
     virtual Status get_next(RuntimeState* state, ChunkPtr* chunk);
     virtual void close();
     int64_t cpu_time_spent() const { return _convert_time_ns; }
@@ -49,7 +49,8 @@ public:
 
     // Used by the scan adapter and Arrow conversion tests; no load-style row rejection.
     static Status convert_batch(RuntimeState* state, const TupleDescriptor* tuple,
-                                const std::shared_ptr<arrow::RecordBatch>& batch, ChunkPtr* chunk);
+                                const std::shared_ptr<arrow::RecordBatch>& batch, ChunkPtr* chunk,
+                                bool empty_projection = false);
 
 private:
     Status _open_reader(const std::string& dataset_uri, const TCloudConfiguration& cloud);
@@ -59,6 +60,7 @@ private:
     bool _batch_is_exhausted() const;
     void _release_batch();
 
+    bool _empty_projection = false;
     RuntimeState* _state = nullptr;
     int _max_chunk_size = 0;
     std::vector<std::string> _field_names;

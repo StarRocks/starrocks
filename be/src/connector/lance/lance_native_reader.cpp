@@ -231,20 +231,22 @@ LanceNativeReader::~LanceNativeReader() {
 }
 
 Status LanceNativeReader::open(RuntimeState* state, const TupleDescriptor* tuple, const std::string& uri,
-                               const TCloudConfiguration& cloud) {
+                               const TCloudConfiguration& cloud, bool empty_projection) {
     close();
     RETURN_IF_CANCELLED(state);
     _tuple = tuple;
     _mem_tracker = state->instance_mem_tracker_ptr();
     _state = state;
     _max_chunk_size = state->chunk_size();
+    _empty_projection = empty_projection;
+    if (_tuple->slots().empty()) return Status::NotSupported("Lance scan requires a materialized slot");
     _init_read_fields();
-    if (_field_names.empty()) return Status::NotSupported("Lance scan requires a materialized slot");
     return _open_reader(uri, cloud);
 }
 
 void LanceNativeReader::_init_read_fields() {
     _field_names.clear();
+    if (_empty_projection) return;
     _field_names.reserve(_tuple->slots().size());
     for (const auto* slot : _tuple->slots()) _field_names.emplace_back(slot->col_name());
 }
@@ -317,13 +319,29 @@ Status LanceNativeReader::_append_batch_to_read_chunk(ChunkPtr* chunk) {
     const auto remaining_batch = _arrow_batch->num_rows() - _batch_start_idx;
     const auto num_elements = std::min<int64_t>(remaining_batch, _max_chunk_size);
     SCOPED_RAW_TIMER(&_convert_time_ns);
-    RETURN_IF_ERROR(convert_batch(_state, _tuple, _arrow_batch->Slice(_batch_start_idx, num_elements), chunk));
+    RETURN_IF_ERROR(convert_batch(_state, _tuple, _arrow_batch->Slice(_batch_start_idx, num_elements), chunk,
+                                 _empty_projection));
     _batch_start_idx += num_elements;
     return Status::OK();
 }
 
 Status LanceNativeReader::convert_batch(RuntimeState* state, const TupleDescriptor* tuple,
-                                        const std::shared_ptr<arrow::RecordBatch>& batch, ChunkPtr* chunk) {
+                                        const std::shared_ptr<arrow::RecordBatch>& batch, ChunkPtr* chunk,
+                                        bool empty_projection) {
+    if (empty_projection) {
+        if (batch->num_columns() != 0 || tuple->slots().size() != 1) {
+            return Status::InternalError("Invalid Lance empty projection batch or tuple");
+        }
+        // Chunk derives its row count from its first column. Retain the planner's unused
+        // slot as a typed placeholder, without reading or converting any dataset values.
+        const auto* slot = tuple->slots()[0];
+        auto column = ColumnHelper::create_column(slot->type(), slot->is_nullable());
+        column->append_default(batch->num_rows());
+        auto result = std::make_shared<Chunk>();
+        result->append_column(std::move(column), slot->id());
+        *chunk = std::move(result);
+        return Status::OK();
+    }
     auto read_chunk = std::make_shared<Chunk>();
     auto dst = std::make_shared<Chunk>();
     ObjectPool pool;

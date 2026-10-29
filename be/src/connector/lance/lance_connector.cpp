@@ -73,7 +73,16 @@ Status LanceDataSource::open(RuntimeState* state) {
     }
     _scanner = std::make_unique<LanceNativeReader>();
     TEST_SYNC_POINT_CALLBACK("LanceDataSource::open:scanner", &_scanner);
-    RETURN_IF_ERROR(_scanner->open(state, _tuple_desc, std::string(lance_table->lance_dataset_uri()), cloud));
+    // The planner retains one unused slot to carry row counts. Never substitute its
+    // values when residual predicates or even not-yet-arrived runtime filters need them.
+    const bool empty_projection = hdfs_scan_node.__isset.can_use_any_column && hdfs_scan_node.can_use_any_column &&
+                                  _tuple_desc->slots().size() == 1 && _conjunct_ctxs.empty() &&
+                                  (_runtime_filters == nullptr || _runtime_filters->descriptors().empty());
+    if (_runtime_profile != nullptr) {
+        _runtime_profile->add_info_string("LanceProjection", empty_projection ? "empty" : "columns");
+    }
+    RETURN_IF_ERROR(_scanner->open(state, _tuple_desc, std::string(lance_table->lance_dataset_uri()), cloud,
+                                  empty_projection));
     return Status::OK();
 }
 

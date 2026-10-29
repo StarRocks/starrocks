@@ -188,6 +188,42 @@ fn empty_projection_preserves_row_count() {
 }
 
 #[test]
+fn empty_projection_respects_deletions_and_empty_datasets() {
+    let dir = tempfile::tempdir().unwrap();
+    let uri = dir.path().join("deleted.lance");
+    let uri = uri.to_str().unwrap();
+    write(uri, (0..7).collect(), WriteMode::Create);
+    runtime().unwrap().block_on(async {
+        let mut dataset = Dataset::open(uri).await.unwrap();
+        dataset.delete("id = 1 OR id = 4").await.unwrap();
+    });
+    unsafe {
+        for (version, expected) in [(0, 5), (1, 7)] {
+            let r = reader(uri, version, &[]);
+            let rows = batches(r);
+            sr_lance_reader_close(r);
+            assert_eq!(rows.iter().map(RecordBatch::num_rows).sum::<usize>(), expected);
+            assert!(rows.iter().all(|b| b.num_columns() == 0 && b.num_rows() <= 2));
+        }
+    }
+    runtime().unwrap().block_on(async {
+        let mut dataset = Dataset::open(uri).await.unwrap();
+        dataset.delete("true").await.unwrap();
+    });
+    let empty_uri = dir.path().join("empty.lance");
+    let empty_uri = empty_uri.to_str().unwrap();
+    write(empty_uri, vec![], WriteMode::Create);
+    unsafe {
+        for path in [uri, empty_uri] {
+            let r = reader(path, 0, &[]);
+            let rows = batches(r);
+            sr_lance_reader_close(r);
+            assert_eq!(rows.iter().map(RecordBatch::num_rows).sum::<usize>(), 0);
+        }
+    }
+}
+
+#[test]
 fn invalid_arguments_and_errors_do_not_escape_ffi() {
     unsafe {
         let mut out = ptr::null_mut();

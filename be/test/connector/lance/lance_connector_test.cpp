@@ -23,6 +23,7 @@
 #include "compute_env/global_dict/fragment_dict_state.h"
 #include "compute_env/query/fragment_runtime_state.h"
 #include "connector/lance/lance_native_reader.h"
+#include "exprs/expr_context.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors_ext.h"
 #include "runtime/runtime_state.h"
@@ -34,14 +35,19 @@ class StubLanceScanner final : public LanceNativeReader {
 public:
     explicit StubLanceScanner(int* close_count) : _close_count(close_count) {}
     Status open(RuntimeState*, const TupleDescriptor* tuple, const std::string& uri,
-                const TCloudConfiguration& cloud) override {
+                const TCloudConfiguration& cloud, bool empty_projection = false) override {
+        this->empty_projection = empty_projection;
         this->tuple = tuple;
         this->uri = uri;
         this->cloud = cloud;
         return open_status;
     }
-    Status get_next(RuntimeState*, ChunkPtr* chunk) override {
+    Status get_next(RuntimeState* state, ChunkPtr* chunk) override {
         if (!read_status.ok()) return read_status;
+        if (empty_projection) {
+            auto batch = arrow::RecordBatch::Make(arrow::schema({}), 7, std::vector<std::shared_ptr<arrow::Array>>{});
+            return convert_batch(state, tuple, batch, chunk, true);
+        }
         auto data = Int32Column::create();
         data->append(42);
         *chunk = std::make_shared<Chunk>();
@@ -49,6 +55,7 @@ public:
         return Status::OK();
     }
     void close() override { ++*_close_count; }
+    bool empty_projection = false;
     const TupleDescriptor* tuple = nullptr;
     std::string uri;
     TCloudConfiguration cloud;
@@ -162,6 +169,88 @@ TEST_F(LanceConnectorTest, ProviderAndFullDatasetScan) {
     source->close(_state.get());
     source->close(_state.get());
     EXPECT_EQ(1, _close_count);
+}
+
+TEST_F(LanceConnectorTest, EmptyProjectionRequiresUnusedValuesAndNoFilters) {
+    _plan.hdfs_scan_node.__set_can_use_any_column(true);
+    RuntimeFilterProbeCollector filters;
+    RuntimeFilterProbeDescriptor filter;
+    for (int mode = 0; mode < 4; ++mode) {
+        _plan.hdfs_scan_node.__set_can_use_any_column(mode != 3);
+        LanceDataSourceProvider provider(nullptr, _plan);
+        auto source = provider.create_data_source(_range);
+        // The descriptor alone must prevent optimization, even before its filter arrives.
+        if (mode == 1) filters.descriptors().emplace(1, &filter);
+        if (mode == 2) filters.descriptors().clear();
+        source->set_runtime_filters(&filters);
+        ExprContext predicate(nullptr);
+        if (mode == 2) source->set_predicates({&predicate});
+        ASSERT_OK(source->open(_state.get()));
+        EXPECT_EQ(mode == 0, _scanner->empty_projection);
+        source->close(_state.get());
+    }
+    LanceDataSourceProvider provider(nullptr, _plan);
+    auto source = provider.create_data_source(_range);
+    ASSERT_OK(source->open(_state.get()));
+    EXPECT_FALSE(_scanner->empty_projection);
+    source->close(_state.get());
+}
+
+TEST_F(LanceConnectorTest, EmptyProjectionReportsRowsAndProfile) {
+    _plan.hdfs_scan_node.__set_can_use_any_column(true);
+    LanceDataSourceProvider provider(nullptr, _plan);
+    auto source = provider.create_data_source(_range);
+    RuntimeProfile profile("test");
+    source->set_runtime_profile(&profile);
+    ASSERT_OK(source->open(_state.get()));
+    EXPECT_EQ("empty", profile.get_child(DataSource::PROFILE_NAME)->get_info_string("LanceProjection").value());
+    ChunkPtr chunk;
+    ASSERT_OK(source->get_next(_state.get(), &chunk));
+    EXPECT_EQ(7, chunk->num_rows());
+    EXPECT_EQ(7, source->raw_rows_read());
+    EXPECT_EQ(7, source->num_rows_read());
+    source->close(_state.get());
+}
+
+TEST_F(LanceConnectorTest, EmptyArrowProjectionPreservesRowsAndSlices) {
+    auto batch = arrow::RecordBatch::Make(arrow::schema({}), 7, std::vector<std::shared_ptr<arrow::Array>>{});
+    for (int64_t rows : {0, 1, 4, 7}) {
+        ChunkPtr chunk;
+        ASSERT_OK(LanceNativeReader::convert_batch(_state.get(), _tuple, batch->Slice(7 - rows, rows), &chunk, true));
+        EXPECT_EQ(rows, chunk->num_rows());
+        EXPECT_EQ(1, chunk->num_columns());
+        EXPECT_TRUE(chunk->is_slot_exist(_tuple->slots()[0]->id()));
+    }
+    ChunkPtr chunk;
+    // A zero-column batch in the ordinary path is a schema error, not permission to invent values.
+    EXPECT_FALSE(LanceNativeReader::convert_batch(_state.get(), _tuple, batch, &chunk).ok());
+}
+
+TEST_F(LanceConnectorTest, EmptyProjectionDoesNotReadPlaceholderColumn) {
+    // This column does not exist in the dataset. Only an actual empty projection can succeed.
+    TypeDescriptor type(TYPE_ARRAY);
+    type.children.push_back(TypeDescriptor(TYPE_FLOAT));
+    const auto* tuple = tuple_for_type(type, "unused_vector");
+    ASSERT_NE(nullptr, tuple);
+    TCloudConfiguration cloud;
+    cloud.__set_cloud_type(TCloudType::DEFAULT);
+    LanceNativeReader reader;
+    ASSERT_OK(reader.open(_state.get(), tuple, LANCE_TEST_DATASET, cloud, true));
+    size_t rows = 0;
+    while (true) {
+        ChunkPtr chunk;
+        auto status = reader.get_next(_state.get(), &chunk);
+        if (status.is_end_of_file()) break;
+        ASSERT_OK(status);
+        rows += chunk->num_rows();
+    }
+    EXPECT_EQ(7, rows);
+    // Reopening must restore real projection and conversion.
+    ASSERT_OK(reader.open(_state.get(), _tuple, LANCE_TEST_DATASET, cloud));
+    ChunkPtr chunk;
+    ASSERT_OK(reader.get_next(_state.get(), &chunk));
+    EXPECT_FALSE(chunk->get_column_by_index(0)->is_null(0));
+    reader.close();
 }
 
 TEST_F(LanceConnectorTest, ForwardsCatalogCloudProperties) {
