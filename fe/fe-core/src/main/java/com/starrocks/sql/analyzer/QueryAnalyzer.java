@@ -32,6 +32,7 @@ import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunction;
@@ -187,6 +188,30 @@ public class QueryAnalyzer {
      */
     public void analyzeExternalTablesOnly(StatementBase node, boolean refreshFilesystemExternalTables) {
         new ExternalTablesOnlyVisitor(refreshFilesystemExternalTables).process(node);
+    }
+
+    /** Resolve the write identity even when optional external-source preparse is disabled. */
+    public void resolvePaimonWriteTargetIdentity(StatementBase statement) {
+        if (!(statement instanceof InsertStmt insert) || insert.getTableRef() == null) {
+            return;
+        }
+        TableRef reference = insert.getTableRef();
+        TableName name = new TableName(reference.getCatalogName(), reference.getDbName(), reference.getTableName(),
+                reference.getPos());
+        name.normalization(session);
+        if (CatalogMgr.isInternalCatalog(name.getCatalog())
+                || !GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists(name.getCatalog())
+                || !"paimon".equalsIgnoreCase(GlobalStateMgr.getCurrentState().getCatalogMgr()
+                        .getCatalogType(name.getCatalog()))) {
+            return;
+        }
+        try (Timer ignored = Tracers.watchScope("ResolvePaimonWriteTarget")) {
+            Table table = metadataMgr.getTable(session, name.getCatalog(), name.getDb(), name.getTbl());
+            if (table instanceof PaimonTable paimonTable) {
+                paimonTable.resolveNativeWriteIdentity();
+                session.getPreResolvedState().put(PreResolvedState.WRITE_TARGET, name, table);
+            }
+        }
     }
 
     public void analyze(StatementBase node, Scope parent) {
@@ -2368,6 +2393,9 @@ public class QueryAnalyzer {
                 Table table = metadataMgr.getTable(session, tableName.getCatalog(), tableName.getDb(),
                         tableName.getTbl());
                 if (table != null) {
+                    if (table instanceof PaimonTable paimonTable) {
+                        paimonTable.resolveNativeWriteIdentity();
+                    }
                     session.getPreResolvedState().put(PreResolvedState.WRITE_TARGET, tableName, table);
                 }
             } catch (RuntimeException e) {

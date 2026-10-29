@@ -332,6 +332,10 @@ public:
     // returns the value of the field with the given key
     StatusOr<VariantValue> get_object_by_key(const VariantMetadata& metadata, std::string_view key) const;
 
+    // Get a field by its position in the object's field-id list, without a dictionary lookup.
+    // Object offsets need not be monotonic: the returned view is the child's exact encoded extent.
+    StatusOr<VariantValue> get_object_field_at_index(uint32_t index) const;
+
     // Get the variant value of the object field
     // returns the value of the field with the given field id
     StatusOr<VariantValue> get_element_at_index(const VariantMetadata& metadata, uint32_t index) const;

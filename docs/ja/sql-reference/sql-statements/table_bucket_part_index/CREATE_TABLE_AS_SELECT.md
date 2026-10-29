@@ -63,7 +63,7 @@ CREATE TABLE AS SELECT (CTAS) 文を使用して、同期または非同期で�
 
 ## 使用上の注意
 
-- CTAS 文は、次の要件を満たす新しいテーブルのみを作成できます:
+- OLAP の作成先では、CTAS は以下のテーブルモデルを使用します。Paimon の作成先については、後述の「Paimon catalog での CTAS」を参照してください。
   - `ENGINE` は `OLAP` です。
 
   - テーブルはデフォルトで重複キーテーブルです。`key_desc` で主キーテーブルとして指定することもできます。
@@ -80,6 +80,28 @@ CREATE TABLE AS SELECT (CTAS) 文を使用して、同期または非同期で�
 - 新しいテーブルが作成された後、このテーブルに対する権限をユーザーに手動で付与する必要があります。
 
 - テーブルを非同期でクエリし、クエリ結果に基づいて新しいテーブルを作成する際にタスクの名前を指定しない場合、StarRocks は自動的にタスクの名前を生成します。
+
+## Paimon catalog での CTAS
+
+Paimon DDL とバッチライターはまだ統合作業中であり、実行時に検証済みのリリースでの提供を保証するものではありません。Paimon catalog の作成先は、上記の OLAP テーブルモデルに対する限定的な例外です。`ENGINE` は `paimon` と推論され、OLAP の `FLOAT`/`DOUBLE` から `DECIMAL` への変換、ソートキーのデフォルト設定、分散のデフォルト設定は適用されません。
+
+```sql
+CREATE TABLE paimon_catalog_fs.write_db.orders_ctas
+PRIMARY KEY (id, dt)
+PARTITION BY (dt)
+PROPERTIES (
+    "bucket" = "4",
+    "file.format" = "parquet",
+    "merge-engine" = "deduplicate"
+)
+AS SELECT id, dt, amount FROM paimon_catalog_fs.write_db.orders;
+```
+
+既存の作成先データベースを使用してください。`PRIMARY KEY` は Paimon ネイティブの主キーを宣言し、書き込みには `bucket > 0` が必要です。キーを指定しない場合、CTAS は Append テーブルを作成します。通常のパーティションカラムのリストとネイティブのテーブルオプションを使用し、`DISTRIBUTED BY` や OLAP のキーとソート定義は使用しないでください。元のテーブルのキーやテーブルオプションは自動的には複製されません。
+
+CTAS は書き込み前にテーブルを作成し、この 2 つのステップを合わせた**原子性はありません**。書き込みに失敗した場合、公開 catalog では識別情報を条件とする原子的な削除の安全性を証明できないため、現在の実装は作成済みテーブルを保持します。コミット結果が不明な場合に自動削除や無条件の再試行をしてはいけません。作成先とファイルを保持し、スナップショットを照合してから手動クリーンアップや再試行を判断してください。複数文トランザクションや FE 再起動をまたぐ Exactly-Once リカバリーは未サポートです。
+
+データ書き込みはネイティブ C++ ライターのみを使用し、JNI ライターもフォールバックもありません。FE の Java catalog とスナップショットコミットのプロトコルも JNI を使用しません。サポートする型、デフォルト値、ライターの依存関係、コミット結果、リーダーの制限については、[Paimon catalog](../../../data_source/catalog/paimon_catalog.md) を参照してください。例とエンドツーエンドの動作には、引き続き実行時検証が必要です。
 
 ## 例
 

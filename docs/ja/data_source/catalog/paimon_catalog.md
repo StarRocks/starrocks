@@ -24,7 +24,11 @@ Paimon クラスターで SQL ワークロードを成功させるには、StarR
 
 ## 使用上の注意
 
-Paimon catalog はデータのクエリにのみ使用できます。Paimon catalog を使用して、Paimon クラスターにデータを削除、削除、または挿入することはできません。
+現在の Paimon 統合では、クエリに加え、`CREATE/DROP DATABASE`、`CREATE/DROP TABLE`、バッチ `INSERT INTO`、`INSERT OVERWRITE`、`CREATE TABLE AS SELECT` (CTAS)、同一 catalog 内の `CREATE TABLE LIKE` が実装されています。行単位の `UPDATE` と `DELETE` はサポートしていません。削除できるデータベースは空のものに限られます。
+
+:::caution
+DDL とバッチ書き込みはまだ統合作業中です。以下のテーブル作成と書き込みの説明は現在の実装を示しており、実行時に検証済みのリリースでの提供を保証するものではありません。例とエンドツーエンドの再読み取り動作には、引き続き実行時検証が必要です。
+:::
 
 ## Paimon to StarRocks data types
 
@@ -755,3 +759,124 @@ OLAP テーブル `olap_tbl` があると仮定し、以下のようにデータ
 ```SQL
 INSERT INTO default_catalog.olap_db.olap_tbl SELECT * FROM paimon_table;
 ```
+
+## Paimon テーブルの作成と書き込み
+
+以下は、まだ統合作業中の DDL とバッチライターの説明です。既存の Paimon catalog とデータベースを使用するか、次の例のようにデータベースを作成します。ウェアハウス、メタストア、ストレージ認証情報は catalog の `PROPERTIES` に設定し、テーブルプロパティには指定しないでください。`CREATE DATABASE` では catalog や格納場所の上書き指定はできません。
+
+### データベースとテーブルの作成
+
+`write_db` が存在する場合は `CREATE DATABASE` を省略し、そのデータベースを使用します。テーブルの格納場所は catalog が決定します。`ENGINE` は対象 catalog から `paimon` と推論されます。
+
+```sql
+SET CATALOG paimon_catalog_fs;
+CREATE DATABASE IF NOT EXISTS write_db;
+USE write_db;
+
+CREATE TABLE orders (
+    id BIGINT NOT NULL,
+    dt DATE NOT NULL,
+    amount DECIMAL(12, 2)
+)
+PRIMARY KEY (id, dt)
+PARTITION BY (dt)
+PROPERTIES (
+    "bucket" = "4",
+    "file.format" = "parquet",
+    "merge-engine" = "deduplicate"
+);
+
+CREATE TABLE event_log (
+    id BIGINT,
+    dt DATE,
+    event_time DATETIME,
+    tags ARRAY<STRING>,
+    attributes MAP<STRING, STRING>,
+    details STRUCT<source STRING, attempt INT>,
+    payload VARIANT
+)
+PARTITION BY (dt)
+PROPERTIES (
+    "bucket" = "-1",
+    "file.format" = "parquet"
+);
+```
+
+`PRIMARY KEY` は OLAP テーブルモデルではなく、Paimon ネイティブの主キーを定義します。主キーカラムは NULL を許可しません。書き込み可能な主キーテーブルでは、`bucket > 0` を明示的に設定してください。主キーのないテーブルは Append テーブルです。パーティションには通常のカラムを `PARTITION BY (column, ...)` で指定し、パーティション定義や式は使用しません。ネイティブのバケット設定には、`DISTRIBUTED BY` ではなく、`PROPERTIES` の `bucket` と必要に応じて `bucket-key` を使用します。OLAP の `ORDER BY`、`ROLLUP`、集約カラム、生成カラム、`AUTO_INCREMENT` はサポートしていません。
+
+### 書き込み型とデフォルト値
+
+- 新しいテーブルでは、表現可能なスカラー型 `BOOLEAN`、`TINYINT`、`SMALLINT`、`INT`、`BIGINT`、`FLOAT`、`DOUBLE`、`DECIMAL`、`CHAR`、`VARCHAR`/`STRING`、`VARBINARY`、`DATE`、`DATETIME` をサポートします。`ARRAY`、`MAP`、`STRUCT`、`VARIANT` と、サポート対象型を使用したネスト構造もサポートします。
+- 新しい `DATETIME` カラムはタイムゾーンなしの Paimon `TIMESTAMP(6)` になります。既存テーブルへの書き込みはネイティブのタイムスタンプ種別を使用しますが、公開 C++ 0.3 ライターがサポートする精度は `0`、`3`、`6`、`9` のみです。精度 `1`、`2`、`4`、`5`、`7`、`8` は書き込み能力の検証時に拒否します。タイムゾーン付きの書き込み先では、元の `DATETIME` をセッションのタイムゾーンで解釈します。作成先の精度が `6` 未満で、元の値のマイクロ秒部分を正確に表現できない場合、ライターは暗黙に切り捨てず、その値を拒否します。元の値にマイクロ秒を超える精度を追加するものではなく、リーダー側のタイムスタンプのマッピングや制限も変わりません。
+- 新規作成するネストされた子要素は NULL を許可します。SQL `CREATE TABLE` ではネストされた `NOT NULL` を宣言できません。書き込み時には既存のネイティブの NULL 制約が適用され、`CREATE TABLE LIKE` ではそれらが保持されます。
+- 通常の `LARGEINT` カラムや、サポート対象外または表現できない型は、暗黙に範囲を縮小せず明示的に拒否します。`VARIANT` のサポートは、公開 Paimon リーダーとの符号付き 128 ビット整数全域の相互運用性を保証するものではありません。この相互運用性は未検証です。
+- `DEFAULT` を省略するか、NULL を許可するカラムに限り `DEFAULT NULL` を指定します。NULL 以外のリテラルや式のデフォルト値はサポートしていません。ネイティブの非 NULL デフォルト値を持つ既存テーブルへ挿入する場合は、カラムの省略や `DEFAULT` に依存せず、明示的な値を指定してください。必須カラムと主キーカラムにも値を指定する必要があります。
+
+### バッチ INSERT と CTAS
+
+```sql
+INSERT INTO paimon_catalog_fs.write_db.orders
+VALUES (1, '2026-01-01', 12.34);
+
+CREATE TABLE paimon_catalog_fs.write_db.orders_copy
+PROPERTIES ("bucket" = "-1", "file.format" = "parquet")
+AS SELECT id, dt, amount FROM paimon_catalog_fs.write_db.orders;
+```
+
+[INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) は値またはクエリ結果を受け取ります。主キーのある書き込み先では、StarRocks OLAP の部分更新ではなく、ネイティブの `deduplicate` マージエンジンを使用します。[CTAS](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) はネイティブの新しいテーブルを作成してからクエリ結果を書き込みます。元のテーブルのキーやテーブルオプションは複製しません。この例では Append テーブルを作成します。主キーのある書き込み先を作成するには、`PRIMARY KEY` を宣言し、`bucket > 0` を明示的に設定してください。
+
+CTAS ではテーブル作成とデータ公開を合わせた原子性は保証されません。書き込みに失敗した場合、公開 catalog ではテーブルの識別情報を条件とする原子的な削除ができないため、現在の実装は作成済みテーブルを保守的に保持します。手動でのクリーンアップや再試行の前に、書き込み先を確認して状態を照合してください。公開結果が不明なテーブルを自動削除してはいけません。
+
+### CREATE TABLE LIKE
+
+元のテーブルと作成先は同一の Paimon catalog に属する必要がありますが、異なるデータベースでもかまいません。
+
+```sql
+SET CATALOG paimon_catalog_fs;
+CREATE DATABASE IF NOT EXISTS copy_db;
+CREATE TABLE paimon_catalog_fs.copy_db.orders_like
+LIKE paimon_catalog_fs.write_db.orders;
+```
+
+`LIKE` は、主キーとパーティションキー、ネイティブ型、タイムスタンプの種別と精度、トップレベルおよびネストされた `NOT NULL` 制約を含むネイティブスキーマと、再利用可能なテーブルオプションをコピーします。作成先には新しい識別情報と格納場所が割り当てられ、元のデータファイルやスナップショットはコピーされません。元のテーブル固有の格納場所や認証情報もコピーしません。`LIKE` による作成でも、以下の書き込み能力のチェックは適用されます。
+
+### ライターの制限
+
+- 書き込み先はメインブランチ上のネイティブ File-Store テーブルであり、単一の自動コミット文を使用する必要があります。明示的な複数文トランザクションや、FE 再起動をまたぐ Exactly-Once リカバリーはサポートしていません。
+- データファイルは Parquet のみをサポートします。レベルごとのファイル形式設定もこの制限に従います。このライターは外部データパス (`data-file.external-paths`)、別のデータディレクトリ (`data-file.path-directory`)、補助ファイルを含む committable をサポートしていません。
+- 主キーテーブルには固定バケット (`bucket > 0`) と `merge-engine = deduplicate` が必要です。Append テーブルは Unaware バケット (`bucket = -1`) または固定バケット (`bucket > 0`、ネイティブで必要な `bucket-key` 設定を含む) をサポートします。
+- 主キーテーブルの動的バケット (`bucket = -1`)、Postpone バケット (`bucket = -2`)、グローバルインデックス、Data Evolution、Row Tracking、`FILEBLOB` はサポートしていません。パーティションをまたぐ主キー更新もサポートしていないため、すべてのパーティションカラムを主キーに含める必要があります。
+- パーティション値は現在 `BOOLEAN`、整数型、`CHAR`/`VARCHAR`、`DATE` のみをサポートします。データカラムでのタイムスタンプや小数のサポートは、パーティションカラムには適用されません。NULL を許可するパーティションカラムはネイティブの NULL マーカーを使用します。公開 SDK が空文字列や空白のみの文字列を NULL と区別できないため、そのような文字列パーティション値は明示的に拒否します。予約済みのデフォルトパーティション名も拒否します。
+- データ書き込みには、分離された `libstarrocks_paimon.so` shim を介してネイティブ C++ ライターのみを使用します。ライターライブラリがない場合や互換性がない場合は失敗し、JNI ライターも JNI フォールバックもありません。FE の Java catalog とスナップショットコミットのプロトコルはデータライターとは別であり、JNI を使用しません。公開 Paimon C++ 0.3 と Java 2.0 SDK のベースラインは変更されていません。
+
+### INSERT OVERWRITE
+
+Paimon の上書きは、StarRocks の一時パーティションを入れ替えるのではなく、スナップショットを公開します。パーティション名や一時パーティションは指定できません。静的パーティションにはカラムと値の組を使用し、すべてのパーティションカラムを指定する必要があります。
+
+| モード | 選択条件 | 入力が空の場合 |
+| --- | --- | --- |
+| 全体 | `PARTITION` 句がなく、動的上書きが無効な場合。非パーティションテーブルでも使用します。テーブル全体を置き換えます。 | テーブル全体を空にします。 |
+| 静的 | `PARTITION (column = value, ...)`。指定したパーティションを置き換えます。 | 指定したパーティションを空にします。 |
+| 動的 | 静的パーティション句がなく、パーティションテーブルで `dynamic_overwrite = true` の場合。入力行に含まれるパーティションのみを置き換え、他は保持します。 | 対象パーティションがないため、既存データは変更されません。 |
+
+```sql
+INSERT OVERWRITE paimon_catalog_fs.write_db.orders
+PARTITION (dt = '2026-01-01')
+SELECT id, amount FROM paimon_catalog_fs.write_db.orders_copy
+WHERE dt = '2026-01-01';
+
+INSERT /*+ SET_VAR(dynamic_overwrite = true) */ OVERWRITE paimon_catalog_fs.write_db.orders
+SELECT id, dt, amount FROM paimon_catalog_fs.write_db.orders_copy;
+```
+
+入力が空の `INSERT INTO` もデータを変更しません。全体上書きと静的上書きでは、入力が空でも対象データを消去します。
+
+### コミット結果と再読み取り
+
+空でない書き込み、および入力が空の全体上書きや静的上書きは、FE が Paimon スナップショットの公開を確認した後にのみ成功を返します。BE がファイル書き込みを完了しただけでは成功ではありません。入力が空の追加や動的上書きは、データ変更なしとして確認され、新しいスナップショットは不要です。
+
+:::warning
+エラーに `Paimon commit outcome is unknown for operation ...; preserve its files and reconcile the snapshot before retrying` が含まれる場合、公開結果はすでに永続化されている可能性があります。ファイルと CTAS の作成先を保持し、操作識別子を記録して、Paimon スナップショットを照合してから再試行の要否を判断してください。クライアントに失敗やキャンセルが返っても、文の無条件な再実行や出力の削除はしないでください。
+:::
+
+書き込みによって、上記の `VARIANT` の制限やタイムスタンプとタイムゾーンのマッピングを含む既存のリーダーの制限がなくなるわけではありません。この機能の再読み取り検証は、ネイティブ C++ リーダーと StarRocks ネイティブ Parquet リーダーに限定し、JNI 相互運用性は対象外です。主キーテーブルの結果には、物理的な入力行数ではなくネイティブのマージセマンティクスが適用されます。リーダーの選択、Compaction、タイムスタンプとタイムゾーンの動作、ネイティブ経路での再読み取りには、引き続きエンドツーエンドの実行時検証が必要です。

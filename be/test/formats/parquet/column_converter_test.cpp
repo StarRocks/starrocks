@@ -14,6 +14,7 @@
 
 #include "formats/parquet/column_converter.h"
 
+#include <arrow/builder.h>
 #include <gtest/gtest.h>
 
 #include <filesystem>
@@ -23,11 +24,17 @@
 #include "base/testutil/assert.h"
 #include "base/time/timezone_utils.h"
 #include "base/types/int96.h"
+#include "base/utility/defer_op.h"
+#include "column/arrow/arrow_to_starrocks_converter.h"
 #include "column/binary_column.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
+#include "column/struct_column.h"
+#include "column/variant_column.h"
 #include "common/config_exec_fwd.h"
+#include "common/config_scan_io_fwd.h"
+#include "formats/arrow/arrow_column_converter.h"
 #include "formats/parquet/encoding_dict.h"
 #include "formats/parquet/encoding_plain.h"
 #include "formats/parquet/file_reader.h"
@@ -36,6 +43,7 @@
 #include "fs/fs.h"
 #include "parquet_test_util/util.h"
 #include "runtime/descriptor_helper.h"
+#include "runtime/descriptors.h"
 #include "types/time_types.h"
 #include "types/timestamp_value.h"
 
@@ -841,6 +849,78 @@ TEST_F(ColumnConverterTest, Int96ReadAsTimestampNtz) {
     EXPECT_EQ(timestamp::add<TimeUnit::SECOND>(packed, 8 * 3600), read_back(false));
 }
 
+// Exercise the real factory with Arrow's signed, noncanonical pre-epoch INT96 representation,
+// canonical positive nanoseconds, and arbitrary bytes in NULL rows. Fixed-offset zones make both
+// timezone modes deterministic, including dates outside the usual timezone cache window.
+TEST_F(ColumnConverterTest, Int96SignedNanosecondsRoundTrip) {
+    struct TestCase {
+        int64_t nanos;
+        uint32_t julian;
+        Timestamp expected;
+    };
+    const std::vector<TestCase> cases = {
+            {-1000, 2440588, timestamp::from_datetime(1969, 12, 31, 23, 59, 59, 999999)},
+            {-86400000000000LL, 2440588, timestamp::from_datetime(1969, 12, 31, 0, 0, 0, 0)},
+            {-86400000001000LL, 2440588, timestamp::from_datetime(1969, 12, 30, 23, 59, 59, 999999)},
+            {-85636854775000LL, 2333837, timestamp::from_datetime(1677, 9, 21, 0, 12, 43, 145225)},
+            {85636854775000LL, 2547339, timestamp::from_datetime(2262, 4, 11, 23, 47, 16, 854775)},
+            {86399999999000LL, 2440587, timestamp::from_datetime(1969, 12, 31, 23, 59, 59, 999999)},
+            {123456789000LL, 2440588, timestamp::from_datetime(1970, 1, 1, 0, 2, 3, 456789)},
+            {-1, 2440588, timestamp::from_datetime(1969, 12, 31, 23, 59, 59, 999999)},
+    };
+    const bool old_fast_timezone_conversion = config::parquet_fast_timezone_conversion;
+    DeferOp restore_config([&] { config::parquet_fast_timezone_conversion = old_fast_timezone_conversion; });
+    ParquetField field;
+    field.physical_type = tparquet::Type::INT96;
+    for (bool fast : {false, true}) {
+        config::parquet_fast_timezone_conversion = fast;
+        for (bool ntz : {false, true}) {
+            for (const auto& [zone, offset] : std::vector<std::pair<std::string, int>>{
+                         {"UTC", 0}, {"+08:00", 8 * 3600}, {"-05:30", -(5 * 3600 + 30 * 60)}}) {
+                SCOPED_TRACE(fmt::format("fast={} ntz={} zone={}", fast, ntz, zone));
+                TypeDescriptor type(TYPE_DATETIME);
+                type.datetime_is_ntz = ntz;
+                std::unique_ptr<ColumnConverter> converter;
+                ASSERT_OK(ColumnConverterFactory::create_converter(field, type, zone, &converter));
+                ASSERT_TRUE(converter->need_convert);
+                auto src = converter->create_src_column();
+                auto* src_nullable = down_cast<NullableColumn*>(src.get());
+                auto* src_data = down_cast<FixedLengthColumn<int96_t>*>(src_nullable->data_column_raw_ptr());
+                for (const auto& test : cases) {
+                    src_data->append(int96_t{static_cast<uint64_t>(test.nanos), test.julian});
+                    src_nullable->null_column_raw_ptr()->append(0);
+                }
+                ASSERT_TRUE(src_nullable->append_nulls(1));
+                src_data->get_data().back() = {std::numeric_limits<uint64_t>::max(),
+                                               std::numeric_limits<uint32_t>::max()};
+                auto dst = ColumnHelper::create_column(type, true);
+                ASSERT_OK(converter->convert(src.get(), dst.get()));
+                ASSERT_EQ(cases.size() + 1, dst->size());
+                ASSERT_TRUE(dst->has_null());
+                ASSERT_TRUE(dst->is_null(cases.size()));
+                const auto* dst_nullable = down_cast<const NullableColumn*>(dst.get());
+                const auto& data = down_cast<const TimestampColumn*>(dst_nullable->data_column().get())->get_data();
+                for (size_t i = 0; i < cases.size(); ++i) {
+                    ASSERT_FALSE(dst->is_null(i));
+                    const auto expected = timestamp::add<TimeUnit::SECOND>(cases[i].expected, ntz ? 0 : offset);
+                    EXPECT_EQ(expected, data[i].timestamp()) << "row " << i;
+                }
+                // An all-NULL batch must not normalize payloads or look up their invalid days.
+                auto all_null = converter->create_src_column();
+                ASSERT_TRUE(all_null->append_nulls(1));
+                auto* all_null_nullable = down_cast<NullableColumn*>(all_null.get());
+                down_cast<FixedLengthColumn<int96_t>*>(all_null_nullable->data_column_raw_ptr())->get_data()[0] =
+                        {std::numeric_limits<uint64_t>::max(), std::numeric_limits<uint32_t>::max()};
+                auto null_dst = ColumnHelper::create_column(type, true);
+                ASSERT_OK(converter->convert(all_null.get(), null_dst.get()));
+                ASSERT_EQ(1, null_dst->size());
+                ASSERT_TRUE(null_dst->has_null());
+                ASSERT_TRUE(null_dst->is_null(0));
+            }
+        }
+    }
+}
+
 namespace {
 
 // Nullable source column; null rows hold extreme values, since the converters may compute them too.
@@ -1104,6 +1184,103 @@ TEST_F(ColumnConverterTest, Int32DaysToDateTimeMatchesReference) {
             ASSERT_EQ(expected.timestamp(), dst_data[i].timestamp()) << "row " << i << " day " << days[i];
         }
     }
+}
+
+// This test lives in the Format harness because create_arrow_column also builds the scanner's
+// expression; the core Column harness must not acquire Format/Expr/Runtime dependencies.
+TEST_F(ColumnConverterTest, ArrowNestedVariantParentNullSlicedAppend) {
+    const auto variant_type = arrow::struct_({arrow::field("value", arrow::binary(), false),
+                                              arrow::field("metadata", arrow::binary(), false)});
+    const auto inner_type = arrow::struct_({arrow::field("payload", variant_type, false)});
+    const auto arrow_type = arrow::struct_({arrow::field("inner", inner_type), arrow::field("keep", arrow::int32())});
+    auto values = std::make_shared<arrow::BinaryBuilder>();
+    auto metadata = std::make_shared<arrow::BinaryBuilder>();
+    auto variant = std::make_shared<arrow::StructBuilder>(
+            variant_type, arrow::default_memory_pool(),
+            std::vector<std::shared_ptr<arrow::ArrayBuilder>>{values, metadata});
+    auto inner = std::make_shared<arrow::StructBuilder>(
+            inner_type, arrow::default_memory_pool(), std::vector<std::shared_ptr<arrow::ArrayBuilder>>{variant});
+    auto keep = std::make_shared<arrow::Int32Builder>();
+    arrow::StructBuilder root(arrow_type, arrow::default_memory_pool(), {inner, keep});
+    constexpr std::string_view kMetadata("\x01\x00\x00", 3);
+    constexpr std::string_view kValue("\x09ok", 3);
+    constexpr std::string_view kVariantNull("\x00", 1);
+    // Required physical VARIANT children contain empty, non-null placeholders below a NULL
+    // outer or inner struct. They must not be inspected. Row 5 has the same bytes but is visible.
+    for (int i = 0; i < 6; ++i) {
+        ASSERT_OK(root.Append(i != 1));
+        ASSERT_OK(inner->Append(i != 2));
+        ASSERT_OK(variant->Append());
+        const bool placeholder = i == 1 || i == 2 || i == 5;
+        ASSERT_OK(values->Append(placeholder ? std::string_view{} : i == 4 ? kVariantNull : kValue));
+        ASSERT_OK(metadata->Append(placeholder ? std::string_view{} : kMetadata));
+        ASSERT_OK(keep->Append(100 + i));
+    }
+    std::shared_ptr<arrow::Array> array;
+    ASSERT_OK(root.Finish(&array));
+    ASSERT_OK(array->ValidateFull());
+    auto sliced = array->Slice(1, 4);
+    ASSERT_EQ(1, sliced->offset());
+    TypeDescriptor variant_desc(TYPE_VARIANT);
+    TypeDescriptor inner_desc(TYPE_STRUCT);
+    inner_desc.field_names = {"payload"};
+    inner_desc.children = {variant_desc};
+    TypeDescriptor type(TYPE_STRUCT);
+    // Destination field order differs from Arrow and includes a missing field.
+    type.field_names = {"keep", "inner", "missing"};
+    type.children = {TypeDescriptor(TYPE_INT), inner_desc, TypeDescriptor(TYPE_INT)};
+    SlotDescriptor slot(0, "nested", type);
+    MutableColumnPtr column;
+    ConvertFuncTree plan;
+    Expr* expr = nullptr;
+    ASSERT_OK(create_arrow_column(arrow_type.get(), &slot, &column, &plan, &expr, _pool, true));
+    ASSERT_NE(nullptr, expr);
+    ArrowConvertContext ctx;
+    ctx.current_column_name = "nested";
+    Filter filter(1, 1);
+    ASSERT_OK(convert_arrow_array_to_column(&plan, 1, array.get(), column.get(), 0, 0, &filter, &ctx));
+    filter.resize(3, 1);
+    ASSERT_OK(convert_arrow_array_to_column(&plan, 2, sliced.get(), column.get(), 0, 1, &filter, &ctx));
+    filter.resize(5, 1);
+    // Both the source slice offset and the source/destination append indexes are nonzero.
+    ASSERT_OK(convert_arrow_array_to_column(&plan, 2, sliced.get(), column.get(), 2, 3, &filter, &ctx));
+    column->check_or_die();
+    ASSERT_EQ(5, column->size());
+    ASSERT_TRUE(column->has_null());
+    EXPECT_TRUE(column->is_null(1));
+    EXPECT_FALSE(column->is_null(2));
+    const auto* root_nullable = down_cast<const NullableColumn*>(column.get());
+    const auto* root_col = down_cast<const StructColumn*>(root_nullable->data_column().get());
+    const auto* inner_nullable = down_cast<const NullableColumn*>(root_col->field_column_raw_ptr(1));
+    EXPECT_TRUE(inner_nullable->is_null(1));
+    EXPECT_TRUE(inner_nullable->is_null(2));
+    const auto* inner_col = down_cast<const StructColumn*>(inner_nullable->data_column().get());
+    const auto* payload_nullable = down_cast<const NullableColumn*>(inner_col->field_column_raw_ptr(0));
+    const auto* payload = down_cast<const VariantColumn*>(payload_nullable->data_column().get());
+    ASSERT_EQ(5, payload->size());
+    for (size_t i = 0; i < column->size(); ++i) {
+        EXPECT_TRUE(root_col->field_column_raw_ptr(2)->is_null(i));
+        EXPECT_EQ(i == 1 || i == 2, payload_nullable->is_null(i));
+        if (i != 1) {
+            EXPECT_EQ(100 + i, root_col->field_column_raw_ptr(0)->get(i).get_int32());
+        }
+        if (i == 1 || i == 2) {
+            continue;
+        }
+        VariantRowRef row;
+        ASSERT_TRUE(payload->try_get_row_ref(i, &row));
+        EXPECT_EQ(kMetadata, row.get_metadata().raw());
+        EXPECT_EQ(i == 4 ? kVariantNull : kValue, row.get_value().raw());
+        EXPECT_EQ(i == 4, row.is_null());
+    }
+    auto invalid_column = column->clone_empty();
+    Filter invalid_filter(1, 1);
+    auto invalid_slice = array->Slice(5, 1);
+    auto st = convert_arrow_array_to_column(&plan, 1, invalid_slice.get(), invalid_column.get(), 0, 0,
+                                            &invalid_filter, &ctx);
+    ASSERT_FALSE(st.ok());
+    EXPECT_NE(std::string::npos, st.message().find("empty value"));
+    EXPECT_NE(std::string::npos, st.message().find("nested"));
 }
 
 } // namespace starrocks::parquet

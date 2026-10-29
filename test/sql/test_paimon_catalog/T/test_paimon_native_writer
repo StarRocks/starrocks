@@ -1,0 +1,89 @@
+-- name: test_paimon_native_writer
+-- All mutations are confined to this case's unique temporary warehouse.
+create external catalog paimon_write_${uuid0}
+properties (
+"type" = "paimon",
+"paimon.catalog.type" = "filesystem",
+"paimon.catalog.warehouse" = "oss://${oss_bucket}/tmp/paimon_native_writer/${uuid0}/",
+"aws.s3.access_key" = "${oss_ak}",
+"aws.s3.secret_key" = "${oss_sk}",
+"aws.s3.endpoint" = "${oss_endpoint}"
+);
+set time_zone = 'UTC';
+set paimon_reader_mode = 'native';
+create database paimon_write_${uuid0}.writer_db;
+
+create table paimon_write_${uuid0}.writer_db.append_rows (
+    id int not null,
+    value varchar(64),
+    p varchar(32)
+) partition by (p)
+properties ("bucket" = "-1", "file.format" = "parquet");
+insert into paimon_write_${uuid0}.writer_db.append_rows values (1, 'one', 'a/b'), (2, NULL, NULL);
+insert into paimon_write_${uuid0}.writer_db.append_rows (p, value, id) select 'a/b', 'three', 3;
+[ORDER]select id, value, p from paimon_write_${uuid0}.writer_db.append_rows order by id;
+function: assert_paimon_reader("select id, value, p from paimon_write_${uuid0}.writer_db.append_rows", "append_rows", "starrocks")
+
+create table paimon_write_${uuid0}.writer_db.pk_rows (
+    id bigint not null,
+    value varchar(64),
+    p varchar(32) not null
+) primary key (id, p)
+partition by (p)
+properties ("bucket" = "4", "file.format" = "parquet");
+insert into paimon_write_${uuid0}.writer_db.pk_rows values (1, 'old', 'a'), (2, 'two', 'b');
+insert into paimon_write_${uuid0}.writer_db.pk_rows select 1, 'new', 'a';
+[ORDER]select id, value, p from paimon_write_${uuid0}.writer_db.pk_rows order by id;
+-- Uncompacted primary-key files require the Paimon SDK rather than the raw-file bypass.
+function: assert_paimon_reader("select id, value, p from paimon_write_${uuid0}.writer_db.pk_rows", "pk_rows", "native")
+
+create table paimon_write_${uuid0}.writer_db.copied_rows
+properties ("bucket" = "-1", "file.format" = "parquet")
+as select id, value, p from paimon_write_${uuid0}.writer_db.append_rows;
+[ORDER]select id, value, p from paimon_write_${uuid0}.writer_db.copied_rows order by id;
+create table paimon_write_${uuid0}.writer_db.like_rows like paimon_write_${uuid0}.writer_db.append_rows;
+select count(*) from paimon_write_${uuid0}.writer_db.like_rows;
+insert into paimon_write_${uuid0}.writer_db.like_rows select * from paimon_write_${uuid0}.writer_db.append_rows;
+[ORDER]select id, value, p from paimon_write_${uuid0}.writer_db.like_rows order by id;
+
+insert overwrite paimon_write_${uuid0}.writer_db.append_rows partition (p = 'a/b')
+select 10, 'replacement';
+[ORDER]select id, value, p from paimon_write_${uuid0}.writer_db.append_rows order by id;
+insert overwrite paimon_write_${uuid0}.writer_db.append_rows partition (p = 'a/b')
+select 0, 'unused' where false;
+[ORDER]select id, value, p from paimon_write_${uuid0}.writer_db.append_rows order by id;
+set dynamic_overwrite = true;
+insert overwrite paimon_write_${uuid0}.writer_db.append_rows select 11, 'dynamic', 'new_partition';
+[ORDER]select id, value, p from paimon_write_${uuid0}.writer_db.append_rows order by id;
+insert overwrite paimon_write_${uuid0}.writer_db.append_rows
+select id, value, p from paimon_write_${uuid0}.writer_db.append_rows where false;
+[ORDER]select id, value, p from paimon_write_${uuid0}.writer_db.append_rows order by id;
+set dynamic_overwrite = false;
+insert overwrite paimon_write_${uuid0}.writer_db.append_rows
+select id, value, p from paimon_write_${uuid0}.writer_db.append_rows where false;
+select count(*) from paimon_write_${uuid0}.writer_db.append_rows;
+
+create table paimon_write_${uuid0}.writer_db.nested_rows (
+    id int,
+    a array<int>,
+    m map<varchar(16), int>,
+    r struct<field_value int>,
+    v variant,
+    t datetime
+) properties ("bucket" = "-1", "file.format" = "parquet");
+insert into paimon_write_${uuid0}.writer_db.nested_rows
+select 1, [1, NULL, 3], map{'x': 7}, named_struct('field_value', 9),
+       cast(parse_json('{"a":42,"b":false}') as variant), cast('1969-12-31 23:59:59.999999' as datetime);
+[ORDER]select id, a[1], a[2], a[3], m['x'], r.field_value,
+    cast(variant_query(v, '$.a') as int), cast(variant_query(v, '$.b') as boolean), cast(t as varchar)
+from paimon_write_${uuid0}.writer_db.nested_rows order by id;
+
+-- Explicit drops touch only objects created in this warehouse; DROP DATABASE is not recursive.
+drop table paimon_write_${uuid0}.writer_db.nested_rows;
+drop table paimon_write_${uuid0}.writer_db.like_rows;
+drop table paimon_write_${uuid0}.writer_db.copied_rows;
+drop table paimon_write_${uuid0}.writer_db.pk_rows;
+drop table paimon_write_${uuid0}.writer_db.append_rows;
+drop database paimon_write_${uuid0}.writer_db;
+set catalog default_catalog;
+drop catalog paimon_write_${uuid0};

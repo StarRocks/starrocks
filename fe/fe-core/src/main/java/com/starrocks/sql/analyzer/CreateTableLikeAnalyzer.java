@@ -15,14 +15,20 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.TableOperation;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.connector.paimon.PaimonTableLikeHelper;
+import com.starrocks.connector.paimon.PaimonTableSchemaConverter;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateTemporaryTableLikeStmt;
@@ -32,8 +38,10 @@ import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.SqlParser;
+import org.apache.paimon.table.FileStoreTable;
 
 import java.util.List;
+import java.util.Map;
 
 public class CreateTableLikeAnalyzer {
 
@@ -51,6 +59,10 @@ public class CreateTableLikeAnalyzer {
                 context, existedTableName.getCatalog(), existedTableName.getDb(), existedTableName.getTbl());
         if (table == null) {
             throw new SemanticException("Table %s is not found", existedTableName.getTbl());
+        }
+        if (table.isPaimonTable() || isPaimonCatalog(targetTableName.getCatalog())) {
+            analyzePaimon(stmt, context, table, targetTableName, existedTableName);
+            return;
         }
         MetaUtils.checkNotSupportCatalog(table, TableOperation.CREATE_TABLE_LIKE, existedTableName.getCatalog());
 
@@ -95,5 +107,47 @@ public class CreateTableLikeAnalyzer {
         } else {
             ErrorReport.reportSemanticException(ErrorCode.ERROR_CREATE_TABLE_LIKE_UNSUPPORTED_VIEW);
         }
+    }
+
+    private static void analyzePaimon(CreateTableLikeStmt stmt, ConnectContext context, Table table,
+                                      TableName target, TableName source) {
+        MetaUtils.checkCatalogExistAndReport(source.getCatalog());
+        MetaUtils.checkCatalogExistAndReport(target.getCatalog());
+        if (stmt instanceof CreateTemporaryTableLikeStmt) {
+            throw new SemanticException("Paimon CREATE TABLE LIKE does not support temporary tables");
+        }
+        if (!(table instanceof PaimonTable) || !isPaimonCatalog(source.getCatalog())
+                || !isPaimonCatalog(target.getCatalog()) || !source.getCatalog().equals(target.getCatalog())) {
+            throw new SemanticException("Paimon CREATE TABLE LIKE requires source and target in the same " +
+                    "external Paimon catalog");
+        }
+        if (stmt.getPartitionDesc() != null || stmt.getDistributionDesc() != null) {
+            throw new SemanticException("Paimon CREATE TABLE LIKE does not support PARTITION BY or DISTRIBUTED BY overrides");
+        }
+        MetadataMgr metadata = GlobalStateMgr.getCurrentState().getMetadataMgr();
+        if (metadata.getDb(context, target.getCatalog(), target.getDb()) == null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, target.getDb());
+        }
+        if (metadata.tableExists(context, target.getCatalog(), target.getDb(), target.getTbl()) && !stmt.isSetIfNotExists()) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_TABLE_EXISTS_ERROR, target.getTbl());
+        }
+        org.apache.paimon.table.Table nativeTable = ((PaimonTable) table).getNativeTable();
+        if (!(nativeTable instanceof FileStoreTable)) {
+            throw new SemanticException("Paimon CREATE TABLE LIKE only supports native file-store tables");
+        }
+        // Validate using the complete native schema, not the lossy read-side StarRocks columns or SHOW CREATE SQL.
+        PaimonTableLikeHelper.copySchema((FileStoreTable) nativeTable, stmt.getProperties());
+        Map<String, String> options = PaimonTableSchemaConverter.tableOptions(stmt.getProperties());
+        // Authorization reads this target descriptor. Execution must copy the current native schema instead.
+        stmt.setCreateTableStmt(new CreateTableStmt(stmt.isSetIfNotExists(), true, stmt.getTableRef(), List.of(),
+                "paimon", null, null, null, options, null, ""));
+    }
+
+    private static boolean isPaimonCatalog(String catalogName) {
+        if (!CatalogMgr.isExternalCatalog(catalogName)) {
+            return false;
+        }
+        Catalog catalog = GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogByName(catalogName);
+        return catalog != null && "paimon".equalsIgnoreCase(catalog.getType());
     }
 }

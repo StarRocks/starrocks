@@ -295,6 +295,7 @@ Status ExecFactory::create_vectorized_node(RuntimeState* state, ObjectPool* pool
         CREATE_NODE(AssertNumRowsNode, pool, tnode, descs);
         return Status::OK();
     case TPlanNodeType::PROJECT_NODE:
+    case TPlanNodeType::PAIMON_BUCKET_ROUTING_NODE:
         CREATE_NODE(ProjectNode, pool, tnode, descs);
         return Status::OK();
     case TPlanNodeType::AI_PROJECT_NODE:

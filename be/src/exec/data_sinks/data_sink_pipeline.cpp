@@ -21,9 +21,11 @@
 #include "data_sink/external/blackhole_table_sink.h"
 #include "data_sink/external/export_sink.h"
 #include "data_sink/external/hive_table_sink.h"
+#include "data_sink/external/paimon_table_sink.h"
 #include "data_sink/tablet/multi_olap_table_sink.h"
 #include "data_sink/tablet/olap_table_sink.h"
 #include "exec/data_sinks/hive_table_sink_pipeline_builder.h"
+#include "exec/data_sinks/paimon_table_sink_pipeline_builder.h"
 #include "exec/data_sinks/table_function_table_sink_pipeline_builder.h"
 #include "exec/pipeline/exchange/exchange_sink_operator.h"
 #include "exec/pipeline/exchange/multi_cast_local_exchange.h"
@@ -282,6 +284,9 @@ Status DataSink::decompose_data_sink_to_pipeline(pipeline::PipelineBuilderContex
         RETURN_IF_ERROR(
                 decompose_iceberg_table_sink_to_pipeline(*iceberg_table_sink, prev_operators, thrift_sink, context));
 #endif
+    } else if (typeid(*this) == typeid(PaimonTableSink)) {
+        auto* paimon_table_sink = down_cast<PaimonTableSink*>(this);
+        RETURN_IF_ERROR(decompose_paimon_table_sink_to_pipeline(*paimon_table_sink, prev_operators, thrift_sink, context));
     } else if (typeid(*this) == typeid(HiveTableSink)) {
         auto* hive_table_sink = down_cast<HiveTableSink*>(this);
         RETURN_IF_ERROR(decompose_hive_table_sink_to_pipeline(*hive_table_sink, prev_operators, thrift_sink, context));

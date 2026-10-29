@@ -18,6 +18,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
+import com.starrocks.connector.paimon.PaimonTableSchemaConverter;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.ColumnDef;
@@ -112,22 +113,33 @@ public class CTASAnalyzer {
             }
         }
 
-        // For replication_num, The behavior is the same as creating a table
-        int defaultReplicationNum = RunMode.defaultReplicationNum();
+        if (createTableStmt.getEngineName().equalsIgnoreCase("paimon")) {
+            // Query-derived nullability does not make a declared Paimon primary key nullable.
+            List<String> primaryKeys = PaimonTableSchemaConverter.primaryKeys(createTableStmt);
+            for (ColumnDef columnDef : createTableStmt.getColumnDefs()) {
+                if (primaryKeys.contains(columnDef.getName())) {
+                    columnDef.setAllowNull(false);
+                }
+            }
+        }
 
-        Map<String, String> stmtProperties = createTableStmt.getProperties();
-        if (null == stmtProperties) {
-            Map<String, String> properties = Maps.newHashMap();
-            properties.put("replication_num", String.valueOf(defaultReplicationNum));
-            createTableStmt.setProperties(properties);
-        } else if (!stmtProperties.containsKey("replication_num")) {
-            stmtProperties.put("replication_num", String.valueOf(defaultReplicationNum));
+        // Replication and distribution defaults belong to OLAP, not external table options.
+        if (createTableStmt.isOlapEngine()) {
+            int defaultReplicationNum = RunMode.defaultReplicationNum();
+            Map<String, String> stmtProperties = createTableStmt.getProperties();
+            if (stmtProperties == null) {
+                Map<String, String> properties = Maps.newHashMap();
+                properties.put("replication_num", String.valueOf(defaultReplicationNum));
+                createTableStmt.setProperties(properties);
+            } else if (!stmtProperties.containsKey("replication_num")) {
+                stmtProperties.put("replication_num", String.valueOf(defaultReplicationNum));
+            }
         }
 
         PartitionDesc partitionDesc = createTableStmt.getPartitionDesc();
         List<ColumnDef> columnDefs = createTableStmt.getColumnDefs();
 
-        if (partitionDesc instanceof ExpressionPartitionDesc) {
+        if (partitionDesc instanceof ExpressionPartitionDesc && createTableStmt.isOlapEngine()) {
             ExpressionPartitionDesc expressionPartitionDesc = (ExpressionPartitionDesc) partitionDesc;
             FunctionCallExpr functionCallExpr = (FunctionCallExpr) expressionPartitionDesc.getExpr();
             AnalyzerUtils.checkAndExtractPartitionCol(functionCallExpr, columnDefs);

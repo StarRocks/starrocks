@@ -63,6 +63,10 @@ namespace starrocks {
 namespace {
 
 void redact_plan_credentials(TPlanNode& node) {
+    if (node.__isset.project_node && node.project_node.__isset.paimon_bucket_routing) {
+        // This opaque binary TPaimonTableSink contains cloud credentials and native options.
+        node.project_node.paimon_bucket_routing.__set_sink_payload(std::string(kCredentialMask));
+    }
     if (!node.__isset.ai_project_node) {
         return;
     }
@@ -77,6 +81,19 @@ void redact_plan_credentials(TPlanNode& node) {
 void redact_plan_credentials(TPlanFragment& fragment) {
     for (auto& node : fragment.plan.nodes) {
         redact_plan_credentials(node);
+    }
+    if (fragment.__isset.output_sink && fragment.output_sink.__isset.paimon_table_sink) {
+        // Only the diagnostic copy reaches here. Besides credentials, paths/options/schema may
+        // themselves contain tokens; do not attempt to recognize individual sensitive keys.
+        auto& sink = fragment.output_sink.paimon_table_sink;
+        sink.__set_cloud_configuration(TCloudConfiguration{});
+        sink.__set_options({});
+        sink.__set_schema_json(std::string(kCredentialMask));
+        sink.__set_location(std::string(kCredentialMask));
+        sink.__set_table_identity(std::string(kCredentialMask));
+        sink.__set_static_partition({});
+        sink.__set_commit_user(std::string(kCredentialMask));
+        sink.__set_operation_id(std::string(kCredentialMask));
     }
 }
 

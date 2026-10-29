@@ -34,6 +34,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.elasticsearch.EsUtil;
+import com.starrocks.connector.paimon.PaimonTableSchemaConverter;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -128,7 +129,12 @@ public class CreateTableAnalyzer {
         analyzeCharsetName(statement);
 
         com.starrocks.catalog.TableName tableNameObj = com.starrocks.catalog.TableName.fromTableRef(tableRef);
-        analyzeMultiExprsPartition(statement, tableNameObj);
+        if (statement.getEngineName().equalsIgnoreCase("paimon")) {
+            // Paimon partition columns and primary keys must not use OLAP generated-column/key rewrites.
+            PaimonTableSchemaConverter.analyze(statement);
+        } else {
+            analyzeMultiExprsPartition(statement, tableNameObj);
+        }
         preCheckColumnRef(statement);
         analyzeKeysDesc(statement);
         analyzePartitionDesc(statement);
@@ -143,6 +149,8 @@ public class CreateTableAnalyzer {
         analyzeIndexDefs(statement);
         if (statement.isOlapEngine()) {
             validateComplexTypeDefaultValues(statement);
+        } else if (statement.getEngineName().equalsIgnoreCase("paimon")) {
+            PaimonTableSchemaConverter.toSchema(statement);
         }
     }
 
@@ -282,7 +290,8 @@ public class CreateTableAnalyzer {
                 throw new SemanticException(engineName + " external table don't support complex type", columnDef.getPos());
             }
 
-            if (!statement.isOlapEngine() && !engineName.equalsIgnoreCase(Table.TableType.HIVE.name())) {
+            if (!statement.isOlapEngine() && !engineName.equalsIgnoreCase(Table.TableType.HIVE.name())
+                    && !engineName.equalsIgnoreCase("paimon")) {
                 columnDef.setIsKey(true);
             }
 
@@ -317,6 +326,10 @@ public class CreateTableAnalyzer {
 
     private static void analyzeKeysDesc(CreateTableStmt stmt) {
         KeysDesc keysDesc = stmt.getKeysDesc();
+        if (stmt.getEngineName().equalsIgnoreCase("paimon")) {
+            // Paimon primary keys need not be a prefix of the schema and do not imply REPLACE aggregation.
+            return;
+        }
         if (!stmt.isOlapEngine()) {
             // mysql, broker, iceberg, hudi and hive do not need key desc
             if (keysDesc != null) {
@@ -687,6 +700,10 @@ public class CreateTableAnalyzer {
 
     public static void analyzePartitionDesc(CreateTableStmt stmt) {
         String engineName = stmt.getEngineName();
+        if (engineName.equalsIgnoreCase("paimon")) {
+            PaimonTableSchemaConverter.analyze(stmt);
+            return;
+        }
         PartitionDesc partitionDesc = stmt.getPartitionDesc();
         if (stmt.isOlapEngine()) {
             if (partitionDesc != null) {

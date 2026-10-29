@@ -453,4 +453,65 @@ PARALLEL_TEST(VariantBuilderTest, array_builder_null_element_demonstrates_bug1_d
     ASSERT_EQ(R"([{"type":"A"},null,{"type":"C"}])", json.value());
 }
 
+PARALLEL_TEST(VariantBuilderTest, nonmonotonic_object_offsets_preserve_exact_children) {
+    // Fields a/b are in lexical order; b's value is physically before a's longer string value.
+    const char metadata[] = {0x11, 2, 0, 1, 2, 'a', 'b'};
+    const char value[] = {2, 2, 0, 1, 1, 0, 5, 0, 13, 'x', 'y', 'z'};
+    VariantRowValue base(std::string_view(metadata, sizeof(metadata)), std::string_view(value, sizeof(value)));
+    auto field_a = base.get_value().get_object_field_at_index(0);
+    auto field_b = base.get_value().get_object_field_at_index(1);
+    ASSERT_TRUE(field_a.ok()) << field_a.status();
+    ASSERT_TRUE(field_b.ok()) << field_b.status();
+    ASSERT_EQ(std::string_view(value + 8, 4), field_a->raw());
+    ASSERT_EQ(VariantValue::kEmptyValue, field_b->raw());
+    ASSERT_FALSE(base.get_value().get_object_field_at_index(2).ok());
+    auto by_key = base.get_value().get_object_by_key(base.get_metadata(), "a");
+    ASSERT_TRUE(by_key.ok()) << by_key.status();
+    ASSERT_EQ(field_a->raw(), by_key->raw());
+
+    auto patch = VariantEncoder::encode_json_text_to_variant("false");
+    ASSERT_TRUE(patch.ok());
+    auto out = VariantBuilder::build_row_from_overlays_strict(
+            base.as_ref(), {{.path = MakePath("c"), .value = std::move(patch).value()}});
+    ASSERT_TRUE(out.ok()) << out.status();
+    auto a = out->get_value().get_object_by_key(out->get_metadata(), "a");
+    auto b = out->get_value().get_object_by_key(out->get_metadata(), "b");
+    auto c = out->get_value().get_object_by_key(out->get_metadata(), "c");
+    ASSERT_TRUE(a.ok());
+    ASSERT_TRUE(b.ok());
+    ASSERT_TRUE(c.ok());
+    ASSERT_EQ(field_a->raw(), a->raw());
+    ASSERT_EQ(field_b->raw(), b->raw());
+    ASSERT_EQ(VariantType::BOOLEAN_FALSE, c->type());
+    ASSERT_EQ(std::string_view(value, sizeof(value)), base.get_value().raw());
+}
+
+PARALLEL_TEST(VariantBuilderTest, strict_rejects_malformed_base_before_root_replacement) {
+    const char truncated_int[] = {static_cast<char>(static_cast<uint8_t>(VariantType::INT64) << 2), 1};
+    VariantRowRef base(VariantMetadata::kEmptyMetadata, std::string_view(truncated_int, sizeof(truncated_int)));
+    auto result = VariantBuilder::build_row_from_overlays_strict(
+            base, {{.path = VariantPath{}, .value = VariantRowValue::from_null()}});
+    ASSERT_FALSE(result.ok());
+    // A scalar null with trailing bytes is not an encoded null value either.
+    const char null_with_trailing[] = {0, 0};
+    ASSERT_FALSE(VariantBuilder::validate_row_strict(VariantMetadata::kEmptyMetadata,
+                                                    std::string_view(null_with_trailing, 2))
+                         .ok());
+}
+
+PARALLEL_TEST(VariantBuilderTest, strict_keeps_array_offsets_in_index_order_and_bounds_nesting) {
+    const char invalid_array[] = {3, 2, 1, 0, 2, 0, 0};
+    ASSERT_FALSE(VariantBuilder::validate_row_strict(VariantMetadata::kEmptyMetadata,
+                                                    std::string_view(invalid_array, sizeof(invalid_array)))
+                         .ok());
+    std::string nested(VariantValue::kEmptyValue);
+    for (size_t i = 0; i < VariantBuilder::kMaxStrictDepth + 1; ++i) {
+        std::string parent;
+        VariantEncoder::append_array_container(&parent, {static_cast<uint32_t>(nested.size())}, nested);
+        nested = std::move(parent);
+    }
+    ASSERT_FALSE(VariantBuilder::validate_row_strict(VariantMetadata::kEmptyMetadata, nested).ok());
+    ASSERT_FALSE(VariantBuilder::build_row_from_overlays_strict(std::nullopt, {}).ok());
+}
+
 } // namespace starrocks

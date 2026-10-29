@@ -69,7 +69,8 @@ enum TDataSinkType {
     SPLIT_DATA_STREAM_SINK = 15,
     NOOP_SINK = 16,
     ICEBERG_DELETE_SINK = 17,
-    ICEBERG_ROW_DELTA_SINK = 18
+    ICEBERG_ROW_DELTA_SINK = 18,
+    PAIMON_TABLE_SINK = 19
 }
 
 enum TResultSinkType {
@@ -336,6 +337,33 @@ struct TSplitDataStreamSink {
     3: optional list<Exprs.TExpr> splitExprs;
 }
 
+// Frozen write contract. Native schema JSON retains field ids, nested nullability and
+// timestamp precision that cannot be reconstructed from the scan tuple alone.
+struct TPaimonTableSink {
+    1: optional i64 target_table_id
+    2: optional i32 tuple_id
+    3: optional string location
+    4: optional string table_identity
+    5: optional i64 schema_id
+    6: optional string schema_json
+    7: optional list<string> column_names
+    8: optional list<string> partition_columns
+    9: optional list<string> bucket_columns
+    10: optional list<string> primary_key_columns
+    11: optional i32 bucket_count
+    12: optional map<string, string> options
+    13: optional string commit_user
+    14: optional i64 commit_identifier
+    15: optional string operation_id
+    16: optional string overwrite_mode
+    17: optional map<string, string> static_partition
+    18: optional CloudConfiguration.TCloudConfiguration cloud_configuration
+    19: optional string time_zone
+    20: optional i32 writer_protocol_version
+    21: optional i32 routing_bucket_slot_id
+    22: optional bool bucket_routed
+}
+
 // Extension point for TDataSink. DO NOT MODIFY: do not add fields here, and do
 // not rename, renumber or remove it. The field numbers inside are allocated
 // separately, so anything added here collides with them, and renaming or
@@ -362,4 +390,5 @@ struct TDataSink {
   16: optional i64 sink_id
   17: optional TSplitDataStreamSink split_stream_sink
   18: optional TDataSinkExt ext
+  19: optional TPaimonTableSink paimon_table_sink
 }

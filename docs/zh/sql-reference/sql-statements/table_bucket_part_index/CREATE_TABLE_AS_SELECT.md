@@ -62,7 +62,7 @@ CREATE TABLE AS SELECT（简称 CTAS）语句可用于同步或异步查询原�
 
 ## 注意事项
 
-- 使用 CTAS 语句创建的新表需满足如下条件：
+- 对于 OLAP 目标表，CTAS 使用以下表模型。Paimon 目标表请参见下文的“Paimon Catalog 中的 CTAS”。
   - `ENGINE` 类型为 `OLAP`。
 
   - 表类型默认为明细表，您也可以在 `key_desc` 中指定为主键表。
@@ -78,6 +78,28 @@ CREATE TABLE AS SELECT（简称 CTAS）语句可用于同步或异步查询原�
 
 - 新表创建成功后，您需要手动授予用户对该表的权限。参见 [表权限](../../../administration/user_privs/authorization/privilege_item.md#表权限-table) 和 [GRANT](../account-management/GRANT.md)。
 - 当异步查询原表并基于查询结果创建新表时，如果不指定 Task 名称，那么 StarRocks 会自动生成一个 Task 名称。
+
+## Paimon Catalog 中的 CTAS
+
+Paimon DDL 和批量 Writer 仍处于集成阶段，不代表已通过运行时验证的版本可用性。Paimon Catalog 目标表是上述 OLAP 表模型的特定例外：`ENGINE` 自动推断为 `paimon`，不应用 OLAP 的 `FLOAT`/`DOUBLE` 到 `DECIMAL` 的转换、默认排序键和默认分布设置。
+
+```sql
+CREATE TABLE paimon_catalog_fs.write_db.orders_ctas
+PRIMARY KEY (id, dt)
+PARTITION BY (dt)
+PROPERTIES (
+    "bucket" = "4",
+    "file.format" = "parquet",
+    "merge-engine" = "deduplicate"
+)
+AS SELECT id, dt, amount FROM paimon_catalog_fs.write_db.orders;
+```
+
+请使用已有的目标数据库。`PRIMARY KEY` 声明 Paimon 原生主键，写入要求 `bucket > 0`；不声明主键时，CTAS 创建 Append 表。请使用普通分区列列表和原生表属性，不要使用 `DISTRIBUTED BY` 或 OLAP Key/排序定义。源表的主键和表属性不会自动克隆。
+
+CTAS 先建表再写入，这两个步骤**不具有原子性**。如果写入失败，当前实现会保留已创建的表，因为公共 Catalog 无法证明按表身份执行原子条件删除是安全的。提交结果未知时，绝不能自动删表或盲目重试。请保留目标表和文件，核对快照后再手动清理或决定是否重试。不支持多语句事务，也不保证跨 FE 重启的 Exactly-Once 恢复。
+
+数据写入仅使用原生 C++ Writer，不提供 JNI Writer 或回退。FE 的 Java Catalog 和快照提交协议不通过 JNI 执行。支持的类型、默认值、Writer 依赖、提交结果和读取限制，请参见 [Paimon catalog](../../../data_source/catalog/paimon_catalog.md)。示例和端到端行为仍需运行时验证。
 
 ## 示例
 

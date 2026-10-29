@@ -145,6 +145,8 @@ public class StatementPlanner {
             SPMPlanner spmPlanner = new SPMPlanner(session);
             stmt = spmPlanner.plan(stmt);
 
+            // Paimon uuid resolution may read storage; freeze it before any FE metadata lock, independent of preparse flags.
+            new QueryAnalyzer(session).resolvePaimonWriteTargetIdentity(stmt);
             plannerMetaLocker = new PlannerMetaLocker(session, stmt);
             // Analyze
             analyzeStatement(stmt, session, plannerMetaLocker);
@@ -983,7 +985,7 @@ public class StatementPlanner {
         }
         if (stmt instanceof InsertStmt && ((InsertStmt) stmt).isOverwrite() &&
                 !((InsertStmt) stmt).hasOverwriteJob() &&
-                !(targetTable.isIcebergTable() || targetTable.isHiveTable())) {
+                !(targetTable.isIcebergTable() || targetTable.isHiveTable() || targetTable.isPaimonTable())) {
             return;
         }
 
@@ -1031,8 +1033,8 @@ public class StatementPlanner {
                     tbl.getSourceTablePort(),
                     authenticateParams);
         } else if (targetTable instanceof SystemTable || targetTable.isIcebergTable() || targetTable.isHiveTable()
-                || targetTable.isTableFunctionTable() || targetTable.isBlackHoleTable()) {
-            // schema table and iceberg and hive table does not need txn
+                || targetTable.isPaimonTable() || targetTable.isTableFunctionTable() || targetTable.isBlackHoleTable()) {
+            // External connector sinks publish through their catalog, not the native FE transaction manager.
         } else {
             long dbId = db.getId();
             txnId = transactionMgr.beginTransaction(

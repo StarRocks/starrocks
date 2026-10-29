@@ -45,6 +45,7 @@
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
 #include "types/value_generator.h"
+#include "types/variant_value.h"
 
 namespace starrocks {
 
@@ -129,6 +130,16 @@ void fill_filter(const arrow::Array* array, size_t array_start_idx, size_t num_e
 Status convert_arrow_array_to_column(ConvertFuncTree* conv_func, size_t num_elements, const arrow::Array* array,
                                      Column* column, size_t batch_start_idx, size_t chunk_start_idx,
                                      Filter* chunk_filter, ArrowConvertContext* conv_ctx) {
+    const auto array_size = static_cast<size_t>(array->length());
+    if (batch_start_idx > array_size || num_elements > array_size - batch_start_idx) {
+        return Status::InvalidArgument("Arrow conversion source range is out of bounds");
+    }
+    if (chunk_start_idx != column->size()) {
+        return Status::InvalidArgument("Arrow conversion must append at the end of the destination column");
+    }
+    if (num_elements == 0) {
+        return Status::OK();
+    }
     if (array->type_id() == ArrowTypeId::DICTIONARY) {
         auto* dictionary_type = down_cast<const arrow::DictionaryType*>(array->type().get());
         auto sliced_array = array->Slice(batch_start_idx, num_elements);
@@ -1074,16 +1085,22 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, StructGurad<LT>> {
         for (size_t i = 0; i < conv_func->field_names.size(); i++) {
             const auto& child_name = conv_func->field_names[i];
             ASSIGN_OR_RETURN(auto* child_col, struct_col->field_column_raw_ptr(child_name));
-            auto child_array = struct_array->GetFieldByName(child_name);
+            const auto child_index = struct_array->struct_type()->GetFieldIndex(child_name);
 
-            if (child_array == nullptr) {
+            if (child_index < 0) {
                 // default null
                 DCHECK(child_col->is_nullable());
                 child_col->append_nulls(num_elements);
                 continue;
             }
 
-            RETURN_IF_ERROR(convert_arrow_array_to_column(conv_func->children[i].get(), num_elements, child_array.get(),
+            // A child's own validity does not include its parent's. Flatten the field so required
+            // physical children (notably VARIANT binaries) under a NULL struct are never read.
+            auto child_array = struct_array->GetFlattenedField(child_index);
+            if (!child_array.ok()) {
+                return Status::InternalError(child_array.status().ToString());
+            }
+            RETURN_IF_ERROR(convert_arrow_array_to_column(conv_func->children[i].get(), num_elements, child_array->get(),
                                                           child_col, array_start_idx, chunk_start_idx, chunk_filter,
                                                           ctx));
         }
@@ -1138,8 +1155,21 @@ static Status variant_converter(const arrow::Array* array, size_t array_start_id
             variant_column->append_default();
             continue;
         }
+        if (value_binary->IsNull(idx) || metadata_binary->IsNull(idx)) {
+            return Status::InvalidArgument(fmt::format("The variant column ({}) has a null value or metadata at row {}",
+                                                       current_column_name_or_null(ctx), idx));
+        }
         const auto value_view = value_binary->GetView(idx);
         const auto metadata_view = metadata_binary->GetView(idx);
+        if (value_view.empty()) {
+            return Status::InvalidArgument(fmt::format("The variant column ({}) has an empty value at row {}",
+                                                       current_column_name_or_null(ctx), idx));
+        }
+        auto st = VariantRowValue::validate_metadata(metadata_view);
+        if (!st.ok()) {
+            return st.clone_and_prepend(fmt::format("The variant column ({}) has invalid metadata at row {}: ",
+                                                    current_column_name_or_null(ctx), idx));
+        }
         variant_column->append_shredded(Slice(metadata_view.data(), metadata_view.size()),
                                         Slice(value_view.data(), value_view.size()));
     }

@@ -104,6 +104,8 @@ target_link_libraries(ConnectorHive PRIVATE Formats)
 if ("${WITH_PAIMON_CPP}" STREQUAL "ON" AND NOT "${MAKE_TEST}" STREQUAL "ON" AND NOT BUILD_FORMAT_LIB)
     add_library(starrocks_paimon SHARED
             hive/paimon/paimon_cpp_entry.cpp
+            hive/paimon/paimon_chunk_sink.cpp
+            hive/paimon/paimon_write_column_converter.cpp
             hive/paimon/paimon_predicate_converter.cpp
             hive/paimon/paimon_file_system.cpp
             hive/paimon/paimon_scanner.cpp

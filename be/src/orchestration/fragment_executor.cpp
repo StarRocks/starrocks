@@ -736,6 +736,7 @@ bool FragmentExecutor::is_final_sink_type(TDataSinkType::type type) {
     case TDataSinkType::ICEBERG_DELETE_SINK:
     case TDataSinkType::ICEBERG_ROW_DELTA_SINK:
     case TDataSinkType::HIVE_TABLE_SINK:
+    case TDataSinkType::PAIMON_TABLE_SINK:
     case TDataSinkType::TABLE_FUNCTION_TABLE_SINK:
     case TDataSinkType::EXPORT_SINK:
     case TDataSinkType::BLACKHOLE_TABLE_SINK:

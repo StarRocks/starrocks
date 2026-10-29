@@ -99,7 +99,9 @@ enum TPlanNodeType {
   BENCHMARK_SCAN_NODE = 42,
   LAKE_CACHE_STATS_SCAN_NODE = 43,
   ENFORCE_UNIQUE_ROW_LOCATOR_NODE = 44,
-  AI_PROJECT_NODE = 45
+  AI_PROJECT_NODE = 45,
+  // Same-release native Paimon writer capability; old backends must reject this node.
+  PAIMON_BUCKET_ROUTING_NODE = 46
 }
 
 // phases of an execution node
@@ -1515,10 +1517,23 @@ struct THdfsScanNode {
     29: optional string database_name
 }
 
+// Exec-only preexchange native bucket calculation. All fields are checked before execution.
+// DataSinks includes PlanNodes, so the frozen TPaimonTableSink uses a bounded TBinaryProtocol
+// payload instead of introducing an include cycle. It contains credentials: never log it.
+struct TPaimonBucketRouting {
+    1: optional i32 protocol_version
+    2: optional binary sink_payload
+    3: optional Types.TSlotId bucket_slot_id
+    // Slot refs to ALL materialized native-schema columns, in native field order, excluding the bucket slot.
+    4: optional list<Exprs.TExpr> schema_exprs
+}
+
 struct TProjectNode {
     1: optional map<Types.TSlotId, Exprs.TExpr> slot_map
     // Used for common operator compute result reuse
     2: optional map<Types.TSlotId, Exprs.TExpr> common_slot_map
+    // Only valid with PAIMON_BUCKET_ROUTING_NODE, never an optional SQL scalar fallback.
+    3: optional TPaimonBucketRouting paimon_bucket_routing
 }
 
 struct TSelectNode {

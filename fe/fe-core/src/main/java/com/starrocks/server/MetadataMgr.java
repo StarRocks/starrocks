@@ -69,6 +69,7 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.Partition;
 import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.connector.metadata.MetadataTableType;
+import com.starrocks.connector.paimon.PaimonSinkExtra;
 import com.starrocks.connector.statistics.ConnectorTableColumnStats;
 import com.starrocks.connector.statistics.StatisticsUtils;
 import com.starrocks.qe.ConnectContext;
@@ -1040,7 +1041,7 @@ public class MetadataMgr {
                 metadata.finishSink(dbName, tableName, sinkCommitInfos, branch);
             } catch (StarRocksConnectorException e) {
                 LOG.error("table sink commit failed", e);
-                throw new StarRocksConnectorException(e.getMessage());
+                throw e;
             }
         });
     }
@@ -1054,12 +1055,15 @@ public class MetadataMgr {
                            List<TSinkCommitInfo> sinkCommitInfos, String branch, Object extra,
                            ConnectContext context) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+        if (extra instanceof PaimonSinkExtra && connectorMetadata.isEmpty()) {
+            throw new StarRocksConnectorException("Paimon publication metadata is unavailable");
+        }
         connectorMetadata.ifPresent(metadata -> {
             try {
                 metadata.finishSink(dbName, tableName, sinkCommitInfos, branch, extra, context);
             } catch (StarRocksConnectorException e) {
                 LOG.error("table sink commit failed", e);
-                throw new StarRocksConnectorException(e.getMessage());
+                throw e;
             }
         });
     }
@@ -1071,7 +1075,20 @@ public class MetadataMgr {
                 metadata.abortSink(dbName, tableName, sinkCommitInfos);
             } catch (StarRocksConnectorException e) {
                 LOG.error("table sink abort failed", e);
-                throw new StarRocksConnectorException(e.getMessage());
+                throw e;
+            }
+        });
+    }
+
+    public void abortSink(String catalogName, String dbName, String tableName, List<TSinkCommitInfo> sinkCommitInfos,
+                          Object extra, ConnectContext context) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+        connectorMetadata.ifPresent(metadata -> {
+            try {
+                metadata.abortSink(dbName, tableName, sinkCommitInfos, extra, context);
+            } catch (StarRocksConnectorException e) {
+                LOG.error("table sink abort failed", e);
+                throw e;
             }
         });
     }
