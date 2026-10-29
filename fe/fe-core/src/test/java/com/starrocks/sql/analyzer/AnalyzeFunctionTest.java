@@ -125,13 +125,16 @@ public class AnalyzeFunctionTest {
                             "Column type " + type + " does not support binary predicate operation with type " + type);
                 }
                 analyzeFail("select g between g and g" + source,
-                        "between predicate type " + type + " with type " + type + " is invalid");
+                        "between predicate type " + type + " with type INVALID_TYPE is invalid");
                 analyzeFail("select g in (g)" + source,
-                        "in predicate type " + type + " with type " + type + " is invalid");
+                        "The input types (" + type + "," + type + ") of in predict are not compatible");
+                analyzeFail("select case when g then 1 else 0 end" + source,
+                        "Invalid when type cast " + type + " to boolean");
                 analyzeFail("select case g when g then 1 else 0 end" + source,
-                        "Invalid when type cast " + type + " to " + type);
+                        "Invalid when type cast " + type + " to INVALID_TYPE");
                 analyzeFail("select id" + source + " where g in (select " +
-                        String.format(constructor, "'POINT (1 2)'") + ")", "in predicate type " + type);
+                        String.format(constructor, "'POINT (1 2)'") + ")",
+                        "The input types (" + type + "," + type + ") of in predict are not compatible");
                 for (String setOp : List.of("union distinct", "intersect", "except")) {
                     analyzeFail("select g" + source + " " + setOp + " select g" + source,
                             type + " not support set operation");
@@ -141,7 +144,7 @@ public class AnalyzeFunctionTest {
                 for (String expr : List.of("case when id=1 then g end", "case when id=1 then NULL else g end",
                         "case when true then g else g end")) {
                     analyzeFail("select ST_AsText(" + expr + ")" + source,
-                            "Invalid then type cast " + type + " to " + type);
+                            "Invalid then type cast " + type + " to INVALID_TYPE");
                 }
                 for (String format : List.of("CSV", "PARQUET")) {
                     analyzeFail("select g" + source + " into outfile 'file:///tmp/scalar_geo_' format as " + format,

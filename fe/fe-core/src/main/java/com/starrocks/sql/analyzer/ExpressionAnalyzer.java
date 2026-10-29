@@ -769,7 +769,7 @@ public class ExpressionAnalyzer {
             Type compatibleType = TypeManager.getCompatibleTypeForBetweenAndIn(list, true);
 
             for (Type type : list) {
-                if (type.isGeoType() || !TypeManager.canCastTo(type, compatibleType)) {
+                if (!TypeManager.canCastTo(type, compatibleType)) {
                     throw new SemanticException(
                             "between predicate type " + type.toSql() + " with type " + compatibleType.toSql()
                                     + " is invalid", node.getPos());
@@ -788,11 +788,11 @@ public class ExpressionAnalyzer {
             Type compatibleType =
                     TypeManager.getCompatibleTypeForBinary(!node.getOp().isNotRangeComparison(), type1, type2);
             // check child type can be cast
-            if (type1.isGeoType() || !TypeManager.canCastTo(type1, compatibleType)) {
+            if (!TypeManager.canCastTo(type1, compatibleType)) {
                 throw new SemanticException(String.format(ERROR_MSG, type1.toSql(), type2.toSql()), node.getPos());
             }
 
-            if (type2.isGeoType() || !TypeManager.canCastTo(type2, compatibleType)) {
+            if (!TypeManager.canCastTo(type2, compatibleType)) {
                 throw new SemanticException(String.format(ERROR_MSG, type1.toSql(), type2.toSql()), node.getPos());
             }
 
@@ -859,7 +859,7 @@ public class ExpressionAnalyzer {
                 if (type.isJsonType() && !queryExpressions.isEmpty()) { // TODO: enable it after support join on JSON
                     throw new SemanticException("In predicate of JSON does not support subquery", child.getPos());
                 }
-                if (type.isGeoType() || !TypeManager.canCastTo(type, compatibleType)) {
+                if (!TypeManager.canCastTo(type, compatibleType)) {
                     throw new SemanticException(
                             "in predicate type " + type.toSql() + " with type " + compatibleType.toSql()
                                     + " is invalid", child.getPos());
@@ -883,7 +883,7 @@ public class ExpressionAnalyzer {
 
             for (Expr child : node.getChildren()) {
                 Type type = child.getType();
-                if (type.isGeoType() || !TypeManager.canCastTo(type, compatibleType)) {
+                if (!TypeManager.canCastTo(type, compatibleType)) {
                     throw new SemanticException(
                             "in predicate type " + type.toSql() + " with type " + compatibleType.toSql()
                                     + " is invalid", child.getPos());
@@ -1651,7 +1651,7 @@ public class ExpressionAnalyzer {
             }
 
             for (Type type : whenTypes) {
-                if (type.isGeoType() || !TypeManager.canCastTo(type, compatibleType)) {
+                if (!TypeManager.canCastTo(type, compatibleType)) {
                     throw new SemanticException("Invalid when type cast " + type.toSql()
                             + " to " + compatibleType.toSql(), node.getPos());
                 }
@@ -1671,7 +1671,7 @@ public class ExpressionAnalyzer {
             Type returnType = thenTypes.stream().allMatch(NullType.NULL::equals) ? BooleanType.BOOLEAN :
                     TypeManager.getCompatibleTypeForCaseWhen(thenTypes);
             for (Type type : thenTypes) {
-                if (type.isGeoType() || !TypeManager.canCastTo(type, returnType)) {
+                if (!TypeManager.canCastTo(type, returnType)) {
                     throw new SemanticException("Invalid then type cast " + type.toSql()
                             + " to " + returnType.toSql(), node.getPos());
                 }
