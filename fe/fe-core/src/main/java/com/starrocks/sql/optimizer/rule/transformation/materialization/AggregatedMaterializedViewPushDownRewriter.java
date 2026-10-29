@@ -589,7 +589,24 @@ public final class AggregatedMaterializedViewPushDownRewriter extends Materializ
             }
             // Remove original aggregate column ref from column ref map
             final ColumnRefSet aggColumnRefSet = getReferencedColumnRef(new ArrayList<>(ctx.aggregations.values()));
-            final ColumnRefSet groupColumnRefSet = getReferencedColumnRef(new ArrayList<>(ctx.groupBys.values()));
+            // The pushed-down aggregate computes a group by expression and outputs the expression's own column
+            // instead of the raw columns it reads, but only for the group keys produced by the rewritten
+            // subtree below this projection, which are exactly the keys present in the remapping collected
+            // from the rewritten children. For those keys the expression inputs are no longer needed above
+            // this projection, and keeping one here would leave the projection referencing a column the
+            // pushed-down aggregate does not output (typically a group by input that partition pruning or
+            // column pruning removed). A group key that is not part of the remapping is still computed above
+            // the push down, so its inputs have to stay, otherwise this projection would drop a pass-through
+            // column that the operator above still needs.
+            Map<ColumnRefOperator, ScalarOperator> remapping = aggColumnRefRemapping.getRemapping();
+            final ColumnRefSet groupColumnRefSet = new ColumnRefSet();
+            for (Map.Entry<ColumnRefOperator, ScalarOperator> groupBy : ctx.groupBys.entrySet()) {
+                if (groupBy.getKey().equals(groupBy.getValue())) {
+                    groupColumnRefSet.union(groupBy.getKey());
+                } else if (remapping.containsKey(groupBy.getKey())) {
+                    aggColumnRefSet.union(groupBy.getValue().getUsedColumns());
+                }
+            }
             aggColumnRefSet.except(groupColumnRefSet);
             if (columnRefMap != null) {
                 for (Map.Entry<ColumnRefOperator, ScalarOperator> e : columnRefMap.entrySet()) {
