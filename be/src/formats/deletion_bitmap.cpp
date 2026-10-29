@@ -64,4 +64,8 @@ void DeletionBitmap::add_value(uint64_t val) {
     roaring64_bitmap_add(_bitmap, val);
 }
 
+void DeletionBitmap::add_values(const uint64_t* vals, size_t n) {
+    roaring64_bitmap_add_many(_bitmap, n, vals);
+}
+
 } // namespace starrocks

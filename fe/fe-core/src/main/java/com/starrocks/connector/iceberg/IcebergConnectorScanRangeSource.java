@@ -62,6 +62,7 @@ import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.FileContent;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.FileScanTask;
+import org.apache.iceberg.MetadataColumns;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
@@ -75,6 +76,7 @@ import org.apache.iceberg.util.StructLikeWrapper;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.nio.ByteBuffer;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -112,6 +114,9 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
 
     // specId, StructLikeWrapper -> partitionId
     private final Map<Pair<Integer, StructLikeWrapper>, Long> partitionKeyToId = Maps.newHashMap();
+    // specId, identity partition values -> partitionId. The PartitionKey holds identity fields only, so the files
+    // of one identity partition share it however many bucket(N) or other transform values they span.
+    private final Map<Pair<Integer, List<Object>>, Long> identityValuesToId = Maps.newHashMap();
     // spec_id -> wrapper whose comparator is reused by copyFor(); forType() builds a new comparator on each call
     private final Map<Integer, StructLikeWrapper> partitionWrapperCache = Maps.newHashMap();
     // spec id -> the spec the scan's tasks are bound to
@@ -333,6 +338,9 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
             if (deleteFile.format() == FileFormat.PARQUET || deleteFile.format() == FileFormat.ORC) {
                 // a position delete file may have another format than its data file (write.delete.format.default)
                 target.setFile_format(IcebergApiConverter.getHdfsFileFormat(deleteFile.format()).toThrift());
+                if (referencesOnlyDataFile(deleteFile, task.file())) {
+                    target.setReferences_only_data_file(true);
+                }
             }
             posDeleteFiles.add(target);
         }
@@ -342,6 +350,27 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
         }
 
         return Lists.newArrayList(buildTScanRangeLocations(hdfsScanRange));
+    }
+
+    // True when every row of a position delete file references dataFile: the file says so
+    // (referenced_data_file), or the lower and upper bounds of its file_path column are both
+    // dataFile's path. A truncated bound never equals the full path.
+    @VisibleForTesting
+    static boolean referencesOnlyDataFile(DeleteFile deleteFile, DataFile dataFile) {
+        String dataFilePath = dataFile.path().toString();
+        if (deleteFile.referencedDataFile() != null) {
+            return deleteFile.referencedDataFile().equals(dataFilePath);
+        }
+        if (deleteFile.lowerBounds() == null || deleteFile.upperBounds() == null) {
+            return false;
+        }
+        int filePathId = MetadataColumns.DELETE_FILE_PATH.fieldId();
+        ByteBuffer lower = deleteFile.lowerBounds().get(filePathId);
+        ByteBuffer upper = deleteFile.upperBounds().get(filePathId);
+        if (lower == null || !lower.equals(upper)) {
+            return false;
+        }
+        return dataFilePath.equals(Conversions.fromByteBuffer(Types.StringType.get(), lower.duplicate()).toString());
     }
 
     private List<TScanRangeLocations> buildDeleteFileScanRanges(FileScanTask task, Long partitionId) throws AnalysisException {
@@ -607,20 +636,33 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
                 ignore -> getPartitionFieldIndexes(spec, indexToPartitionField));
 
         StructLike origPartition = task.partition();
-        PartitionKey partitionKey = getPartitionKey(origPartition, spec, partitionFieldIndexes, indexToPartitionField);
-        long partitionId = partitionIdGenerator.getOrGenerate(partitionKey);
-        partitionKeyToId.put(cacheKey, partitionId);
+        // getPartitionKey() is a function of the spec and these values (spec.javaClasses() gives an identity field
+        // its source column's class), so they key its result.
+        Class<?>[] javaClasses = spec.javaClasses();
+        List<Object> identityValues = new ArrayList<>(partitionFieldIndexes.size());
+        for (int index : partitionFieldIndexes) {
+            identityValues.add(PartitionUtil.getPartitionValue(origPartition, index, javaClasses[index]));
+        }
+        Pair<Integer, List<Object>> identityKey = Pair.create(spec.specId(), identityValues);
+        Long partitionId = identityValuesToId.get(identityKey);
+        if (partitionId == null) {
+            PartitionKey partitionKey =
+                    getPartitionKey(origPartition, spec, partitionFieldIndexes, indexToPartitionField);
+            partitionId = partitionIdGenerator.getOrGenerate(partitionKey);
+            identityValuesToId.put(identityKey, partitionId);
 
-        // The PartitionKey holds identity fields only, so several cache keys (one per bucket, say) share one
-        // partition id and one thrift value. The scheduler sends it once per fragment instance and drops it from
-        // later ranges (FragmentInstance.removeDuplicatedPartitionValues).
-        partitionValues.computeIfAbsent(partitionId, ignore -> {
-            THdfsPartition value = new THdfsPartition();
-            value.setPartition_key_exprs(partitionKey.getKeys().stream()
-                    .map(ExprToThrift::treeToThrift)
-                    .collect(Collectors.toList()));
-            return value;
-        });
+            // Several cache keys (one per bucket, say) share one partition id and one thrift value. The scheduler
+            // sends it once per fragment instance and drops it from later ranges
+            // (FragmentInstance.removeDuplicatedPartitionValues).
+            partitionValues.computeIfAbsent(partitionId, ignore -> {
+                THdfsPartition value = new THdfsPartition();
+                value.setPartition_key_exprs(partitionKey.getKeys().stream()
+                        .map(ExprToThrift::treeToThrift)
+                        .collect(Collectors.toList()));
+                return value;
+            });
+        }
+        partitionKeyToId.put(cacheKey, partitionId);
         checkPartitionNumLimit(table, partitionKeyToId.size());
         return partitionId;
     }

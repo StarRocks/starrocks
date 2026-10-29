@@ -21,6 +21,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <cstdint>
+#include <limits>
 #include <memory>
 #include <mutex>
 #include <new>
@@ -165,7 +166,12 @@ public:
             input_row.media = media;
             std::get<AIFunctionInputBatch>(output.input).rows.emplace_back(std::move(input_row));
         }
+        auto scalar_output = output;
         if (aggregate_input) output.input = *aggregate_input;
+        if (include_scalar_output) {
+            scalar_output.slot_id = kAIOutputSlot + aggregate_output_count;
+            prepared.ai_outputs.emplace_back(std::move(scalar_output));
+        }
         for (size_t index = 1; index < aggregate_output_count; ++index) {
             auto extra_output = output;
             extra_output.slot_id += index;
@@ -182,6 +188,7 @@ public:
     PrepareException prepare_exception = PrepareException::NONE;
     std::optional<AIAggregateReduceInputBatch> aggregate_input;
     size_t aggregate_output_count = 1;
+    bool include_scalar_output = false;
     std::optional<size_t> output_chunk_rows;
     bool output_chunk_contains_ai_slot = false;
     std::vector<AIFunctionRowAction> row_actions;
@@ -207,6 +214,7 @@ struct ResultMemoryState {
     size_t reserved_bytes = 0;
     size_t release_calls = 0;
     size_t released_bytes = 0;
+    bool reject_reservations = false;
 };
 
 class ResultMemoryContext {
@@ -228,6 +236,7 @@ private:
     static bool reserve(void* opaque, size_t bytes) noexcept {
         auto* state = static_cast<State*>(opaque);
         ++state->result_memory->reserve_calls;
+        if (state->result_memory->reject_reservations) return false;
         state->result_memory->reserved_bytes += bytes;
         return true;
     }
@@ -605,17 +614,16 @@ TEST(AIProjectProcessorTest, RequestSlotStorageUsesTheAsyncMemoryAllocationScope
 
     size_t allocations = 0;
     auto* sync_point = SyncPoint::GetInstance();
-    sync_point->SetCallBack("AIProjectProcessor::Lane:before_slots_allocation", [&](void*) {
+    sync_point->SetCallBack("AIProjectProcessor::RequestTable:before_slots_allocation", [&](void*) {
         ++allocations;
-        // Lane destruction already uses this process scope. The slot buffer
-        // must be allocated here as well, including when configure runs on a
-        // query driver. This also verifies ASAN builds without malloc hooks.
+        // Request storage is physically owned by the process even when
+        // preparation runs on a query driver, including in ASAN builds.
         EXPECT_EQ(process_tracker.get(), tls_mem_tracker);
     });
     sync_point->EnableProcessing();
     DeferOp cleanup([&] {
         sync_point->DisableProcessing();
-        sync_point->ClearCallBack("AIProjectProcessor::Lane:before_slots_allocation");
+        sync_point->ClearCallBack("AIProjectProcessor::RequestTable:before_slots_allocation");
     });
     auto buffer = make_input_buffer();
     auto projection = std::make_shared<RecordingProjection>();
@@ -624,9 +632,124 @@ TEST(AIProjectProcessorTest, RequestSlotStorageUsesTheAsyncMemoryAllocationScope
         SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(query_tracker.get());
         auto processor = make_processor(buffer, projection, submitter, "ignore", 2);
         ASSERT_NE(nullptr, processor);
+        EXPECT_EQ(0, allocations);
+        for (int lane = 0; lane < 2; ++lane) {
+            put_and_finish(buffer, make_input_chunk(lane, 1), lane);
+            ASSERT_OK(processor->try_process(&state, lane));
+            submitter->succeed("prompt-" + std::to_string(lane));
+            auto result = processor->pull_chunk(&state, lane);
+            ASSERT_TRUE(result.ok()) << result.status();
+            ASSERT_NE(nullptr, result.value());
+        }
         EXPECT_EQ(query_tracker.get(), tls_mem_tracker);
     }
     EXPECT_EQ(2, allocations);
+}
+
+TEST(AIProjectProcessorTest, ScalarCellsQueueBeyondOpeningAdmissionLimitAndAdvanceBudget) {
+    for (size_t outputs : {1, 2}) {
+        SCOPED_TRACE(outputs);
+        auto buffer = make_input_buffer();
+        auto projection = std::make_shared<RecordingProjection>();
+        projection->aggregate_output_count = outputs;
+        auto submitter = std::make_shared<ManualTaskSubmitter>();
+        auto config = runtime_config();
+        config.max_inflight = 1;
+        config.sub_chunk_size = 128;
+        auto created = AIProjectProcessor::create(buffer, projection, submitter, config);
+        ASSERT_TRUE(created.ok()) << created.status();
+        auto processor = created.value();
+        ASSERT_OK(processor->configure(1));
+        RuntimeState state;
+        put_and_finish(buffer, make_input_chunk(0, 128));
+        for (size_t turn = 0; turn < 128 * outputs; ++turn) {
+            ASSERT_OK(processor->try_process(&state, 0));
+        }
+        EXPECT_EQ(128 * outputs, submitter->pending_count());
+        EXPECT_EQ(128 * outputs, submitter->submit_calls);
+        if (submitter->pending_count() != 128 * outputs) {
+            ASSERT_OK(processor->set_source_finished(0));
+            submitter->complete_remaining_as_cancelled();
+            continue;
+        }
+        EXPECT_FALSE(processor->can_process(0));
+        for (size_t output = 0; output < outputs; ++output) {
+            for (size_t row = 0; row < 128; ++row) {
+                if (submitter->pending_count() > 0) submitter->succeed("prompt-" + std::to_string(row));
+            }
+        }
+        auto result = processor->pull_chunk(&state, 0);
+        ASSERT_TRUE(result.ok()) << result.status();
+        ASSERT_NE(nullptr, result.value());
+        EXPECT_EQ(128, result.value()->num_rows());
+        EXPECT_EQ(128 * outputs, processor->statistics(0).request_count);
+        EXPECT_FALSE(processor->pending_finish(0));
+    }
+}
+
+TEST(AIProjectProcessorTest, TinyActualInputDoesNotAllocateForHugeConfiguredSubchunk) {
+    for (size_t rows : {0, 1}) {
+        SCOPED_TRACE(rows);
+        auto memory = std::make_shared<ResultMemoryState>();
+        ResultMemoryContext context(memory);
+        auto submitter = std::make_shared<ManualTaskSubmitter>(context.context());
+        submitter->inline_success = true;
+        auto buffer = make_input_buffer();
+        auto projection = std::make_shared<RecordingProjection>();
+        auto config = runtime_config();
+        config.sub_chunk_size = std::numeric_limits<int32_t>::max();
+        config.max_inflight = std::numeric_limits<int32_t>::max();
+        auto created = AIProjectProcessor::create(buffer, projection, submitter, config);
+        ASSERT_TRUE(created.ok()) << created.status();
+        auto processor = created.value();
+        ASSERT_OK(processor->configure(1));
+        EXPECT_EQ(0, memory->reserved_bytes) << "configure must not allocate for the configured row ceiling";
+        put_and_finish(buffer, make_input_chunk(0, rows));
+        RuntimeState state;
+        for (int turn = 0; turn < 4 && !processor->has_output(0); ++turn) {
+            ASSERT_OK(processor->try_process(&state, 0));
+        }
+        auto output = processor->pull_chunk(&state, 0);
+        ASSERT_TRUE(output.ok()) << output.status();
+        ASSERT_NE(nullptr, output.value());
+        EXPECT_EQ(rows, output.value()->num_rows());
+        EXPECT_LT(memory->reserved_bytes, kMiB);
+        EXPECT_EQ(memory->reserved_bytes, memory->released_bytes);
+        EXPECT_EQ(rows, submitter->submit_calls);
+    }
+}
+
+TEST(AIProjectProcessorTest, RequestTableAllocationAndReservationFailurePublishNoTasks) {
+    for (int failure_stage : {0, 1, 2}) {
+        SCOPED_TRACE(failure_stage);
+        auto memory = std::make_shared<ResultMemoryState>();
+        ResultMemoryContext context(memory);
+        auto buffer = make_input_buffer();
+        auto projection = std::make_shared<RecordingProjection>();
+        auto submitter = std::make_shared<ManualTaskSubmitter>(context.context());
+        auto processor = make_processor(buffer, projection, submitter);
+        ASSERT_NE(nullptr, processor);
+        auto* sync_point = SyncPoint::GetInstance();
+        const char* point = failure_stage == 0 ? "AIProjectProcessor::RequestTable:before_slots_allocation"
+                                               : "AIProjectProcessor::RequestTable:after_slots_allocation";
+        sync_point->SetCallBack(point, [&](void*) {
+            if (failure_stage != 2) throw std::bad_alloc();
+            memory->reject_reservations = true;
+        });
+        sync_point->EnableProcessing();
+        DeferOp cleanup([&] {
+            sync_point->DisableProcessing();
+            sync_point->ClearCallBack(point);
+        });
+        put_and_finish(buffer, make_input_chunk(0, 1));
+        RuntimeState state;
+        EXPECT_TRUE(processor->try_process(&state, 0).is_mem_limit_exceeded());
+        EXPECT_TRUE(processor->status(0).is_mem_limit_exceeded());
+        EXPECT_EQ(0, submitter->submit_calls);
+        EXPECT_FALSE(processor->pending_finish(0));
+        ASSERT_OK(processor->set_source_finished(0));
+        EXPECT_EQ(memory->reserved_bytes, memory->released_bytes);
+    }
 }
 
 TEST(AIProjectProcessorTest, SuccessfulSubmitWithoutHandleIsFatalInBothErrorModes) {
@@ -1888,7 +2011,7 @@ TEST(AIProjectProcessorTest, SubmitExceptionsSettleUnsubmittedRowsAndAllowSubmit
 } // namespace
 
 namespace {
-AIAggregateReduceInputBatch aggregate_input(size_t records) {
+AIAggregateReduceInputBatch aggregate_input(size_t records, char first_record = 'a') {
     const size_t record_bytes = 40000;
     std::string encoded(kAiAggregateStateHeaderBytes + records * (8 + record_bytes), '\0');
     encode_ai_aggregate_state_header(reinterpret_cast<uint8_t*>(encoded.data()), records, records * (8 + record_bytes));
@@ -1896,7 +2019,7 @@ AIAggregateReduceInputBatch aggregate_input(size_t records) {
     for (size_t row = 0; row < records; ++row) {
         for (size_t i = 0; i < 8; ++i)
             encoded[offset++] = static_cast<char>((uint64_t(record_bytes) >> (8 * i)) & 0xff);
-        encoded.replace(offset, record_bytes, std::string(record_bytes, 'a' + row));
+        encoded.replace(offset, record_bytes, std::string(record_bytes, first_record + row));
         offset += record_bytes;
     }
     auto column = BinaryColumn::create();
@@ -2035,6 +2158,10 @@ TEST(AIProjectProcessorTest, AggregateInlineCallbacksReuseSlotsAcrossRoundsAndRe
     put_and_finish(buffer, make_input_chunk(0, 1));
     RuntimeState state;
     ASSERT_OK(processor->try_process(&state, 0));
+    EXPECT_TRUE(processor->can_process(0)) << "inline publication must keep the driver runnable";
+    for (int turn = 0; turn < 4 && processor->can_process(0); ++turn) {
+        ASSERT_OK(processor->try_process(&state, 0));
+    }
     auto output = processor->pull_chunk(&state, 0);
     ASSERT_TRUE(output.ok()) << output.status();
     ASSERT_NE(nullptr, output.value());
@@ -2105,11 +2232,19 @@ TEST(AIProjectProcessorTest, AggregateSlotReuseDoesNotWaitForCallbackNotificatio
     auto lifetime = std::make_shared<QueryContextLifetime>();
     state.set_query_ctx_lifetime(lifetime);
     BlockingSourceObserver observer;
-    ASSERT_OK(processor->attach_source_observer(0, &state, &observer));
     ASSERT_OK(processor->try_process(&state, 0));
-    ASSERT_EQ(1, submitter->submit_calls);
+    ASSERT_EQ(2, submitter->submit_calls);
+    const auto first_leaf = std::find_if(submitter->pending.begin(), submitter->pending.end(), [&](const auto& entry) {
+        return entry.second.prompt == submitter->submitted_prompts.front();
+    });
+    ASSERT_NE(submitter->pending.end(), first_leaf);
+    AITaskCallback duplicate_leaf_callback = first_leaf->second.callback;
+    // Complete one leaf before attaching the blocking observer, then let the
+    // second leaf's observer tail overlap submission of the final reduction.
+    submitter->succeed_value(submitter->submitted_prompts.front(), std::string("summary"));
+    ASSERT_OK(processor->attach_source_observer(0, &state, &observer));
     std::thread completion(
-            [&] { submitter->succeed_value(submitter->submitted_prompts.front(), std::string("summary")); });
+            [&] { submitter->succeed_value(submitter->submitted_prompts.back(), std::string("summary")); });
     DeferOp cleanup([&] {
         observer.release();
         if (completion.joinable()) completion.join();
@@ -2118,13 +2253,17 @@ TEST(AIProjectProcessorTest, AggregateSlotReuseDoesNotWaitForCallbackNotificatio
     EXPECT_TRUE(processor->pending_finish(0));
     EXPECT_TRUE(processor->can_process(0));
     ASSERT_OK(processor->try_process(&state, 0));
-    EXPECT_EQ(2, submitter->submit_calls) << "publication-closed slot can serve the next leaf before callback drain";
+    EXPECT_EQ(3, submitter->submit_calls) << "the final request can start before the leaf notification drains";
+    duplicate_leaf_callback(AILifecycleCancelled{.reason = AILifecycleReason::CANCELLED},
+                            {.task_count = 1, .error_count = 1});
+    EXPECT_OK(processor->status(0));
+    EXPECT_EQ(2, processor->statistics(0).task_count);
+    EXPECT_EQ(0, processor->statistics(0).error_count);
+    EXPECT_TRUE(processor->pending_finish(0));
+    EXPECT_EQ(1, submitter->pending_count());
     EXPECT_FALSE(processor->can_process(0));
     observer.release();
     completion.join();
-    submitter->succeed_value(submitter->submitted_prompts.back(), std::string("summary"));
-    ASSERT_OK(processor->try_process(&state, 0));
-    EXPECT_EQ(3, submitter->submit_calls);
     submitter->succeed_value(submitter->submitted_prompts.back(), std::string("final"));
     auto output = processor->pull_chunk(&state, 0);
     ASSERT_TRUE(output.ok());
@@ -2321,7 +2460,8 @@ TEST(AIProjectProcessorTest, DiscardedSiblingCompletionStillReleasesItsHandleOnT
     sync_point->SetCallBack("AIProjectProcessor::_advance:after_row_discard", [&](void*) {
         // Reproduce a sibling callback winning the race after discard marking
         // but before the driver's cancellation sweep can take its handle.
-        submitter->succeed_value(prompts.back(), std::string("discarded summary"));
+        std::thread completion([&] { submitter->succeed_value(prompts.back(), std::string("discarded summary")); });
+        completion.join();
     });
     sync_point->EnableProcessing();
     DeferOp cleanup([&] {
@@ -2341,6 +2481,241 @@ TEST(AIProjectProcessorTest, DiscardedSiblingCompletionStillReleasesItsHandleOnT
         EXPECT_EQ(1, handle->destroy_calls);
         EXPECT_EQ(std::this_thread::get_id(), handle->destroy_thread);
     }
+}
+
+TEST(AIProjectProcessorTest, IgnoredGroupFailureDoesNotDiscardOtherGroupsOrScalarOutputs) {
+    for (const std::string on_error : {"ignore", "fail"}) {
+        SCOPED_TRACE(on_error);
+        auto batch = aggregate_input(2);
+        auto states = BinaryColumn::create();
+        states->append(down_cast<const BinaryColumn&>(*batch.states).get_slice(0));
+        const auto second = aggregate_input(2, 'x');
+        states->append(down_cast<const BinaryColumn&>(*second.states).get_slice(0));
+        batch.states = states;
+        auto buffer = make_input_buffer();
+        auto projection = std::make_shared<RecordingProjection>();
+        projection->aggregate_input = std::move(batch);
+        projection->include_scalar_output = true;
+        auto submitter = std::make_shared<ManualTaskSubmitter>();
+        auto processor = make_processor(buffer, projection, submitter, on_error);
+        put_and_finish(buffer, make_input_chunk(0, 2));
+        RuntimeState state;
+        for (int turn = 0; turn < 4; ++turn) ASSERT_OK(processor->try_process(&state, 0));
+        ASSERT_EQ(6, submitter->pending_count());
+        const auto failed = std::find_if(
+                submitter->submitted_prompts.begin(), submitter->submitted_prompts.end(),
+                [](const auto& prompt) { return prompt.find(std::string(100, 'a')) != std::string::npos; });
+        ASSERT_NE(submitter->submitted_prompts.end(), failed);
+        submitter->fail_row(*failed);
+        if (on_error == "fail") {
+            ASSERT_OK(processor->try_process(&state, 0));
+            EXPECT_FALSE(processor->status(0).ok());
+            EXPECT_FALSE(processor->pull_chunk(&state, 0).ok());
+            for (const auto& [id, pending] : submitter->pending) EXPECT_EQ(1, pending.handle_state->cancel_calls);
+            submitter->complete_remaining_as_cancelled();
+            EXPECT_FALSE(processor->pending_finish(0));
+            continue;
+        }
+        ASSERT_OK(processor->try_process(&state, 0));
+        for (int turn = 0; turn < 8 && !processor->has_output(0); ++turn) {
+            std::vector<std::string> successful;
+            for (const auto& [id, pending] : submitter->pending) {
+                if (pending.handle_state->cancel_calls == 0) successful.push_back(pending.prompt);
+            }
+            for (const auto& prompt : successful) {
+                if (prompt.starts_with("prompt-"))
+                    submitter->succeed(prompt);
+                else
+                    submitter->succeed_value(prompt, std::string("successful-group"));
+            }
+            ASSERT_OK(processor->try_process(&state, 0));
+        }
+        auto output = processor->pull_chunk(&state, 0);
+        ASSERT_TRUE(output.ok()) << output.status();
+        ASSERT_NE(nullptr, output.value());
+        EXPECT_TRUE(ai_column(output.value()).is_null(0));
+        EXPECT_EQ("successful-group", ai_value(output.value(), 1));
+        const auto& scalar =
+                down_cast<const NullableColumn&>(*output.value()->get_column_by_slot_id(kAIOutputSlot + 1));
+        for (size_t row = 0; row < 2; ++row) {
+            EXPECT_FALSE(scalar.is_null(row));
+            EXPECT_EQ("result-" + std::to_string(row),
+                      down_cast<const BinaryColumn&>(*scalar.data_column()).get_slice(row).to_string());
+        }
+        EXPECT_EQ(1, submitter->pending_count()) << "only the ignored group's cancelled sibling remains";
+        EXPECT_TRUE(processor->pending_finish(0));
+        submitter->complete_remaining_as_cancelled();
+        EXPECT_FALSE(processor->pending_finish(0));
+        EXPECT_EQ(7, processor->statistics(0).task_count);
+        EXPECT_EQ(2, processor->aggregate_statistics(0).groups);
+        EXPECT_EQ(1, processor->statistics(0).error_count);
+    }
+}
+
+TEST(AIProjectProcessorTest, RetiredTableBlocksNextSliceUntilLastSiblingAndSurvivesNotificationTail) {
+    auto memory = std::make_shared<ResultMemoryState>();
+    ResultMemoryContext context(memory);
+    auto buffer = make_input_buffer();
+    auto projection = std::make_shared<RecordingProjection>();
+    projection->aggregate_input = aggregate_input(2);
+    auto submitter = std::make_shared<ManualTaskSubmitter>(context.context());
+    auto config = runtime_config();
+    config.sub_chunk_size = 1;
+    auto created = AIProjectProcessor::create(buffer, projection, submitter, config);
+    ASSERT_TRUE(created.ok()) << created.status();
+    auto processor = created.value();
+    ASSERT_OK(processor->configure(1));
+    RuntimeState state;
+    state.set_enable_event_scheduler(true);
+    auto lifetime = std::make_shared<QueryContextLifetime>();
+    state.set_query_ctx_lifetime(lifetime);
+    put_and_finish(buffer, make_input_chunk(0, 2));
+    ASSERT_OK(processor->try_process(&state, 0));
+    ASSERT_EQ(2, submitter->pending_count());
+    const auto prompts = submitter->submitted_prompts;
+    submitter->fail_row(prompts.front());
+    auto first = processor->pull_chunk(&state, 0);
+    ASSERT_TRUE(first.ok()) << first.status();
+    ASSERT_NE(nullptr, first.value());
+    EXPECT_TRUE(ai_column(first.value()).is_null(0));
+    ASSERT_OK(processor->try_process(&state, 0));
+    EXPECT_EQ(1, projection->prepare_calls);
+    EXPECT_FALSE(processor->can_process(0));
+    EXPECT_TRUE(processor->pending_finish(0));
+    EXPECT_GT(memory->reserved_bytes, memory->released_bytes);
+    BlockingSourceObserver observer;
+    ASSERT_OK(processor->attach_source_observer(0, &state, &observer));
+    std::thread completion([&] { submitter->cancel_lifecycle(prompts.back()); });
+    DeferOp cleanup([&] {
+        observer.release();
+        if (completion.joinable()) completion.join();
+    });
+    ASSERT_TRUE(observer.wait_until_entered()) << "last returned slot must wake the source waiting for the next table";
+    EXPECT_TRUE(processor->can_process(0));
+    EXPECT_TRUE(processor->pending_finish(0));
+    ASSERT_OK(processor->try_process(&state, 0));
+    EXPECT_EQ(2, projection->prepare_calls);
+    EXPECT_EQ(2, submitter->pending_count());
+    EXPECT_OK(processor->status(0));
+    observer.release();
+    completion.join();
+    ASSERT_OK(processor->set_source_finished(0));
+    submitter->complete_remaining_as_cancelled();
+    EXPECT_FALSE(processor->pending_finish(0));
+    EXPECT_EQ(memory->reserved_bytes, memory->released_bytes);
+}
+
+TEST(AIProjectProcessorTest, OldCallbackCannotTouchNewTableAndLastOwnerReleasesSlotReservation) {
+    auto memory = std::make_shared<ResultMemoryState>();
+    ResultMemoryContext context(memory);
+    auto buffer = make_input_buffer();
+    auto projection = std::make_shared<RecordingProjection>();
+    auto submitter = std::make_shared<ManualTaskSubmitter>(context.context());
+    auto config = runtime_config();
+    config.sub_chunk_size = 1;
+    auto created = AIProjectProcessor::create(buffer, projection, submitter, config);
+    ASSERT_TRUE(created.ok()) << created.status();
+    auto processor = created.value();
+    ASSERT_OK(processor->configure(1));
+    put_and_finish(buffer, make_input_chunk(0, 2));
+    RuntimeState state;
+    ASSERT_OK(processor->try_process(&state, 0));
+    ASSERT_EQ(1, submitter->pending_count());
+    AITaskCallback old_callback = submitter->pending.begin()->second.callback;
+    const size_t first_table_bytes = memory->reserved_bytes;
+    EXPECT_GT(first_table_bytes, 0);
+    submitter->succeed("prompt-0");
+    auto first = processor->pull_chunk(&state, 0);
+    ASSERT_TRUE(first.ok()) << first.status();
+    ASSERT_NE(nullptr, first.value());
+    EXPECT_EQ("result-0", ai_value(first.value(), 0));
+    first.value().reset();
+    EXPECT_TRUE(projection->last_output_chunk.expired()) << "retired callbacks must not own SQL chunks";
+    EXPECT_EQ(0, memory->released_bytes) << "the retained callback is still a table owner";
+    ASSERT_OK(processor->try_process(&state, 0));
+    EXPECT_EQ(2, projection->prepare_calls);
+    EXPECT_EQ(first_table_bytes * 2, memory->reserved_bytes);
+    old_callback(AILifecycleCancelled{.reason = AILifecycleReason::CANCELLED}, {.task_count = 1, .error_count = 1});
+    EXPECT_OK(processor->status(0));
+    EXPECT_EQ(1, processor->statistics(0).task_count);
+    EXPECT_TRUE(processor->pending_finish(0));
+    old_callback = {};
+    EXPECT_EQ(first_table_bytes, memory->released_bytes);
+    submitter->succeed("prompt-1");
+    auto second = processor->pull_chunk(&state, 0);
+    ASSERT_TRUE(second.ok()) << second.status();
+    ASSERT_NE(nullptr, second.value());
+    EXPECT_EQ("result-1", ai_value(second.value(), 0));
+    EXPECT_EQ(2, processor->statistics(0).task_count);
+    EXPECT_EQ(0, processor->statistics(0).error_count);
+    EXPECT_FALSE(processor->pending_finish(0));
+    EXPECT_EQ(memory->reserved_bytes, memory->released_bytes);
+}
+
+TEST(AIProjectProcessorTest, SparseRunnableAggregateAdvancesWithinBudgetsBesideManyWaitingScalarCells) {
+    constexpr size_t rows = 256;
+    auto batch = aggregate_input(8);
+    auto nulls = NullColumn::create();
+    nulls->append(0);
+    auto states = NullableColumn::create(batch.states->clone(), std::move(nulls));
+    states->append_nulls(rows - 1);
+    batch.states = states;
+    auto buffer = make_input_buffer();
+    auto projection = std::make_shared<RecordingProjection>();
+    projection->aggregate_input = std::move(batch);
+    projection->include_scalar_output = true;
+    auto submitter = std::make_shared<ManualTaskSubmitter>();
+    auto config = runtime_config();
+    config.max_inflight = 1;
+    config.sub_chunk_size = rows;
+    auto made = AIProjectProcessor::create(buffer, projection, submitter, config);
+    ASSERT_TRUE(made.ok()) << made.status();
+    auto processor = made.value();
+    ASSERT_OK(processor->configure(1));
+    put_and_finish(buffer, make_input_chunk(0, rows));
+    RuntimeState state;
+    for (int turn = 0; turn < 16 && processor->can_process(0); ++turn) {
+        const size_t previous_requests = submitter->submit_calls;
+        const auto previous_groups = processor->aggregate_statistics(0).groups;
+        ASSERT_OK(processor->try_process(&state, 0));
+        EXPECT_LE(submitter->submit_calls - previous_requests, 64);
+        EXPECT_LE(processor->aggregate_statistics(0).groups - previous_groups, 64);
+        size_t prompt_bytes = 0;
+        for (size_t request = previous_requests; request < submitter->submit_calls; ++request) {
+            prompt_bytes += submitter->submitted_prompts[request].size();
+        }
+        EXPECT_LE(prompt_bytes, 256 * 1024);
+    }
+    ASSERT_EQ(rows + 8, submitter->pending_count());
+    EXPECT_EQ(rows, processor->aggregate_statistics(0).groups);
+    EXPECT_EQ(rows - 1, processor->aggregate_statistics(0).empty_groups);
+    EXPECT_EQ(8, processor->aggregate_statistics(0).leaf_requests);
+    EXPECT_EQ(1, processor->aggregate_statistics(0).rounds);
+    EXPECT_FALSE(processor->can_process(0));
+    const auto submitted = submitter->submitted_prompts;
+    for (auto it = submitted.rbegin(); it != submitted.rend(); ++it) {
+        if (!it->starts_with("prompt-")) submitter->succeed_value(*it, std::string("summary"));
+    }
+    EXPECT_EQ(rows, submitter->pending_count());
+    ASSERT_TRUE(processor->can_process(0));
+    ASSERT_OK(processor->try_process(&state, 0));
+    EXPECT_EQ(rows + 1, submitter->pending_count()) << "the runnable group must progress beside waiting scalar cells";
+    EXPECT_EQ(rows + 9, submitter->submit_calls);
+    submitter->succeed_value(submitter->submitted_prompts.back(), std::string("final"));
+    ASSERT_OK(processor->try_process(&state, 0));
+    EXPECT_FALSE(processor->can_process(0));
+    EXPECT_FALSE(processor->has_output(0));
+    for (size_t row = 0; row < rows; ++row) submitter->succeed("prompt-" + std::to_string(row));
+    auto output = processor->pull_chunk(&state, 0);
+    ASSERT_TRUE(output.ok()) << output.status();
+    ASSERT_NE(nullptr, output.value());
+    EXPECT_EQ("final", ai_value(output.value(), 0));
+    EXPECT_EQ(rows - 1, ai_column(output.value()).null_count());
+    const auto& scalar = down_cast<const NullableColumn&>(*output.value()->get_column_by_slot_id(kAIOutputSlot + 1));
+    EXPECT_EQ(0, scalar.null_count());
+    EXPECT_EQ(rows + 9, processor->statistics(0).request_count);
+    EXPECT_EQ(2, processor->aggregate_statistics(0).rounds);
+    EXPECT_FALSE(processor->pending_finish(0));
 }
 
 } // namespace starrocks::pipeline

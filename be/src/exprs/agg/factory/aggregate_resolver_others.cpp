@@ -42,7 +42,8 @@ struct LowCardPercentileDispatcher {
             resolver->add_aggregate_mapping_variadic<pt, pt, LowCardPercentileState<pt>>(
                     "percentile_disc_lc", false, AggregateFactory::MakeLowCardPercentileCntAggregateFunction<pt>());
             resolver->add_aggregate_mapping<pt, TYPE_VARCHAR, LowCardPercentileState<pt>>(
-                    "percentile_build_lc", false, AggregateFactory::MakeLowCardPercentileBinAggregateFunction<pt>());
+                    "percentile_build_lc", kWithoutWindow,
+                    AggregateFactory::MakeLowCardPercentileBinAggregateFunction<pt>());
         }
     }
 };
@@ -50,7 +51,7 @@ struct LowCardPercentileDispatcher {
 void AggregateFuncResolver::register_others() {
     // Preserve the NULL bitmap for singleton serialization; masked text must not consume the group byte limit.
     add_aggregate_mapping<TYPE_VARCHAR, TYPE_VARBINARY, AICollectTextState, AggregateFunctionPtr, false>(
-            "__ai_collect_text", false, AggregateFactory::MakeAICollectTextAggregateFunction());
+            "__ai_collect_text", kWithoutWindow, AggregateFactory::MakeAICollectTextAggregateFunction());
 
     add_aggregate_mapping_variadic<TYPE_BIGINT, TYPE_DOUBLE, PercentileApproxState>(
             "percentile_approx", false, AggregateFactory::MakePercentileApproxAggregateFunction());
@@ -77,7 +78,7 @@ void AggregateFuncResolver::register_others() {
             AggregateFactory::MakePercentileApproxWeightedArrayAggregateFunction());
 
     add_aggregate_mapping<TYPE_PERCENTILE, TYPE_PERCENTILE, PercentileValue>(
-            "percentile_union", false, AggregateFactory::MakePercentileUnionAggregateFunction());
+            "percentile_union", kWithoutWindow, AggregateFactory::MakePercentileUnionAggregateFunction());
 
     add_aggregate_mapping_variadic<TYPE_DOUBLE, TYPE_DOUBLE, PercentileState<TYPE_DOUBLE>>(
             "percentile_cont", false, AggregateFactory::MakePercentileContAggregateFunction<TYPE_DOUBLE>());

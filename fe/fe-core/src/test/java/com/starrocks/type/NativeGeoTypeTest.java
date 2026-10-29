@@ -58,6 +58,25 @@ public class NativeGeoTypeTest {
     }
 
     @Test
+    public void testNestedGeoType() {
+        for (Type scalar : List.of(IntegerType.BIGINT, NullType.NULL, UnknownType.UNKNOWN_TYPE,
+                new ScalarType(PrimitiveType.GEOGRAPHY), new ScalarType(PrimitiveType.GEOMETRY))) {
+            assertFalse(scalar.hasNestedGeoType());
+        }
+        assertFalse(new MapType(VarcharType.VARCHAR, new ArrayType(IntegerType.BIGINT)).hasNestedGeoType());
+        assertFalse(new StructType(List.of(new ArrayType(NullType.NULL))).hasNestedGeoType());
+        for (PrimitiveType primitive : new PrimitiveType[] {PrimitiveType.GEOGRAPHY, PrimitiveType.GEOMETRY}) {
+            Type geo = ScalarType.createGeoType(primitive, descriptor(primitive));
+            for (Type type : List.of(new ArrayType(geo), new MapType(geo, IntegerType.INT),
+                    new MapType(IntegerType.INT, geo), new StructType(List.of(IntegerType.INT, geo)))) {
+                assertTrue(type.hasNestedGeoType(), type.toSql());
+                assertTrue(new ArrayType(new StructType(List.of(type))).hasNestedGeoType());
+                assertTrue(new MapType(VarcharType.VARCHAR, type).hasNestedGeoType());
+            }
+        }
+    }
+
+    @Test
     public void testScanSlotPreservesGeoDescriptor() {
         for (PrimitiveType primitive : new PrimitiveType[] {PrimitiveType.GEOGRAPHY, PrimitiveType.GEOMETRY}) {
             ScalarType type = ScalarType.createGeoType(primitive, descriptor(primitive));

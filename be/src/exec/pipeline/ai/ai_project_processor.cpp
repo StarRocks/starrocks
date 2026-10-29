@@ -15,6 +15,8 @@
 #include "exec/pipeline/ai/ai_project_processor.h"
 
 #include <algorithm>
+#include <array>
+#include <limits>
 #include <new>
 #include <optional>
 #include <utility>
@@ -51,6 +53,7 @@ struct AIProjectProcessor::OutputState {
 
 struct AIProjectProcessor::ActiveSubchunk {
     AIProjectPreparedSubchunk prepared;
+    std::shared_ptr<RequestTable> requests;
     std::vector<OutputState> outputs;
     size_t remaining = 0;
     size_t next_row = 0;
@@ -73,19 +76,59 @@ struct AIProjectProcessor::RequestSlot {
     std::unique_ptr<AIProjectTaskHandle> handle;
 };
 
-struct AIProjectProcessor::Lane {
-    explicit Lane(size_t slot_count) {
-        // ai_allocate_shared constructs and destroys Lane in the async memory
-        // scope, so its persistent slot storage must be allocated here too.
-        TEST_SYNC_POINT("AIProjectProcessor::Lane:before_slots_allocation");
+// Published tables never change layout. Slot state and retirement are protected
+// by the lane mutex; callback owners keep storage and accounting alive together.
+struct AIProjectProcessor::RequestTable {
+    RequestTable(AIMemoryContext memory, size_t slot_count) : memory(std::move(memory)) {
+        TEST_SYNC_POINT("AIProjectProcessor::RequestTable:before_slots_allocation");
         slots.resize(slot_count);
+        TEST_SYNC_POINT("AIProjectProcessor::RequestTable:after_slots_allocation");
+        const size_t bytes = slots.capacity() * sizeof(RequestSlot);
+        if (!this->memory.reserve(bytes)) throw std::bad_alloc();
+        reserved_bytes = bytes;
     }
 
+    ~RequestTable() {
+        // ai_allocate_shared destroys the table in its async physical scope.
+        // Free slot storage before releasing its logical reservation.
+        std::vector<RequestSlot>().swap(slots);
+        memory.release(reserved_bytes);
+    }
+
+    static StatusOr<std::shared_ptr<RequestTable>> create(const AIMemoryContext& memory, size_t rows, size_t outputs) {
+        if (outputs != 0 && rows > std::numeric_limits<size_t>::max() / outputs) {
+            return Status::MemoryLimitExceeded("AI project request table size exceeds memory limit");
+        }
+        const size_t cells = rows * outputs;
+        constexpr size_t kMinRequestWindow = 64;
+        const size_t capacity = cells == 0 ? 0 : std::max(cells, kMinRequestWindow);
+        if (capacity > std::vector<RequestSlot>().max_size() ||
+            capacity > std::numeric_limits<size_t>::max() / sizeof(RequestSlot)) {
+            return Status::MemoryLimitExceeded("AI project request table size exceeds memory limit");
+        }
+        return ai_allocate_shared<RequestTable>(memory, memory, capacity);
+    }
+
+    void release_if_consumed(RequestSlot& slot) {
+        if (slot.used && slot.publication_closed && slot.submission_returned && slot.consumed) {
+            slot.used = false;
+            --used;
+        }
+    }
+
+    AIMemoryContext memory;
+    std::vector<RequestSlot> slots;
+    size_t reserved_bytes = 0;
+    size_t used = 0;
+    bool retired = false;
+};
+
+struct AIProjectProcessor::Lane {
     mutable std::mutex mutex;
     ChunkPtr input_chunk;
     size_t input_offset = 0;
     std::shared_ptr<ActiveSubchunk> active;
-    std::vector<RequestSlot> slots; // Bounded allocation before the first callback.
+    std::shared_ptr<RequestTable> requests; // At most one table still owns used slots.
     Status terminal_status;
     TerminalKind terminal_kind = TerminalKind::NONE;
     size_t outstanding_callbacks = 0;
@@ -147,7 +190,7 @@ Status AIProjectProcessor::configure(int32_t dop) {
     try {
         _lanes.reserve(dop);
         for (int32_t i = 0; i < dop; ++i) {
-            auto lane = ai_allocate_shared<Lane>(_memory, std::min<size_t>(_config.max_inflight, 64));
+            auto lane = ai_allocate_shared<Lane>(_memory);
             _lanes.emplace_back(std::move(lane));
         }
     } catch (const std::bad_alloc&) {
@@ -243,6 +286,7 @@ Status AIProjectProcessor::try_process(RuntimeState* state, int32_t driver_seque
 
     ChunkPtr input;
     std::shared_ptr<ActiveSubchunk> active;
+    std::shared_ptr<RequestTable> retired_requests;
     size_t offset = 0;
     {
         std::lock_guard lock(lane->mutex);
@@ -250,11 +294,18 @@ Status AIProjectProcessor::try_process(RuntimeState* state, int32_t driver_seque
             lane->building) {
             return Status::OK();
         }
+        // An ignored group may be materialized before its cancelled siblings
+        // close publication. Keep the next subchunk behind those used slots.
+        if (lane->active == nullptr && lane->requests != nullptr) {
+            if (lane->requests->used != 0) return Status::OK();
+            retired_requests = std::move(lane->requests);
+        }
         lane->building = true;
         active = lane->active;
         input = lane->input_chunk;
         offset = lane->input_offset;
     }
+    retired_requests.reset();
     DeferOp clear_building([lane] {
         std::lock_guard lock(lane->mutex);
         lane->building = false;
@@ -372,6 +423,7 @@ Status AIProjectProcessor::_prepare_and_submit(RuntimeState* state, int32_t driv
     }
     subchunk->prepared.output_chunk->owner_info() = slice->owner_info();
 
+    ASSIGN_OR_RETURN(subchunk->requests, RequestTable::create(_memory, rows, subchunk->prepared.ai_outputs.size()));
     for (size_t output_index = 0; output_index < subchunk->prepared.ai_outputs.size(); ++output_index) {
         auto& prepared_output = subchunk->prepared.ai_outputs[output_index];
         const bool slot_exists = subchunk->prepared.output_chunk->is_slot_exist(prepared_output.slot_id);
@@ -420,6 +472,7 @@ Status AIProjectProcessor::_prepare_and_submit(RuntimeState* state, int32_t driv
         std::lock_guard lock(lane->mutex);
         if (lane->source_finished) return Status::OK();
         if (!lane->terminal_status.ok() || lane->terminal_kind != TerminalKind::NONE) return Status::OK();
+        lane->requests = subchunk->requests;
         lane->active = subchunk;
     }
     return _advance(lane, subchunk);
@@ -428,6 +481,7 @@ Status AIProjectProcessor::_prepare_and_submit(RuntimeState* state, int32_t driv
 Status AIProjectProcessor::_advance(const std::shared_ptr<Lane>& lane,
                                     const std::shared_ptr<ActiveSubchunk>& subchunk) {
     const bool ignore = _config.on_error == "ignore";
+    const auto& requests = subchunk->requests;
     auto stopped = [&] {
         std::lock_guard lock(lane->mutex);
         return lane->source_finished || !lane->terminal_status.ok() || lane->terminal_kind != TerminalKind::NONE;
@@ -437,114 +491,104 @@ Status AIProjectProcessor::_advance(const std::shared_ptr<Lane>& lane,
         // Publish discard before cancellation, which is allowed to callback inline.
         {
             std::lock_guard lock(lane->mutex);
-            for (auto& slot : lane->slots) {
+            for (auto& slot : requests->slots) {
                 if (slot.used && slot.output_index == output && slot.row_index == row) slot.discarded = true;
             }
         }
         TEST_SYNC_POINT("AIProjectProcessor::_advance:after_row_discard");
         subchunk->outputs[output].rows[row].work->finish_null();
-        for (size_t i = 0; i < lane->slots.size(); ++i) {
+        for (size_t i = 0; i < requests->slots.size(); ++i) {
             std::unique_ptr<AIProjectTaskHandle> cancel;
             {
                 std::lock_guard lock(lane->mutex);
-                auto& slot = lane->slots[i];
-                if (slot.used && slot.discarded && !slot.publication_closed) cancel = std::move(slot.handle);
+                auto& slot = requests->slots[i];
+                if (slot.used && slot.output_index == output && slot.row_index == row && !slot.publication_closed) {
+                    cancel = std::move(slot.handle);
+                }
             }
             if (cancel != nullptr) cancel->cancel();
         }
         return Status::OK();
     };
     auto advance = [&]() -> Status {
+        if (stopped()) return Status::OK();
+        // Drain once. Inline completions from the submission phase are consumed
+        // by a later driver advance, as reported by can_process().
+        for (size_t i = 0; i < requests->slots.size(); ++i) {
+            std::optional<AITaskResult> result;
+            std::unique_ptr<AIProjectTaskHandle> handle;
+            size_t output = 0, row = 0;
+            uint64_t ordinal = 0;
+            bool discard = false;
+            {
+                std::lock_guard lock(lane->mutex);
+                auto& slot = requests->slots[i];
+                if (!slot.used || !slot.publication_closed || slot.consumed) continue;
+                output = slot.output_index;
+                row = slot.row_index;
+                ordinal = slot.ordinal;
+                discard = slot.discarded;
+                result = std::move(slot.result);
+                slot.result.reset();
+                slot.consumed = true;
+                if (slot.submission_returned) {
+                    handle = std::move(slot.handle);
+                    requests->release_if_consumed(slot);
+                }
+            }
+            if (discard || !result) continue;
+            auto& cell = subchunk->outputs[output].rows[row];
+            if (!cell.work->is_aggregate()) cell.completed_handle = std::move(handle);
+            if (auto* success = std::get_if<AITaskSuccess>(&*result)) {
+                const auto status = cell.work->consume_success(ordinal, std::move(*success));
+                if (status.is_invalid_argument() && cell.work->is_aggregate()) {
+                    std::lock_guard lock(lane->mutex);
+                    ++lane->aggregate_statistics.local_budget_errors;
+                }
+                RETURN_IF_ERROR(fail_row(output, row, status));
+            } else if (std::holds_alternative<AISanitizedRowFailure>(*result)) {
+                RETURN_IF_ERROR(fail_row(output, row, Status::InvalidArgument("AI function request failed")));
+            }
+        }
+
+        constexpr size_t kMaxRequests = 64;
+        constexpr size_t kMaxPromptBytes = 256 * 1024;
+        constexpr size_t kMaxInitializedCells = 64;
+        constexpr size_t kMaxDecodedBytes = kAiAggregateStateMaxBytes;
+        std::array<size_t, kMaxRequests> free_slots;
+        size_t free_count = 0;
+        {
+            std::lock_guard lock(lane->mutex);
+            for (size_t i = 0; i < requests->slots.size() && free_count < kMaxRequests; ++i) {
+                if (!requests->slots[i].used) free_slots[free_count++] = i;
+            }
+        }
+        // Collect runnable cells once from the existing round-robin position.
+        // The local ring revisits runnable groups without rescanning WAITING rows.
+        std::array<size_t, kMaxRequests> candidates;
+        size_t candidate_count = 0;
+        const size_t row_count = subchunk->outputs.empty() ? 0 : subchunk->outputs[0].rows.size();
+        const size_t total = row_count * subchunk->outputs.size();
+        for (size_t scan = 0; scan < total && candidate_count < kMaxRequests && free_count != 0; ++scan) {
+            const size_t index = (subchunk->next_row + scan) % total;
+            auto& cell = subchunk->outputs[index / row_count].rows[index % row_count];
+            if (!cell.completed && (!cell.work.has_value() || cell.work->progress() == AIWorkProgress::RUNNABLE)) {
+                candidates[candidate_count++] = index;
+            }
+        }
+        size_t candidate_head = 0;
+        size_t candidate_tail = candidate_count;
         size_t submitted = 0;
         size_t bytes = 0;
         size_t initialized_cells = 0;
         size_t decoded_bytes = 0;
-        constexpr size_t kMaxInitializedCells = 64;
-        constexpr size_t kMaxDecodedBytes = kAiAggregateStateMaxBytes;
-        const size_t row_count = subchunk->outputs.empty() ? 0 : subchunk->outputs[0].rows.size();
-        const size_t total = row_count * subchunk->outputs.size();
-        for (;;) {
+        while (candidate_count != 0 && submitted < free_count && bytes < kMaxPromptBytes) {
             if (stopped()) return Status::OK();
-            // Completion is consumed only by the driver. Slots become reusable
-            // after publication closes AND submit returns, independently of the
-            // callback lifecycle barrier that still protects notification.
-            for (size_t i = 0; i < lane->slots.size(); ++i) {
-                std::optional<AITaskResult> result;
-                std::unique_ptr<AIProjectTaskHandle> handle;
-                size_t output = 0, row = 0;
-                uint64_t ordinal = 0;
-                bool discard = false;
-                {
-                    std::lock_guard lock(lane->mutex);
-                    auto& slot = lane->slots[i];
-                    if (!slot.used || !slot.publication_closed || slot.consumed) continue;
-                    output = slot.output_index;
-                    row = slot.row_index;
-                    ordinal = slot.ordinal;
-                    discard = slot.discarded;
-                    result = std::move(slot.result);
-                    slot.result.reset();
-                    slot.consumed = true;
-                    if (slot.submission_returned) {
-                        handle = std::move(slot.handle);
-                        slot.used = false;
-                    }
-                }
-                if (discard || !result) continue;
-                auto& cell = subchunk->outputs[output].rows[row];
-                if (!cell.work->is_aggregate()) cell.completed_handle = std::move(handle);
-                if (auto* success = std::get_if<AITaskSuccess>(&*result)) {
-                    const auto status = cell.work->consume_success(ordinal, std::move(*success));
-                    if (status.is_invalid_argument() && cell.work->is_aggregate()) {
-                        std::lock_guard lock(lane->mutex);
-                        ++lane->aggregate_statistics.local_budget_errors;
-                    }
-                    RETURN_IF_ERROR(fail_row(output, row, status));
-                } else if (std::holds_alternative<AISanitizedRowFailure>(*result)) {
-                    RETURN_IF_ERROR(fail_row(output, row, Status::InvalidArgument("AI function request failed")));
-                }
-            }
-            bool runnable = false;
-            for (auto& output : subchunk->outputs) {
-                for (auto& cell : output.rows) {
-                    if (cell.completed) continue;
-                    if (!cell.work.has_value()) {
-                        runnable = true;
-                    } else if (cell.work->progress() == AIWorkProgress::COMPLETE) {
-                        cell.success = cell.work->take_result();
-                        cell.completed = true;
-                        --subchunk->remaining;
-                    } else {
-                        runnable |= cell.work->progress() == AIWorkProgress::RUNNABLE;
-                    }
-                }
-            }
-            size_t free_slot = lane->slots.size();
-            {
-                std::lock_guard lock(lane->mutex);
-                subchunk->runnable = runnable;
-                subchunk->ready = subchunk->remaining == 0;
-                for (size_t i = 0; i < lane->slots.size(); ++i) {
-                    if (!lane->slots[i].used) {
-                        free_slot = i;
-                        break;
-                    }
-                }
-            }
-            if (!runnable || free_slot == lane->slots.size() || submitted >= 64 || bytes >= 256 * 1024) break;
-            size_t output_index = 0, row_index = 0;
-            bool found = false;
-            for (size_t scan = 0; scan < total; ++scan) {
-                const size_t index = subchunk->next_row++ % total;
-                output_index = index / row_count;
-                row_index = index % row_count;
-                auto& cell = subchunk->outputs[output_index].rows[row_index];
-                if (!cell.completed && (!cell.work.has_value() || cell.work->progress() == AIWorkProgress::RUNNABLE)) {
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) break;
+            const size_t index = candidates[candidate_head++ % kMaxRequests];
+            --candidate_count;
+            subchunk->next_row = (index + 1) % total;
+            const size_t output_index = index / row_count;
+            const size_t row_index = index % row_count;
             auto& cell = subchunk->outputs[output_index].rows[row_index];
             if (!cell.work.has_value()) {
                 auto& input = subchunk->prepared.ai_outputs[output_index].input;
@@ -553,16 +597,13 @@ Status AIProjectProcessor::_advance(const std::shared_ptr<Lane>& lane,
                         aggregate.states->is_null(row_index) ? 0 : aggregate.states->get(row_index).get_slice().size;
                 if (initialized_cells == kMaxInitializedCells ||
                     (initialized_cells != 0 && state_bytes > kMaxDecodedBytes - decoded_bytes)) {
-                    // Keep this cell next in the round-robin order. An
-                    // oversized first state still reaches the codec and fails,
+                    // An oversized first state still reaches the codec and fails
                     // rather than yielding forever without validating it.
-                    --subchunk->next_row;
+                    subchunk->next_row = index;
                     break;
                 }
                 ++initialized_cells;
                 ASSIGN_OR_RETURN(auto initialized, AIProjectRowWork::create(input, row_index));
-                // Codec/memory failures above are query-fatal even with ignore.
-                // A successful decode is at most kMaxDecodedBytes.
                 decoded_bytes += state_bytes;
                 cell.work.emplace(std::move(initialized));
                 {
@@ -583,15 +624,19 @@ Status AIProjectProcessor::_advance(const std::shared_ptr<Lane>& lane,
                 RETURN_IF_ERROR(fail_row(output_index, row_index, next.status()));
                 continue;
             }
-            if (!next.value()) break;
+            if (!next.value()) {
+                subchunk->next_row = index;
+                break;
+            }
+            const size_t free_slot = free_slots[submitted];
             AIWorkRequest request = std::move(*next.value());
             bytes += request.prompt.size();
             const uint64_t task_id = _next_task_id.fetch_add(1, std::memory_order_relaxed);
             AITaskCallback callback;
             auto build_callback = [&] {
-                callback = [lane, ignore, task_id, free_slot](
+                callback = [lane, requests, ignore, task_id, free_slot](
                                    AITaskResult result, const AIExecutionStatistics& statistics) mutable noexcept {
-                    _complete_task(lane, ignore, task_id, free_slot, std::move(result), statistics);
+                    _complete_task(lane, requests, ignore, task_id, free_slot, std::move(result), statistics);
                 };
             };
             _memory.run_in_physical_scope([](void* p) { (*static_cast<decltype(build_callback)*>(p))(); },
@@ -600,13 +645,19 @@ Status AIProjectProcessor::_advance(const std::shared_ptr<Lane>& lane,
                 auto clear = [&] { AITaskCallback().swap(callback); };
                 _memory.run_in_physical_scope([](void* p) { (*static_cast<decltype(clear)*>(p))(); }, &clear);
             });
+            std::unique_ptr<AIProjectTaskHandle> completed_handle;
             {
                 std::lock_guard lock(lane->mutex);
                 if (lane->source_finished || !lane->terminal_status.ok() || lane->terminal_kind != TerminalKind::NONE)
                     break;
-                auto& slot = lane->slots[free_slot];
+                auto& slot = requests->slots[free_slot];
+                // A discarded callback may release a slot before the driver's
+                // cancellation sweep. Keep handle destruction on the driver,
+                // outside the mutex, including when this slot is reused.
+                completed_handle = std::move(slot.handle);
                 slot = RequestSlot{};
                 slot.used = true;
+                ++requests->used;
                 slot.task_id = task_id;
                 slot.output_index = output_index;
                 slot.row_index = row_index;
@@ -619,6 +670,7 @@ Status AIProjectProcessor::_advance(const std::shared_ptr<Lane>& lane,
                 ++lane->outstanding_callbacks;
                 ++lane->submissions_in_progress;
             }
+            completed_handle.reset();
             ++submitted;
             const auto& output = subchunk->prepared.ai_outputs[output_index];
             StatusOr<std::unique_ptr<AIProjectTaskHandle>> handle_or =
@@ -650,45 +702,75 @@ Status AIProjectProcessor::_advance(const std::shared_ptr<Lane>& lane,
             bool already_published;
             {
                 std::lock_guard lock(lane->mutex);
-                already_published = lane->slots[free_slot].publication_closed;
+                already_published = requests->slots[free_slot].publication_closed;
             }
             if (!already_published && (!handle_or.ok() || handle_or.value() == nullptr)) {
-                _complete_submit_failure(lane, ignore, task_id, free_slot,
+                _complete_submit_failure(lane, requests, ignore, task_id, free_slot,
                                          handle_or.ok()
                                                  ? Status::InternalError("AI task submitter returned a null handle")
                                                  : handle_or.status());
             }
             std::unique_ptr<AIProjectTaskHandle> cancel;
             std::shared_ptr<QueryContextLifetime> drain_pin;
+            std::shared_ptr<RequestTable> retired_requests;
+            bool cancel_handle = false;
             bool notify = false;
             {
                 std::lock_guard lock(lane->mutex);
-                auto& slot = lane->slots[free_slot];
+                auto& slot = requests->slots[free_slot];
                 slot.submission_returned = true;
                 if (handle_or.ok()) {
                     if (lane->source_finished ||
                         (!slot.publication_closed && (slot.discarded || !lane->terminal_status.ok() ||
                                                       lane->terminal_kind != TerminalKind::NONE))) {
                         cancel = std::move(handle_or).value();
+                        cancel_handle = true;
                     } else {
                         slot.handle = std::move(handle_or).value();
                     }
                 }
                 if (slot.consumed && slot.publication_closed) {
-                    // Source finish may have discarded this result before
-                    // submit returned. Keep its identity until the callback
-                    // closes publication and releases its lifecycle barrier.
-                    slot.used = false;
+                    requests->release_if_consumed(slot);
+                    if (slot.handle != nullptr) cancel = std::move(slot.handle);
                     notify = !lane->source_finished;
+                    if (requests->retired && requests->used == 0 && lane->requests == requests) {
+                        retired_requests = std::move(lane->requests);
+                    }
                 }
                 if (lane->source_finished && lane->submissions_in_progress == 1 && lane->outstanding_callbacks == 0) {
                     drain_pin = lane->query_lifetime.lock();
                 }
                 --lane->submissions_in_progress;
             }
-            if (cancel != nullptr) cancel->cancel();
+            if (cancel_handle && cancel != nullptr) cancel->cancel();
             if (notify || drain_pin != nullptr) _notify_source(&lane->observable);
             if (!exception_status.ok()) return exception_status;
+            // Revisit a runnable aggregate within this advance so a single
+            // group can fill the bounded request window with multiple leaves.
+            if (work.progress() == AIWorkProgress::RUNNABLE) {
+                candidates[candidate_tail++ % kMaxRequests] = index;
+                ++candidate_count;
+            }
+        }
+        bool runnable = false;
+        for (auto& output : subchunk->outputs) {
+            for (auto& cell : output.rows) {
+                if (cell.completed) continue;
+                if (!cell.work.has_value()) {
+                    runnable = true;
+                } else if (cell.work->progress() == AIWorkProgress::COMPLETE) {
+                    cell.success = cell.work->take_result();
+                    cell.completed = true;
+                    --subchunk->remaining;
+                } else {
+                    runnable |= cell.work->progress() == AIWorkProgress::RUNNABLE;
+                }
+            }
+        }
+        {
+            std::lock_guard lock(lane->mutex);
+            subchunk->runnable = runnable;
+            subchunk->ready = subchunk->remaining == 0;
         }
         return Status::OK();
     };
@@ -707,33 +789,37 @@ Status AIProjectProcessor::_advance(const std::shared_ptr<Lane>& lane,
     // Driver errors cancel immediately. A callback-published terminal status
     // is consumed by pull_chunk, which retains ownership of completed handles
     // until that consumption. Source finish already disposes its own handles.
-    if (!result.ok()) _dispose_request_handles(lane, true);
+    if (!result.ok()) _dispose_request_handles(lane, requests);
     return result;
 }
 
-void AIProjectProcessor::_complete_submit_failure(const std::shared_ptr<Lane>& lane, bool ignore, uint64_t task_id,
-                                                  size_t slot_index, const Status& status) {
+void AIProjectProcessor::_complete_submit_failure(const std::shared_ptr<Lane>& lane,
+                                                  const std::shared_ptr<RequestTable>& requests, bool ignore,
+                                                  uint64_t task_id, size_t slot_index, const Status& status) {
     if (status.is_cancelled() || status.is_time_out() || status.is_shutdown() || status.is_service_unavailable()) {
         const auto reason = status.is_cancelled()
                                     ? AILifecycleReason::CANCELLED
                                     : status.is_time_out() ? AILifecycleReason::DEADLINE : AILifecycleReason::SHUTDOWN;
-        _complete_task(lane, ignore, task_id, slot_index, AILifecycleCancelled{.reason = reason}, {});
+        _complete_task(lane, requests, ignore, task_id, slot_index, AILifecycleCancelled{.reason = reason}, {});
     } else {
         const auto failure = status.is_mem_limit_exceeded() || status.is_resource_busy()
                                      ? AISanitizedFailureClass::LOCAL_RESOURCE
                                      : AISanitizedFailureClass::LOCAL_REQUEST;
-        _complete_task(lane, ignore, task_id, slot_index, AISanitizedRowFailure{.failure_class = failure}, {});
+        _complete_task(lane, requests, ignore, task_id, slot_index, AISanitizedRowFailure{.failure_class = failure},
+                       {});
     }
 }
 
-void AIProjectProcessor::_complete_task(const std::shared_ptr<Lane>& lane, bool ignore, uint64_t task_id,
+void AIProjectProcessor::_complete_task(const std::shared_ptr<Lane>& lane,
+                                        const std::shared_ptr<RequestTable>& requests, bool ignore, uint64_t task_id,
                                         size_t slot_index, AITaskResult result,
                                         const AIExecutionStatistics& statistics) noexcept {
     bool notify = false;
+    std::shared_ptr<RequestTable> retired_requests;
     {
         AITaskResult local(std::move(result));
         std::lock_guard lock(lane->mutex);
-        auto& slot = lane->slots[slot_index];
+        auto& slot = requests->slots[slot_index];
         if (!slot.used || slot.task_id != task_id || slot.publication_closed) return;
         lane->statistics.add(statistics);
         try {
@@ -768,10 +854,19 @@ void AIProjectProcessor::_complete_task(const std::shared_ptr<Lane>& lane, bool 
             notify = !lane->source_finished;
         }
         slot.publication_closed = true;
-        if (slot.consumed && slot.submission_returned) slot.used = false;
+        if (slot.consumed && slot.submission_returned) {
+            requests->release_if_consumed(slot);
+            // In particular, the last cancelled sibling releases cross-subchunk
+            // backpressure even though it has no result for the driver to drain.
+            notify |= !lane->source_finished;
+            if (requests->retired && requests->used == 0 && lane->requests == requests) {
+                retired_requests = std::move(lane->requests);
+            }
+        }
         // No slot access is permitted after this lock: the driver may reuse it
         // while this callback is still executing the observer notification.
     }
+    retired_requests.reset();
     if (notify) _notify_source(&lane->observable);
     std::shared_ptr<QueryContextLifetime> drain_pin;
     {
@@ -802,7 +897,7 @@ bool AIProjectProcessor::has_output(int32_t driver_sequence) const {
     // pull_chunk, including a reducer wave that has another round to schedule.
     if (lane->active->runnable) return false;
     bool published = false;
-    for (const auto& slot : lane->slots) {
+    for (const auto& slot : lane->active->requests->slots) {
         if (!slot.used || slot.discarded) continue;
         if (!slot.publication_closed) return false;
         published |= !slot.consumed;
@@ -824,12 +919,13 @@ bool AIProjectProcessor::can_process(int32_t driver_sequence) const {
         }
         if (lane->active != nullptr) {
             bool free = false;
-            for (const auto& slot : lane->slots) {
+            for (const auto& slot : lane->active->requests->slots) {
                 if (slot.used && slot.publication_closed && !slot.consumed) return true;
                 free |= !slot.used;
             }
             return !lane->active->ready && lane->active->runnable && free;
         }
+        if (lane->requests != nullptr && lane->requests->used != 0) return false;
         if (lane->input_chunk != nullptr) return true;
     }
     auto has_chunk = _input_buffer->lane_has_chunk(driver_sequence);
@@ -841,10 +937,12 @@ StatusOr<ChunkPtr> AIProjectProcessor::pull_chunk(RuntimeState* state, int32_t d
     ASSIGN_OR_RETURN(std::shared_ptr<Lane> lane, _lane(driver_sequence));
 
     std::shared_ptr<ActiveSubchunk> subchunk;
+    std::shared_ptr<RequestTable> requests;
     Status driver_status;
     TerminalKind terminal_kind = TerminalKind::NONE;
     {
         std::lock_guard lock(lane->mutex);
+        requests = lane->requests;
         if (!lane->terminal_status.ok() || lane->terminal_kind != TerminalKind::NONE) {
             driver_status = lane->terminal_status;
             terminal_kind = lane->terminal_kind;
@@ -857,7 +955,7 @@ StatusOr<ChunkPtr> AIProjectProcessor::pull_chunk(RuntimeState* state, int32_t d
     }
 
     if (!driver_status.ok() || terminal_kind != TerminalKind::NONE) {
-        _dispose_request_handles(lane, true);
+        _dispose_request_handles(lane, requests);
         return _terminal_status(driver_status, terminal_kind);
     }
 
@@ -877,7 +975,7 @@ StatusOr<ChunkPtr> AIProjectProcessor::pull_chunk(RuntimeState* state, int32_t d
             std::lock_guard lock(lane->mutex);
             lane->terminal_status.update(output.status());
         }
-        _dispose_request_handles(lane, true);
+        _dispose_request_handles(lane, requests);
         return output.status();
     }
     {
@@ -886,7 +984,7 @@ StatusOr<ChunkPtr> AIProjectProcessor::pull_chunk(RuntimeState* state, int32_t d
             lane->active.reset();
         }
     }
-    _dispose_request_handles(lane, false);
+    _dispose_request_handles(lane, requests);
     return std::move(output).value();
 }
 
@@ -934,7 +1032,8 @@ StatusOr<bool> AIProjectProcessor::lane_finished(int32_t driver_sequence) const 
             return true;
         }
         if (!lane->terminal_status.ok() || lane->terminal_kind != TerminalKind::NONE || lane->building ||
-            lane->input_chunk != nullptr || lane->active != nullptr) {
+            lane->input_chunk != nullptr || lane->active != nullptr ||
+            (lane->requests != nullptr && lane->requests->used != 0)) {
             return false;
         }
     }
@@ -971,6 +1070,7 @@ Status AIProjectProcessor::set_source_finished(int32_t driver_sequence) {
 
     ChunkPtr input_to_release;
     std::shared_ptr<ActiveSubchunk> active_to_release;
+    std::shared_ptr<RequestTable> requests;
     {
         std::lock_guard lock(lane->mutex);
         if (lane->source_finished) {
@@ -979,10 +1079,11 @@ Status AIProjectProcessor::set_source_finished(int32_t driver_sequence) {
         lane->source_finished = true;
         input_to_release = std::move(lane->input_chunk);
         active_to_release = std::move(lane->active);
+        requests = std::move(lane->requests);
     }
 
     Status buffer_status = _input_buffer->set_source_finished(driver_sequence);
-    _dispose_request_handles(lane, true);
+    _dispose_request_handles(lane, requests);
     active_to_release.reset();
     input_to_release.reset();
     return buffer_status;
@@ -1069,28 +1170,38 @@ Status AIProjectProcessor::_row_failure_status() {
     return Status::InternalError("AI function request failed");
 }
 
-void AIProjectProcessor::_dispose_request_handles(const std::shared_ptr<Lane>& lane, bool cancel_unfinished) noexcept {
-    if (lane == nullptr) return;
-    for (size_t i = 0; i < lane->slots.size(); ++i) {
+void AIProjectProcessor::_dispose_request_handles(const std::shared_ptr<Lane>& lane,
+                                                  const std::shared_ptr<RequestTable>& requests) noexcept {
+    if (requests == nullptr) return;
+    {
+        std::lock_guard lock(lane->mutex);
+        requests->retired = true;
+    }
+    for (size_t i = 0; i < requests->slots.size(); ++i) {
         std::unique_ptr<AIProjectTaskHandle> handle;
         std::optional<AITaskResult> result;
         bool cancel = false;
         {
             std::lock_guard lock(lane->mutex);
-            auto& slot = lane->slots[i];
-            cancel = cancel_unfinished && slot.used && !slot.publication_closed;
-            // A discarded callback may have freed its slot before the cancel
-            // sweep. Its completed handle still belongs to driver cleanup.
+            auto& slot = requests->slots[i];
+            cancel = slot.used && !slot.publication_closed;
             handle = std::move(slot.handle);
-            if (cancel_unfinished && slot.used) {
+            if (slot.used) {
                 slot.discarded = true;
                 result = std::move(slot.result);
                 slot.result.reset();
                 slot.consumed = true;
-                if (slot.publication_closed && slot.submission_returned) slot.used = false;
+                requests->release_if_consumed(slot);
             }
         }
         if (handle != nullptr && cancel) handle->cancel();
+    }
+    std::shared_ptr<RequestTable> retired_requests;
+    {
+        std::lock_guard lock(lane->mutex);
+        if (requests->used == 0 && lane->requests == requests) {
+            retired_requests = std::move(lane->requests);
+        }
     }
     // Row work, columns, and summaries are driver-owned. Source finish only
     // detaches its shared_ptr; an advancing driver is their final owner.

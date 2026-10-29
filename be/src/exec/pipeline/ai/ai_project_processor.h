@@ -163,6 +163,7 @@ private:
     struct ActiveSubchunk;
     struct Lane;
     struct RequestSlot;
+    struct RequestTable;
     enum class TerminalKind : uint8_t;
 
     AIProjectProcessor(std::shared_ptr<AIChunkBuffer> input_buffer, std::shared_ptr<AIProjectProjection> projection,
@@ -172,17 +173,19 @@ private:
     Status _prepare_and_submit(RuntimeState* state, int32_t driver_sequence, const std::shared_ptr<Lane>& lane,
                                ChunkPtr slice);
     Status _advance(const std::shared_ptr<Lane>& lane, const std::shared_ptr<ActiveSubchunk>& subchunk);
-    static void _complete_task(const std::shared_ptr<Lane>& lane, bool ignore_row_failures, uint64_t task_id,
-                               size_t slot_index, AITaskResult result,
+    static void _complete_task(const std::shared_ptr<Lane>& lane, const std::shared_ptr<RequestTable>& requests,
+                               bool ignore_row_failures, uint64_t task_id, size_t slot_index, AITaskResult result,
                                const AIExecutionStatistics& statistics) noexcept;
-    static void _complete_submit_failure(const std::shared_ptr<Lane>& lane, bool ignore_row_failures, uint64_t task_id,
-                                         size_t slot_index, const Status& status);
+    static void _complete_submit_failure(const std::shared_ptr<Lane>& lane,
+                                         const std::shared_ptr<RequestTable>& requests, bool ignore_row_failures,
+                                         uint64_t task_id, size_t slot_index, const Status& status);
     static StatusOr<ChunkPtr> _materialize(const std::shared_ptr<ActiveSubchunk>& subchunk, bool ignore_row_failures,
                                            AIExecutionStatistics* statistics);
 
     static Status _terminal_status(const Status& driver_status, TerminalKind terminal_kind);
     static Status _row_failure_status();
-    static void _dispose_request_handles(const std::shared_ptr<Lane>& lane, bool cancel_unfinished) noexcept;
+    static void _dispose_request_handles(const std::shared_ptr<Lane>& lane,
+                                         const std::shared_ptr<RequestTable>& requests) noexcept;
     static void _notify_source(PipeObservable* observable);
 
     std::shared_ptr<AIChunkBuffer> _input_buffer;

@@ -16,6 +16,9 @@
 
 #include <gtest/gtest.h>
 
+#include <atomic>
+#include <thread>
+
 namespace starrocks {
 
 class MemTrackerTest : public testing::Test {
@@ -38,6 +41,60 @@ protected:
     std::unique_ptr<MemTracker> _query_2;
     ObjectPool _pool;
 };
+
+TEST_F(MemTrackerTest, transfer_preserves_common_ancestors) {
+    _query_1->consume(100);
+    _query_1->transfer_to(_query_2.get(), 60);
+    EXPECT_EQ(40, _query_1->consumption());
+    EXPECT_EQ(60, _query_2->consumption());
+    EXPECT_EQ(100, _query_pool_mem_tracker->consumption());
+    EXPECT_EQ(100, _process_mem_tracker->consumption());
+    EXPECT_EQ(100, _query_pool_mem_tracker->peak_consumption());
+    _query_2->transfer_to(_process_mem_tracker.get(), 60);
+    EXPECT_EQ(40, _query_pool_mem_tracker->consumption());
+    EXPECT_EQ(100, _process_mem_tracker->consumption());
+    _process_mem_tracker->transfer_to(_query_2.get(), 60);
+    _query_2->transfer_to(_query_2.get(), 60);
+    EXPECT_EQ(60, _query_2->consumption());
+    EXPECT_EQ(100, _process_mem_tracker->peak_consumption());
+    _query_1->release(40);
+    _query_2->release(60);
+}
+
+TEST_F(MemTrackerTest, transfer_does_not_open_common_ancestor_limit_window) {
+    MemTracker process(1024, "process");
+    MemTracker pool(1024, "pool", &process);
+    MemTracker sender(-1, "sender", &pool);
+    MemTracker receiver(-1, "receiver", &pool);
+    sender.consume(1024);
+    std::atomic<bool> started = false;
+    std::atomic<bool> done = false;
+    std::atomic<int> admitted = 0;
+    std::thread checker([&] {
+        started.store(true);
+        do {
+            if (pool.try_consume(1) == nullptr) {
+                admitted.fetch_add(1);
+                pool.release(1);
+            }
+        } while (!done.load());
+    });
+    while (!started.load()) {
+        std::this_thread::yield();
+    }
+    for (int i = 0; i < 100000; ++i) {
+        sender.transfer_to(&receiver, 1024);
+        receiver.transfer_to(&sender, 1024);
+    }
+    done.store(true);
+    checker.join();
+    EXPECT_EQ(0, admitted.load());
+    EXPECT_EQ(1024, process.consumption());
+    EXPECT_EQ(1024, process.peak_consumption());
+    EXPECT_EQ(1024, pool.consumption());
+    EXPECT_EQ(1024, pool.peak_consumption());
+    sender.release(1024);
+}
 
 TEST_F(MemTrackerTest, label_type_convert) {
     const auto& mem_types = MemTracker::mem_types();

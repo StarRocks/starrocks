@@ -768,6 +768,25 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     // reset is in flight. A refresh run compares it with the value it saw at its start before publishing version
     // entries, and publishes none if that value was odd or has changed, see MVVersionManager#persistRefreshScheme.
     private final AtomicLong versionMapResetEpoch = new AtomicLong();
+    // Whether this mv should end up active, as loaded from the image. Set while the mv waits for its layer of
+    // the startup activation, cleared once a reload of it is done; see prepareForStartupActivation.
+    private volatile Boolean startupDesiredActive = null;
+    // statusEpoch right after the handover, guarded by this: once they differ, another path has changed this mv's
+    // status since, and startupDesiredActive no longer holds.
+    private long startupHandoverEpoch = 0;
+    // Completed once the reload in progress is done; a new one is set, guarded by this, when a reload starts while
+    // none is in progress. Lets the startup activation wait for a reload another path is running, see
+    // activateOnStartup.
+    private volatile CompletableFuture<Void> reloadDone = CompletableFuture.completedFuture(null);
+
+    // Keep the status epoch consistent with an active-to-inactive transition. An already inactive MV keeps
+    // its epoch so that a replayed activation being derived for it is not mistaken for stale.
+    private synchronized void markInactiveForReload() {
+        if (active) {
+            this.active = false;
+            this.statusEpoch++;
+        }
+    }
 
     public MaterializedView() {
         super(TableType.MATERIALIZED_VIEW);
@@ -1669,11 +1688,84 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
     /**
      * Reload the materialized view with original active state.
-     * NOTE: This method will not try to activate the materialized view.
      * @param isReloadAsync whether reload mv asynchronously when it is desired to be active.
+     * @return the activation completion, used by the startup coordinator to wait for a whole layer
      */
-    public void onReload(boolean isReloadAsync) {
-        onReload(isReloadAsync, isActive(), false);
+    public CompletableFuture<?> onReload(boolean isReloadAsync) {
+        return onReload(isReloadAsync, null, false);
+    }
+
+    /**
+     * Hand this mv over to the layered startup activation, see
+     * {@link com.starrocks.server.MvStartupActivationCoordinator}. Called on the image loading thread for every mv
+     * before any of them is reloaded.
+     * <p>
+     * The mv turns inactive right away, as it did when every mv was reloaded at once: until its activation has
+     * run, nothing may treat it as usable. Its reload state stays {@code NOT} until its own layer is submitted,
+     * so a reload that reaches it earlier -- the replay of a {@code CREATE MATERIALIZED VIEW} on top of it, say --
+     * reloads it in place instead of waiting for a layer that has not started.
+     * <p>
+     * The decision whether it should end up active is taken here, from the image, and kept until a reload of it is
+     * done: marking it inactive would otherwise make every later reload entry read that decision as false and
+     * leave the mv inactive for good. It is only kept while nothing else changes the mv's status: once the journal
+     * replayed since the handover activates or inactivates it, its current status is the decision instead.
+     * <p>
+     * An mv that has already been reloaded, or is being reloaded, is left alone: {@link #activateOnStartup} skips it,
+     * so marking it inactive here would leave it inactive.
+     */
+    public void prepareForStartupActivation() {
+        if (getReloadState() != RELOAD_STATE_NOT) {
+            return;
+        }
+        synchronized (this) {
+            this.startupDesiredActive = active;
+            markInactiveForReload();
+            this.startupHandoverEpoch = statusEpoch;
+        }
+    }
+
+    /**
+     * Run the startup activation of this mv; the activator the startup coordinator applies to each mv of a layer.
+     * An mv another path has already reloaded is skipped, and so is an mv dropped by the journal replayed since the
+     * handover. An mv another path is reloading right now is waited for instead: its layer is only over once that
+     * reload is, or the next layer's checks would wait for it on mv-plan-cache threads.
+     *
+     * @return the future of the asynchronous activation task, or of the reload in progress; an already completed
+     *         future when skipped or when the mv is not desired to be active
+     */
+    public CompletableFuture<?> activateOnStartup() {
+        int reloadState = getReloadState();
+        if (reloadState == RELOAD_STATE_ING) {
+            // Another path -- the replay of a CREATE MATERIALIZED VIEW on top of it, say -- is reloading it in place.
+            // Bounded like waitForReloaded, so that a reload that never ends cannot hold the layers back for good.
+            LOG.info("mv {} is being reloaded by another path, its startup activation waits for that reload", getName());
+            return reloadDone.copy().orTimeout(Config.mv_async_reload_wait_timeout_second, TimeUnit.SECONDS);
+        }
+        if (reloadState != RELOAD_STATE_NOT) {
+            LOG.info("skip the startup activation of mv {}, it has already been reloaded by another path, " +
+                    "reload state: {}", getName(), reloadState);
+            return CompletableFuture.completedFuture(null);
+        }
+        if (!isInCatalog()) {
+            LOG.info("skip the startup activation of mv {}({}), it was dropped after the image was loaded",
+                    getName(), getId());
+            return CompletableFuture.completedFuture(null);
+        }
+        return onReload(true, null, false);
+    }
+
+    private synchronized boolean resolveDesiredActive() {
+        Boolean desired = startupDesiredActive;
+        // A status change since the handover -- a replayed ALTER ... ACTIVE or INACTIVE, say -- is newer than what
+        // the image said.
+        return desired != null && statusEpoch == startupHandoverEpoch ? desired : active;
+    }
+
+    private void markReloadDone() {
+        // Clear the startup decision first: whoever sees DONE must not pick up a stale one.
+        startupDesiredActive = null;
+        changeReloadState(RELOAD_STATE_DONE);
+        reloadDone.complete(null);
     }
 
     /**
@@ -1685,42 +1777,57 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      * It shouldn't affect the behavior of other operations which might indeed need to do a reload process.
      *
      * @param isReloadAsync whether this reload is called after FE's image loading process.
-     * @param desiredActive whether the materialized view should be active after reload.
+     * @param desiredActive whether the materialized view should be active after reload, or null to take the
+     *                      startup decision, see {@link #resolveDesiredActive}.
      */
-    private void onReload(boolean isReloadAsync,
-                          boolean desiredActive,
-                          boolean isThrowException) {
+    private CompletableFuture<?> onReload(boolean isReloadAsync,
+                                          Boolean desiredActive,
+                                          boolean isThrowException) {
         // Only skip reload during FE startup/checkpoint scenarios (isReloadAsync=true).
         if (isReloadAsync && hasReloaded()) {
-            return;
+            return CompletableFuture.completedFuture(null);
         }
-        try {
+        final boolean desired;
+        final long epoch;
+        synchronized (this) {
+            // One step, so that a status change replayed concurrently is either part of the decision or newer than
+            // the epoch the asynchronous verdict must still find, see checkAndSetActive.
+            desired = desiredActive != null ? desiredActive : resolveDesiredActive();
             // set inactive first to avoid inconsistent state during reloading
-            this.active = false;
+            markInactiveForReload();
+            epoch = statusEpoch;
+            // before the state turns ING below, so that whoever sees ING finds the future of this reload
+            if (reloadDone.isDone()) {
+                reloadDone = new CompletableFuture<>();
+            }
+        }
+        CompletableFuture<?> activationTask = CompletableFuture.completedFuture(null);
+        try {
             // set reload first
             this.changeReloadState(RELOAD_STATE_ING);
             // reload mv required metadata synchronously
             onReloadImpl();
             // if desired to be active, check whether you can be active
-            checkAndSetActive(isReloadAsync, desiredActive);
+            activationTask = checkAndSetActive(isReloadAsync, desired, epoch);
         } catch (Throwable e) {
             LOG.error("reload mv failed: {}", this, e);
             // only set inactive when it is desired to be active
-            if (desiredActive) {
+            if (desired) {
                 setInActiveReason(InactiveReason.ofInactive("reload failed: " + e.getMessage()));
             }
             if (isThrowException) {
                 throw e;
             }
         } finally {
-            if (!isReloadAsync || !desiredActive) {
+            if (!isReloadAsync || !desired) {
                 LOG.info("finish reloading mv {}. current active state: {}", getName(), isActive());
-                changeReloadState(RELOAD_STATE_DONE);
+                markReloadDone();
             }
         }
+        return activationTask;
     }
 
-    private void checkAndSetActive(boolean isReloadAsync, boolean desiredActive) {
+    private CompletableFuture<?> checkAndSetActive(boolean isReloadAsync, boolean desiredActive, long epoch) {
         // to avoid blocking the main replay thread and reduce fe restart time, check isActive asynchronously,
         // this method is time costing because:
         // - if mv contains external base tables, it may need to connect external systems to check table existence
@@ -1728,12 +1835,11 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         // so we submit an async task to do this check
         if (isReloadAsync) {
             // A status change replayed while the check runs (an INACTIVE from the leader) wins over its verdict,
-            // which was computed for the status before, as in activateOnReplay.
-            final long epoch;
-            synchronized (this) {
-                epoch = statusEpoch;
-            }
-            CachingMvPlanContextBuilder.submitAsyncTask(buildTaskName("MVCheckIsActive"), () -> {
+            // which was computed for the status before, as in activateOnReplay. The epoch is the one noted together
+            // with the decision in onReload, so the synchronous reload in between is covered too.
+            // The coordinator waits on this future before submitting the next layer. Plan cache building stays
+            // queued separately by the setActive() hook and is not part of this task.
+            return CachingMvPlanContextBuilder.submitAsyncTask(buildTaskName("MVCheckIsActive"), () -> {
                 try {
                     onReloadImplHeavy();
 
@@ -1746,7 +1852,11 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                     setInActiveReasonUnlessChanged(
                             InactiveReason.ofInactive("check and set active failed: " + e.getMessage()), epoch);
                 } finally {
-                    changeReloadState(RELOAD_STATE_DONE);
+                    markReloadDone();
+                }
+                // As in activateOnReplay: a DROP replayed while this check ran must not be undone by what it published.
+                if (!isInCatalog()) {
+                    undoActivationOfDroppedMv("dropped while its activation was being checked");
                 }
                 return null;
             });
@@ -1757,6 +1867,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 InactiveReason reason = checkIsActiveOnLoadBlocking();
                 setInActiveReason(reason);
             }
+            return CompletableFuture.completedFuture(null);
         }
     }
 
@@ -1857,11 +1968,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             // the base-table links and the rewrite cache. DROP takes the mv out of the catalog before it
             // cleans up, so checking after every side effect above means one of the two always runs last.
             if (!isInCatalog()) {
-                LOG.info("mv {} was dropped while its replayed activation was being rebuilt, undoing it",
-                        getName());
-                setInactiveAndReason("dropped while its replayed activation was being rebuilt");
-                unlinkFromBaseTables(getMvId());
-                GlobalStateMgr.getCurrentState().getGlobalConstraintManager().unRegisterConstraint(this);
+                undoActivationOfDroppedMv("dropped while its replayed activation was being rebuilt");
                 return null;
             }
             if (!stale && !reason.isActive) {
@@ -1873,6 +1980,21 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             }
             return null;
         });
+    }
+
+    /**
+     * Undo what an asynchronous activation published -- the constraints, the base-table links, the rewrite cache
+     * and the metrics -- for an mv a DROP took out of the catalog while that activation ran. DROP takes the mv out
+     * of the catalog before it cleans up, so a caller that checks after every side effect of its own always runs
+     * last.
+     */
+    private void undoActivationOfDroppedMv(String reason) {
+        LOG.info("mv {} was {}, undoing its activation", getName(), reason);
+        setInactiveAndReason(reason);
+        unlinkFromBaseTables(getMvId());
+        GlobalStateMgr.getCurrentState().getGlobalConstraintManager().unRegisterConstraint(this);
+        // the reload registers them, see onReloadImpl
+        MaterializedViewMetricsRegistry.getInstance().remove(getMvId());
     }
 
     /**

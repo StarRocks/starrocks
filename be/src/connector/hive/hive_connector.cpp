@@ -670,6 +670,8 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
                 ADD_CHILD_COUNTER(_runtime_profile, "DataCacheSkipReadCounter", TUnit::UNIT, prefix);
         _scanner_ctx.profile.datacache_skip_read_bytes =
                 ADD_CHILD_COUNTER(_runtime_profile, "DataCacheSkipReadBytes", TUnit::BYTES, prefix);
+        _scanner_ctx.profile.datacache_read_error_counter =
+                ADD_CHILD_COUNTER(_runtime_profile, "DataCacheReadErrorCounter", TUnit::UNIT, prefix);
         _scanner_ctx.profile.datacache_read_timer = ADD_CHILD_TIMER(_runtime_profile, "DataCacheReadTimer", prefix);
         _scanner_ctx.profile.datacache_read_peer_counter =
                 ADD_CHILD_COUNTER(_runtime_profile, "DataCacheReadPeerCounter", TUnit::UNIT, prefix);

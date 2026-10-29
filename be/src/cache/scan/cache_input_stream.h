@@ -46,6 +46,8 @@ public:
         int64_t skip_read_cache_bytes = 0;
         int64_t skip_read_peer_cache_count = 0;
         int64_t skip_read_peer_cache_bytes = 0;
+        // Reads that failed with an error other than NotFound or ResourceBusy, served from remote instead.
+        int64_t read_cache_error_count = 0;
         int64_t skip_write_cache_count = 0;
         int64_t skip_write_cache_bytes = 0;
         int64_t write_cache_fail_count = 0;
