@@ -635,8 +635,8 @@ Status PrimaryKeyManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_
             if (auto it = del_plan.dels_after_segment.find(global_segment_id);
                 it != del_plan.dels_after_segment.end()) {
                 for (uint32_t del_id : it->second) {
-                    RETURN_IF_ERROR(
-                            _do_delete(del_id, del_plan.del_rssids[del_id], params, state, index, &new_deletes));
+                    RETURN_IF_ERROR(_do_delete(del_id, del_plan.del_rssids[del_id], params, state, index, &new_deletes,
+                                               &orphan_files));
                     update_index_cache_size(index_entry);
                     del_plan.del_applied[del_id] = true;
                 }
@@ -678,7 +678,8 @@ Status PrimaryKeyManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_
         if (del_plan.del_applied[del_id]) {
             continue;
         }
-        RETURN_IF_ERROR(_do_delete(del_id, del_plan.del_rssids[del_id], params, state, index, &new_deletes));
+        RETURN_IF_ERROR(
+                _do_delete(del_id, del_plan.del_rssids[del_id], params, state, index, &new_deletes, &orphan_files));
         update_index_cache_size(index_entry);
         del_plan.del_applied[del_id] = true;
     }
@@ -1247,7 +1248,8 @@ Status PrimaryKeyManager::_do_update(uint32_t rowset_id, int32_t upsert_idx, con
 // current BE carry a pre-built tombstone sstable, which bulk_erase ingests directly; small del files and
 // pre-upgrade txn logs fall back to the memtable erase path.
 Status PrimaryKeyManager::_do_delete(uint32_t del_id, uint32_t del_rssid, const RowsetUpdateStateParams& params,
-                                     RowsetUpdateState& state, LakePersistentIndex& index, DeletesMap* new_deletes) {
+                                     RowsetUpdateState& state, LakePersistentIndex& index, DeletesMap* new_deletes,
+                                     std::vector<FileMetaPB>* orphan_files) {
     TRACE_COUNTER_SCOPE_LATENCY_US("do_delete_latency_us");
     RETURN_IF_ERROR(state.load_delete(del_id, params));
     DCHECK(state.deletes(del_id) != nullptr);
@@ -1256,11 +1258,16 @@ Status PrimaryKeyManager::_do_delete(uint32_t del_id, uint32_t del_rssid, const 
     const bool has_prebuilt_del_sst = op_write.del_ssts_size() == op_write.dels_meta_size() &&
                                       op_write.del_sst_ranges_size() == op_write.dels_meta_size() &&
                                       !op_write.del_ssts(del_id).name().empty();
-    if (has_prebuilt_del_sst) {
+    if (has_prebuilt_del_sst && use_cloud_native_pk_index(*params.metadata)) {
         RETURN_IF_ERROR(index.bulk_erase(*state.deletes(del_id), new_deletes, del_rssid, op_write.del_ssts(del_id),
                                          op_write.del_sst_ranges(del_id), params.metadata->version()));
     } else {
         RETURN_IF_ERROR(index.erase(*state.deletes(del_id), new_deletes, del_rssid));
+        if (has_prebuilt_del_sst) {
+            // Only a cloud-native persistent index can ingest the tombstone sstable. Any other index applies the
+            // delete through the memtable, and the sstable goes to vacuum instead of staying unreferenced.
+            orphan_files->push_back(op_write.del_ssts(del_id));
+        }
     }
     state.release_delete(del_id);
     return Status::OK();

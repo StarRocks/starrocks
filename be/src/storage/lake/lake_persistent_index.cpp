@@ -506,7 +506,7 @@ Status LakePersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue
                                    IOStat* stat, ParallelUpsertContext* ctx) {
     // The active-memtable write stays on the caller thread: the memtable is not safe for concurrent
     // writes, and this is also what fixes the order of an upsert against the deletes around it.
-    std::shared_ptr<std::set<KeyIndex>> not_founds = std::make_shared<std::set<KeyIndex>>();
+    std::shared_ptr<KeyIndexSet> not_founds = std::make_shared<KeyIndexSet>();
     size_t num_found;
     RETURN_IF_ERROR(_memtable->upsert(n, keys, values, old_values, not_founds.get(), &num_found, _publish_version));
 
@@ -603,7 +603,7 @@ Status LakePersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_v
     if (parallel_worthwhile) {
         KeyIndexSet cur;
         for (auto idx : not_founds) {
-            cur.insert(idx);
+            cur.insert(cur.end(), idx);
             if (cur.size() >= min_rows_per_task) {
                 subsets.push_back(std::move(cur));
                 cur.clear();
@@ -659,7 +659,7 @@ Status LakePersistentIndex::bulk_erase(size_t n, const Slice* keys, IndexValue* 
                 [min_rows_per_task, n](size_t i) {
                     KeyIndexSet key_indexes;
                     for (size_t j = i * min_rows_per_task, e = std::min(j + min_rows_per_task, n); j < e; ++j) {
-                        key_indexes.insert(j);
+                        key_indexes.insert(key_indexes.end(), j);
                     }
                     return key_indexes;
                 },

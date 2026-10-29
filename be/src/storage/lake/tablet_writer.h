@@ -113,8 +113,9 @@ public:
     const std::vector<std::vector<uint32_t>>& seg_delvecs() const { return _seg_delvecs; }
 
     // Parallel to dels(): the pre-built tombstone sstable for each del file, built at write time when
-    // its serialized size reaches pk_index_eager_build_threshold_bytes. An empty entry means publish
-    // applies that delete via the memtable erase path. del_sst_ranges() carries each sstable's key range.
+    // its serialized size reaches pk_index_eager_build_threshold_bytes or it holds pk_index_del_sst_min_rows
+    // rows. An empty entry means publish applies that delete via the memtable erase path.
+    // del_sst_ranges() carries each sstable's key range.
     const std::vector<FileInfo>& del_ssts() const { return _del_ssts; }
 
     const std::vector<PersistentIndexSstableRangePB>& del_sst_ranges() const { return _del_sst_ranges; }
@@ -247,9 +248,9 @@ public:
     // However, whether eager PK index build is actually enabled still depends on the schema.
     void try_enable_pk_index_eager_build();
     // Parallel to _dels: pre-built tombstone sstable + its key range for each del file (an empty FileInfo
-    // when this del file has no sstable). Built when the serialized del-file size reaches
-    // pk_index_eager_build_threshold_bytes; shared-data primary-key tablets always use the cloud-native
-    // persistent index, so publish can ingest it directly.
+    // when this del file has no sstable). Built when the del file reaches pk_index_eager_build_threshold_bytes
+    // or pk_index_del_sst_min_rows rows. Publish ingests it into a cloud-native persistent index; any other
+    // index applies the delete through the memtable and hands the sstable to vacuum.
     std::vector<FileInfo> _del_ssts;
     std::vector<PersistentIndexSstableRangePB> _del_sst_ranges;
 
