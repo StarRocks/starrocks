@@ -17,19 +17,32 @@
 #include <gtest/gtest.h>
 
 #include <iostream>
+#include <memory>
+#include <string>
+#include <vector>
 
 #include "base/testutil/assert.h"
+#include "base/uid_util.h"
+#include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/datum_tuple.h"
 #include "common/config_exec_fwd.h"
+#include "compute_env/load/load_stream_mgr.h"
+#include "compute_env/load/stream_load_pipe.h"
 #include "fs/fs_memory.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/Descriptors_types.h"
+#include "gen_cpp/PlanNodes_types.h"
+#include "runtime/byte_buffer.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
+<<<<<<< HEAD
 #include "testutil/type_test_helper.h"
+=======
+#include "runtime/service_contexts.h"
+>>>>>>> 08f90cdbbd1... [BugFix][RB-843] Read channel stream load pipes without blocking, with the default buffer (#67291)
 
 namespace starrocks {
 
@@ -43,7 +56,8 @@ protected:
 
     std::unique_ptr<CSVScanner> create_csv_scanner(const std::vector<TypeDescriptor>& types,
                                                    const std::vector<TBrokerRangeDesc>& ranges,
-                                                   TBrokerScanRangeParams* params) {
+                                                   TBrokerScanRangeParams* params,
+                                                   const QueryExecutionServices* services = nullptr) {
         /// Init DescriptorTable
         TDescriptorTableBuilder desc_tbl_builder;
         TTupleDescriptorBuilder tuple_desc_builder;
@@ -60,7 +74,8 @@ protected:
         CHECK(st.ok()) << st.to_string();
 
         /// Init RuntimeState
-        RuntimeState* state = _obj_pool.add(new RuntimeState(TUniqueId(), TQueryOptions(), TQueryGlobals(), nullptr));
+        RuntimeState* state =
+                _obj_pool.add(new RuntimeState(TUniqueId(), TQueryOptions(), TQueryGlobals(), services, nullptr));
         state->set_desc_tbl(desc_tbl);
         state->init_instance_mem_tracker();
         state->_query_options.query_type = TQueryType::LOAD;
@@ -102,7 +117,8 @@ protected:
                                                    const std::string& multi_row_delimiter = "\n",
                                                    const std::string& multi_column_separator = "|",
                                                    const int64_t skip_header = 0, const bool trim_space = false,
-                                                   const char enclose = 0, const char escape = 0) {
+                                                   const char enclose = 0, const char escape = 0,
+                                                   const QueryExecutionServices* services = nullptr) {
         /// TBrokerScanRangeParams
         TBrokerScanRangeParams* params = _obj_pool.add(new TBrokerScanRangeParams());
         params->__set_multi_row_delimiter(multi_row_delimiter);
@@ -112,10 +128,15 @@ protected:
         params->__set_enclose(enclose);
         params->__set_escape(escape);
 
-        return create_csv_scanner(types, ranges, params);
+        return create_csv_scanner(types, ranges, params, services);
     }
 
     bool _use_v2;
+
+    // For scanners that read a stream load pipe (FILE_STREAM).
+    LoadStreamMgr _load_stream_mgr;
+    RuntimeServices _runtime_services;
+    QueryExecutionServices _query_execution_services;
 
 private:
     RuntimeState _runtime_state;
@@ -1435,6 +1456,74 @@ TEST_P(CSVScannerTest, test_skip_headers) {
     EXPECT_EQ(0, schema.size());
     EXPECT_EQ(st.to_string(false),
               "End of file: The parameter 'skip_header' is set to 3, but there are only 2 rows in the csv file");
+}
+
+// A channel or merge-commit stream load reads its pipe without blocking: the scanner gets TimedOut while the next
+// piece of the data has not arrived, and is called again later. Header rows still to skip, and a row cut by a
+// timed-out read, carry over to that call.
+TEST_P(CSVScannerTest, test_stream_pipe_resumes_after_timed_out_reads) {
+    _runtime_services.load_stream_mgr = &_load_stream_mgr;
+    _query_execution_services.runtime = &_runtime_services;
+    const UniqueId load_id = UniqueId::gen_uid();
+    auto pipe = std::make_shared<StreamLoadPipe>(/*non_blocking_read=*/true, /*non_blocking_wait_us=*/1000,
+                                                 DEFAULT_STREAM_LOAD_PIPE_BUFFERED_BYTES,
+                                                 DEFAULT_STREAM_LOAD_PIPE_CHUNK_SIZE);
+    ASSERT_OK(_load_stream_mgr.put(load_id, pipe));
+    DeferOp remove_pipe([&] { _load_stream_mgr.remove(load_id); });
+
+    std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_VARCHAR)};
+    std::vector<TBrokerRangeDesc> ranges(1);
+    ranges[0].file_type = TFileType::FILE_STREAM;
+    ranges[0].format_type = TFileFormatType::FORMAT_CSV_PLAIN;
+    ranges[0].__set_load_id(load_id.to_thrift());
+    ranges[0].__set_start_offset(0);
+    ranges[0].__set_num_of_columns_from_file(2);
+
+    // Two header rows, which would load as data if they were not skipped; the second is cut by a timed-out read.
+    // The third piece arrives on its own, so the read after it times out in the middle of a row: with enclose (the
+    // state-machine parser), inside an enclosed field.
+    char enclose = 0;
+    std::vector<std::string> pieces;
+    std::string first_value;
+    if (_use_v2) {
+        enclose = '"';
+        pieces = {"100,h1\n2", "00,h2\n", "1,\"a", ",b\"\n2,c\n"};
+        first_value = "a,b";
+    } else {
+        pieces = {"100,h1\n2", "00,h2\n", "1,a", "b\n2,c\n"};
+        first_value = "ab";
+    }
+    auto scanner = create_csv_scanner(types, ranges, "\n", ",", /*skip_header=*/2, /*trim_space=*/false, enclose,
+                                      /*escape=*/0, &_query_execution_services);
+    ASSERT_OK(scanner->open());
+
+    auto append = [&pipe](const std::string& piece) {
+        auto buf = ByteBuffer::allocate_with_tracker(piece.size()).value();
+        buf->put_bytes(piece.data(), piece.size());
+        buf->flip_to_read();
+        return pipe->append(std::move(buf));
+    };
+    // Nothing has arrived yet.
+    auto res = scanner->get_next();
+    ASSERT_TRUE(res.status().is_time_out()) << res.status();
+    // Each piece but the last leaves a header row or a data row incomplete, or the pipe empty.
+    for (size_t i = 0; i + 1 < pieces.size(); ++i) {
+        ASSERT_OK(append(pieces[i]));
+        res = scanner->get_next();
+        ASSERT_TRUE(res.status().is_time_out()) << "piece " << i << ": " << res.status();
+    }
+    ASSERT_OK(append(pieces.back()));
+    ASSERT_OK(pipe->finish());
+
+    res = scanner->get_next();
+    ASSERT_OK(res.status());
+    ChunkPtr chunk = res.value();
+    ASSERT_EQ(2, chunk->num_rows());
+    EXPECT_EQ(1, chunk->get(0)[0].get_int32());
+    EXPECT_EQ(first_value, chunk->get(0)[1].get_slice().to_string());
+    EXPECT_EQ(2, chunk->get(1)[0].get_int32());
+    EXPECT_EQ("c", chunk->get(1)[1].get_slice().to_string());
+    EXPECT_TRUE(scanner->get_next().status().is_end_of_file());
 }
 
 INSTANTIATE_TEST_CASE_P(CSVScannerTestParams, CSVScannerTest, Values(true, false));

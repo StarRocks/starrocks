@@ -112,16 +112,26 @@ Status CSVReader::buffInit() {
 }
 
 Status CSVReader::readMore(bool expandBuffer) {
-    if (_buff.free_space() > 0) {
-        return _fill_buffer();
-    } else {
-        if (expandBuffer) {
-            RETURN_IF_ERROR(_expand_buffer_loosely());
-            return _fill_buffer();
-        } else {
-            return Status::OK();
-        }
+    // Once a read of this more_rows() call has timed out, the row being parsed cannot be completed in this call.
+    // Every later read fails at once too, also one inside is_row_delimiter() or is_column_delimiter(), which only
+    // returns false: the parser then reaches NEWROW without taking bytes of a delimiter for data, and parses the
+    // row again on the next call.
+    if (UNLIKELY(!_read_timeout.ok())) {
+        return _read_timeout;
     }
+    Status st;
+    if (_buff.free_space() > 0) {
+        st = _fill_buffer();
+    } else if (expandBuffer) {
+        RETURN_IF_ERROR(_expand_buffer_loosely());
+        st = _fill_buffer();
+    } else {
+        return Status::OK();
+    }
+    if (UNLIKELY(st.is_time_out())) {
+        _read_timeout = st;
+    }
+    return st;
 }
 
 #define DOUBLE_CHECK_AVAILABLE()                \
@@ -156,6 +166,7 @@ Status CSVReader::more_rows() {
     if (UNLIKELY(_limit > 0 && _parsed_bytes > _limit)) {
         return Status::EndOfFile("Reached limit");
     }
+    _read_timeout = Status::OK();
     Status status = Status::OK();
     status = buffInit();
     if (!status.ok()) {
@@ -403,10 +414,12 @@ Status CSVReader::more_rows() {
 
         newrow_label:
         case NEWROW:
-            if (reachBuffEnd) {
-                // We dot get the complete row, back the read pointer, continue next time.
+            if (reachBuffEnd || UNLIKELY(status.is_time_out())) {
+                // The row is not complete: move the read pointer back to its start and parse it again next time. A
+                // timed-out read (a stream load pipe that has no data yet) returns its status so that the scanner
+                // yields; the bytes of the row stay in the buffer for the next call.
                 _buff.set_position_offset(parsed_start);
-                return Status::OK();
+                return status;
             }
             _parsed_bytes += _buff.position_offset() - parsed_start;
             parsed_end = _buff.position_offset();
