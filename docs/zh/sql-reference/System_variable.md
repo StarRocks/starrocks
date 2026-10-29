@@ -1016,6 +1016,8 @@ FROM test;
 * 默认值：false
 * 引入版本：v3.0
 
+启用聚合落盘时，MAP 或包含 MAP 的 ARRAY/STRUCT 等不可排序的分组键会自动使用基于哈希分区的 partitionwise 落盘，即使 `spill_partitionwise_agg` 为 `false`。可排序的分组键仍遵循该设置。
+
 ### enable_spill_to_remote_storage
 
 * 描述：是否启用将中间结果落盘至对象存储。如果设置为 `true`，当本地磁盘的用量达到上限后，StarRocks 将中间结果落盘至 `spill_storage_volume` 中指定的存储卷中。有关更多信息，请参阅 [将中间结果落盘至对象存储](../administration/management/resource_management/spill_to_disk.md#preview-将中间结果落盘至对象存储)。

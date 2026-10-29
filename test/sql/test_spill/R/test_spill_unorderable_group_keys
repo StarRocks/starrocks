@@ -1,0 +1,209 @@
+-- name: test_spill_unorderable_group_keys
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+
+create table facts (
+    ts datetime,
+    rid int,
+    tags map<varchar(50), varchar(50)>,
+    v bigint
+) duplicate key(ts, rid)
+distributed by hash(rid) buckets 1
+properties('replication_num' = '1');
+-- result:
+-- !result
+
+insert into facts
+select '2026-10-01 00:01:00', generate_series,
+       map_from_arrays(['app', 'user'], ['a', cast(generate_series as varchar)]), 1
+from table(generate_series(1, 4096));
+-- result:
+-- !result
+-- Equal maps with the opposite key order must merge after spill/restore as well.
+insert into facts
+select '2026-10-01 00:01:00', generate_series,
+       map_from_arrays(['user', 'app'], [cast(generate_series as varchar), 'a']), 2
+from table(generate_series(1, 4096));
+-- result:
+-- !result
+insert into facts values
+    ('2026-10-01 00:01:00', 5001, null, 5),
+    ('2026-10-01 00:01:00', 5002, null, 7),
+    ('2026-10-01 00:01:00', 5003, map{}, 11),
+    ('2026-10-01 00:01:00', 5004, map{}, 13),
+    ('2026-10-01 00:01:00', 5005, map{'app': null}, 17),
+    ('2026-10-01 00:01:00', 5006, map{'app': null}, 19);
+-- result:
+-- !result
+
+set pipeline_dop = 1;
+-- result:
+-- !result
+set new_planner_agg_stage = 2;
+-- result:
+-- !result
+set enable_query_cache = false;
+-- result:
+-- !result
+set enable_sort_aggregate = false;
+-- result:
+-- !result
+set enable_profile = true;
+-- result:
+-- !result
+set enable_async_profile = false;
+-- result:
+-- !result
+set spill_mode = 'force';
+-- result:
+-- !result
+set spillable_operator_mask = 6;
+-- result:
+-- !result
+set spill_partitionwise_agg = false;
+-- result:
+-- !result
+set spill_mem_table_size = 4096;
+-- result:
+-- !result
+set enable_agg_spill_preaggregation = false;
+-- result:
+-- !result
+set cbo_push_down_aggregate_mode = 1;
+-- result:
+-- !result
+
+-- Do not explicitly enable partitionwise aggregation: the key types must select it.
+-- RowsSpilled/RowsRestored alone can include buffered rows. Require positive bytes
+-- written to storage AND read back, allowing either local or remote spill storage.
+create view assert_spill_readback as
+select assert_true(coalesce(max(cast(nullif(regexp_extract(line,
+           'BytesFlushTo(LocalDisk|RemoteStorage): ([0-9.]+)', 2), '') as double)), 0) > 0) as spilled,
+       assert_true(coalesce(max(cast(nullif(regexp_extract(line,
+           'BytesRestoreFrom(LocalDisk|RemoteStorage): ([0-9.]+)', 2), '') as double)), 0) > 0) as restored
+from table(unnest(split(coalesce(get_query_profile(last_query_id()), ''), '\n'))) p(line);
+-- result:
+-- !result
+
+create view derived_map_agg as
+select tags['app'] as app, date_trunc('hour', ts) as hr, sum(v) as total
+from facts
+where tags['app'] in
+      (select tags['app'] from facts where ts >= '2026-10-01')
+group by tags['app'], date_trunc('hour', ts);
+-- result:
+-- !result
+
+create view direct_map_agg as
+select count(*) as group_count, sum(s) as total, max(s) as max_total
+from (select tags, sum(v) as s from facts group by tags) t;
+-- result:
+-- !result
+
+create view array_map_agg as
+select count(*) as group_count, sum(s) as total, max(s) as max_total
+from (select [tags] as k, sum(v) as s from facts group by [tags]) t;
+-- result:
+-- !result
+
+create view struct_map_agg as
+select count(*) as group_count, sum(s) as total, max(s) as max_total
+from (select named_struct('m', tags) as k, sum(v) as s
+      from facts group by named_struct('m', tags)) t;
+-- result:
+-- !result
+
+create view distinct_map as
+select count(*) as group_count, sum(coalesce(cardinality(tags), 0)) as entries
+from (select distinct tags from facts) t;
+-- result:
+-- !result
+
+-- The customer shape must actually push an aggregate below the semi join and
+-- introduce the raw MAP as a grouping key, not merely aggregate scalar app/hour.
+function: assert_explain_matches("select * from derived_map_agg", "LEFT SEMI JOIN", "group by: [0-9]+: ts, [0-9]+: tags")
+-- result:
+None
+-- !result
+
+-- Establish the same results without spilling.
+set enable_spill = false;
+-- result:
+-- !result
+select * from derived_map_agg;
+-- result:
+a	2026-10-01 00:00:00	12288
+-- !result
+select * from direct_map_agg;
+-- result:
+4099	12360	36
+-- !result
+select * from array_map_agg;
+-- result:
+4099	12360	36
+-- !result
+select * from struct_map_agg;
+-- result:
+4099	12360	36
+-- !result
+select * from distinct_map;
+-- result:
+4099	8193
+-- !result
+
+-- Each query independently proves that its grouped state was written and read.
+set enable_spill = true;
+-- result:
+-- !result
+select * from derived_map_agg;
+-- result:
+a	2026-10-01 00:00:00	12288
+-- !result
+select * from assert_spill_readback;
+-- result:
+1	1
+-- !result
+select * from direct_map_agg;
+-- result:
+4099	12360	36
+-- !result
+select * from assert_spill_readback;
+-- result:
+1	1
+-- !result
+select * from array_map_agg;
+-- result:
+4099	12360	36
+-- !result
+select * from assert_spill_readback;
+-- result:
+1	1
+-- !result
+select * from struct_map_agg;
+-- result:
+4099	12360	36
+-- !result
+select * from assert_spill_readback;
+-- result:
+1	1
+-- !result
+select * from distinct_map;
+-- result:
+4099	8193
+-- !result
+select * from assert_spill_readback;
+-- result:
+1	1
+-- !result
+
+select count(*) from (select tags, sum(v) from facts where rid < 0 group by tags) t;
+-- result:
+0
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result

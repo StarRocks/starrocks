@@ -24,6 +24,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/hash/hash_util.hpp"
 #include "base/testutil/assert.h"
 #include "base/uid_util.h"
 #include "base/utility/defer_op.h"
@@ -885,6 +886,107 @@ TEST_F(SpillTest, partition_process) {
         }
         ASSERT_OK(spiller->flush<SyncExecutor>(&dummy_rt_st, FailedGuard{}));
     }
+}
+
+// The partitionwise aggregation fallback must do more than accept a MAP at prepare time:
+// force real partition flushes and read the blocks back with the same transient partition
+// readers used by the operator. MAP and MAP nested inside ARRAY/STRUCT cannot be compared
+// by a sort, so check every restored value by its independent row id instead of sorting it.
+TEST_F(SpillTest, partitioned_map_roundtrip) {
+    const auto map_type = TypeDescriptor::create_map_type(TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_INT));
+    const std::vector<TypeDescriptor> key_types = {
+            map_type, TypeDescriptor::create_array_type(map_type),
+            TypeDescriptor::create_struct_type({"tag", "attributes"}, {TypeDescriptor(TYPE_INT), map_type})};
+    constexpr int kChunks = 12;
+    constexpr int kRowsPerChunk = 64;
+    constexpr int kRows = kChunks * kRowsPerChunk;
+    std::vector<std::vector<std::string>> expected(kRows);
+
+    SpilledOptions options(4);
+    options.mem_table_pool_size = 1;
+    options.spill_mem_table_bytes_size = 1024;
+    options.spill_type = spill::SpillFormaterType::SPILL_BY_COLUMN;
+    options.block_manager = dummy_block_mgr.get();
+    options.splittable = false;
+    auto factory = spill::make_spilled_factory();
+    auto spiller = factory->create(options);
+    spiller->set_metrics(metrics);
+    ASSERT_OK(spiller->prepare(&dummy_rt_st));
+
+    for (int batch = 0; batch < kChunks; ++batch) {
+        auto chunk = std::make_shared<Chunk>();
+        for (int column = 0; column < key_types.size(); ++column) {
+            chunk->append_column(ColumnHelper::create_column(key_types[column], true), column);
+        }
+        chunk->append_column(Int32Column::create(), 3);
+        chunk->append_column(Int64Column::create(), 4);
+        for (int row = 0; row < kRowsPerChunk; ++row) {
+            const int32_t id = batch * kRowsPerChunk + row;
+            const int32_t group = id % 31;
+            DatumMap map;
+            if (group % 5 != 0) {
+                map.emplace(group, group + 1);
+                map.emplace(group + 100, group % 3 == 0 ? Datum{} : Datum(group * 2));
+            }
+            const Datum map_value = group % 7 == 0 ? Datum{} : Datum(map);
+            chunk->get_column_raw_ptr_by_slot_id(0)->append_datum(map_value);
+            chunk->get_column_raw_ptr_by_slot_id(1)->append_datum(DatumArray{map_value, DatumMap{}});
+            chunk->get_column_raw_ptr_by_slot_id(2)->append_datum(DatumStruct{group, map_value});
+            chunk->get_column_raw_ptr_by_slot_id(3)->append_datum(id);
+            chunk->get_column_raw_ptr_by_slot_id(4)->append_datum(int64_t(id) * 13);
+            for (int column = 0; column < 3; ++column) {
+                expected[id].push_back(chunk->get_column_by_slot_id(column)->debug_item(row));
+            }
+        }
+        auto hash = spill::SpillHashColumn::create(kRowsPerChunk, HashUtil::FNV_SEED);
+        for (int column = 0; column < 3; ++column) {
+            chunk->get_column_by_slot_id(column)->fnv_hash(hash->get_data().data(), 0, kRowsPerChunk);
+        }
+        chunk->append_column(std::move(hash), Chunk::HASH_AGG_SPILL_HASH_SLOT_ID);
+        ASSERT_OK(spiller->spill<SyncExecutor>(&dummy_rt_st, chunk, EmptyMemGuard{}));
+        ASSERT_OK(spiller->task_status());
+    }
+    ASSERT_OK(spiller->flush<SyncExecutor>(&dummy_rt_st, EmptyMemGuard{}));
+    ASSERT_OK(spiller->task_status());
+    ASSERT_GT(metrics.local_flush_bytes->value(), 0) << "the test must write blocks, not read only in-memory rows";
+
+    std::vector<const SpillPartitionInfo*> partitions;
+    spiller->get_all_partitions(&partitions);
+    ASSERT_EQ(4, partitions.size());
+    std::vector<bool> seen(kRows, false);
+    size_t restored_rows = 0;
+    for (auto& reader : spiller->get_partition_spill_readers(partitions)) {
+        ASSERT_OK(reader->trigger_restore<SyncExecutor>(&dummy_rt_st, EmptyMemGuard{}));
+        bool eof = false;
+        // Bound the loop so a missing EOF becomes a test failure instead of a hang.
+        for (int attempt = 0; attempt < kRows + kChunks; ++attempt) {
+            auto result = reader->restore<SyncExecutor>(&dummy_rt_st, EmptyMemGuard{});
+            if (result.status().is_end_of_file()) {
+                eof = true;
+                break;
+            }
+            ASSERT_OK(result.status());
+            ASSERT_NE(nullptr, result.value());
+            const auto& chunk = result.value();
+            for (size_t row = 0; row < chunk->num_rows(); ++row) {
+                const int32_t id = chunk->get_column_by_slot_id(3)->get(row).get_int32();
+                ASSERT_GE(id, 0);
+                ASSERT_LT(id, kRows);
+                ASSERT_FALSE(seen[id]) << "duplicate restored row " << id;
+                seen[id] = true;
+                for (int column = 0; column < 3; ++column) {
+                    EXPECT_EQ(expected[id][column], chunk->get_column_by_slot_id(column)->debug_item(row));
+                }
+                EXPECT_EQ(int64_t(id) * 13, chunk->get_column_by_slot_id(4)->get(row).get_int64());
+                ++restored_rows;
+            }
+        }
+        ASSERT_TRUE(eof);
+    }
+    EXPECT_EQ(kRows, restored_rows);
+    EXPECT_TRUE(std::all_of(seen.begin(), seen.end(), [](bool value) { return value; }));
+    EXPECT_GT(metrics.local_restore_bytes->value(), 0);
+    EXPECT_GT(metrics.local_read_io_count->value(), 0);
 }
 
 struct PredoSyncExecutor {
