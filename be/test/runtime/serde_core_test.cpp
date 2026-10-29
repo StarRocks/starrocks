@@ -1096,8 +1096,7 @@ ProtobufChunkMeta make_wide_meta(size_t all_null_columns, size_t int_columns) {
     meta.is_consts.assign(total, false);
     for (size_t i = 0; i < total; i++) {
         meta.slot_id_to_index[static_cast<SlotId>(i)] = i;
-        meta.types[i] = i < all_null_columns ? TypeDescriptor::create_varchar_type(65533)
-                                             : TypeDescriptor(LogicalType::TYPE_INT);
+        meta.types[i] = i < all_null_columns ? TYPE_VARCHAR_DESC : TypeDescriptor(LogicalType::TYPE_INT);
     }
     return meta;
 }

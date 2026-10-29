@@ -773,8 +773,7 @@ PARALLEL_TEST(VecStringFunctionsTest, str_to_map_v1) {
     array_str_null->append_datum(Datum(DatumArray{Datum("ab:b"), Datum("ab:b"), Datum("")}));
 
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
-    TypeDescriptor string_type_desc = TypeDescriptor::create_varchar_type(10);
-    auto string_column = ColumnHelper::create_column(string_type_desc, true);
+    auto string_column = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
     string_column->append_datum("a:b,c:d");
     string_column->append_datum("a:1,b:2");
 
@@ -801,7 +800,7 @@ PARALLEL_TEST(VecStringFunctionsTest, str_to_map_v1) {
     map_delimiter_builder_nullable.append("");
     map_delimiter_builder_nullable.append_null();
     ColumnPtr map_delimiter_nullable = map_delimiter_builder_nullable.build_nullable_column();
-    auto delimiter_column = ColumnHelper::create_column(string_type_desc, true);
+    auto delimiter_column = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
     delimiter_column->append_datum(",");
     delimiter_column->append_datum(",");
 

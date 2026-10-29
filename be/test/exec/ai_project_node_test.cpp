@@ -50,7 +50,7 @@ constexpr std::string_view kSecretSentinel = "must-not-appear-in-plan-or-error";
 constexpr std::string_view kArbitraryCredentialEnvironment = "UNIT_TEST_ARBITRARY_AI_CREDENTIAL_ENV";
 
 TypeDescriptor varchar_type() {
-    return TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+    return TYPE_VARCHAR_DESC;
 }
 
 TExpr make_slot_ref(TTupleId tuple_id, TSlotId slot_id) {

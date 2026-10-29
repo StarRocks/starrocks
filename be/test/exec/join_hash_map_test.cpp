@@ -395,8 +395,7 @@ ColumnPtr JoinHashMapTest::create_int32_column(uint32_t row_count, uint32_t star
 }
 
 ColumnPtr JoinHashMapTest::create_binary_column(uint32_t row_count, uint32_t start_value) {
-    const auto& varchar_type_desc = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
-    MutableColumnPtr column = ColumnHelper::create_column(varchar_type_desc, false);
+    MutableColumnPtr column = ColumnHelper::create_column(TYPE_VARCHAR_DESC, false);
     auto* binary_column = ColumnHelper::as_raw_column<BinaryColumn>(column);
     for (int32_t i = 0; i < row_count; i++) {
         std::string str = std::to_string(start_value + i);
