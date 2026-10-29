@@ -655,8 +655,8 @@ TEST_F(VectorizedLambdaFunctionExprTest, test_lambda_common_expr_slot_conflict) 
 // the input chunk.
 //   array_map(a -> array_map(b -> array_length(a) + b, a), ARRAY<ARRAY<INT>>[[1, 2]])
 TEST_F(VectorizedLambdaFunctionExprTest, nested_array_map_captures_outer_arg_const_input) {
-    const SlotId kOuterArg = 100000; // a : array<int>
-    const SlotId kInnerArg = 100001; // b : int
+    const SlotId kOuterArg = 100000;                              // a : array<int>
+    const SlotId kInnerArg = 100001;                              // b : int
     TypeDescriptor type_arr_arr_int = array_type(TYPE_ARRAY_INT); // array<array<int>>
 
     // Outer input: const ARRAY<ARRAY<INT>>[[1, 2]] (one row).
