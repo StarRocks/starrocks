@@ -18,9 +18,11 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.RemoteFileInfoDefaultSource;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.paimon.PaimonReaderSelector.Reader;
 import com.starrocks.connector.paimon.PaimonRemoteFileDesc;
@@ -28,8 +30,8 @@ import com.starrocks.connector.paimon.PaimonSplitsInfo;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SessionVariable.PaimonReaderMode;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.thrift.THdfsFileFormat;
@@ -46,17 +48,19 @@ import org.apache.paimon.io.DataFileMeta;
 import org.apache.paimon.io.DataInputViewStreamWrapper;
 import org.apache.paimon.io.DataOutputView;
 import org.apache.paimon.manifest.FileSource;
-import org.apache.paimon.table.FileStoreTable;
 import org.apache.paimon.schema.TableSchema;
-import org.apache.paimon.types.DataTypes;
+import org.apache.paimon.table.FileStoreTable;
 import org.apache.paimon.table.source.DataSplit;
 import org.apache.paimon.table.source.DeletionFile;
 import org.apache.paimon.table.source.RawFile;
 import org.apache.paimon.table.source.Split;
-import org.apache.paimon.utils.Range;
+import org.apache.paimon.types.DataTypes;
 import org.apache.paimon.utils.InstantiationUtil;
+import org.apache.paimon.utils.Range;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -266,9 +270,10 @@ public class PaimonScanNodeTest {
         }
     }
 
-    @Test
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
     public void testSetupScanRangeLocationsAutoRoutesRawSdkAndSystemSplits(
-            @Mocked GlobalStateMgr globalStateMgr, @Mocked MetadataMgr metadataMgr, @Mocked PaimonTable table) {
+            boolean incremental, @Mocked GlobalStateMgr globalStateMgr, @Mocked MetadataMgr metadataMgr, @Mocked PaimonTable table) {
         ConnectContext ctx = new ConnectContext();
         // With GlobalStateMgr mocked, the ConnectContext-created SessionVariable is a cascaded mock
         // that returns null for the reader mode, so install a real one (defaults to AUTO).
@@ -279,7 +284,10 @@ public class PaimonScanNodeTest {
             DataSplit parquetSplit = createRawConvertibleDataSplit("parquet", List.of(deletionFile));
             DataSplit avroSplit = createRawConvertibleDataSplit("avro", List.of());
             FileStoreTable nativeTable = createNativeTable();
-            List<RemoteFileInfo> remoteFiles = createRemoteFiles(parquetSplit, avroSplit, new TestSplit());
+            Tracers.register(ctx);
+            Tracers.init(ctx, "VARS", "EXTERNAL");
+            List<RemoteFileInfo> remoteFiles = List.of(createRemoteFiles(parquetSplit).get(0),
+                    createRemoteFiles(avroSplit).get(0), createRemoteFiles(new TestSplit()).get(0));
             new Expectations() {
                 {
                     GlobalStateMgr.getCurrentState();
@@ -288,8 +296,13 @@ public class PaimonScanNodeTest {
                     result = metadataMgr;
                     table.getNativeTable();
                     result = nativeTable;
-                    metadataMgr.getRemoteFiles((Table) any, (GetRemoteFilesParams) any);
-                    result = remoteFiles;
+                    if (incremental) {
+                        metadataMgr.getRemoteFilesAsync((Table) any, (GetRemoteFilesParams) any);
+                        result = new RemoteFileInfoDefaultSource(remoteFiles);
+                    } else {
+                        metadataMgr.getRemoteFiles((Table) any, (GetRemoteFilesParams) any);
+                        result = remoteFiles;
+                    }
                 }
             };
 
@@ -299,10 +312,17 @@ public class PaimonScanNodeTest {
             slot.setColumn(new Column("id", IntegerType.INT));
             desc.addSlot(slot);
             PaimonScanNode scanNode = new PaimonScanNode(new PlanNodeId(0), desc, "XXX");
-            scanNode.setupScanRangeLocations(desc, null, -1);
-
-            Assertions.assertEquals(3, scanNode.getScanRangeLocations(10).size());
-            THdfsScanRange parquetRange = scanNode.getScanRangeLocations(10).get(0)
+            scanNode.setupScanRangeLocations(desc, null, incremental ? 10 : -1);
+            List<TScanRangeLocations> ranges = new ArrayList<>();
+            if (incremental) {
+                while (scanNode.hasMoreScanRanges()) {
+                    ranges.addAll(scanNode.getScanRangeLocations(1));
+                }
+            } else {
+                ranges.addAll(scanNode.getScanRangeLocations(10));
+            }
+            Assertions.assertEquals(3, ranges.size());
+            THdfsScanRange parquetRange = ranges.get(0)
                     .getScan_range().getHdfs_scan_range();
             Assertions.assertEquals(THdfsFileFormat.PARQUET, parquetRange.getFile_format());
             Assertions.assertTrue(parquetRange.isSetPaimon_deletion_file());
@@ -310,7 +330,7 @@ public class PaimonScanNodeTest {
             Assertions.assertFalse(parquetRange.isUse_paimon_jni_reader());
             Assertions.assertEquals(100L, parquetRange.getLength());
 
-            THdfsScanRange avroRange = scanNode.getScanRangeLocations(10).get(1)
+            THdfsScanRange avroRange = ranges.get(1)
                     .getScan_range().getHdfs_scan_range();
             Assertions.assertEquals(THdfsFileFormat.UNKNOWN, avroRange.getFile_format());
             Assertions.assertFalse(avroRange.isUse_paimon_jni_reader());
@@ -318,14 +338,22 @@ public class PaimonScanNodeTest {
             Assertions.assertTrue(avroRange.isSetPaimon_split_info_binary());
             Assertions.assertEquals(100L, avroRange.getLength());
 
-            THdfsScanRange systemRange = scanNode.getScanRangeLocations(10).get(2)
+            THdfsScanRange systemRange = ranges.get(2)
                     .getScan_range().getHdfs_scan_range();
             Assertions.assertTrue(systemRange.isUse_paimon_jni_reader());
             Assertions.assertFalse(systemRange.isUse_paimon_native_reader());
             Assertions.assertFalse(systemRange.isSetPaimon_split_info_binary());
             Assertions.assertEquals(IntegerType.INT.getTypeSize(), systemRange.getLength());
             Assertions.assertEquals(1, scanNode.getScanNodePredicates().getSelectedPartitionIds().size());
+            String profile = Tracers.printVars();
+            Assertions.assertTrue(profile.contains("starRocksNativeReaderReadNum: 1"), profile);
+            Assertions.assertTrue(profile.contains("paimonNativeReaderReadNum: 1"), profile);
+            Assertions.assertTrue(profile.contains("jniReaderReadNum: 1"), profile);
+            Assertions.assertTrue(profile.contains("starRocksNativeReaderReadBytes: 100 B"), profile);
+            Assertions.assertTrue(profile.contains("paimonNativeReaderReadBytes: 100 B"), profile);
+            Assertions.assertTrue(profile.contains("Paimon.metadata.deletionVector.null.count: 1"), profile);
         } finally {
+            Tracers.close();
             ConnectContext.remove();
         }
     }
