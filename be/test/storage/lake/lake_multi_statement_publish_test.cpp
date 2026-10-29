@@ -25,10 +25,7 @@
 
 #include <ctime>
 
-#include "base/testutil/assert.h"
-#include "base/testutil/id_generator.h"
 #include "column/chunk.h"
-#include "column/chunk_factory.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
@@ -40,6 +37,8 @@
 #include "storage/lake/test_util.h"
 #include "storage/lake/transactions.h"
 #include "storage/tablet_schema.h"
+#include "testutil/assert.h"
+#include "testutil/id_generator.h"
 
 namespace starrocks::lake {
 
@@ -114,8 +113,7 @@ protected:
     StatusOr<TabletMetadataPtr> publish_multi_statement(int64_t new_version, int64_t txn_id,
                                                         const std::vector<PUniqueId>& load_ids) {
         std::vector<TxnInfoPB> txns{make_txn_info(txn_id, load_ids)};
-        return publish_version(_tablet_mgr.get(), PublishTabletInfo(_tablet_metadata->id()), new_version - 1,
-                               new_version, txns, false);
+        return publish_version(_tablet_mgr.get(), _tablet_metadata->id(), new_version - 1, new_version, txns, false);
     }
 
     Status publish_multi_statement_log_version(int64_t log_version, int64_t txn_id,
@@ -142,7 +140,7 @@ protected:
         int64_t rows = 0;
         int64_t sum_c0 = 0;
         while (true) {
-            auto chunk = ChunkFactory::new_chunk(*_schema, 128);
+            auto chunk = ChunkHelper::new_chunk(*_schema, 128);
             auto st = reader->get_next(chunk.get());
             if (st.is_end_of_file()) {
                 break;
