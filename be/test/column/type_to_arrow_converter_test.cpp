@@ -18,6 +18,7 @@
 #include <gtest/gtest.h>
 
 #include "base/testutil/assert.h"
+#include "testutil/type_test_helper.h"
 
 namespace starrocks {
 
@@ -34,8 +35,7 @@ TEST(TypeToArrowConverterTest, MapsScalarAndNestedTypes) {
     EXPECT_EQ(20, decimal_type->precision());
     EXPECT_EQ(4, decimal_type->scale());
 
-    auto array = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_BIGINT));
-    ASSERT_OK(convert_to_arrow_type(array, &type));
+    ASSERT_OK(convert_to_arrow_type(TYPE_ARRAY_BIGINT_DESC, &type));
     ASSERT_EQ(arrow::Type::LIST, type->id());
     auto list_type = std::static_pointer_cast<arrow::ListType>(type);
     EXPECT_EQ(arrow::Type::INT64, list_type->value_type()->id());

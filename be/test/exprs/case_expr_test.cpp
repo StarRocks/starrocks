@@ -173,19 +173,17 @@ TEST_F(VectorizedCaseExprTest, whenArrayMapCase) {
 
     std::unique_ptr<Expr> expr(VectorizedCaseExprFactory::from_thrift(expr_node, TYPE_ARRAY, TYPE_MAP));
 
-    TypeDescriptor type_arr_int = array_type(TYPE_INT);
-
-    auto array0 = ColumnHelper::create_column(type_arr_int, true);
+    auto array0 = ColumnHelper::create_column(TYPE_ARRAY_INT_DESC, true);
     array0->append_datum(DatumArray{Datum((int32_t)1), Datum((int32_t)4)}); // [1,4]
     array0->append_datum(DatumArray{Datum(), Datum()});                     // [NULL, NULL]
     array0->append_datum(DatumArray{Datum(), Datum((int32_t)12)});          // [NULL, 12]
-    auto array_expr0 = MockExpr(type_arr_int, std::move(array0));
+    auto array_expr0 = MockExpr(TYPE_ARRAY_INT_DESC, std::move(array0));
 
-    auto array1 = ColumnHelper::create_column(type_arr_int, false);
+    auto array1 = ColumnHelper::create_column(TYPE_ARRAY_INT_DESC, false);
     array1->append_datum(DatumArray{Datum((int32_t)11), Datum((int32_t)41)}); // [11,41]
     array1->append_datum(DatumArray{Datum(), Datum()});                       // [NULL, NULL]
     array1->append_datum(DatumArray{Datum(), Datum((int32_t)1)});             // [NULL, 1]
-    auto array_expr1 = MockExpr(type_arr_int, std::move(array1));
+    auto array_expr1 = MockExpr(TYPE_ARRAY_INT_DESC, std::move(array1));
 
     TypeDescriptor type_map_int_int = map_type(TYPE_INT, TYPE_INT);
     expr->set_type(type_map_int_int);
@@ -955,19 +953,18 @@ TEST_F(VectorizedCaseExprTest, NoCaseWhenNullReturnIntElse) {
 }
 
 TEST_F(VectorizedCaseExprTest, NoCaseWhenFalseReturnElse) {
-    TypeDescriptor type_arr_int = array_type(TYPE_INT);
     expr_node.case_expr.has_case_expr = false;
     expr_node.case_expr.has_else_expr = false;
-    expr_node.type = type_arr_int.to_thrift();
+    expr_node.type = TYPE_ARRAY_INT_DESC.to_thrift();
     expr_node.is_nullable = true;
 
     std::unique_ptr<Expr> expr(VectorizedCaseExprFactory::from_thrift(expr_node, TYPE_ARRAY, TYPE_BOOLEAN));
 
-    auto array0 = ColumnHelper::create_column(type_arr_int, true);
+    auto array0 = ColumnHelper::create_column(TYPE_ARRAY_INT_DESC, true);
     array0->append_datum(DatumArray{Datum((int32_t)1), Datum((int32_t)4)}); // [1,4]
     array0->append_datum(DatumArray{Datum(), Datum()});                     // [NULL, NULL]
     array0->append_datum(DatumArray{Datum(), Datum((int32_t)12)});          // [NULL, 12]
-    auto array_expr0 = MockExpr(type_arr_int, array0);
+    auto array_expr0 = MockExpr(TYPE_ARRAY_INT_DESC, array0);
 
     auto bo = BooleanColumn::create();
     bo->append_datum(Datum(true));  // [true]
@@ -987,19 +984,18 @@ TEST_F(VectorizedCaseExprTest, NoCaseWhenFalseReturnElse) {
 }
 
 TEST_F(VectorizedCaseExprTest, NoCaseWhenNullReturnElse) {
-    TypeDescriptor type_arr_int = array_type(TYPE_INT);
     expr_node.case_expr.has_case_expr = false;
     expr_node.case_expr.has_else_expr = false;
-    expr_node.type = type_arr_int.to_thrift();
+    expr_node.type = TYPE_ARRAY_INT_DESC.to_thrift();
     expr_node.is_nullable = true;
 
     std::unique_ptr<Expr> expr(VectorizedCaseExprFactory::from_thrift(expr_node, TYPE_ARRAY, TYPE_BOOLEAN));
 
-    auto array0 = ColumnHelper::create_column(type_arr_int, true);
+    auto array0 = ColumnHelper::create_column(TYPE_ARRAY_INT_DESC, true);
     array0->append_datum(DatumArray{Datum((int32_t)1), Datum((int32_t)4)}); // [1,4]
     array0->append_datum(DatumArray{Datum(), Datum()});                     // [NULL, NULL]
     array0->append_datum(DatumArray{Datum(), Datum((int32_t)12)});          // [NULL, 12]
-    auto array_expr0 = MockExpr(type_arr_int, array0);
+    auto array_expr0 = MockExpr(TYPE_ARRAY_INT_DESC, array0);
 
     auto when0 = MockNullVectorizedExpr<TYPE_BOOLEAN>(expr_node, 3, false, true);
 

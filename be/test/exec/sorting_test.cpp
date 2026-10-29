@@ -39,6 +39,7 @@
 #include "exprs/expr_context.h"
 #include "exprs/expr_executor.h"
 #include "runtime/runtime_state.h"
+#include "testutil/type_test_helper.h"
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
 
@@ -518,10 +519,9 @@ protected:
 
     void check(const SortDescs& sort_desc, const std::vector<int32_t>& expected) {
         auto runtime_state = create_runtime_state();
-        TypeDescriptor array_type = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_INT));
         std::vector<std::unique_ptr<ColumnRef>> exprs;
         std::vector<ExprContext*> sort_exprs;
-        exprs.emplace_back(std::make_unique<ColumnRef>(array_type, 1));
+        exprs.emplace_back(std::make_unique<ColumnRef>(TYPE_ARRAY_INT_DESC, 1));
         sort_exprs.emplace_back(new ExprContext(exprs.back().get()));
         ASSERT_OK(ExprExecutor::prepare(sort_exprs, runtime_state.get()));
         ASSERT_OK(ExprExecutor::open(sort_exprs, runtime_state.get()));

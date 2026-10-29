@@ -29,6 +29,7 @@
 #include "column/schema.h"
 #include "runtime/descriptors.h"
 #include "storage_primitive/type_utils.h"
+#include "testutil/type_test_helper.h"
 #include "types/datum.h"
 #include "types/type_descriptor.h"
 
