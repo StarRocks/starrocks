@@ -48,6 +48,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.type.BooleanType;
+import com.starrocks.type.DateType;
 import com.starrocks.type.MapType;
 import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
@@ -209,7 +210,9 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
 
         // we will try cast const operator to variable operator
         if ((rightChild.isVariable() && leftChild.isConstantRef()) ||
-                (leftChild.isVariable() && rightChild.isConstantRef())) {
+                (leftChild.isVariable() && rightChild.isConstantRef()) ||
+                isDateVariableAndNumericCastConstantExpression(rightChild, leftChild) ||
+                isDateVariableAndNumericCastConstantExpression(leftChild, rightChild)) {
             int constant = leftChild.isVariable() ? 1 : 0;
             int variable = 1 - constant;
             Optional<BinaryPredicateOperator> optional = optimizeConstantAndVariable(predicate, constant, variable);
@@ -228,6 +231,20 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
             addCastChild(compatibleType, predicate, 1);
         }
         return predicate;
+    }
+
+    private boolean isDateVariableAndNumericCastConstantExpression(ScalarOperator variable, ScalarOperator constant) {
+        return variable.isVariable() && variable.getType().isDateType() &&
+                constant instanceof CastOperator && constant.isConstant() && constant.getType().isNumericType() &&
+                isValidDateIntegerCast(constant.getChild(0));
+    }
+
+    private boolean isValidDateIntegerCast(ScalarOperator operator) {
+        if (!(operator instanceof ConstantOperator)) {
+            return true;
+        }
+        return !((ConstantOperator) operator).isNull() &&
+                Utils.tryCastConstant(operator, DateType.DATE).isPresent();
     }
 
     private Optional<BinaryPredicateOperator> optimizeConstantAndVariable(BinaryPredicateOperator predicate,
