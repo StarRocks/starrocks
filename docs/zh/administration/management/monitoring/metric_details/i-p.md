@@ -268,6 +268,55 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 - 单位：字节
 - 描述：JIT 编译函数缓存使用的内存。
 
+## `jvm_heap_size_bytes`
+
+- 单位：字节
+- 类型：瞬时值
+- 标签：`type`（`used`、`committed` 或 `max`）
+- 描述：BE 进程内嵌 JVM 的堆内存。`used` 为对象占用的内存，`committed` 为 JVM 已向操作系统申请的内存，`max` 为堆内存上限。FE 节点也会为自身的 JVM 导出同名指标，此处描述的是 BE 指标。
+  - 仅当 BE 配置项 `enable_jvm_metrics` 为 `true`（默认值）且 BE 启动时设置了环境变量 `JAVA_HOME` 时，才会导出 BE JVM 指标（本节中所有 `jvm_*_size_bytes` 指标）。
+  - BE 不会为了采集这些指标而启动 JVM。在 BE 进程中创建 JVM 之前（例如访问 HDFS、使用基于 JNI 的 Scanner 或 Java UDF），所有取值均为 `0`。
+  - 当 BE 配置项 `enable_metric_calculator` 为 `true`（默认值）时，每 15 秒刷新一次取值；否则在拉取指标时刷新。
+  - 当 `enable_jvm_memory_tracker` 为 `true`（默认值）时，已提交的堆内存和非堆内存还会计入 BE 的 `jvm` 内存追踪器（MemTracker）。
+
+## `jvm_non_heap_size_bytes`
+
+- 单位：字节
+- 类型：瞬时值
+- 标签：`type`（`used` 或 `committed`）
+- 描述：BE 进程内嵌 JVM 的非堆内存，例如 Metaspace 和 Code Cache。不导出 `max` 取值。BE JVM 指标的导出条件参见 [`jvm_heap_size_bytes`](#jvm_heap_size_bytes)。
+
+## `jvm_old_size_bytes`
+
+- 单位：字节
+- 类型：瞬时值
+- 标签：`type`（`used`、`committed`、`max`、`peak_used` 或 `peak_max`）
+- 描述：BE 进程内嵌 JVM 的老年代内存池。各 `type` 的含义及支持的垃圾回收器参见 [`jvm_young_size_bytes`](#jvm_young_size_bytes)。
+
+## `jvm_perm_size_bytes`
+
+- 单位：字节
+- 类型：瞬时值
+- 标签：`type`（`used`、`committed`、`max`、`peak_used` 或 `peak_max`）
+- 描述：BE 进程内嵌 JVM 的 Metaspace（Java 7 及更早版本中为永久代）。除非设置了 JVM 参数 `-XX:MaxMetaspaceSize`，Metaspace 没有确定的上限，因此 `max` 和 `peak_max` 通常为 `-1`。各 `type` 的含义参见 [`jvm_young_size_bytes`](#jvm_young_size_bytes)。
+
+## `jvm_survivor_size_bytes`
+
+- 单位：字节
+- 类型：瞬时值
+- 标签：`type`（`used`、`committed`、`max`、`peak_used` 或 `peak_max`）
+- 描述：BE 进程内嵌 JVM 的 Survivor 区内存池。使用默认的 G1 回收器时，`max` 和 `peak_max` 为 `-1`。各 `type` 的含义及支持的垃圾回收器参见 [`jvm_young_size_bytes`](#jvm_young_size_bytes)。
+
+## `jvm_young_size_bytes`
+
+- 单位：字节
+- 类型：瞬时值
+- 标签：`type`（`used`、`committed`、`max`、`peak_used` 或 `peak_max`）
+- 描述：BE 进程内嵌 JVM 的新生代（Eden 区）内存池。使用默认的 G1 回收器时，`max` 和 `peak_max` 为 `-1`。BE JVM 指标的导出条件参见 [`jvm_heap_size_bytes`](#jvm_heap_size_bytes)。
+  - `used`、`committed` 和 `max` 为内存池的当前使用情况。`peak_used` 为 JVM 启动以来 `used` 的最大值，`peak_max` 为 JVM 启动以来 `max` 的最大值。仅在使用 Parallel 回收器（会调整内存池大小）时，`peak_max` 才会与 `max` 不同。
+  - `max` 或 `peak_max` 为 `-1` 表示该内存池没有确定的上限，并不表示出错。
+  - `jvm_young_size_bytes`、`jvm_survivor_size_bytes` 和 `jvm_old_size_bytes` 按照内存池名称匹配，因此仅在 JVM 使用 Serial、Parallel、CMS 或 G1 垃圾回收器时才有取值。使用 ZGC 或 Shenandoah 时，这些指标保持为 `0`。`jvm_heap_size_bytes` 和 `jvm_non_heap_size_bytes` 不受影响。
+
 ## `lake_compaction_held_segment_bytes`
 
 - 单位：字节
