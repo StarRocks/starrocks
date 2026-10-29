@@ -353,6 +353,9 @@ public class StatementPlanner {
 
     private static void checkQueryOutput(StatementBase statement) {
         if (statement instanceof QueryStatement query && !query.hasOutFileClause()) {
+            if (query.isExplain() && !query.isExplainAnalyze()) {
+                return;
+            }
             for (Field field : query.getQueryRelation().getRelationFields().getAllFields()) {
                 if (field.getType().isScalarType(PrimitiveType.GEOMETRY)) {
                     throw new SemanticException(

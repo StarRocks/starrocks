@@ -79,16 +79,22 @@ class StatementPlannerTest extends PlanTestBase {
     @Test
     public void testGeometryPublicOutput() throws Exception {
         String geometry = "ST_GeomFromText('POINT (1 2)', 'EPSG:3857')";
+        String column = "ST_GeomFromText(if(v1 IS NULL, NULL, 'POINT (1 2)'), 'EPSG:3857')";
         for (String sql : List.of("select " + geometry, "select ST_GeomFromText(NULL, 'EPSG:3857')",
                 "select * from (select " + geometry + " g) t",
                 "with c as (select " + geometry + " g) select g from c",
-                "select " + geometry + " union all select NULL")) {
-            StatementBase stmt = UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sql, connectContext);
-            try (PlannerMetaLocker locker = new PlannerMetaLocker(connectContext, stmt)) {
-                SemanticException error = assertThrows(SemanticException.class,
-                        () -> StatementPlanner.analyzeStatement(stmt, connectContext, locker));
-                assertTrue(error.getMessage().contains(
-                        "GEOMETRY query results are not supported; use ST_AsText or ST_AsBinary"), error.getMessage());
+                "select " + geometry + " union all select NULL", "select " + column + " from t0",
+                "select g from (select " + column + " g from t0) t",
+                "with c as (select " + column + " g from t0) select g from c")) {
+            getFragmentPlan("explain " + sql);
+            for (String prefix : List.of("", "explain analyze ")) {
+                StatementBase stmt = UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(prefix + sql, connectContext);
+                try (PlannerMetaLocker locker = new PlannerMetaLocker(connectContext, stmt)) {
+                    SemanticException error = assertThrows(SemanticException.class,
+                            () -> StatementPlanner.analyzeStatement(stmt, connectContext, locker));
+                    assertTrue(error.getMessage().contains(
+                            "GEOMETRY query results are not supported; use ST_AsText or ST_AsBinary"), error.getMessage());
+                }
             }
         }
         for (String sql : List.of("select ST_GeogFromText('POINT (1 2)')",
