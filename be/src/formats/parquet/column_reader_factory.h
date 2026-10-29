@@ -98,6 +98,14 @@ public:
     // struct's levels (a direct subfield, else a leaf under a struct subfield), or nullptr if there is none. The
     // reader factory and LakeMetaHelper use the same choice.
     static const ParquetField* find_struct_level_source(const ParquetField& field);
+
+    // For an array<struct> column whose consumers need only its offsets (access path /<col>/OFFSET, e.g.
+    // cardinality(col)): a list reader whose element struct reads a single stored leaf for the levels and fills
+    // every subfield with NULL, instead of one reader per leaf. Returns nullptr when the column is not an
+    // array<struct> or its element has no such leaf; the caller then builds the full reader.
+    static StatusOr<ColumnReaderPtr> create_array_offsets_only(const ColumnReaderOptions& opts,
+                                                               const ParquetField* field,
+                                                               const TypeDescriptor& col_type);
 };
 
 } // namespace starrocks::parquet
