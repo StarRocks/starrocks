@@ -363,7 +363,8 @@ void FragmentContextManager::cancel(const Status& status) {
     }
 }
 void FragmentContext::prepare_pass_through_chunk_buffer() {
-    _runtime_state->exec_env()->stream_mgr()->prepare_pass_through_chunk_buffer(_query_id);
+    _runtime_state->exec_env()->stream_mgr()->prepare_pass_through_chunk_buffer(
+            _query_id, _runtime_state->query_mem_tracker_ptr());
 }
 void FragmentContext::destroy_pass_through_chunk_buffer() {
     if (_runtime_state) {
