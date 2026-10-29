@@ -458,6 +458,47 @@ TEST_F(ChunkPredicateBuilderTest, rt_has_null) {
               "NULL)\"},{\"and\":[{\"pred\":\"(columnId(1)>=10)\"},{\"pred\":\"(columnId(1)<=20)\"}]}]}]}");
 }
 
+// An IN list over the strings of a dictionary encoded column, too long for normalize_in_or_equal_predicate,
+// reaches the join runtime filter pass unnormalized. That pass maps the column through the dictionary, so it
+// must not read this predicate as one over dictionary codes.
+TEST_F(ChunkPredicateBuilderTest, varchar_long_in_on_dict_column_is_not_read_as_codes) {
+    SlotId slot_id = 1;
+    parquet::Utils::SlotDesc slot_descs[] = {{"c1", TYPE_VARCHAR_DESC, 1}, {"c2", TYPE_VARCHAR_DESC, 2}, {""}};
+    _opts.tuple_desc = parquet::Utils::create_tuple_descriptor(&_runtime_state, &_pool, slot_descs);
+
+    std::vector<std::string> dict_words;
+    for (int i = 0; i < 50; i++) {
+        dict_words.emplace_back("k" + std::to_string(i));
+    }
+    GlobalDictMap forward;
+    RGlobalDictMap reverse;
+    for (size_t i = 0; i < dict_words.size(); i++) {
+        auto code = static_cast<int32_t>(i + 1);
+        forward.emplace(Slice(dict_words[i]), code);
+        reverse.emplace(code, Slice(dict_words[i]));
+    }
+    _fragment_dict_state->mutable_query_global_dicts()->emplace(slot_id,
+                                                                std::make_pair(std::move(forward), std::move(reverse)));
+
+    std::vector<std::string> values;
+    for (int i = 0; i < 2048; i++) {
+        values.emplace_back("k" + std::to_string(i));
+    }
+    _texprs.emplace_back(ExprsTestHelper::create_in_pred_texpr<TYPE_VARCHAR, std::string>(slot_id, values, false));
+    ASSERT_OK(ExprsTestHelper::create_and_open_conjunct_ctxs(&_pool, &_runtime_state, &_texprs, &_expr_ctxs));
+    ASSERT_EQ(_expr_ctxs.size(), 1);
+
+    _expr_containers.emplace_back(BoxedExprContext(_expr_ctxs[0]));
+
+    ChunkPredicateBuilder<BoxedExprContext, CompoundNodeType::AND> builder(_opts, _expr_containers, true);
+    ASSIGN_OR_ASSERT_FAIL(auto normalized, builder.parse_conjuncts());
+    ASSERT_TRUE(normalized);
+
+    // Too long to become a column range, so nothing is pushed down; the conjunct is evaluated as it is.
+    ASSIGN_OR_ASSERT_FAIL(auto pred, builder.get_predicate_tree_root(_int_pred_parser, _predicate_free_pool));
+    ASSERT_EQ(pred.debug_string(), "{\"and\":[]}");
+}
+
 TEST_F(ChunkPredicateBuilderTest, varchar_rt_has_no_null) {
     SlotId slot_id = 1;
     parquet::Utils::SlotDesc slot_descs[] = {{"c1", TYPE_VARCHAR_DESC, 1}, {"c2", TYPE_VARCHAR_DESC, 2}, {""}};
