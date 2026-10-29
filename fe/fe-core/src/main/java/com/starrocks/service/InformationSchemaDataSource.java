@@ -51,6 +51,7 @@ import com.starrocks.lake.compaction.PartitionStatistics;
 import com.starrocks.lake.compaction.Quantiles;
 import com.starrocks.lake.vector.VectorIndexBuildScheduler;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.TemporaryTableMgr;
@@ -623,6 +624,12 @@ public class InformationSchemaDataSource {
 
             List<BasicTable> tables = new ArrayList<>();
             List<String> tableNames = metadataMgr.listTableNames(context, catalogName, dbName);
+            // list views once per database (not per table); only needed when external tables are not fully loaded
+            Set<String> viewNames = null;
+            if (!CatalogMgr.isInternalCatalog(catalogName)
+                    && !Config.enable_external_catalog_information_schema_tables_access_full_metadata) {
+                viewNames = metadataMgr.listViewNames(context, catalogName, dbName);
+            }
             for (String tableName : tableNames) {
                 if (matcher != null && !matcher.match(tableName)) {
                     continue;
@@ -631,7 +638,7 @@ public class InformationSchemaDataSource {
                 BasicTable table = null;
                 try {
                     table = metadataMgr.getBasicTable(context, catalogName, dbName, tableName,
-                        Config.enable_external_catalog_information_schema_tables_access_full_metadata);
+                        Config.enable_external_catalog_information_schema_tables_access_full_metadata, viewNames);
                 } catch (Exception e) {
                     LOG.warn(e.getMessage(), e);
                 }

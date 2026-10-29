@@ -673,13 +673,16 @@ public class ShowExecutor {
             try {
                 List<String> tableNames = GlobalStateMgr.getCurrentState().getMetadataMgr()
                         .listTableNames(context, catalogName, dbName);
+                // list views once per database (not per table) so that connector views are typed as VIEW
+                Set<String> viewNames = needLock ? null : GlobalStateMgr.getCurrentState().getMetadataMgr()
+                        .listViewNames(context, catalogName, dbName);
 
                 for (String tableName : tableNames) {
                     if (matcher != null && !matcher.match(tableName)) {
                         continue;
                     }
                     BasicTable table = GlobalStateMgr.getCurrentState().getMetadataMgr().getBasicTable(
-                            context, catalogName, dbName, tableName);
+                            context, catalogName, dbName, tableName, false, viewNames);
                     if (table == null) {
                         LOG.warn("table {}.{}.{} does not exist", catalogName, dbName, tableName);
                         continue;
