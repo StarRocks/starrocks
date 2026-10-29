@@ -423,6 +423,10 @@ Advantages.)
 - Live validation: deployed on a 15-CN shared-data cluster; verified 1 -> 15
   endpoints, full-result parity across all shards, and the throughput numbers
   above.
+- Value-level data sanity: an order-independent content checksum (commutative sum
+  of per-row hashes) over the full 2,941,805-row result matched exactly between
+  single-endpoint and multi-endpoint (identical checksum), confirming the fan-out
+  returns identical values, not just the same row count.
 - Architecture coverage: validated on shared-data (CN). Shared-nothing (BE) uses
   the identical FE planning/coordination and the same backend Arrow Flight
   service, so it is expected to behave the same; a BE-cluster run to confirm is
