@@ -30,12 +30,9 @@
 #include "parquet/schema.h"
 #include "parquet_schema_builder.h"
 #include "runtime/descriptors.h"
-<<<<<<< HEAD:be/src/exec/parquet_reader.cpp
+#include "runtime/runtime_state.h"
 #include "util/byte_buffer.h"
 #include "util/runtime_profile.h"
-=======
-#include "runtime/runtime_state.h"
->>>>>>> 84ecaf2 ([BugFix][RB-647] Read pre-buffered Parquet ranges on the scan thread (#81771)):be/src/connector/file/scanner/parquet_reader.cpp
 
 namespace starrocks {
 // ====================================================================================================================
@@ -286,14 +283,10 @@ Status ParquetReaderWrap::_init_parquet_reader() {
         }
 
         return Status::OK();
-<<<<<<< HEAD:be/src/exec/parquet_reader.cpp
     } catch (parquet::ParquetException& e) {
-=======
-    } catch (::parquet::ParquetException& e) {
         if (const auto* cancelled = cancelled_status_of(e); cancelled != nullptr) {
             return cancelled_read_status(*cancelled, _filename);
         }
->>>>>>> 84ecaf2 ([BugFix][RB-647] Read pre-buffered Parquet ranges on the scan thread (#81771)):be/src/connector/file/scanner/parquet_reader.cpp
         std::stringstream str_error;
         str_error << "Init parquet reader fail. " << e.what() << ", filename: " << _filename;
         LOG(WARNING) << str_error.str();
@@ -306,18 +299,12 @@ Status ParquetReaderWrap::init_parquet_reader(const std::vector<SlotDescriptor*>
     try {
         if (_current_line_of_group == 0) { // the first read
             RETURN_IF_ERROR(column_indices(tuple_slot_descs));
-<<<<<<< HEAD:be/src/exec/parquet_reader.cpp
             arrow::Status status = _reader->GetRecordBatchReader({_current_group}, _parquet_column_ids, &_rb_batch);
 
-            if (!status.ok()) {
-=======
-            auto rb_result = _reader->GetRecordBatchReader({_current_group}, _parquet_column_ids);
-            if (rb_result.status().IsCancelled()) {
-                return cancelled_read_status(rb_result.status(), _filename);
+            if (status.IsCancelled()) {
+                return cancelled_read_status(status, _filename);
             }
-            if (!rb_result.ok()) {
-                const auto& status = rb_result.status();
->>>>>>> 84ecaf2 ([BugFix][RB-647] Read pre-buffered Parquet ranges on the scan thread (#81771)):be/src/connector/file/scanner/parquet_reader.cpp
+            if (!status.ok()) {
                 LOG(WARNING) << "Get RecordBatch Failed. error: " << status.ToString() << ", filename: " << _filename;
                 return Status::InternalError(fmt::format("{}. filename: {}", status.ToString(), _filename));
             }
@@ -326,14 +313,10 @@ Status ParquetReaderWrap::init_parquet_reader(const std::vector<SlotDescriptor*>
                              "RecordBatchReader";
                 return Status::EndOfFile("Unexpected nullptr RecordBatchReader");
             }
-<<<<<<< HEAD:be/src/exec/parquet_reader.cpp
             status = _rb_batch->ReadNext(&_batch);
-=======
-            arrow::Status status = _rb_batch->ReadNext(&_batch);
             if (status.IsCancelled()) {
                 return cancelled_read_status(status, _filename);
             }
->>>>>>> 84ecaf2 ([BugFix][RB-647] Read pre-buffered Parquet ranges on the scan thread (#81771)):be/src/connector/file/scanner/parquet_reader.cpp
             if (!status.ok()) {
                 LOG(WARNING) << "The first read record. error: " << status.ToString() << ", filename: " << _filename;
                 return Status::InternalError(fmt::format("{}. filename: {}", status.ToString(), _filename));
@@ -351,14 +334,10 @@ Status ParquetReaderWrap::init_parquet_reader(const std::vector<SlotDescriptor*>
             }
         }
         return Status::OK();
-<<<<<<< HEAD:be/src/exec/parquet_reader.cpp
     } catch (parquet::ParquetException& e) {
-=======
-    } catch (::parquet::ParquetException& e) {
         if (const auto* cancelled = cancelled_status_of(e); cancelled != nullptr) {
             return cancelled_read_status(*cancelled, _filename);
         }
->>>>>>> 84ecaf2 ([BugFix][RB-647] Read pre-buffered Parquet ranges on the scan thread (#81771)):be/src/connector/file/scanner/parquet_reader.cpp
         std::stringstream str_error;
         str_error << "Init parquet reader fail. " << e.what();
         LOG(WARNING) << str_error.str() << " filename: " << _filename;
@@ -441,26 +420,17 @@ Status ParquetReaderWrap::read_record_batch(const std::vector<SlotDescriptor*>& 
         _current_line_of_group = 0;
         _rows_of_group = _file_metadata->RowGroup(_current_group)->num_rows(); //get rows of the current row group
         // read batch
-<<<<<<< HEAD:be/src/exec/parquet_reader.cpp
         arrow::Status status = _reader->GetRecordBatchReader({_current_group}, _parquet_column_ids, &_rb_batch);
+        if (status.IsCancelled()) {
+            return cancelled_read_status(status, _filename);
+        }
         if (!status.ok()) {
             return Status::InternalError(fmt::format("Get RecordBatchReader Failed. filename: {}", _filename));
         }
         status = _rb_batch->ReadNext(&_batch);
-=======
-        auto rb_result = _reader->GetRecordBatchReader({_current_group}, _parquet_column_ids);
-        if (rb_result.status().IsCancelled()) {
-            return cancelled_read_status(rb_result.status(), _filename);
-        }
-        if (!rb_result.ok()) {
-            return Status::InternalError(fmt::format("Get RecordBatchReader Failed. filename: {}", _filename));
-        }
-        _rb_batch = std::move(rb_result).ValueOrDie();
-        arrow::Status status = _rb_batch->ReadNext(&_batch);
         if (status.IsCancelled()) {
             return cancelled_read_status(status, _filename);
         }
->>>>>>> 84ecaf2 ([BugFix][RB-647] Read pre-buffered Parquet ranges on the scan thread (#81771)):be/src/connector/file/scanner/parquet_reader.cpp
         if (!status.ok()) {
             return Status::InternalError(fmt::format("Read Batch Error With Libarrow. filename: {}", _filename));
         }
