@@ -24,7 +24,12 @@
 
 #include <filesystem>
 #include <memory>
+#include <mutex>
+#include <numeric>
+#include <string_view>
+#include <thread>
 #include <utility>
+#include <vector>
 
 #include "column/chunk.h"
 #include "common/status.h"
@@ -40,6 +45,249 @@
 
 namespace starrocks {
 
+<<<<<<< HEAD:be/test/exec/file_scanner/parquet_scanner_test.cpp
+=======
+TEST(ParquetGeoReaderTest, EmptyFileKeepsExistingInferenceAndEof) {
+    for (const auto& logical : {::parquet::LogicalType::Geography(), ::parquet::LogicalType::Geometry()}) {
+        auto shape = ::parquet::schema::PrimitiveNode::Make("shape", ::parquet::Repetition::OPTIONAL, logical,
+                                                            ::parquet::Type::BYTE_ARRAY);
+        auto schema = std::static_pointer_cast<::parquet::schema::GroupNode>(
+                ::parquet::schema::GroupNode::Make("root", ::parquet::Repetition::REQUIRED, {shape}));
+        auto sink_result = arrow::io::BufferOutputStream::Create();
+        ASSERT_TRUE(sink_result.ok());
+        auto sink = sink_result.ValueOrDie();
+        auto writer = ::parquet::ParquetFileWriter::Open(sink, schema);
+        writer->Close();
+        auto result = sink->Finish();
+        ASSERT_TRUE(result.ok());
+        auto file = std::make_shared<RandomAccessFile>(
+                std::make_shared<io::StringInputStream>(result.ValueOrDie()->ToString()), "empty-geo.parquet");
+        ScannerCounter counter;
+        std::shared_ptr<arrow::io::RandomAccessFile> input = std::make_shared<ParquetChunkFile>(file, 0, &counter);
+        ParquetReaderWrap reader(std::move(input), 1, 0, result.ValueOrDie()->size());
+        std::vector<SlotDescriptor> inferred;
+        ASSERT_TRUE(reader.get_schema(&inferred).ok());
+        ASSERT_EQ(1, inferred.size());
+        EXPECT_EQ(TYPE_VARBINARY, inferred[0].type().type);
+        SlotDescriptor binary(0, "shape", TypeDescriptor::create_varbinary_type(1024));
+        EXPECT_TRUE(reader.init_parquet_reader({&binary}).is_end_of_file());
+        SlotDescriptor missing(1, "missing", TypeDescriptor(TYPE_INT));
+        ParquetReaderWrap ordinary(std::make_shared<ParquetChunkFile>(file, 0, &counter), 1, 0,
+                                   result.ValueOrDie()->size());
+        EXPECT_TRUE(ordinary.init_parquet_reader({&missing}).is_end_of_file());
+        // Empty-file projections keep the original EOF behavior for every column.
+        ParquetReaderWrap mixed(std::make_shared<ParquetChunkFile>(file, 0, &counter), 2, 0,
+                                result.ValueOrDie()->size());
+        EXPECT_TRUE(mixed.init_parquet_reader({&missing, &binary}).is_end_of_file());
+    }
+}
+
+TEST(ParquetGeoReaderTest, AnnotatedColumnsKeepExistingReads) {
+    for (const auto& logical : {::parquet::LogicalType::Geography(), ::parquet::LogicalType::Geometry()}) {
+        auto id = ::parquet::schema::PrimitiveNode::Make("id", ::parquet::Repetition::REQUIRED, ::parquet::Type::INT32);
+        auto shape = ::parquet::schema::PrimitiveNode::Make("shape", ::parquet::Repetition::REQUIRED, logical,
+                                                            ::parquet::Type::BYTE_ARRAY);
+        auto schema = std::static_pointer_cast<::parquet::schema::GroupNode>(
+                ::parquet::schema::GroupNode::Make("root", ::parquet::Repetition::REQUIRED, {id, shape}));
+        auto sink_result = arrow::io::BufferOutputStream::Create();
+        ASSERT_TRUE(sink_result.ok());
+        auto sink = sink_result.ValueOrDie();
+        auto writer = ::parquet::ParquetFileWriter::Open(sink, schema);
+        auto* group = writer->AppendRowGroup();
+        const int32_t value = 42;
+        static_cast<::parquet::Int32Writer*>(group->NextColumn())->WriteBatch(1, nullptr, nullptr, &value);
+        const uint8_t wkb[21] = {1, 1}; // Little-endian WKB POINT(0 0).
+        const ::parquet::ByteArray bytes(sizeof(wkb), wkb);
+        static_cast<::parquet::ByteArrayWriter*>(group->NextColumn())->WriteBatch(1, nullptr, nullptr, &bytes);
+        writer->Close();
+        auto result = sink->Finish();
+        ASSERT_TRUE(result.ok());
+        auto file = std::make_shared<RandomAccessFile>(
+                std::make_shared<io::StringInputStream>(result.ValueOrDie()->ToString()), "projected-geo.parquet");
+        ScannerCounter counter;
+        ParquetReaderWrap reader(std::make_shared<ParquetChunkFile>(file, 0, &counter), 1, 0,
+                                 result.ValueOrDie()->size());
+        SlotDescriptor supported(0, "id", TypeDescriptor(TYPE_INT));
+        auto status = reader.init_parquet_reader({&supported});
+        ASSERT_TRUE(status.ok()) << status;
+        auto batch = reader.get_batch();
+        ASSERT_NE(nullptr, batch);
+        ASSERT_EQ(1, batch->num_rows());
+        ASSERT_EQ(1, batch->num_columns());
+        EXPECT_EQ(42, std::static_pointer_cast<arrow::Int32Array>(batch->column(0))->Value(0));
+        for (auto type : {TypeDescriptor::create_varbinary_type(1024)}) {
+            // Each reader owns and closes its Arrow wrapper independently.
+            ParquetReaderWrap rejected(std::make_shared<ParquetChunkFile>(file, 0, &counter), 1, 0,
+                                       result.ValueOrDie()->size());
+            SlotDescriptor unsupported(1, "shape", type);
+            ASSERT_TRUE(rejected.init_parquet_reader({&unsupported}).ok());
+            ASSERT_NE(nullptr, rejected.get_batch());
+            EXPECT_EQ(1, rejected.get_batch()->num_rows());
+        }
+    }
+}
+
+namespace {
+
+// In-memory file that records the thread of every positional read.
+class ThreadRecordingStream final : public io::StringInputStream {
+public:
+    using io::StringInputStream::StringInputStream;
+
+    Status read_at_fully(int64_t offset, void* out, int64_t count) override {
+        {
+            std::lock_guard<std::mutex> l(_mutex);
+            _read_threads.push_back(std::this_thread::get_id());
+        }
+        return io::StringInputStream::read_at_fully(offset, out, count);
+    }
+
+    std::vector<std::thread::id> read_threads() {
+        std::lock_guard<std::mutex> l(_mutex);
+        return _read_threads;
+    }
+
+private:
+    std::mutex _mutex;
+    std::vector<std::thread::id> _read_threads;
+};
+
+// In-memory file that cancels the query right after its first read, which is the footer read.
+class CancelAfterFirstReadStream final : public io::StringInputStream {
+public:
+    CancelAfterFirstReadStream(std::string contents, RuntimeState* state)
+            : io::StringInputStream(std::move(contents)), _state(state) {}
+
+    Status read_at_fully(int64_t offset, void* out, int64_t count) override {
+        RETURN_IF_ERROR(io::StringInputStream::read_at_fully(offset, out, count));
+        _state->set_is_cancelled(true);
+        return Status::OK();
+    }
+
+private:
+    RuntimeState* _state;
+};
+
+// A single INT32 column "id" holding 0, 1, 2, ... in `num_row_groups` row groups of `num_rows` rows each.
+std::string make_int32_parquet(int32_t num_rows, int32_t num_row_groups = 1) {
+    auto id = ::parquet::schema::PrimitiveNode::Make("id", ::parquet::Repetition::REQUIRED, ::parquet::Type::INT32);
+    auto schema = std::static_pointer_cast<::parquet::schema::GroupNode>(
+            ::parquet::schema::GroupNode::Make("root", ::parquet::Repetition::REQUIRED, {id}));
+    auto sink = arrow::io::BufferOutputStream::Create().ValueOrDie();
+    auto writer = ::parquet::ParquetFileWriter::Open(sink, schema);
+    std::vector<int32_t> values(num_rows);
+    for (int32_t i = 0; i < num_row_groups; ++i) {
+        std::iota(values.begin(), values.end(), i * num_rows);
+        auto* group = writer->AppendRowGroup();
+        static_cast<::parquet::Int32Writer*>(group->NextColumn())
+                ->WriteBatch(num_rows, nullptr, nullptr, values.data());
+    }
+    writer->Close();
+    return sink->Finish().ValueOrDie()->ToString();
+}
+
+} // namespace
+
+TEST(ParquetChunkFileTest, ReadAsyncReadsInline) {
+    const std::string contents = "0123456789";
+    auto file = std::make_shared<RandomAccessFile>(std::make_shared<io::StringInputStream>(contents), "inline.bin");
+    ScannerCounter counter;
+    auto chunk_file = std::make_shared<ParquetChunkFile>(file, 0, &counter);
+    auto future = chunk_file->ReadAsync(arrow::io::default_io_context(), 2, 5);
+    // The read is done before ReadAsync() returns, so nothing is queued on Arrow's IO thread pool.
+    ASSERT_TRUE(future.is_finished());
+    const auto& result = future.result();
+    ASSERT_TRUE(result.ok()) << result.status().ToString();
+    EXPECT_EQ("23456", (*result)->ToString());
+    EXPECT_EQ(1, counter.file_read_count);
+}
+
+TEST(ParquetChunkFileTest, PreBufferedReadsRunOnCallerThread) {
+    const int32_t num_rows = 100;
+    const std::string contents = make_int32_parquet(num_rows);
+    auto stream = std::make_shared<ThreadRecordingStream>(contents);
+    auto file = std::make_shared<RandomAccessFile>(stream, "caller-thread.parquet");
+    ScannerCounter counter;
+    ParquetReaderWrap reader(std::make_shared<ParquetChunkFile>(file, 0, &counter), 1, 0, contents.size());
+    SlotDescriptor slot(0, "id", TypeDescriptor(TYPE_INT));
+    ASSERT_OK(reader.init_parquet_reader({&slot}));
+    auto batch = reader.get_batch();
+    ASSERT_NE(nullptr, batch);
+    ASSERT_EQ(num_rows, batch->num_rows());
+    EXPECT_EQ(num_rows - 1, std::static_pointer_cast<arrow::Int32Array>(batch->column(0))->Value(num_rows - 1));
+    // The footer read and the pre-buffered column chunk read both run on this thread.
+    const auto threads = stream->read_threads();
+    ASSERT_GE(threads.size(), 2u);
+    for (const auto& tid : threads) {
+        EXPECT_EQ(std::this_thread::get_id(), tid);
+    }
+}
+
+TEST(ParquetChunkFileTest, CancelledQuerySkipsReads) {
+    const std::string contents = make_int32_parquet(10);
+    auto file =
+            std::make_shared<RandomAccessFile>(std::make_shared<io::StringInputStream>(contents), "cancelled.parquet");
+    RuntimeState state{TQueryGlobals()};
+    state.set_is_cancelled(true);
+    ScannerCounter counter;
+    auto chunk_file = std::make_shared<ParquetChunkFile>(file, 0, &counter, &state);
+
+    char buf[4];
+    auto read = chunk_file->ReadAt(0, sizeof(buf), buf);
+    EXPECT_TRUE(read.status().IsCancelled()) << read.status().ToString();
+    auto future = chunk_file->ReadAsync(arrow::io::default_io_context(), 0, sizeof(buf));
+    ASSERT_TRUE(future.is_finished());
+    EXPECT_TRUE(future.result().status().IsCancelled()) << future.result().status().ToString();
+
+    // The scan stops with the cancellation instead of reading the file or reporting a read error.
+    ParquetReaderWrap reader(std::move(chunk_file), 1, 0, contents.size());
+    SlotDescriptor slot(0, "id", TypeDescriptor(TYPE_INT));
+    auto st = reader.init_parquet_reader({&slot});
+    EXPECT_TRUE(st.is_cancelled()) << st;
+    EXPECT_NE(std::string_view::npos, st.message().find("query cancelled")) << st;
+    EXPECT_EQ(0, counter.file_read_count);
+}
+
+TEST(ParquetChunkFileTest, CancelAfterFooterStopsColumnRead) {
+    const std::string contents = make_int32_parquet(10);
+    RuntimeState state{TQueryGlobals()};
+    auto stream = std::make_shared<CancelAfterFirstReadStream>(contents, &state);
+    auto file = std::make_shared<RandomAccessFile>(stream, "cancel-after-footer.parquet");
+    ScannerCounter counter;
+    ParquetReaderWrap reader(std::make_shared<ParquetChunkFile>(file, 0, &counter, &state), 1, 0, contents.size());
+    SlotDescriptor slot(0, "id", TypeDescriptor(TYPE_INT));
+    auto st = reader.init_parquet_reader({&slot});
+    // The footer was parsed, then the column chunk read stopped at the cancellation.
+    EXPECT_EQ(10, reader.num_rows());
+    EXPECT_TRUE(st.is_cancelled()) << st;
+    EXPECT_NE(std::string_view::npos, st.message().find("query cancelled")) << st;
+    EXPECT_EQ(1, counter.file_read_count);
+}
+
+TEST(ParquetChunkFileTest, CancelAfterInitStopsNextRowGroup) {
+    const int32_t rows_per_group = 10;
+    const std::string contents = make_int32_parquet(rows_per_group, 2);
+    auto file = std::make_shared<RandomAccessFile>(std::make_shared<io::StringInputStream>(contents),
+                                                   "cancel-after-init.parquet");
+    RuntimeState state{TQueryGlobals()};
+    ScannerCounter counter;
+    ParquetReaderWrap reader(std::make_shared<ParquetChunkFile>(file, 0, &counter, &state), 1, 0, contents.size());
+    SlotDescriptor slot(0, "id", TypeDescriptor(TYPE_INT));
+    ASSERT_OK(reader.init_parquet_reader({&slot}));
+    ASSERT_EQ(rows_per_group, reader.get_batch()->num_rows());
+    const int64_t reads_before_cancel = counter.file_read_count;
+
+    // The second row group needs another range read, which a cancelled query must not start.
+    state.set_is_cancelled(true);
+    bool eof = false;
+    auto st = reader.read_record_batch({&slot}, &eof);
+    EXPECT_TRUE(st.is_cancelled()) << st;
+    EXPECT_FALSE(eof);
+    EXPECT_NE(std::string_view::npos, st.message().find("query cancelled")) << st;
+    EXPECT_EQ(reads_before_cancel, counter.file_read_count);
+}
+
+>>>>>>> 84ecaf2 ([BugFix][RB-647] Read pre-buffered Parquet ranges on the scan thread (#81771)):be/test/connector/file/scanner/parquet_scanner_test.cpp
 class ParquetScannerTest : public ::testing::Test {
 public:
     static void SetUpTestSuite() {
