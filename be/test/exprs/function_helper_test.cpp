@@ -23,13 +23,7 @@
 #include "column/map_column.h"
 #include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
-<<<<<<< HEAD
-=======
-#include "exprs/agg/base_aggregate_test.h"
-#include "exprs/agg/map_agg.h"
-#include "exprs/struct_functions.h"
 #include "testutil/type_test_helper.h"
->>>>>>> 060cf22 ([UT] Share ARRAY test type descriptors across BE tests (#81813))
 
 namespace starrocks {
 struct FunctionHelperTest : public ::testing::Test {};
