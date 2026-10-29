@@ -757,12 +757,9 @@ PARALLEL_TEST(VecStringFunctionsTest, splitChinese) {
     }
 }
 
-TypeDescriptor array_type(const LogicalType& child_type);
-
 PARALLEL_TEST(VecStringFunctionsTest, str_to_map_v1) {
     // input array<string>
     int chunk_size = 7;
-    TypeDescriptor TYPE_ARRAY_VARCHAR = array_type(TYPE_VARCHAR);
     auto array_str_null = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
     // []
     // NULL

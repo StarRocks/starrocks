@@ -375,8 +375,6 @@ PARALLEL_TEST(MapFunctionsTest, test_map_filter_int_nullable) {
         map_column_not_nullable->append_datum(DatumMap());
     }
 
-    TypeDescriptor TYPE_ARRAY_BOOLEAN = array_type(TYPE_BOOLEAN);
-
     // [null, true, false]
     // []
     // [false]

@@ -112,22 +112,6 @@ protected:
 
     void TearDown() override {}
 
-    TypeDescriptor TYPE_ARRAY_BOOLEAN = array_type(TYPE_BOOLEAN);
-    TypeDescriptor TYPE_ARRAY_TINYINT = array_type(TYPE_TINYINT);
-    TypeDescriptor TYPE_ARRAY_SMALLINT = array_type(TYPE_SMALLINT);
-    TypeDescriptor TYPE_ARRAY_INT = array_type(TYPE_INT);
-    TypeDescriptor TYPE_ARRAY_LARGEINT = array_type(TYPE_LARGEINT);
-    TypeDescriptor TYPE_ARRAY_FLOAT = array_type(TYPE_FLOAT);
-    TypeDescriptor TYPE_ARRAY_DOUBLE = array_type(TYPE_DOUBLE);
-    TypeDescriptor TYPE_ARRAY_VARCHAR = array_type(TYPE_VARCHAR);
-    TypeDescriptor TYPE_ARRAY_ARRAY_INT = array_type(array_type(TYPE_INT));
-    TypeDescriptor TYPE_ARRAY_ARRAY_VARCHAR = array_type(array_type(TYPE_VARCHAR));
-
-    TypeDescriptor TYPE_ARRAY_BIGINT = array_type(TYPE_BIGINT);
-    TypeDescriptor TYPE_ARRAY_DATE = array_type(TYPE_DATE);
-    TypeDescriptor TYPE_ARRAY_DATETIME = array_type(TYPE_DATETIME);
-
-protected:
     template <typename CppType>
     void _check_array(const Buffer<CppType>& check_values, const DatumArray& value);
 
