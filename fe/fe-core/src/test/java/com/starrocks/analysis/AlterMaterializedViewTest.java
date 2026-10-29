@@ -735,28 +735,6 @@ public class AlterMaterializedViewTest extends MVTestBase  {
         starRocksAssert.dropTable(baseTableName);
     }
 
-    @Test
-<<<<<<< HEAD
-=======
-    public void testActivateAViewWhoseNamesNeedQuoting() throws Exception {
-        String dbName = "db-active-quoted";
-        starRocksAssert.withDatabase(dbName).useDatabase(dbName);
-        try {
-            starRocksAssert.withTable("create table base_tbl_quoted (k1 int, k2 int) properties('replication_num'='1')");
-            starRocksAssert.withMaterializedView("create materialized view `mv-active-quoted` " +
-                    "refresh manual as select * from base_tbl_quoted");
-            MaterializedView mv = starRocksAssert.getMv(dbName, "mv-active-quoted");
-            AlterMVJobExecutor.inactiveMvAndLog(mv,
-                    MaterializedViewExceptions.inactiveReasonForBaseTableReorderColumns("base_tbl_quoted"));
-
-            MVActiveChecker.tryToActivate(mv);
-            Assertions.assertTrue(mv.isActive(), mv.getInactiveReason());
-        } finally {
-            starRocksAssert.useDatabase("test");
-            starRocksAssert.dropDatabase("`" + dbName + "`");
-        }
-    }
-
     private static void assertTracks(MaterializedView mv, Table baseTable) {
         Assertions.assertEquals(baseTable.getId(), mv.getBaseTableInfos().get(0).getTableId());
         Assertions.assertEquals(Set.of(baseTable.getId()),
@@ -831,7 +809,6 @@ public class AlterMaterializedViewTest extends MVTestBase  {
     }
 
     @Test
->>>>>>> 532e79eee64... [BugFix][RB-829] Inactivate materialized views when their base table is swapped or renamed (#67260)
     public void testActiveCheckerBackoff() {
         MVActiveChecker.MvActiveInfo activeInfo = MVActiveChecker.MvActiveInfo.firstFailure();
         Assertions.assertTrue(activeInfo.isInGracePeriod());
