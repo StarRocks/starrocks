@@ -26,6 +26,7 @@
 #include "column/variant_converter.h"
 #include "column/variant_encoder.h"
 #include "gutil/casts.h"
+#include "testutil/type_test_helper.h"
 #include "types/decimalv2_value.h"
 #include "types/timestamp_value.h"
 
@@ -243,8 +244,7 @@ PARALLEL_TEST(VariantColumnMergerTest, choose_common_type_numeric_and_decimal_ca
     ASSERT_TRUE(decimal.ok());
     ASSERT_EQ(TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL64, 18, 2), decimal.value());
 
-    auto array_conflict = VariantColumnMerger::choose_common_type(
-            TypeDescriptor::create_array_type(TypeDescriptor(TYPE_BIGINT)), TypeDescriptor(TYPE_BIGINT));
+    auto array_conflict = VariantColumnMerger::choose_common_type(TYPE_ARRAY_BIGINT_DESC, TypeDescriptor(TYPE_BIGINT));
     ASSERT_TRUE(array_conflict.ok());
     ASSERT_EQ(TypeDescriptor(TYPE_VARIANT), array_conflict.value());
 }
@@ -444,22 +444,18 @@ PARALLEL_TEST(VariantColumnMergerTest, merge_shredded_array_conflict_hoist_varia
     auto src0_metadata = BinaryColumn::create();
     auto src0_remain = BinaryColumn::create();
     append_primitive_int8_row(src0_metadata.get(), src0_remain.get(), 1);
-    TypeDescriptor src0_array_type(TYPE_ARRAY);
-    src0_array_type.children.emplace_back(TypeDescriptor(TYPE_BIGINT));
     MutableColumns src0_typed;
     src0_typed.emplace_back(build_nullable_array_int64_column({{10, 20}}, {0}));
-    src0->set_shredded_columns({"a"}, {src0_array_type}, std::move(src0_typed), std::move(src0_metadata),
+    src0->set_shredded_columns({"a"}, {TYPE_ARRAY_BIGINT_DESC}, std::move(src0_typed), std::move(src0_metadata),
                                std::move(src0_remain));
 
     auto src1 = VariantColumn::create();
     auto src1_metadata = BinaryColumn::create();
     auto src1_remain = BinaryColumn::create();
     append_primitive_int8_row(src1_metadata.get(), src1_remain.get(), 2);
-    TypeDescriptor src1_array_type(TYPE_ARRAY);
-    src1_array_type.children.emplace_back(TypeDescriptor(TYPE_DOUBLE));
     MutableColumns src1_typed;
     src1_typed.emplace_back(build_nullable_array_double_column({{30.5}}, {0}));
-    src1->set_shredded_columns({"a"}, {src1_array_type}, std::move(src1_typed), std::move(src1_metadata),
+    src1->set_shredded_columns({"a"}, {TYPE_ARRAY_DOUBLE_DESC}, std::move(src1_typed), std::move(src1_metadata),
                                std::move(src1_remain));
 
     Columns inputs{src0, src1};
@@ -478,11 +474,9 @@ PARALLEL_TEST(VariantColumnMergerTest, merge_shredded_array_nonarray_conflict_ho
     auto src0_metadata = BinaryColumn::create();
     auto src0_remain = BinaryColumn::create();
     append_primitive_int8_row(src0_metadata.get(), src0_remain.get(), 1);
-    TypeDescriptor src0_array_type(TYPE_ARRAY);
-    src0_array_type.children.emplace_back(TypeDescriptor(TYPE_BIGINT));
     MutableColumns src0_typed;
     src0_typed.emplace_back(build_nullable_array_int64_column({{10, 20}}, {0}));
-    src0->set_shredded_columns({"a"}, {src0_array_type}, std::move(src0_typed), std::move(src0_metadata),
+    src0->set_shredded_columns({"a"}, {TYPE_ARRAY_BIGINT_DESC}, std::move(src0_typed), std::move(src0_metadata),
                                std::move(src0_remain));
 
     auto src1 = VariantColumn::create();

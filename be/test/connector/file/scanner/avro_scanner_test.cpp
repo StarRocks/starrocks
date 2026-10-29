@@ -33,6 +33,7 @@
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
+#include "testutil/type_test_helper.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -823,9 +824,7 @@ TEST_F(AvroScannerTest, test_array) {
     types.emplace_back(TYPE_BOOLEAN);
     types.emplace_back(TYPE_BIGINT);
     types.emplace_back(TYPE_DOUBLE);
-    TypeDescriptor t(TYPE_ARRAY);
-    t.children.emplace_back(TYPE_BIGINT);
-    types.emplace_back(t);
+    types.emplace_back(TYPE_ARRAY_BIGINT_DESC);
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
@@ -912,9 +911,7 @@ TEST_F(AvroScannerTest, test_complex_schema) {
     std::vector<TypeDescriptor> types;
     types.emplace_back(TypeDescriptor::create_varchar_type(20));
     types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    TypeDescriptor t(TYPE_ARRAY);
-    t.children.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(t);
+    types.emplace_back(TYPE_ARRAY_VARCHAR_DESC);
     types.emplace_back(TypeDescriptor::create_varchar_type(20));
 
     std::vector<TBrokerRangeDesc> ranges;
@@ -1103,9 +1100,7 @@ TEST_F(AvroScannerTest, test_complex_schema_null_data) {
     std::vector<TypeDescriptor> types;
     types.emplace_back(TypeDescriptor::create_varchar_type(20));
     types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    TypeDescriptor t(TYPE_ARRAY);
-    t.children.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(t);
+    types.emplace_back(TYPE_ARRAY_VARCHAR_DESC);
     types.emplace_back(TypeDescriptor::create_varchar_type(20));
 
     std::vector<TBrokerRangeDesc> ranges;
@@ -1591,9 +1586,7 @@ TEST_F(AvroScannerTest, test_array_with_boolean) {
     ASSERT_TRUE(write_avro_data(avro_helper, data_path).ok());
 
     std::vector<TypeDescriptor> types;
-    TypeDescriptor t(TYPE_ARRAY);
-    t.children.emplace_back(TYPE_BOOLEAN);
-    types.emplace_back(t);
+    types.emplace_back(TYPE_ARRAY_BOOLEAN_DESC);
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
@@ -1662,9 +1655,7 @@ TEST_F(AvroScannerTest, test_array_of_nullable_string) {
         EXPECT_TRUE(write_avro_data(avro_helper, data_path).ok());
 
         std::vector<TypeDescriptor> types;
-        TypeDescriptor t(TYPE_ARRAY);
-        t.children.emplace_back(TypeDescriptor::create_varchar_type(50));
-        types.emplace_back(t);
+        types.emplace_back(TYPE_ARRAY_VARCHAR_DESC);
 
         std::vector<TBrokerRangeDesc> ranges;
         TBrokerRangeDesc range;
@@ -1801,8 +1792,7 @@ TEST_F(AvroScannerTest, test_map_of_array) {
     ASSERT_TRUE(write_avro_data(avro_helper, data_path).ok());
 
     std::vector<TypeDescriptor> types;
-    types.emplace_back(TypeDescriptor::create_map_type(TypeDescriptor::create_varchar_type(20),
-                                                       TypeDescriptor::create_array_type(TypeDescriptor(TYPE_INT))));
+    types.emplace_back(TypeDescriptor::create_map_type(TypeDescriptor::create_varchar_type(20), TYPE_ARRAY_INT_DESC));
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
@@ -1995,8 +1985,7 @@ TEST_F(AvroScannerTest, test_deep_nested) {
     types.emplace_back(TypeDescriptor::create_array_type(TypeDescriptor::create_struct_type(
             {"k", "m"},
             {TypeDescriptor::create_varchar_type(20),
-             TypeDescriptor::create_map_type(TypeDescriptor::create_varchar_type(20),
-                                             TypeDescriptor::create_array_type(TypeDescriptor(TYPE_INT)))})));
+             TypeDescriptor::create_map_type(TypeDescriptor::create_varchar_type(20), TYPE_ARRAY_INT_DESC)})));
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;

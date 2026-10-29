@@ -39,6 +39,7 @@
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
 #include "runtime/service_contexts.h"
+#include "testutil/type_test_helper.h"
 
 namespace starrocks {
 
@@ -654,13 +655,9 @@ TEST_F(JsonScannerTest, test_invalid_json_path) {
 
 TEST_F(JsonScannerTest, test_one_level_array) {
     std::vector<TypeDescriptor> types;
-    TypeDescriptor t1(TYPE_ARRAY);
-    t1.children.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(t1);
+    types.emplace_back(TYPE_ARRAY_VARCHAR_DESC);
 
-    TypeDescriptor t2(TYPE_ARRAY);
-    t2.children.emplace_back(TYPE_INT);
-    types.emplace_back(t2);
+    types.emplace_back(TYPE_ARRAY_INT_DESC);
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
@@ -785,9 +782,7 @@ TEST_F(JsonScannerTest, test_invalid_nested_level1) {
 TEST_F(JsonScannerTest, test_invalid_nested_level2) {
     // the nested level in schema is less than json
     std::vector<TypeDescriptor> types;
-    TypeDescriptor t1(TYPE_ARRAY);
-    t1.children.emplace_back(TYPE_LARGEINT);
-    types.emplace_back(t1);
+    types.emplace_back(TYPE_ARRAY_LARGEINT_DESC);
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
@@ -1055,7 +1050,7 @@ TEST_F(JsonScannerTest, test_multi_type) {
     types.emplace_back(TypeDescriptor::create_varchar_type(20));
     types.emplace_back(TYPE_DATE);
     types.emplace_back(TYPE_DATETIME);
-    types.emplace_back(TypeDescriptor::create_array_type(TypeDescriptor(TYPE_INT)));
+    types.emplace_back(TYPE_ARRAY_INT_DESC);
 
     types.emplace_back(TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 27, 9));
     types.emplace_back(TypeDescriptor::create_char_type(20));

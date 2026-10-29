@@ -19,6 +19,7 @@
 #include "formats/parquet/schema.h"
 #include "parquet/schema.h"
 #include "parquet/types.h"
+#include "testutil/type_test_helper.h"
 #include "types/type_descriptor.h"
 
 namespace starrocks {
@@ -640,7 +641,7 @@ TEST_F(ParquetSchemaBuilderTest, MapKeyOnly) {
     auto key = create_primitive_node("key", ::parquet::Repetition::REQUIRED, ::parquet::Type::INT32);
     auto kv = create_group_node("key_value", ::parquet::Repetition::REPEATED, {key});
     auto node = create_map_node("my_set", ::parquet::Repetition::OPTIONAL, {kv});
-    check_inferred_type(node, TypeDescriptor::create_array_type(TypeDescriptor(TYPE_INT)));
+    check_inferred_type(node, TYPE_ARRAY_INT_DESC);
 }
 
 TEST_F(ParquetSchemaBuilderTest, MapInvalidKeyValue) {
@@ -699,7 +700,7 @@ TEST_F(ParquetSchemaBuilderTest, TopLevelRepeatedFields) {
     // One-level list encoding: repeated int32 a;
     {
         auto node = create_primitive_node("a", ::parquet::Repetition::REPEATED, ::parquet::Type::INT32);
-        check_inferred_type(node, TypeDescriptor::create_array_type(TypeDescriptor(TYPE_INT)));
+        check_inferred_type(node, TYPE_ARRAY_INT_DESC);
     }
     // repeated group rg { required int32 x; optional binary y; }
     {
@@ -713,19 +714,17 @@ TEST_F(ParquetSchemaBuilderTest, TopLevelRepeatedFields) {
     {
         auto a = create_primitive_node("a", ::parquet::Repetition::REPEATED, ::parquet::Type::INT32);
         auto node = create_group_node("s", ::parquet::Repetition::OPTIONAL, {a});
-        check_inferred_type(node, TypeDescriptor::create_struct_type(
-                                          {"a"}, {TypeDescriptor::create_array_type(TypeDescriptor(TYPE_INT))}));
+        check_inferred_type(node, TypeDescriptor::create_struct_type({"a"}, {TYPE_ARRAY_INT_DESC}));
     }
 }
 
 TEST_F(ParquetSchemaBuilderTest, LegacyListEncodings) {
-    const auto int_array = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_INT));
-
     // Two-level encoding, the repeated primitive is the element (not a nested list):
     // optional group my_list (LIST) { repeated int32 element; }
     {
         auto element = create_primitive_node("element", ::parquet::Repetition::REPEATED, ::parquet::Type::INT32);
-        check_inferred_type(create_list_node("my_list", ::parquet::Repetition::OPTIONAL, {element}), int_array);
+        check_inferred_type(create_list_node("my_list", ::parquet::Repetition::OPTIONAL, {element}),
+                            TYPE_ARRAY_INT_DESC);
     }
     // A repeated group with several fields is a struct element:
     // optional group my_list (LIST) { repeated group element { required binary str; required int32 num; } }
@@ -743,7 +742,7 @@ TEST_F(ParquetSchemaBuilderTest, LegacyListEncodings) {
         auto inner = create_primitive_node("array", ::parquet::Repetition::REPEATED, ::parquet::Type::INT32);
         auto array = create_list_node("array", ::parquet::Repetition::REPEATED, {inner});
         check_inferred_type(create_list_node("my_list", ::parquet::Repetition::OPTIONAL, {array}),
-                            TypeDescriptor::create_array_type(int_array));
+                            TypeDescriptor::create_array_type(TYPE_ARRAY_INT_DESC));
     }
     // Same without the LIST annotation on the repeated group:
     // optional group my_list (LIST) { repeated group bag { repeated int32 item; } }
@@ -751,7 +750,7 @@ TEST_F(ParquetSchemaBuilderTest, LegacyListEncodings) {
         auto item = create_primitive_node("item", ::parquet::Repetition::REPEATED, ::parquet::Type::INT32);
         auto bag = create_group_node("bag", ::parquet::Repetition::REPEATED, {item});
         check_inferred_type(create_list_node("my_list", ::parquet::Repetition::OPTIONAL, {bag}),
-                            TypeDescriptor::create_array_type(int_array));
+                            TypeDescriptor::create_array_type(TYPE_ARRAY_INT_DESC));
     }
     // ... but an unannotated repeated group named `array` or `<list name>_tuple` stays a struct element, even
     // when its single child is repeated:
@@ -762,7 +761,7 @@ TEST_F(ParquetSchemaBuilderTest, LegacyListEncodings) {
         auto group = create_group_node(name, ::parquet::Repetition::REPEATED, {nums});
         check_inferred_type(
                 create_list_node("my_list", ::parquet::Repetition::OPTIONAL, {group}),
-                TypeDescriptor::create_array_type(TypeDescriptor::create_struct_type({"nums"}, {int_array})));
+                TypeDescriptor::create_array_type(TypeDescriptor::create_struct_type({"nums"}, {TYPE_ARRAY_INT_DESC})));
     }
     // A single-field repeated group named `array` is a struct element:
     // optional group my_list (LIST) { repeated group array { required binary str; } }
