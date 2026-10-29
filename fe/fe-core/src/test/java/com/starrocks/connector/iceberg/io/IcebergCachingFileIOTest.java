@@ -27,6 +27,7 @@ import org.apache.iceberg.hadoop.HadoopConfigurable;
 import org.apache.iceberg.hadoop.HadoopOutputFile;
 import org.apache.iceberg.io.FileIO;
 import org.apache.iceberg.io.InputFile;
+import org.apache.iceberg.io.ResolvingFileIO;
 import org.apache.iceberg.util.SerializableSupplier;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -240,6 +241,20 @@ public class IcebergCachingFileIOTest {
 
         // Other schemes keep going through the wrapped FileIO.
         Assertions.assertNull(IcebergCachingFileIO.sharedGcsFileSystem("file:///tmp/t", base));
+    }
+
+    @Test
+    public void testGcsFastPathKeepsWrappedIOCredential() {
+        Configuration base = new Configuration();
+        base.set("fs.gs.impl", FakeGcsFileSystem.class.getName());
+        Map<String, String> token = new HashMap<>();
+        token.put(GCS_ACCESS_TOKEN, "token-1");
+        IcebergCachingFileIO fileIO = newFileIO(base, token);
+
+        // deleteFile() and the serialized table for metadata scans use the wrapped IO, not the shared FileSystem.
+        fileIO.newInputFile("gs://bucket-a/t/metadata/v1.metadata.json");
+        Assertions.assertEquals("token-1", ((ResolvingFileIO) fileIO.getWrappedIO()).getConf()
+                .get(GCPCloudConfigurationProvider.ACCESS_TOKEN_KEY));
     }
 
     private static IcebergCachingFileIO newFileIO(Configuration conf, Map<String, String> properties) {

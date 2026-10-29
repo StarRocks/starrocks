@@ -185,11 +185,12 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
     public InputFile newInputFile(String path) {
         try {
             Configuration fileConf = buildConfFromProperties(properties, path);
+            // deleteFile() and getWrappedIO() still go through wrappedIO, so it needs this file's credential too.
+            wrappedIO.setConf(fileConf);
             FileSystem gcs = sharedGcsFileSystem(path, fileConf);
             if (gcs != null) {
                 return new CachingInputFile(fileContentCache, HadoopInputFile.fromPath(new Path(path), gcs, fileConf));
             }
-            wrappedIO.setConf(fileConf);
             return new CachingInputFile(fileContentCache, wrappedIO.newInputFile(path));
         } catch (StarRocksException e) {
             String errorMessage = String.format("Failed to new input file for path: %s, properties: %s", path, properties);
@@ -202,11 +203,11 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
     public OutputFile newOutputFile(String path) {
         try {
             Configuration fileConf = buildConfFromProperties(properties, path);
+            wrappedIO.setConf(fileConf);
             FileSystem gcs = sharedGcsFileSystem(path, fileConf);
             if (gcs != null) {
                 return HadoopOutputFile.fromPath(new Path(path), gcs, fileConf);
             }
-            wrappedIO.setConf(fileConf);
             // Wrapped rather than returned as is: newOutputFile itself contacts nothing -- the wait is in
             // create()/createOrOverwrite() on the object handed back, which is where the guard has to be.
             // Returned as the wrapped IO made it, deliberately. The write has no door and cannot have one
