@@ -67,6 +67,7 @@ import com.starrocks.lake.LakeMetaVersionNotFoundException;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.planner.DescriptorTable;
+import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
@@ -534,6 +535,11 @@ public class DefaultCoordinator extends Coordinator {
             if (connectContext.getSessionVariable().isEnableConnectorIncrementalScanRanges()) {
                 jobSpec.setIncrementalScanRanges(true);
             }
+        }
+        if (jobSpec.getScanNodes().stream()
+                .anyMatch(scan -> scan instanceof OlapScanNode nativeScan && nativeScan.isParallelRangeScan())) {
+            // Native parallel tablet tasks use the ordinary one-shot assignment and deployment lifecycle.
+            jobSpec.setIncrementalScanRanges(false);
         }
 
         coordinatorPreprocessor.prepareExec();
