@@ -425,6 +425,9 @@ append_runtime_library_path "${STARROCKS_THIRDPARTY}/installed/lib"
 append_runtime_library_path "${STARROCKS_THIRDPARTY}/installed/lib64"
 append_runtime_library_path "${STARROCKS_THIRDPARTY}/installed/llvm/lib"
 append_runtime_library_path "${STARROCKS_THIRDPARTY}/installed/paimon-cpp/lib"
+if [[ "${WITH_CONNECTOR_LANCE}" == "ON" ]]; then
+    append_runtime_library_path "${STARROCKS_THIRDPARTY}/installed/lance/lib"
+fi
 
 while IFS= read -r runtime_lib_dir; do
     append_runtime_library_path "${runtime_lib_dir}"
