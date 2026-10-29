@@ -119,6 +119,14 @@ public interface IcebergCatalog extends MemoryTrackable {
 
     List<String> listTables(ConnectContext context, String dbName);
 
+    /**
+     * List the names of views of the database. Views are also included in {@link #listTables} by catalogs
+     * that merge them (e.g. REST), this is used to tell them apart.
+     */
+    default List<String> listViews(ConnectContext context, String dbName) {
+        return new ArrayList<>();
+    }
+
     default boolean createTable(ConnectContext context,
                                 String dbName,
                                 String tableName,

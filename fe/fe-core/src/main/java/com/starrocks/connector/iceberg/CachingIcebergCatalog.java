@@ -265,6 +265,11 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     }
 
     @Override
+    public List<String> listViews(ConnectContext connectContext, String dbName) {
+        return delegate.listViews(connectContext, dbName);
+    }
+
+    @Override
     public Table getTable(ConnectContext connectContext, String dbName, String tableName) throws StarRocksConnectorException {
         IcebergTableName icebergTableName = new IcebergTableName(dbName, tableName);
 

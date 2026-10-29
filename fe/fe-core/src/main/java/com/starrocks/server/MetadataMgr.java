@@ -102,6 +102,7 @@ import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -289,6 +290,23 @@ public class MetadataMgr {
             }
         }
         return ImmutableList.copyOf(tableNames.build());
+    }
+
+    /**
+     * List the names of views (a subset of {@link #listTableNames}) for connectors that distinguish views in listing.
+     * It may involve remote calls, so callers should invoke it once per database rather than once per table.
+     */
+    public Set<String> listViewNames(ConnectContext context, String catalogName, String dbName) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+        if (connectorMetadata.isEmpty()) {
+            return Collections.emptySet();
+        }
+        try {
+            return ImmutableSet.copyOf(connectorMetadata.get().listViewNames(context, dbName));
+        } catch (Exception e) {
+            LOG.error("Failed to listViewNames on [{}.{}]", catalogName, dbName, e);
+            throw e;
+        }
     }
 
     public boolean createTable(ConnectContext context, CreateTableStmt stmt) throws DdlException {
@@ -652,6 +670,17 @@ public class MetadataMgr {
 
     public BasicTable getBasicTable(ConnectContext context, String catalogName, String dbName, String tblName,
                                     boolean fetchExternalMetadata) {
+        return getBasicTable(context, catalogName, dbName, tblName, fetchExternalMetadata, null);
+    }
+
+    /**
+     * Same as {@link #getBasicTable(ConnectContext, String, String, String, boolean)}, but when external metadata is
+     * not fetched, the table is typed as a connector view if its name is in {@code viewNames}.
+     * Callers listing a whole database should obtain {@code viewNames} once via
+     * {@link #listViewNames(ConnectContext, String, String)} and reuse it for every table; null means "do not check views".
+     */
+    public BasicTable getBasicTable(ConnectContext context, String catalogName, String dbName, String tblName,
+                                    boolean fetchExternalMetadata, Set<String> viewNames) {
         if (catalogName == null) {
             return getTable(context, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbName, tblName);
         }
@@ -666,8 +695,13 @@ public class MetadataMgr {
         }
 
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
-        return connectorMetadata.map(
-                        metadata -> new ExternalCatalogTableBasicInfo(catalogName, dbName, tblName, metadata.getTableType()))
+        return connectorMetadata.map(metadata -> {
+                    Table.TableType tableType = metadata.getTableType();
+                    if (viewNames != null && viewNames.contains(tblName) && metadata.getViewType() != null) {
+                        tableType = metadata.getViewType();
+                    }
+                    return new ExternalCatalogTableBasicInfo(catalogName, dbName, tblName, tableType);
+                })
                 .orElse(null);
     }
 
