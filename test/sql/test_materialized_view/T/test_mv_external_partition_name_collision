@@ -1,0 +1,57 @@
+-- name: test_mv_external_partition_name_collision
+
+-- A materialized view over an external table names each of its partitions after the base partition
+-- value, keeping only [a-zA-Z0-9_]. That used to be the whole name, so -1 and 1 both became p1, as did
+-- 'a-b' and 'ab': the second partition replaced the first, its rows never reached the view, and every
+-- query rewritten onto the view silently lost them.
+
+create external catalog mv_iceberg_${uuid0}
+properties
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+create database mv_iceberg_${uuid0}.sql_test_db_${uuid0};
+
+create table mv_iceberg_${uuid0}.sql_test_db_${uuid0}.t_int (v int, k int) partition by (k);
+insert into mv_iceberg_${uuid0}.sql_test_db_${uuid0}.t_int values (10, -1), (20, 1), (30, 2), (40, -2), (50, 22);
+
+create table mv_iceberg_${uuid0}.sql_test_db_${uuid0}.t_str (v int, s string) partition by (s);
+insert into mv_iceberg_${uuid0}.sql_test_db_${uuid0}.t_str values (1, 'a-b'), (2, 'ab'), (3, 'a_b'), (4, 'a b'), (5, 'a.b');
+
+create database db_${uuid0};
+use db_${uuid0};
+
+create materialized view mv_int partition by k distributed by hash(v) buckets 1
+refresh deferred manual properties ("replication_num" = "1")
+as select v, k from mv_iceberg_${uuid0}.sql_test_db_${uuid0}.t_int;
+refresh materialized view mv_int with sync mode;
+
+create materialized view mv_str partition by s distributed by hash(v) buckets 1
+refresh deferred manual properties ("replication_num" = "1")
+as select v, s from mv_iceberg_${uuid0}.sql_test_db_${uuid0}.t_str;
+refresh materialized view mv_str with sync mode;
+
+-- Every base partition has its own view partition and its rows.
+select count(*) from information_schema.partitions_meta where db_name = 'db_${uuid0}' and table_name = 'mv_int';
+select k, v from mv_int order by k;
+select count(*) from information_schema.partitions_meta where db_name = 'db_${uuid0}' and table_name = 'mv_str';
+select s, v from mv_str order by v;
+
+-- The same answers through rewrite as from the base tables.
+function: print_hit_materialized_views("select k, v from mv_iceberg_${uuid0}.sql_test_db_${uuid0}.t_int")
+select k, v from mv_iceberg_${uuid0}.sql_test_db_${uuid0}.t_int order by k;
+set enable_materialized_view_rewrite = false;
+select k, v from mv_iceberg_${uuid0}.sql_test_db_${uuid0}.t_int order by k;
+set enable_materialized_view_rewrite = true;
+function: print_hit_materialized_views("select s, v from mv_iceberg_${uuid0}.sql_test_db_${uuid0}.t_str")
+select s, v from mv_iceberg_${uuid0}.sql_test_db_${uuid0}.t_str order by v;
+
+drop materialized view mv_int;
+drop materialized view mv_str;
+drop database db_${uuid0} force;
+drop table mv_iceberg_${uuid0}.sql_test_db_${uuid0}.t_int force;
+drop table mv_iceberg_${uuid0}.sql_test_db_${uuid0}.t_str force;
+drop database mv_iceberg_${uuid0}.sql_test_db_${uuid0} force;
+drop catalog mv_iceberg_${uuid0};
