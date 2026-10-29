@@ -823,9 +823,17 @@ Status ChunkPredicateBuilder<E, Type>::normalize_join_runtime_filter(const SlotD
             const Expr* root_expr = _exprs[i].root();
             if (TExprOpcode::FILTER_IN == root_expr->op()) {
                 const Expr* l = root_expr->get_child(0);
-                if (!l->is_slotref() ||
-                    (l->type().type != slot.type().type && l->type().type != MappingType && !ignore_cast(slot, *l))) {
+                if (!l->is_slotref()) {
                     continue;
+                }
+                if constexpr (SlotType == TYPE_VARCHAR && MappingType == LowCardDictType) {
+                    if (l->type().type != LowCardDictType) {
+                        continue;
+                    }
+                } else {
+                    if (l->type().type != slot.type().type && !ignore_cast(slot, *l)) {
+                        continue;
+                    }
                 }
 
                 std::vector<SlotId> slot_ids;
