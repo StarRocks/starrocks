@@ -747,6 +747,8 @@ TEST_F(SpillTest, order_by_restore_large_offsets_binary) {
     std::vector<int32_t> keys;
     std::vector<std::string> values;
     ASSERT_OK(caller.trigger_restore<SyncExecutor>(&dummy_rt_st, EmptyMemGuard{}));
+    // Marks the merge cursors data-ready, which restore() requires before it reads.
+    ASSERT_TRUE(caller._spiller->has_output_data());
     while (true) {
         auto chunk_st = caller.restore<SyncExecutor>(&dummy_rt_st, EmptyMemGuard{});
         if (chunk_st.status().is_end_of_file()) {
