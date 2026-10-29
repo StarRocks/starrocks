@@ -1055,10 +1055,9 @@ TEST_F(JsonScannerTest, test_multi_type) {
     types.emplace_back(TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 27, 9));
     types.emplace_back(TypeDescriptor::create_char_type(20));
     types.emplace_back(TYPE_TIME);
-    types.emplace_back(TypeDescriptor::create_struct_type(
-            {"f_int", "f_string"}, {TypeDescriptor(TYPE_INT), TYPE_VARCHAR_DESC}));
     types.emplace_back(
-            TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TypeDescriptor(TYPE_DOUBLE)));
+            TypeDescriptor::create_struct_type({"f_int", "f_string"}, {TypeDescriptor(TYPE_INT), TYPE_VARCHAR_DESC}));
+    types.emplace_back(TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TypeDescriptor(TYPE_DOUBLE)));
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
@@ -1907,14 +1906,14 @@ TEST_F(JsonScannerTest, test_large_compressed_json_large) {
     EXPECT_GE(file_size, 1 * 1024 * 1024);
 
     std::vector<TypeDescriptor> types;
-    types.emplace_back(TYPE_VARCHAR_DESC); // id
-    types.emplace_back(TYPE_VARCHAR_DESC); // name
-    types.emplace_back(TYPE_DOUBLE);                              // value
-    types.emplace_back(TYPE_BIGINT);                              // timestamp
-    types.emplace_back(TYPE_VARCHAR_DESC);  // category
-    types.emplace_back(TYPE_DOUBLE);                              // score
-    types.emplace_back(TYPE_BOOLEAN);                             // active
-    types.emplace_back(TypeDescriptor::create_json_type());       // tags
+    types.emplace_back(TYPE_VARCHAR_DESC);                  // id
+    types.emplace_back(TYPE_VARCHAR_DESC);                  // name
+    types.emplace_back(TYPE_DOUBLE);                        // value
+    types.emplace_back(TYPE_BIGINT);                        // timestamp
+    types.emplace_back(TYPE_VARCHAR_DESC);                  // category
+    types.emplace_back(TYPE_DOUBLE);                        // score
+    types.emplace_back(TYPE_BOOLEAN);                       // active
+    types.emplace_back(TypeDescriptor::create_json_type()); // tags
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
@@ -2002,14 +2001,13 @@ TEST_F(JsonScannerTest, test_source_metadata_fill) {
     // by-name path (no jsonpath): metadata slots follow the two payload columns, filled from meta.
     {
         std::vector<TypeDescriptor> types;
-        types.emplace_back(TYPE_BIGINT);                             // id (payload)
+        types.emplace_back(TYPE_BIGINT);       // id (payload)
         types.emplace_back(TYPE_VARCHAR_DESC); // payload
         types.emplace_back(TYPE_VARCHAR_DESC); // topic (meta, slot 2)
-        types.emplace_back(TYPE_INT);                                // partition (meta, slot 3)
-        types.emplace_back(TYPE_BIGINT);                             // offset (meta, slot 4)
-        types.emplace_back(
-                TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC,
-                                                TYPE_VARCHAR_DESC)); // headers (slot 5)
+        types.emplace_back(TYPE_INT);          // partition (meta, slot 3)
+        types.emplace_back(TYPE_BIGINT);       // offset (meta, slot 4)
+        types.emplace_back(TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC,
+                                                           TYPE_VARCHAR_DESC)); // headers (slot 5)
 
         std::vector<TRoutineLoadMetaColumn> meta_cols = {
                 json_meta_desc(2, TStreamSourceMetaKind::TOPIC), json_meta_desc(3, TStreamSourceMetaKind::PARTITION),
@@ -2042,7 +2040,7 @@ TEST_F(JsonScannerTest, test_source_metadata_fill) {
     // slot->jsonpath mapping must skip it (meta_count shift) for the payload columns to stay aligned.
     {
         std::vector<TypeDescriptor> types;
-        types.emplace_back(TYPE_BIGINT);                             // id (payload, jsonpath[0])
+        types.emplace_back(TYPE_BIGINT);       // id (payload, jsonpath[0])
         types.emplace_back(TYPE_VARCHAR_DESC); // topic (meta, slot 1)
         types.emplace_back(TYPE_VARCHAR_DESC); // payload (payload, jsonpath[1])
 
@@ -2072,7 +2070,7 @@ TEST_F(JsonScannerTest, test_source_metadata_fill) {
     // must win and the payload field must not overwrite it (object-order skip path).
     {
         std::vector<TypeDescriptor> types;
-        types.emplace_back(TYPE_BIGINT);                             // id (payload)
+        types.emplace_back(TYPE_BIGINT);       // id (payload)
         types.emplace_back(TYPE_VARCHAR_DESC); // payload (meta TOPIC, slot 1)
 
         std::vector<TRoutineLoadMetaColumn> meta_cols = {json_meta_desc(1, TStreamSourceMetaKind::TOPIC)};

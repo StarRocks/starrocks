@@ -25,8 +25,7 @@ namespace starrocks {
 class AddMapColumnTest : public ::testing::Test {};
 
 TEST_F(AddMapColumnTest, test_good_json) {
-    TypeDescriptor type_desc = TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC,
-                                                               TYPE_VARCHAR_DESC);
+    TypeDescriptor type_desc = TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TYPE_VARCHAR_DESC);
 
     auto column = ColumnHelper::create_column(type_desc, false);
 
@@ -41,8 +40,7 @@ TEST_F(AddMapColumnTest, test_good_json) {
 }
 
 TEST_F(AddMapColumnTest, test_bad_json) {
-    TypeDescriptor type_desc = TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC,
-                                                               TYPE_VARCHAR_DESC);
+    TypeDescriptor type_desc = TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TYPE_VARCHAR_DESC);
 
     auto column = ColumnHelper::create_column(type_desc, false);
 

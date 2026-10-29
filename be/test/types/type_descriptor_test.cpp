@@ -785,8 +785,7 @@ TEST_F(TypeDescriptorTest, test_promote_types) {
              TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 19, 2)},
 
             {TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 38, 38),
-             TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 38, 0),
-             TYPE_VARCHAR_DESC},
+             TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 38, 0), TYPE_VARCHAR_DESC},
 
             {TypeDescriptor::create_varchar_type(10), TypeDescriptor::create_varchar_type(20),
              TypeDescriptor::create_varchar_type(20)},

@@ -265,8 +265,7 @@ TEST_F(ComplexColumnReaderTest, test_map_unknown_value_type_skips_value_decode) 
 
     auto datum = avro::GenericDatum(map_schema, map_datum);
 
-    TypeDescriptor type_desc = TypeDescriptor::create_map_type(
-            TYPE_VARCHAR_DESC, TypeDescriptor(TYPE_UNKNOWN));
+    TypeDescriptor type_desc = TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TypeDescriptor(TYPE_UNKNOWN));
     auto column = create_adaptive_nullable_column(type_desc);
     auto reader = get_column_reader(type_desc, false);
 

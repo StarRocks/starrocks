@@ -2330,8 +2330,7 @@ TEST_P(RowsetColumnPartialUpdateTest, partial_update_json_meta_dict_reads_overla
 
     // Non-nullable, matching what MetaReader builds for META_DICT_MERGE: _collect_dict_for_column only
     // appends to the array's offsets/elements, never to a null column.
-    auto dict_column = ColumnHelper::create_column(
-            TypeDescriptor::create_array_type(TYPE_VARCHAR_DESC), false);
+    auto dict_column = ColumnHelper::create_column(TypeDescriptor::create_array_type(TYPE_VARCHAR_DESC), false);
     std::vector<Column*> dsts = {dict_column.get()};
     ASSERT_OK(collecter.collect(&dsts));
 

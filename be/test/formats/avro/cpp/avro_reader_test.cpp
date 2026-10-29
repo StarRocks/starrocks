@@ -359,8 +359,7 @@ TEST_F(AvroReaderTest, test_read_complex_types_as_varchar) {
     // read as varchar type
     for (auto& slot_desc : tmp_slot_descs) {
         slot_descs.emplace_back(_obj_pool.add(
-                new SlotDescriptor(slot_desc.id(), std::string(slot_desc.col_name()),
-                                   TYPE_VARCHAR_DESC)));
+                new SlotDescriptor(slot_desc.id(), std::string(slot_desc.col_name()), TYPE_VARCHAR_DESC)));
     }
 
     // create column readers

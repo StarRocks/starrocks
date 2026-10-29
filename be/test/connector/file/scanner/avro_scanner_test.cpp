@@ -368,8 +368,7 @@ TEST_F(AvroScannerTest, test_basic_type_to_json_or_string) {
     {
         config::avro_ignore_union_type_tag = false;
 
-        auto scanner = create_avro_scanner({TYPE_VARCHAR_DESC}, ranges, {"jsontype"},
-                                           avro_helper.schema_text);
+        auto scanner = create_avro_scanner({TYPE_VARCHAR_DESC}, ranges, {"jsontype"}, avro_helper.schema_text);
 
         Status st = scanner->open();
         ASSERT_TRUE(st.ok());
@@ -389,8 +388,7 @@ TEST_F(AvroScannerTest, test_basic_type_to_json_or_string) {
     {
         config::avro_ignore_union_type_tag = true;
 
-        auto scanner = create_avro_scanner({TYPE_VARCHAR_DESC}, ranges, {"jsontype"},
-                                           avro_helper.schema_text);
+        auto scanner = create_avro_scanner({TYPE_VARCHAR_DESC}, ranges, {"jsontype"}, avro_helper.schema_text);
 
         Status st = scanner->open();
         ASSERT_TRUE(st.ok());
@@ -1413,8 +1411,7 @@ TEST_F(AvroScannerTest, test_map_type) {
         types.emplace_back(TYPE_BOOLEAN);
         types.emplace_back(TYPE_BIGINT);
         types.emplace_back(TYPE_DOUBLE);
-        types.emplace_back(TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC,
-                                                           TypeDescriptor(TYPE_BIGINT)));
+        types.emplace_back(TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TypeDescriptor(TYPE_BIGINT)));
 
         std::vector<TBrokerRangeDesc> ranges;
         TBrokerRangeDesc range;
@@ -1442,8 +1439,7 @@ TEST_F(AvroScannerTest, test_map_type) {
     // load avro map natively into a MAP<VARCHAR, BIGINT> column selected via jsonpaths
     {
         std::vector<TypeDescriptor> types;
-        types.emplace_back(TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC,
-                                                           TypeDescriptor(TYPE_BIGINT)));
+        types.emplace_back(TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TypeDescriptor(TYPE_BIGINT)));
 
         std::vector<TBrokerRangeDesc> ranges;
         TBrokerRangeDesc range;
@@ -1511,8 +1507,7 @@ TEST_F(AvroScannerTest, test_struct_type) {
 
         std::vector<TypeDescriptor> types;
         types.emplace_back(TypeDescriptor::create_struct_type(
-                {"f_int", "f_str", "f_opt"}, {TypeDescriptor(TYPE_INT), TYPE_VARCHAR_DESC,
-                                              TYPE_VARCHAR_DESC}));
+                {"f_int", "f_str", "f_opt"}, {TypeDescriptor(TYPE_INT), TYPE_VARCHAR_DESC, TYPE_VARCHAR_DESC}));
 
         std::vector<TBrokerRangeDesc> ranges;
         TBrokerRangeDesc range;
@@ -1852,8 +1847,8 @@ TEST_F(AvroScannerTest, test_array_of_struct) {
     ASSERT_TRUE(write_avro_data(avro_helper, data_path).ok());
 
     std::vector<TypeDescriptor> types;
-    types.emplace_back(TypeDescriptor::create_array_type(TypeDescriptor::create_struct_type(
-            {"a", "b"}, {TypeDescriptor(TYPE_INT), TYPE_VARCHAR_DESC})));
+    types.emplace_back(TypeDescriptor::create_array_type(
+            TypeDescriptor::create_struct_type({"a", "b"}, {TypeDescriptor(TYPE_INT), TYPE_VARCHAR_DESC})));
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
@@ -1908,8 +1903,7 @@ TEST_F(AvroScannerTest, test_struct_with_map) {
     std::vector<TypeDescriptor> types;
     types.emplace_back(TypeDescriptor::create_struct_type(
             {"id", "m"},
-            {TypeDescriptor(TYPE_INT),
-             TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TypeDescriptor(TYPE_INT))}));
+            {TypeDescriptor(TYPE_INT), TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TypeDescriptor(TYPE_INT))}));
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
@@ -1983,9 +1977,7 @@ TEST_F(AvroScannerTest, test_deep_nested) {
 
     std::vector<TypeDescriptor> types;
     types.emplace_back(TypeDescriptor::create_array_type(TypeDescriptor::create_struct_type(
-            {"k", "m"},
-            {TYPE_VARCHAR_DESC,
-             TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TYPE_ARRAY_INT_DESC)})));
+            {"k", "m"}, {TYPE_VARCHAR_DESC, TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TYPE_ARRAY_INT_DESC)})));
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
@@ -2342,14 +2334,13 @@ TEST_F(AvroScannerTest, test_source_metadata_fill) {
     // by-name path (no jsonpath): metadata slots follow the two payload columns and are filled from meta.
     {
         std::vector<TypeDescriptor> types;
-        types.emplace_back(TYPE_BIGINT);                             // id (payload)
+        types.emplace_back(TYPE_BIGINT);       // id (payload)
         types.emplace_back(TYPE_VARCHAR_DESC); // payload
         types.emplace_back(TYPE_VARCHAR_DESC); // topic (meta, slot 2)
-        types.emplace_back(TYPE_INT);                                // partition (meta, slot 3)
-        types.emplace_back(TYPE_BIGINT);                             // offset (meta, slot 4)
-        types.emplace_back(
-                TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC,
-                                                TYPE_VARCHAR_DESC)); // headers (slot 5)
+        types.emplace_back(TYPE_INT);          // partition (meta, slot 3)
+        types.emplace_back(TYPE_BIGINT);       // offset (meta, slot 4)
+        types.emplace_back(TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC,
+                                                           TYPE_VARCHAR_DESC)); // headers (slot 5)
 
         std::vector<TRoutineLoadMetaColumn> meta_cols = {
                 meta_desc(2, TStreamSourceMetaKind::TOPIC), meta_desc(3, TStreamSourceMetaKind::PARTITION),
@@ -2383,7 +2374,7 @@ TEST_F(AvroScannerTest, test_source_metadata_fill) {
     // slot->jsonpath mapping must skip it (meta_count shift) for the payload columns to stay aligned.
     {
         std::vector<TypeDescriptor> types;
-        types.emplace_back(TYPE_BIGINT);                             // id (payload, jsonpath[0])
+        types.emplace_back(TYPE_BIGINT);       // id (payload, jsonpath[0])
         types.emplace_back(TYPE_VARCHAR_DESC); // topic (meta, slot 1)
         types.emplace_back(TYPE_VARCHAR_DESC); // payload (payload, jsonpath[1])
 

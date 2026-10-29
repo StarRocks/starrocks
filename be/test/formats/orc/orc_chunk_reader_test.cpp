@@ -2483,25 +2483,20 @@ TEST_F(OrcChunkReaderTest, GetFileSchema) {
               {"col_list_list_int", TypeDescriptor::create_array_type(TypeDescriptor::create_array_type(
                                             TypeDescriptor::from_logical_type(TYPE_INT)))},
               {"col_map_string_int",
-               TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC,
-                                               TypeDescriptor::from_logical_type(TYPE_INT))},
+               TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TypeDescriptor::from_logical_type(TYPE_INT))},
               {"col_map_string_map_string_int",
                TypeDescriptor::create_map_type(
-                       TYPE_VARCHAR_DESC,
-                       TypeDescriptor::create_map_type(
-                               TYPE_VARCHAR_DESC,
-                               TypeDescriptor::from_logical_type(TYPE_INT)))},
+                       TYPE_VARCHAR_DESC, TypeDescriptor::create_map_type(
+                                                  TYPE_VARCHAR_DESC, TypeDescriptor::from_logical_type(TYPE_INT)))},
               {"col_struct_string_int",
-               TypeDescriptor::create_struct_type(
-                       {"field_string", "field_int"},
-                       {TYPE_VARCHAR_DESC, TypeDescriptor::from_logical_type(TYPE_INT)})},
+               TypeDescriptor::create_struct_type({"field_string", "field_int"},
+                                                  {TYPE_VARCHAR_DESC, TypeDescriptor::from_logical_type(TYPE_INT)})},
               {"col_struct_struct_string_int_string",
                TypeDescriptor::create_struct_type(
                        {"filed_struct", "field_string2"},
                        {TypeDescriptor::create_struct_type(
                                 {"field_string1", "field_int"},
-                                {TYPE_VARCHAR_DESC,
-                                 TypeDescriptor::from_logical_type(TYPE_INT)}),
+                                {TYPE_VARCHAR_DESC, TypeDescriptor::from_logical_type(TYPE_INT)}),
                         TYPE_VARCHAR_DESC})}}}};
 
     for (const auto& test_case : test_cases) {
