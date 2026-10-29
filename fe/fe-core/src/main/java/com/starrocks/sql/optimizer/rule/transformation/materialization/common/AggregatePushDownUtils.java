@@ -77,7 +77,8 @@ public class AggregatePushDownUtils {
         final List<Table> queryTables = MvUtils.getAllTables(queryOptExpression);
         // refresh query predicate split since query predicate have been changed after push down
         final PredicateSplit queryPredicateSplit = getQuerySplitPredicate(optimizerContext,
-                materializationContext, queryOptExpression, queryColumnRefFactory, queryColumnRefRewriter, rule);
+                materializationContext, queryOptExpression, queryColumnRefFactory, queryColumnRefRewriter, rule,
+                origMVRewriteContext.isUseOriginalPredicate());
         if (queryPredicateSplit == null) {
             logMVRewrite(origMVRewriteContext, "Rewrite push down agg failed: get query split predicate failed");
             return null;
@@ -89,6 +90,8 @@ public class AggregatePushDownUtils {
                 queryTables, queryOptExpression, queryColumnRefRewriter, queryPredicateSplit, Lists.newArrayList(), rule);
         // set aggregate push down context to be used in the final stage
         newMvRewriteContext.setAggregatePushDownContext(ctx);
+        newMvRewriteContext.setUseOriginalPredicate(origMVRewriteContext.isUseOriginalPredicate());
+
         AggregatedMaterializedViewRewriter rewriter = new AggregatedMaterializedViewRewriter(newMvRewriteContext);
         OptExpression result = rewriter.doRewrite(newMvRewriteContext);
         if (result == null) {

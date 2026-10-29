@@ -255,7 +255,9 @@ public class SplitScanORToUnionRule extends TransformationRule {
                 .setColRefToColumnMetaMap(refToColumns)
                 .setColumnMetaToColRefMap(columnToRefs)
                 .setFromSplitOR(true)
-                .setPredicate(rewriter.rewrite(scanPredicate));
+                .setPredicate(rewriter.rewrite(scanPredicate))
+                // A UNION child only covers one disjoint branch, not the original OR predicate.
+                .setPredicateForMvRewrite(null);
         if (scan.getPrunedPartitionPredicates() != null && !scan.getPrunedPartitionPredicates().isEmpty()) {
             builder.setPrunedPartitionPredicates(scan.getPrunedPartitionPredicates().stream()
                     .map(rewriter::rewrite).collect(Collectors.toList()));
