@@ -151,13 +151,8 @@ private:
     const std::shared_ptr<MemTracker> _query_mem_tracker;
 };
 
-<<<<<<< HEAD:be/src/runtime/local_pass_through_buffer.cpp
-PassThroughChunkBuffer::PassThroughChunkBuffer(const TUniqueId& query_id)
-        : _mutex(), _query_id(query_id), _ref_count(1) {}
-=======
 PassThroughChunkBuffer::PassThroughChunkBuffer(const TUniqueId& query_id, std::shared_ptr<MemTracker> query_mem_tracker)
-        : _mutex(), _query_id(query_id), _query_mem_tracker(std::move(query_mem_tracker)) {}
->>>>>>> 99ec6bf ([Refactor] Pass the query tracker to the pass-through buffer at open (#81820)):be/src/compute_env/data_stream/local_pass_through_buffer.cpp
+        : _mutex(), _query_id(query_id), _query_mem_tracker(std::move(query_mem_tracker)), _ref_count(1) {}
 
 PassThroughChunkBuffer::~PassThroughChunkBuffer() {
     if (UNLIKELY(_ref_count != 0)) {
