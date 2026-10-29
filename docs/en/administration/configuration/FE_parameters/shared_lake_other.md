@@ -741,15 +741,6 @@ This topic introduces the following types of FE configurations:
 
 ## Data Lake
 
-### `enable_delta_lake_azure_start_from_listing`
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether Delta Lake catalogs list Azure (`abfs`/`abfss`) `_delta_log` files starting at the requested version. Valid values are `true` and `false`. Set to `false` to list the entire log directory before filtering. Applies immediately to all catalogs without an FE restart. Accounts configured to use the Blob endpoint continue to use full listings. Explicitly configured custom Delta LogStore implementations are preserved.
-- Introduced in: -
-
 ### `files_enable_insert_push_down_column_type`
 
 - Default: true

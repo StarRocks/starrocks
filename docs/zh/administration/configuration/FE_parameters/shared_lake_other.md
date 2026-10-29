@@ -742,15 +742,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ## 数据湖
 
-### `enable_delta_lake_azure_start_from_listing`
-
-- 默认值: true
-- 类型: Boolean
-- 单位: -
-- 是否可变: Yes
-- 描述: 是否让 Delta Lake Catalog 从请求的版本开始列出 Azure（`abfs`/`abfss`）中的 `_delta_log` 文件。有效值为 `true` 和 `false`。设置为 `false` 时，会先列出整个日志目录，再进行过滤。修改后立即对所有 Catalog 生效，无需重启 FE。配置为使用 Blob 端点的账户仍使用完整目录列表。显式配置的自定义 Delta LogStore 实现保持不变。
-- 引入版本: -
-
 ### `files_enable_insert_push_down_column_type`
 
 - 默认值: true

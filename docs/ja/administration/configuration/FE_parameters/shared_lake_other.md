@@ -742,15 +742,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ## データレイク
 
-### `enable_delta_lake_azure_start_from_listing`
-
-- デフォルト：true
-- タイプ：Boolean
-- 単位：-
-- 変更可能：Yes
-- 説明：Delta Lake カタログが Azure（`abfs`/`abfss`）の `_delta_log` ファイルを要求されたバージョンから一覧取得するかどうかを指定します。有効な値は `true` と `false` です。`false` に設定すると、ログディレクトリ全体を一覧取得してからフィルタリングします。変更は FE の再起動なしで、すべてのカタログに即時適用されます。Blob エンドポイントを使用するように設定されたアカウントでは、引き続きディレクトリ全体を一覧取得します。明示的に設定されたカスタム Delta LogStore 実装は維持されます。
-- 導入時期：-
-
 ### `files_enable_insert_push_down_column_type`
 
 - デフォルト：true

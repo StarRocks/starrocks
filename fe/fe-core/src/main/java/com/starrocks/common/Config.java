@@ -3512,6 +3512,7 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean enable_reuse_spark_column_statistics = true;
 
+    // Internal rollback switch; intentionally omitted from the public FE configuration reference.
     @ConfField(mutable = true, comment = "Whether Delta Lake catalogs list an Azure (abfs/abfss) _delta_log " +
             "from the requested version instead of listing all of its files. When off, listings behave like " +
             "Delta's stock AzureLogStore. Takes effect immediately for all catalogs.")
