@@ -28,7 +28,6 @@ import com.starrocks.clone.DynamicPartitionScheduler;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.RuntimeProfile;
-import com.starrocks.common.util.concurrent.lock.LockHoldDepth;
 import com.starrocks.connector.iceberg.MockIcebergMetadata;
 import com.starrocks.scheduler.mv.pct.MVPCTRefreshProcessor;
 import com.starrocks.server.GlobalStateMgr;
@@ -40,6 +39,7 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
+import com.starrocks.utframe.LockProbe;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Invocation;
 import mockit.Mock;
@@ -56,8 +56,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 @TestMethodOrder(MethodName.class)
@@ -736,17 +734,11 @@ public class PartitionBasedMvRefreshProcessorIcebergTest extends MVTestBase {
                 "\"replication_num\" = \"1\"\n" +
                 ")\n" +
                 "AS SELECT id, data, ts  FROM `iceberg0`.`partitioned_transforms_db`.`t0_multi_day_tz` as a;");
-        Thread testThread = Thread.currentThread();
-        AtomicInteger calls = new AtomicInteger();
-        AtomicBoolean resolvedUnderLock = new AtomicBoolean(false);
+        LockProbe probe = LockProbe.onCurrentThread();
         new MockUp<MvUtils>() {
             @Mock
             public Optional<Table> getTable(Invocation invocation, BaseTableInfo baseTableInfo) {
-                if (Thread.currentThread() == testThread) {
-                    calls.incrementAndGet();
-                    // OR-accumulated: a later lock-free lookup must not erase a locked one
-                    resolvedUnderLock.compareAndSet(false, LockHoldDepth.isUnderLock());
-                }
+                probe.record("getTable");
                 return invocation.proceed(baseTableInfo);
             }
         };
@@ -760,8 +752,7 @@ public class PartitionBasedMvRefreshProcessorIcebergTest extends MVTestBase {
             Assertions.assertEquals("date_trunc('day', ts) >= current_date() - interval 1 year",
                     mv.getTableProperty().getPartitionRetentionCondition());
             Assertions.assertTrue(mv.getRetentionConditionExpr().isPresent());
-            Assertions.assertTrue(calls.get() > 0, "the iceberg base table was never re-got, so the check below is vacuous");
-            Assertions.assertFalse(resolvedUnderLock.get(),
+            probe.assertReachedOutsideTheLock("getTable",
                     "ALTER MV SET partition_retention_condition re-got the iceberg base table under the MV's lock");
         } finally {
             starRocksAssert.dropMaterializedView(mvName);

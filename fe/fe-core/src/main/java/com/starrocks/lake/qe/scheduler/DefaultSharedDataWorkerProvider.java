@@ -65,7 +65,7 @@ import static com.starrocks.qe.WorkerProviderHelper.rendezvousWeight;
  *   on {@code BlacklistBackupRoutingPolicy}: {@code CIRCULAR} walks the sorted node id ring
  *   starting after the primary; {@code RANDOM} picks uniformly among eligible nodes; {@code TABLET_HASH} picks the
  *   eligible node with the highest rendezvous hash of (affinity key, node id), and falls back to {@code CIRCULAR}
- *   when the caller has no affinity key. The default policy is {@code CIRCULAR}
+ *   when the caller has no affinity key. The default policy is {@code TABLET_HASH}
  *   unless another value is passed at construction, and stays fixed for the lifetime of this provider.
  * Also in shared-data mode, all nodes will be treated as compute nodes. so the session variable @@prefer_compute_node
  * will be always true, and @@use_compute_nodes will be always -1 which means using all the available compute nodes.

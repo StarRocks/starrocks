@@ -1430,7 +1430,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean skipBlackList = false;
 
     @VariableMgr.VarAttr(name = BLACKLIST_BACKUP_ROUTING)
-    private String blacklistBackupRouting = BlacklistBackupRoutingPolicy.CIRCULAR.name();
+    private String blacklistBackupRouting = BlacklistBackupRoutingPolicy.getDefault().name();
 
     @VariableMgr.VarAttr(name = DEFAULT_VIEW_SQL_SECURITY)
     private String defaultViewSqlSecurity = DefaultViewSqlSecurity.getDefault().name();
@@ -1463,6 +1463,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // read state is unsafe across sibling scans of the same table. Set true to opt such scans back in.
     @VariableMgr.VarAttr(name = ENABLE_LAKE_PREPARED_SPLIT_ON_DUP_TABLE_SCAN)
     private boolean enableLakePreparedSplitOnDupTableScan = false;
+
+    @VariableMgr.VarAttr(name = "range_scan_execution_mode", flag = VariableMgr.SESSION_ONLY)
+    private String rangeScanExecutionMode = "colocate";
 
     // The strategy mode of TabletInternalParallel, which is effective only when enableTabletInternalParallel is true.
     // The optional values are "auto" and "force_split".
@@ -5123,6 +5126,21 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setLogRejectedRecordNum(long logRejectedRecordNum) {
         this.logRejectedRecordNum = logRejectedRecordNum;
+    }
+
+    public String getRangeScanExecutionMode() {
+        return rangeScanExecutionMode;
+    }
+
+    public void setRangeScanExecutionMode(String mode) {
+        if (!"colocate".equalsIgnoreCase(mode) && !"parallel".equalsIgnoreCase(mode)) {
+            throw new IllegalArgumentException("Legal values of range_scan_execution_mode are colocate|parallel");
+        }
+        rangeScanExecutionMode = mode.toLowerCase(Locale.ROOT);
+    }
+
+    public boolean isParallelRangeScan() {
+        return "parallel".equals(rangeScanExecutionMode);
     }
 
     public boolean isEnablePipelineEngine() {

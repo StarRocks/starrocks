@@ -1,5 +1,5 @@
-position: 100
-label: '指标详情'
+position: 10
+label: '通用监控指标'
 collapsible: true
 collapsed: true
 link:

@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//     https://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.common;
 
+import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
@@ -29,10 +30,12 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.type.DateType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.TypeFactory;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
@@ -43,16 +46,31 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Tests for the bounded-refresh handling in {@link RangePartitionDiffer#diff}.
+ * Tests for {@link RangePartitionDiffer}.
  *
  * <p>A refresh with PARTITION START/END must not partially replace a partition set: when a shape
  * change swaps one or more old MV partitions for one or more mapped partitions (fine to coarse, or
  * coarse to fine), the replacement component is applied only if it is fully inside the requested
  * range, otherwise it is left completely untouched.
  */
-public class RangePartitionDifferTest {
+public class RangePartitionDifferTest extends MVTestBase {
 
     private static final Column PARTITION_COLUMN = new Column("k1", DateType.DATETIME);
+
+    @BeforeAll
+    public static void beforeClass() throws Exception {
+        MVTestBase.beforeClass();
+        starRocksAssert.withTable("CREATE TABLE range_differ_base (k1 date, v1 int)\n" +
+                "PARTITION BY RANGE(k1) (\n" +
+                "    PARTITION p1 VALUES LESS THAN ('2020-02-01'),\n" +
+                "    PARTITION p2 VALUES LESS THAN ('2020-03-01')\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(v1) BUCKETS 1\n" +
+                "PROPERTIES('replication_num' = '1');");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW range_differ_mv\n" +
+                "PARTITION BY k1 DISTRIBUTED BY HASH(k1) BUCKETS 1 REFRESH DEFERRED MANUAL\n" +
+                "AS SELECT k1, sum(v1) AS v1 FROM range_differ_base GROUP BY k1");
+    }
 
     private static Range<PartitionKey> range(String lower, String upper) throws AnalysisException {
         PartitionKey lo = PartitionKey.createPartitionKey(Collections.singletonList(new PartitionValue(lower)),
@@ -98,6 +116,23 @@ public class RangePartitionDifferTest {
                 "p20210502_20210503", range("2021-05-02", "2021-05-03"),
                 "p20210601_20210602", range("2021-06-01", "2021-06-02"),
                 "p20210602_20210603", range("2021-06-02", "2021-06-03")));
+    }
+
+    @Test
+    public void testPartitionDiffOfInactivatedMvNamesTheMv() {
+        MaterializedView mv = getMv("range_differ_mv");
+        RangePartitionDiffer differ =
+                new RangePartitionDiffer(mv, MVTimelinessArbiter.QueryRewriteParams.ofRefresh(), null);
+        mv.setInactiveAndReason("inactivated by the test");
+        try {
+            IllegalArgumentException e = Assertions.assertThrows(IllegalArgumentException.class,
+                    () -> differ.computePartitionDiff(null, Maps.newHashMap()));
+            Assertions.assertTrue(e.getMessage().contains("materialized view range_differ_mv"), e.getMessage());
+            Assertions.assertTrue(e.getMessage().contains("inactive reason: inactivated by the test"),
+                    e.getMessage());
+        } finally {
+            mv.setActive();
+        }
     }
 
     /**

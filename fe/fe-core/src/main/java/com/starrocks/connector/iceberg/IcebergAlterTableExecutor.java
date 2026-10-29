@@ -53,6 +53,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.ManageSnapshots;
+import org.apache.iceberg.Schema;
 import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.SnapshotRef;
 import org.apache.iceberg.Table;
@@ -64,6 +65,7 @@ import org.apache.iceberg.UpdateSchema;
 import org.apache.iceberg.expressions.Literal;
 import org.apache.iceberg.expressions.Term;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
+import org.apache.iceberg.types.Types;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -80,7 +82,6 @@ import static com.starrocks.connector.iceberg.IcebergMetadata.COMPRESSION_CODEC;
 import static com.starrocks.connector.iceberg.IcebergMetadata.FILE_FORMAT;
 import static com.starrocks.connector.iceberg.IcebergMetadata.LOCATION_PROPERTY;
 import static com.starrocks.sql.ast.OutFileClause.PARQUET_COMPRESSION_TYPE_MAP;
-import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 
 public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
     private static final Logger LOGGER = LoggerFactory.getLogger(IcebergAlterTableExecutor.class);
@@ -116,17 +117,7 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
             ColumnPosition pos = clause.getColPos();
             ColumnDef columnDef = clause.getColumnDef();
 
-            // All non-partition columns must use NULL as the default value.
-            if (!columnDef.isAllowNull()) {
-                throw new StarRocksConnectorException("column in iceberg table must be nullable.");
-            }
-            org.apache.iceberg.types.Type icebergType = toIcebergColumnType(columnDef.getType());
-            Literal<?> defaultLiteral = buildIcebergDefaultLiteral(columnDef, icebergType);
-            if (defaultLiteral != null) {
-                updateSchema.addColumn(columnDef.getName(), icebergType, columnDef.getComment(), defaultLiteral);
-            } else {
-                updateSchema.addColumn(columnDef.getName(), icebergType, columnDef.getComment());
-            }
+            addColumn(updateSchema, columnDef);
 
             // AFTER column / FIRST
             if (pos != null) {
@@ -151,16 +142,7 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
             List<ColumnDef> columns = clause.getColumnDefs();
 
             for (ColumnDef columnDef : columns) {
-                if (!columnDef.isAllowNull()) {
-                    throw new StarRocksConnectorException("column in iceberg table must be nullable.");
-                }
-                org.apache.iceberg.types.Type icebergType = toIcebergColumnType(columnDef.getType());
-                Literal<?> defaultLiteral = buildIcebergDefaultLiteral(columnDef, icebergType);
-                if (defaultLiteral != null) {
-                    updateSchema.addColumn(columnDef.getName(), icebergType, columnDef.getComment(), defaultLiteral);
-                } else {
-                    updateSchema.addColumn(columnDef.getName(), icebergType, columnDef.getComment());
-                }
+                addColumn(updateSchema, columnDef);
             }
             updateSchema.commit();
         });
@@ -238,14 +220,74 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
 
     @Override
     public Void visitAddFieldClause(AddFieldClause clause, ConnectContext context) {
-        unsupportedException("Not support");
+        actions.add(() -> {
+            UpdateSchema updateSchema = this.transaction.updateSchema();
+            Types.NestedField parent = findNestedStruct(transaction.table().schema(), clause.getColName(),
+                    clause.getNestedParentFieldNames());
+            String parentName = transaction.table().schema().findColumnName(parent.fieldId());
+            String fieldName = clause.getFieldName();
+            updateSchema.addColumn(parentName, fieldName, toIcebergColumnType(clause.getType()));
+
+            ColumnPosition pos = clause.getFieldPos();
+            if (pos != null) {
+                String fullName = parentName + "." + fieldName;
+                if (pos.isFirst()) {
+                    updateSchema.moveFirst(fullName);
+                } else {
+                    updateSchema.moveAfter(fullName, parentName + "." + findChild(parent, pos.getLastCol()).name());
+                }
+            }
+            updateSchema.commit();
+        });
         return null;
     }
 
     @Override
     public Void visitDropFieldClause(DropFieldClause clause, ConnectContext context) {
-        unsupportedException("Not support");
+        actions.add(() -> {
+            Schema schema = transaction.table().schema();
+            Types.NestedField parent = findNestedStruct(schema, clause.getColName(), clause.getNestedParentFieldNames());
+            Types.NestedField field = findChild(parent, clause.getFieldName());
+            // StarRocks has no empty struct type, so the column would become unreadable
+            if (parent.type().asStructType().fields().size() == 1) {
+                throw new StarRocksConnectorException("Cannot drop %s, the only field of %s", field.name(),
+                        parent.name());
+            }
+            transaction.updateSchema().deleteColumn(schema.findColumnName(field.fieldId())).commit();
+        });
         return null;
+    }
+
+    // Walks a column down a nested field path: a name steps into a struct field and [*] into an array element.
+    // Returns the struct the path ends at.
+    private static Types.NestedField findNestedStruct(Schema schema, String columnName, List<String> path) {
+        Types.NestedField field = schema.caseInsensitiveFindField(columnName);
+        if (field == null) {
+            throw new StarRocksConnectorException("Column %s does not exist", columnName);
+        }
+        for (String name : path) {
+            org.apache.iceberg.types.Type type = field.type();
+            if (type.isListType()) {
+                field = type.asListType().fields().get(0);
+            } else if (type.isStructType()) {
+                field = findChild(field, name);
+            } else {
+                throw new StarRocksConnectorException("Field %s of column %s is not a struct or an array", name,
+                        columnName);
+            }
+        }
+        if (!field.type().isStructType()) {
+            throw new StarRocksConnectorException("Field %s is not a struct", field.name());
+        }
+        return field;
+    }
+
+    private static Types.NestedField findChild(Types.NestedField struct, String name) {
+        Types.NestedField child = struct.type().asStructType().caseInsensitiveField(name);
+        if (child == null) {
+            throw new StarRocksConnectorException("Field %s does not exist in %s", name, struct.name());
+        }
+        return child;
     }
 
     @Override
@@ -462,6 +504,25 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
             super.resultSet = tableProcedure.execute(tableProcedureContext, args);
         });
         return null;
+    }
+
+    // A NOT NULL column can only be added to a v3 table, and only with a default: rows in the existing data
+    // files read the default as the column's initial-default.
+    private void addColumn(UpdateSchema updateSchema, ColumnDef columnDef) {
+        org.apache.iceberg.types.Type icebergType = toIcebergColumnType(columnDef.getType());
+        Literal<?> defaultLiteral = buildIcebergDefaultLiteral(columnDef, icebergType);
+        if (!columnDef.isAllowNull()) {
+            if (defaultLiteral == null || !(table instanceof BaseTable baseTable)
+                    || baseTable.operations().current().formatVersion() < 3) {
+                throw new StarRocksConnectorException(
+                        "column in iceberg table must be nullable, unless it has a default value on a v3 table.");
+            }
+            updateSchema.addRequiredColumn(columnDef.getName(), icebergType, columnDef.getComment(), defaultLiteral);
+        } else if (defaultLiteral != null) {
+            updateSchema.addColumn(columnDef.getName(), icebergType, columnDef.getComment(), defaultLiteral);
+        } else {
+            updateSchema.addColumn(columnDef.getName(), icebergType, columnDef.getComment());
+        }
     }
 
     private Literal<?> buildIcebergDefaultLiteral(ColumnDef columnDef, org.apache.iceberg.types.Type icebergType) {

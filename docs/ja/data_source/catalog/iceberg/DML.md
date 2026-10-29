@@ -126,7 +126,9 @@ Iceberg テーブルにロードされるクエリストートメントの結果
 ### 構文
 
 ```SQL
+[WITH <with_query> [, ...]]
 DELETE FROM <table_name> [FOR VERSION AS OF <branch_name>]
+[USING <relation> [, ...]]
 WHERE <condition>
 ```
 
@@ -138,6 +140,10 @@ WHERE <condition>
   - テーブル名のみ（catalog とデータベースの設定後）：`table_name`
 
 - `branch_name`: 行を削除するブランチ。ブランチから行を読み取り、変更をそのブランチにコミットします。タグではなくブランチである必要があります。
+
+- `relation`: `condition` でターゲットテーブルと結合するテーブルまたはサブクエリ。ターゲットの行がそれらの複数の行と一致しても、削除は 1 回だけです。
+
+- `with_query`: `condition` で参照できる共通テーブル式 (CTE)。
 
 - `condition`: 削除する行を識別する条件。以下を含めることができます：
   - 比較演算子：`=`、`!=`、`>`、`<`、`>=`、`<=`、`<>`
@@ -224,6 +230,7 @@ UPDATE は Iceberg V2 の **Merge-On-Read** モデルで実装しています。
 ### 構文
 
 ```SQL
+[WITH <with_query> [, ...]]
 UPDATE <table_name> [FOR VERSION AS OF <branch_name>]
 SET <column_name> = <expression> [, <column_name> = <expression> ...]
 WHERE <condition>
@@ -240,6 +247,8 @@ WHERE <condition>
 
 - `branch_name`: 更新するブランチ。ブランチから行を読み取り、変更をそのブランチにコミットします。タグではなくブランチである必要があります。
 
+- `with_query`: `condition` で参照できる共通テーブル式 (CTE)。
+
 - `condition`: 更新する行を識別する述語。サポートされる演算子は `DELETE` と同じです（比較演算子、論理演算子、`IN` / `NOT IN`、`BETWEEN`、`LIKE`、`IS NULL` / `IS NOT NULL`、`IN` / `EXISTS` サブクエリ）。
 
 ### 使用上の注意
@@ -248,7 +257,7 @@ WHERE <condition>
 - フルテーブル更新を防ぐため、`WHERE` 句は **必須** です。
 - パーティション列は更新できません。 パーティション割り当てを変更する必要がある場合は、`INSERT OVERWRITE` を使用してください。
 - 隠しメタデータ列 `_file` および `_pos` は `SET` で代入できません。
-- Iceberg テーブルへの UPDATE では、`WITH`（CTE）句および `FROM` 句は使用できません。
+- Iceberg テーブルへの UPDATE では、`FROM` 句は使用できません。
 - Iceberg V2 には列のデフォルト値セマンティクスが存在しないため、`DEFAULT` 値はサポートされていません（initial-default / write-default は V3 の機能です）。
 - 既存の Iceberg sink と同様に、Parquet 形式の Iceberg テーブルのみサポートされます。
 - 並行 UPDATE は **直列化可能（serializable）分離** で実行されます。コミット時、StarRocks は読み取りスナップショットに対してデータファイルを再検証し、並行書き込みと衝突した場合、UPDATE はサイレントに上書きせずに失敗します。

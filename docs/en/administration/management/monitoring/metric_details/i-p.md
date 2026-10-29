@@ -774,6 +774,8 @@ Latency metrics expose percentile series such as `merge_commit_request_latency_9
 - Unit: Bytes
 - Description: Memory used by this process.
 
+This metric includes local pass-through buffers tracked by `passthrough_mem_bytes`. The pass-through metric is a component of the process total, not additional memory; do not add the two metrics when calculating total usage. This accounting metric is not container RSS.
+
 ## `process_thread_num`
 
 - Unit: Count

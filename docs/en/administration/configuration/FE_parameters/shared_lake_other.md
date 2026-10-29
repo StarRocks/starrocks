@@ -655,7 +655,7 @@ This topic introduces the following types of FE configurations:
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The maximum number of worker threads that are used by the grpc server in the FE starmgr module.
+- Description: The maximum number of threads that run the gRPC server handlers in the FE starmgr module. The pool keeps one thread per CPU core and starts more threads only when all of its threads are busy. Extra threads exit after they are idle for 60 seconds. When this many threads are busy, new calls wait in a queue. Valid values: 1 or more. A value of 0 or less is rejected, both in `fe.conf` and by `ADMIN SET FRONTEND CONFIG`.
 - Introduced in: v4.0.0, v3.5.8
 
 ### `starmgr_grpc_timeout_seconds`
