@@ -15,15 +15,10 @@
 package com.starrocks.sql.optimizer.rewrite;
 
 import com.google.common.collect.Lists;
-<<<<<<< HEAD
-import com.starrocks.analysis.TableName;
-import com.starrocks.catalog.Type;
-=======
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import com.starrocks.catalog.TableName;
-import com.starrocks.catalog.UserIdentity;
->>>>>>> ebffe7a ([BugFix] Key same-named base tables by full name in inspect_mv_refresh_info (#81358))
+import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.leader.ReportHandler;
 import com.starrocks.memory.MemoryUsageTracker;
