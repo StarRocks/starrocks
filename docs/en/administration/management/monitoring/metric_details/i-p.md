@@ -313,7 +313,7 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Type: Instantaneous
 - Labels: `type` (`used`, `committed`, `max`, `peak_used`, or `peak_max`)
 - Description: Young generation (Eden space) memory pool of the JVM embedded in the BE process. With the default G1 collector, `max` and `peak_max` are `-1`. See [`jvm_heap_size_bytes`](#jvm_heap_size_bytes) for when the BE JVM metrics are exported.
-  - `used`, `committed`, and `max` are the current usage of the pool. `peak_used` is the highest `used` value since the JVM started, and `peak_max` is the highest `max` value since the JVM started. `peak_max` differs from `max` only under the Parallel collector, which can resize the pool.
+  - `used`, `committed`, and `max` are the current usage of the pool. `peak_used` and `peak_max` come from the peak usage that the JVM records for the pool (`MemoryPoolMXBean.getPeakUsage()`): `peak_used` is the highest `used` value, and `peak_max` is the `max` field of that peak usage record. `peak_max` is not a separately tracked high-water mark of `max`, so use `max`, not `peak_max`, to monitor the capacity of the pool. The peak usage is recorded since the JVM started or since it was last reset. The BE never resets it, so it is reset only when the BE restarts.
   - A `max` or `peak_max` of `-1` means that the pool has no defined maximum size. It does not indicate an error.
   - `jvm_young_size_bytes`, `jvm_survivor_size_bytes`, and `jvm_old_size_bytes` are populated only when the JVM uses the Serial, Parallel, CMS, or G1 garbage collector, because they are matched by the memory pool names of these collectors. Under ZGC or Shenandoah, they stay `0`. `jvm_heap_size_bytes` and `jvm_non_heap_size_bytes` are not affected.
 

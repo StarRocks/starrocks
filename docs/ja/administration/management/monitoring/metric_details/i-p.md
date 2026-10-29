@@ -313,7 +313,7 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 - タイプ: 瞬時値
 - ラベル: `type` (`used`、`committed`、`max`、`peak_used`、または `peak_max`)
 - 説明: BE プロセスに組み込まれた JVM の Young 世代 (Eden 領域) メモリプール。デフォルトの G1 コレクターを使用する場合、`max` と `peak_max` は `-1` です。BE の JVM メトリクスがエクスポートされる条件については、[`jvm_heap_size_bytes`](#jvm_heap_size_bytes) を参照してください。
-  - `used`、`committed`、`max` はメモリプールの現在の使用状況です。`peak_used` は JVM 起動以降の `used` の最大値、`peak_max` は JVM 起動以降の `max` の最大値です。`peak_max` が `max` と異なるのは、メモリプールのサイズを変更する Parallel コレクターを使用している場合だけです。
+  - `used`、`committed`、`max` はメモリプールの現在の使用状況です。`peak_used` と `peak_max` は、JVM がメモリプールについて記録するピーク使用状況 (`MemoryPoolMXBean.getPeakUsage()`) から取得されます。`peak_used` は `used` の最大値で、`peak_max` はそのピーク使用状況の記録に含まれる `max` フィールドです。`peak_max` は `max` の最大値を別途追跡したものではないため、メモリプールの容量を監視するには `peak_max` ではなく `max` を使用してください。ピーク使用状況は、JVM の起動時または最後にリセットされた時点から記録されます。BE はピーク使用状況をリセットしないため、リセットされるのは BE の再起動時だけです。
   - `max` または `peak_max` が `-1` の場合、そのメモリプールにはサイズの上限が定義されていないことを意味します。エラーを示すものではありません。
   - `jvm_young_size_bytes`、`jvm_survivor_size_bytes`、`jvm_old_size_bytes` はメモリプール名で照合されるため、JVM が Serial、Parallel、CMS、または G1 ガベージコレクターを使用している場合にのみ値が設定されます。ZGC または Shenandoah では `0` のままです。`jvm_heap_size_bytes` と `jvm_non_heap_size_bytes` は影響を受けません。
 

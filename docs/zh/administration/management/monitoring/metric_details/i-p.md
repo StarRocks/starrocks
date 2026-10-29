@@ -313,7 +313,7 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 - 类型：瞬时值
 - 标签：`type`（`used`、`committed`、`max`、`peak_used` 或 `peak_max`）
 - 描述：BE 进程内嵌 JVM 的新生代（Eden 区）内存池。使用默认的 G1 回收器时，`max` 和 `peak_max` 为 `-1`。BE JVM 指标的导出条件参见 [`jvm_heap_size_bytes`](#jvm_heap_size_bytes)。
-  - `used`、`committed` 和 `max` 为内存池的当前使用情况。`peak_used` 为 JVM 启动以来 `used` 的最大值，`peak_max` 为 JVM 启动以来 `max` 的最大值。仅在使用 Parallel 回收器（会调整内存池大小）时，`peak_max` 才会与 `max` 不同。
+  - `used`、`committed` 和 `max` 为内存池的当前使用情况。`peak_used` 和 `peak_max` 来自 JVM 为该内存池记录的峰值使用情况（`MemoryPoolMXBean.getPeakUsage()`）：`peak_used` 为 `used` 的最大值，`peak_max` 为该峰值记录中的 `max` 字段。`peak_max` 并不是单独统计的 `max` 历史最大值，因此监控内存池容量时请使用 `max`，而不是 `peak_max`。峰值记录从 JVM 启动或上一次重置时开始统计。BE 不会重置峰值记录，因此只有 BE 重启时才会重置。
   - `max` 或 `peak_max` 为 `-1` 表示该内存池没有确定的上限，并不表示出错。
   - `jvm_young_size_bytes`、`jvm_survivor_size_bytes` 和 `jvm_old_size_bytes` 按照内存池名称匹配，因此仅在 JVM 使用 Serial、Parallel、CMS 或 G1 垃圾回收器时才有取值。使用 ZGC 或 Shenandoah 时，这些指标保持为 `0`。`jvm_heap_size_bytes` 和 `jvm_non_heap_size_bytes` 不受影响。
 
