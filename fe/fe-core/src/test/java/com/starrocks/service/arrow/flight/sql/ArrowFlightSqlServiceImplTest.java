@@ -32,10 +32,14 @@ import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.AuditEncryptionChecker;
 import com.starrocks.thrift.TUniqueId;
+import io.grpc.EquivalentAddressGroup;
+import io.grpc.NameResolver;
+import io.grpc.NameResolverProvider;
+import io.grpc.NameResolverRegistry;
 import mockit.Expectations;
 import mockit.Mocked;
+import org.apache.arrow.flight.Action;
 import org.apache.arrow.flight.CallHeaders;
-import org.apache.arrow.flight.CallStatus;
 import org.apache.arrow.flight.CloseSessionRequest;
 import org.apache.arrow.flight.CloseSessionResult;
 import org.apache.arrow.flight.Criteria;
@@ -45,8 +49,11 @@ import org.apache.arrow.flight.FlightDescriptor;
 import org.apache.arrow.flight.FlightInfo;
 import org.apache.arrow.flight.FlightProducer;
 import org.apache.arrow.flight.FlightRuntimeException;
+import org.apache.arrow.flight.FlightServer;
+import org.apache.arrow.flight.FlightStatusCode;
 import org.apache.arrow.flight.FlightStream;
 import org.apache.arrow.flight.Location;
+import org.apache.arrow.flight.NoOpFlightProducer;
 import org.apache.arrow.flight.NoOpSessionOptionValueVisitor;
 import org.apache.arrow.flight.PutResult;
 import org.apache.arrow.flight.Result;
@@ -58,6 +65,8 @@ import org.apache.arrow.flight.Ticket;
 import org.apache.arrow.flight.sql.FlightSqlProducer;
 import org.apache.arrow.flight.sql.FlightSqlUtils;
 import org.apache.arrow.flight.sql.impl.FlightSql;
+import org.apache.arrow.memory.BufferAllocator;
+import org.apache.arrow.memory.RootAllocator;
 import org.apache.arrow.vector.VectorSchemaRoot;
 import org.apache.arrow.vector.ipc.ReadChannel;
 import org.apache.arrow.vector.ipc.message.MessageSerializer;
@@ -71,11 +80,15 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.net.InetSocketAddress;
+import java.net.URI;
 import java.nio.channels.Channels;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -466,26 +479,98 @@ public class ArrowFlightSqlServiceImplTest {
     }
 
     @Test
-    public void testStreamResultFromUnreachableBEDropsCachedClient() throws Exception {
-        FlightClient mockBeClient = mock(FlightClient.class);
-        FlightStream mockBeStream = mock(FlightStream.class);
+    public void testCachedClientFollowsNodeToNewAddress() throws Exception {
+        // A node that restarts keeps its host name but may come back on a new IP. Stand in for DNS with a
+        // resolver whose answer moves from server A to server B, the way a pod's record does.
+        AtomicReference<InetSocketAddress> address = new AtomicReference<>();
+        NameResolverProvider resolver = new NameResolverProvider() {
+            @Override
+            protected boolean isAvailable() {
+                return true;
+            }
 
-        service.addToCacheForTesting("127.0.0.1:9400", mockBeClient);
+            @Override
+            protected int priority() {
+                return 10;
+            }
 
-        when(mockBeClient.getStream(any(Ticket.class))).thenReturn(mockBeStream);
-        when(mockBeStream.getRoot()).thenThrow(CallStatus.UNAVAILABLE.withDescription("io exception").toRuntimeException());
+            @Override
+            public String getDefaultScheme() {
+                return "moving-node-test";
+            }
 
-        String proxyTicket = "19abc7b87307530-9965dc19f22a94a8|19abc7b87307530-9965dc19f22a94a9|127.0.0.1|9400";
-        FlightSql.TicketStatementQuery ticket = FlightSql.TicketStatementQuery.newBuilder()
-                .setStatementHandle(ByteString.copyFromUtf8(proxyTicket))
-                .build();
-        FlightProducer.ServerStreamListener listener = mock(FlightProducer.ServerStreamListener.class);
+            @Override
+            public NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
+                if (!getDefaultScheme().equals(targetUri.getScheme())) {
+                    return null;
+                }
+                return new NameResolver() {
+                    private Listener2 listener;
 
-        service.getStreamStatement(ticket, mockCallContext, listener);
+                    @Override
+                    public String getServiceAuthority() {
+                        return "moving-node";
+                    }
 
-        verify(listener).error(any(Throwable.class));
-        assertNull(service.getClientFromCacheForTesting("127.0.0.1:9400"));
-        verify(mockBeClient).close();
+                    @Override
+                    public void start(Listener2 listener) {
+                        this.listener = listener;
+                        refresh();
+                    }
+
+                    @Override
+                    public void refresh() {
+                        listener.onResult(ResolutionResult.newBuilder()
+                                .setAddresses(List.of(new EquivalentAddressGroup(address.get())))
+                                .build());
+                    }
+
+                    @Override
+                    public void shutdown() {
+                    }
+                };
+            }
+        };
+
+        NameResolverRegistry.getDefaultRegistry().register(resolver);
+        try (BufferAllocator allocator = new RootAllocator();
+                FlightServer serverA = startNoOpServer(allocator);
+                FlightServer serverB = startNoOpServer(allocator)) {
+            address.set(new InetSocketAddress("127.0.0.1", serverA.getPort()));
+            FlightClient client = service.getOrCreateClient("moving-node:1", "moving-node", 1);
+            assertEquals(FlightStatusCode.UNIMPLEMENTED, callStatus(client));
+
+            serverA.close();
+            address.set(new InetSocketAddress("127.0.0.1", serverB.getPort()));
+
+            // The first call after the move may still fail; the cached client must reach B without being evicted.
+            FlightStatusCode status = callStatus(client);
+            for (int i = 0; i < 100 && status != FlightStatusCode.UNIMPLEMENTED; i++) {
+                Thread.sleep(100);
+                status = callStatus(client);
+            }
+            assertEquals(FlightStatusCode.UNIMPLEMENTED, status);
+            assertSame(client, service.getClientFromCacheForTesting("moving-node:1"));
+            client.close();
+        } finally {
+            NameResolverRegistry.getDefaultRegistry().deregister(resolver);
+        }
+    }
+
+    private static FlightServer startNoOpServer(BufferAllocator allocator) throws IOException {
+        return FlightServer.builder(allocator, Location.forGrpcInsecure("127.0.0.1", 0), new NoOpFlightProducer())
+                .build()
+                .start();
+    }
+
+    // NoOpFlightProducer answers every action with UNIMPLEMENTED, so that code means the call reached a server.
+    private static FlightStatusCode callStatus(FlightClient client) {
+        try {
+            client.doAction(new Action("ping")).hasNext();
+            return FlightStatusCode.OK;
+        } catch (FlightRuntimeException e) {
+            return e.status().code();
+        }
     }
 
     @Test
@@ -1230,41 +1315,6 @@ public class ArrowFlightSqlServiceImplTest {
             testService.createPreparedStatement(createReq, callContext, listener);
             Thread.sleep(500);
             verify(listener).onError(any(FlightRuntimeException.class));
-        }
-    }
-
-    @Test
-    public void testProxyForwarding_unreachableRemoteFEDropsCachedClient() throws Exception {
-        try (MockedStatic<ArrowFlightSqlSessionManager> mockedSessionMgr =
-                     mockStatic(ArrowFlightSqlSessionManager.class)) {
-            TestableArrowFlightSqlServiceImpl testService =
-                    new TestableArrowFlightSqlServiceImpl(sessionManager,
-                            Location.forGrpcInsecure("localhost", 1234));
-            testService.setProxyEnabled(true);
-
-            String remoteToken = "remote-fe|some-uuid-token";
-            FlightProducer.CallContext callContext = mock(FlightProducer.CallContext.class);
-            when(callContext.peerIdentity()).thenReturn(remoteToken);
-            when(sessionManager.isLocalToken(remoteToken)).thenReturn(false);
-            mockedSessionMgr.when(() -> ArrowFlightSqlSessionManager.extractFeHost(remoteToken))
-                    .thenReturn("remote-fe");
-
-            FlightClient mockFeClient = mock(FlightClient.class);
-            Config.arrow_flight_port = 9408;
-            testService.addToCacheForTesting("remote-fe:9408", mockFeClient);
-
-            when(mockFeClient.doAction(any(org.apache.arrow.flight.Action.class), any()))
-                    .thenThrow(CallStatus.UNAVAILABLE.withDescription("io exception").toRuntimeException());
-
-            FlightSql.ActionCreatePreparedStatementRequest createReq =
-                    FlightSql.ActionCreatePreparedStatementRequest.newBuilder()
-                            .setQuery("SELECT 1").build();
-            FlightProducer.StreamListener<Result> listener = mock(FlightProducer.StreamListener.class);
-            testService.createPreparedStatement(createReq, callContext, listener);
-            Thread.sleep(500);
-            verify(listener).onError(any(FlightRuntimeException.class));
-            assertNull(testService.getClientFromCacheForTesting("remote-fe:9408"));
-            verify(mockFeClient).close();
         }
     }
 
