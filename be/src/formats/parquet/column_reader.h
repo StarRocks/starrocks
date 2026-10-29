@@ -48,6 +48,7 @@ class RandomAccessFile;
 struct FormatScannerStats;
 class ColumnPredicate;
 class ExprContext;
+class TParquetEncryptionInfo;
 class NullableColumn;
 class TIcebergSchemaField;
 struct TypeDescriptor;
@@ -80,8 +81,14 @@ struct ColumnReaderOptions {
     FormatScannerStats* stats = nullptr;
     RandomAccessFile* file = nullptr;
     const tparquet::RowGroup* row_group_meta = nullptr;
+    int16_t row_group_ordinal = 0; // index of this row group in the file (for PME AAD)
     uint64_t first_row_index = 0;
     const FileMetaData* file_meta_data = nullptr;
+    // Per-file encryption material from the scan range (PME). The DEK is deliberately not
+    // cached on FileMetaData -- see FileMetaData::EncryptionContext -- so the decryptor reads
+    // it from here, which makes "encrypted file but no key from the planner" fail on every
+    // scan rather than only when the footer cache misses.
+    const TParquetEncryptionInfo* parquet_encryption_info = nullptr;
     int64_t modification_time = 0;
     uint64_t file_size = 0;
     const DataCacheOptions* datacache_options;
