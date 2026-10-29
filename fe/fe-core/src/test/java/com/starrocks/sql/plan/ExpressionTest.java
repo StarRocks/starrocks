@@ -257,6 +257,87 @@ public class ExpressionTest extends PlanTestBase {
                 + "  |  <slot 14> : days_sub(15: cast, 3)\n"));
     }
 
+    // seconds_add takes its amount as an INT, so a fraction of a second is added with microseconds_add
+    @Test
+    public void testIntervalWithFractionalSeconds() throws Exception {
+        String[][] cases = {
+                {"id_datetime + interval '0.5' second", "microseconds_add(8: id_datetime, 500000)"},
+                {"id_datetime + interval 1.5 second", "microseconds_add(seconds_add(8: id_datetime, 1), 500000)"},
+                {"id_datetime - interval 1.5 second", "microseconds_sub(seconds_sub(8: id_datetime, 1), 500000)"},
+                {"interval 1.5 second + id_datetime", "microseconds_add(seconds_add(8: id_datetime, 1), 500000)"},
+                {"id_datetime + interval -0.25 second", "microseconds_add(8: id_datetime, -250000)"},
+                {"id_datetime + interval -1.5 second", "microseconds_add(seconds_add(8: id_datetime, -1), -500000)"},
+                {"id_datetime + interval 0.000001 second", "microseconds_add(8: id_datetime, 1)"},
+                {"id_datetime + interval 1e0 second", "seconds_add(8: id_datetime, 1)"},
+                {"id_datetime + interval 0.5e0 second", "microseconds_add(8: id_datetime, 500000)"},
+                {"date_add(id_datetime, interval '3000.000001' second)",
+                        "microseconds_add(seconds_add(8: id_datetime, 3000), 1)"},
+                {"timestampadd(second, 2.5, id_datetime)", "microseconds_add(seconds_add(8: id_datetime, 2), 500000)"},
+                // the amount is still a number of seconds when it has a fraction of zero
+                {"id_datetime + interval '5.0' second", "seconds_add(8: id_datetime, 5)"},
+                {"id_datetime + interval 5.00 second", "seconds_add(8: id_datetime, 5)"},
+                // amounts without a fraction are as before
+                {"id_datetime + interval 2 second", "seconds_add(8: id_datetime, 2)"},
+                {"id_datetime + interval '2' second", "seconds_add(8: id_datetime, 2)"},
+                {"id_datetime - interval 2 second", "seconds_sub(8: id_datetime, 2)"},
+                // and the other calls on the same value are not merged with it
+                {"id_datetime + interval 1.5 second + interval 1 second",
+                        "seconds_add(microseconds_add(seconds_add(8: id_datetime, 1), 500000), 1)"},
+                {"id_datetime + interval 1.5 second + interval 250 millisecond",
+                        "milliseconds_add(microseconds_add(seconds_add(8: id_datetime, 1), 500000), 250)"},
+                // a constant expression is folded first
+                {"timestampadd(second, 0.25 + 0.25, id_datetime)", "microseconds_add(8: id_datetime, 500000)"},
+                {"id_datetime + interval cast('1.5' as decimal(10, 1)) second",
+                        "microseconds_add(seconds_add(8: id_datetime, 1), 500000)"},
+                {"date_sub(id_datetime, interval cast(3 as double) / 4 second)", "microseconds_sub(8: id_datetime, 750000)"},
+        };
+        for (String[] c : cases) {
+            String plan = getFragmentPlan("select " + c[0] + " from test_all_type");
+            assertContains(plan, c[1]);
+        }
+    }
+
+    @Test
+    public void testIntervalWithSecondsFinerThanMicroseconds() {
+        // DATETIME has no digits below microseconds
+        SemanticException e = assertThrows(SemanticException.class,
+                () -> getFragmentPlan("select id_datetime + interval 0.1234567 second from test_all_type"));
+        assertContains(e.getMessage(), "0.1234567");
+        assertThrows(SemanticException.class,
+                () -> getFragmentPlan("select id_datetime + interval '1.0000001' second from test_all_type"));
+        // also when the amount is a constant expression
+        assertThrows(SemanticException.class,
+                () -> getFragmentPlan("select timestampadd(second, 0.0000001 + 0, id_datetime) from test_all_type"));
+    }
+
+    // A literal amount is checked when the expression is analyzed, so a definition that uses it is refused when it is
+    // created, rather than each time it is used
+    @Test
+    public void testDefinitionWithSecondsFinerThanMicroseconds() {
+        Exception e = assertThrows(Exception.class, () -> starRocksAssert.withTable("CREATE TABLE t_interval_generated (\n" +
+                "  k1 INT NOT NULL,\n" +
+                "  ts DATETIME NOT NULL,\n" +
+                "  ts2 DATETIME NULL AS ts + INTERVAL 0.1234567 SECOND\n" +
+                ") DUPLICATE KEY(k1) DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES ('replication_num' = '1')"));
+        assertContains(e.getMessage(), "at most 6 decimals");
+
+        e = assertThrows(Exception.class, () -> starRocksAssert.withView(
+                "create view v_interval_finer as select id_datetime + interval '0.1234567' second from test_all_type"));
+        assertContains(e.getMessage(), "at most 6 decimals");
+    }
+
+    // An exponent describes a huge number in a few characters. Such amounts are refused or left to the INT cast,
+    // without spelling the number out.
+    @Test
+    public void testIntervalWithHugeExponentInSeconds() throws Exception {
+        SemanticException e = assertThrows(SemanticException.class,
+                () -> getFragmentPlan("select id_datetime + interval '1e-100000000' second from test_all_type"));
+        assertContains(e.getMessage(), "1E-100000000");
+
+        String plan = getFragmentPlan("select id_datetime + interval '1e100000000' second from test_all_type");
+        assertNotContains(plan, "microseconds_add");
+    }
+
     @Test
     public void testScalarOperatorToExpr() {
         ColumnRefOperator columnRefOperator = new ColumnRefOperator(2, IntegerType.INT, "e", true);
