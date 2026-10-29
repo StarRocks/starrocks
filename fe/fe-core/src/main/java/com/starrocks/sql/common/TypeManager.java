@@ -205,7 +205,7 @@ public class TypeManager {
                 return getEquivalenceBaseType(t1, t2);
             }
         }
-        if (t1.isFileType() || t2.isFileType()) {
+        if (t1.isFileType() || t2.isFileType() || t1.isGeoType() || t2.isGeoType()) {
             return InvalidType.INVALID;
         }
         if (t1.getPrimitiveType() == PrimitiveType.NULL_TYPE) {
@@ -291,8 +291,8 @@ public class TypeManager {
             return TypeManager.getCommonSuperType(type1, type2);
         }
         if (type1.isComplexType() || type2.isComplexType() || type1.isOnlyMetricType() || type2.isOnlyMetricType() ||
-                type1.isFileType() || type2.isFileType()) {
-            // We don't support complex type (map/struct) for GT/LT predicate, and FILE is never comparable.
+                type1.isFileType() || type2.isFileType() || type1.isGeoType() || type2.isGeoType()) {
+            // We don't support complex type (map/struct) for GT/LT predicate, and FILE/geo types are never comparable.
             return InvalidType.INVALID;
         }
 
@@ -374,6 +374,10 @@ public class TypeManager {
                     isContainVarcharWithoutLength = true;
                 }
             }
+        }
+        // BE does not support geo values in CASE results or comparisons.
+        if (compatibleType.isGeoType()) {
+            return InvalidType.INVALID;
         }
         if (compatibleType.isStringType()) {
             ScalarType resultType = (ScalarType) compatibleType;
