@@ -36,6 +36,7 @@ import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TIcebergDeleteFile;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.type.DateType;
+import org.apache.iceberg.AppendFiles;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.DeleteFile;
@@ -44,6 +45,7 @@ import org.apache.iceberg.FileMetadata;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.MetadataColumns;
 import org.apache.iceberg.Metrics;
+import org.apache.iceberg.PartitionData;
 import org.apache.iceberg.PartitionKey;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
@@ -56,6 +58,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -273,9 +276,10 @@ public class IcebergConnectorScanRangeSourceTest extends TableTestBase {
         IcebergTable icebergTable = new IcebergTable(1, "iceberg_table", "iceberg_catalog", "resource", "db",
                 "table", "", Lists.newArrayList(new Column("k1", INT), new Column("k2", INT)), nativeTable,
                 Maps.newHashMap());
+        PartitionIdGenerator partitionIdGenerator = Mockito.spy(PartitionIdGenerator.of());
         IcebergConnectorScanRangeSource scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable,
                 RemoteFileInfoDefaultSource.EMPTY, IcebergMORParams.EMPTY, desc, Optional.empty(),
-                PartitionIdGenerator.of(), false, false);
+                partitionIdGenerator, false, false);
 
         Map<String, Long> idByFile = Maps.newHashMap();
         Map<String, Long> k2ByFile = Maps.newHashMap();
@@ -301,6 +305,85 @@ public class IcebergConnectorScanRangeSourceTest extends TableTestBase {
         Assertions.assertNotSame(valueByFile.get(k2Is1Bucket0.location()), valueByFile.get(k2Is2Bucket0.location()));
         // the partition count still counts every (k2, bucket) combination
         Assertions.assertEquals(3, scanRangeSource.selectedPartitionCount());
+        // the PartitionKey (and its id) is built once per identity partition, not once per bucket
+        Mockito.verify(partitionIdGenerator, Mockito.times(2)).getOrGenerate(Mockito.any());
+    }
+
+    private static DataFile dataFile(PartitionSpec spec, String path, Object... partitionValues) {
+        PartitionData partition = new PartitionData(spec.partitionType());
+        for (int i = 0; i < partitionValues.length; i++) {
+            partition.put(i, partitionValues[i]);
+        }
+        return DataFiles.builder(spec).withPath(path).withFileSizeInBytes(10).withPartition(partition)
+                .withRecordCount(1).build();
+    }
+
+    @Test
+    public void testIdentityPartitionCacheMatchesUncachedPartitionKeys() throws Exception {
+        // string and date identity fields with NULLs beside a bucket, across two specs
+        Schema schema = new Schema(
+                Types.NestedField.optional(1, "id", Types.IntegerType.get()),
+                Types.NestedField.optional(2, "s", Types.StringType.get()),
+                Types.NestedField.optional(3, "d", Types.DateType.get()));
+        PartitionSpec bucketSpec = PartitionSpec.builderFor(schema).identity("s").identity("d").bucket("id", 4).build();
+        TestTables.TestTable nativeTable = create(schema, bucketSpec, "t_identity_cache", 2);
+        // (s, d as days since epoch, id_bucket); 19723 = 2024-01-01
+        Object[][] bucketPartitions = {
+                {"a", 19723, 0}, {"a", 19723, 1}, {"a", 19724, 0}, {"b", 19723, 2},
+                {null, 19723, 0}, {null, 19723, 3}, {"a", null, 1}, {null, null, 1}};
+        AppendFiles append = nativeTable.newFastAppend();
+        for (int i = 0; i < bucketPartitions.length; i++) {
+            append.appendFile(dataFile(bucketSpec, "/path/to/bucket-spec-" + i + ".parquet", bucketPartitions[i]));
+        }
+        append.commit();
+
+        nativeTable.updateSpec().removeField("id_bucket").commit();
+        PartitionSpec identitySpec = nativeTable.spec();
+        Assertions.assertNotEquals(bucketSpec.specId(), identitySpec.specId());
+        nativeTable.newFastAppend()
+                .appendFile(dataFile(identitySpec, "/path/to/identity-spec-0.parquet", "a", 19723))
+                .appendFile(dataFile(identitySpec, "/path/to/identity-spec-1.parquet", null, 19725))
+                .commit();
+
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(5));
+        SlotDescriptor sSlot = new SlotDescriptor(new SlotId(2), desc);
+        sSlot.setType(VARCHAR);
+        sSlot.setColumn(new Column("s", VARCHAR));
+        desc.addSlot(sSlot);
+        SlotDescriptor dSlot = new SlotDescriptor(new SlotId(3), desc);
+        dSlot.setType(DateType.DATE);
+        dSlot.setColumn(new Column("d", DateType.DATE));
+        desc.addSlot(dSlot);
+        IcebergTable icebergTable = new IcebergTable(1, "iceberg_table", "iceberg_catalog", "resource", "db",
+                "table", "", Lists.newArrayList(new Column("id", INT), new Column("s", VARCHAR),
+                        new Column("d", DateType.DATE)), nativeTable, Maps.newHashMap());
+        PartitionIdGenerator partitionIdGenerator = PartitionIdGenerator.of();
+        IcebergConnectorScanRangeSource scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable,
+                RemoteFileInfoDefaultSource.EMPTY, IcebergMORParams.EMPTY, desc, Optional.empty(),
+                partitionIdGenerator, false, false);
+
+        List<FileScanTask> tasks = Lists.newArrayList(nativeTable.newScan().planFiles());
+        Assertions.assertEquals(bucketPartitions.length + 2, tasks.size());
+        Set<Long> partitionIds = new HashSet<>();
+        for (FileScanTask task : tasks) {
+            long partitionId = scanRangeSource.addPartition(task);
+            THdfsPartition value = scanRangeSource.buildScanRange(task, task.file(), partitionId).getPartition_value();
+
+            // A source that sees only this file builds its PartitionKey without any cached identity partition.
+            IcebergConnectorScanRangeSource uncached = new IcebergConnectorScanRangeSource(icebergTable,
+                    RemoteFileInfoDefaultSource.EMPTY, IcebergMORParams.EMPTY, desc, Optional.empty(),
+                    partitionIdGenerator, false, false);
+            long expectedId = uncached.addPartition(task);
+            Assertions.assertEquals(expectedId, partitionId, task.file().location());
+            Assertions.assertEquals(uncached.buildScanRange(task, task.file(), expectedId).getPartition_value(), value,
+                    task.file().location());
+            partitionIds.add(partitionId);
+        }
+        // (a, 2024-01-01), (a, 2024-01-02), (b, 2024-01-01), (null, 2024-01-01), (a, null), (null, null),
+        // (null, 2024-01-03); the identity spec's (a, 2024-01-01) file shares the bucket spec's id
+        Assertions.assertEquals(7, partitionIds.size());
+        // the partition count counts every (spec, full partition tuple)
+        Assertions.assertEquals(bucketPartitions.length + 2, scanRangeSource.selectedPartitionCount());
     }
 
     @Test

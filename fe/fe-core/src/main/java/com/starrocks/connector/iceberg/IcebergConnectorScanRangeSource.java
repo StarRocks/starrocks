@@ -114,6 +114,9 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
 
     // specId, StructLikeWrapper -> partitionId
     private final Map<Pair<Integer, StructLikeWrapper>, Long> partitionKeyToId = Maps.newHashMap();
+    // specId, identity partition values -> partitionId. The PartitionKey holds identity fields only, so the files
+    // of one identity partition share it however many bucket(N) or other transform values they span.
+    private final Map<Pair<Integer, List<Object>>, Long> identityValuesToId = Maps.newHashMap();
     // spec_id -> wrapper whose comparator is reused by copyFor(); forType() builds a new comparator on each call
     private final Map<Integer, StructLikeWrapper> partitionWrapperCache = Maps.newHashMap();
     // spec id -> the spec the scan's tasks are bound to
@@ -633,20 +636,33 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
                 ignore -> getPartitionFieldIndexes(spec, indexToPartitionField));
 
         StructLike origPartition = task.partition();
-        PartitionKey partitionKey = getPartitionKey(origPartition, spec, partitionFieldIndexes, indexToPartitionField);
-        long partitionId = partitionIdGenerator.getOrGenerate(partitionKey);
-        partitionKeyToId.put(cacheKey, partitionId);
+        // getPartitionKey() is a function of the spec and these values (spec.javaClasses() gives an identity field
+        // its source column's class), so they key its result.
+        Class<?>[] javaClasses = spec.javaClasses();
+        List<Object> identityValues = new ArrayList<>(partitionFieldIndexes.size());
+        for (int index : partitionFieldIndexes) {
+            identityValues.add(PartitionUtil.getPartitionValue(origPartition, index, javaClasses[index]));
+        }
+        Pair<Integer, List<Object>> identityKey = Pair.create(spec.specId(), identityValues);
+        Long partitionId = identityValuesToId.get(identityKey);
+        if (partitionId == null) {
+            PartitionKey partitionKey =
+                    getPartitionKey(origPartition, spec, partitionFieldIndexes, indexToPartitionField);
+            partitionId = partitionIdGenerator.getOrGenerate(partitionKey);
+            identityValuesToId.put(identityKey, partitionId);
 
-        // The PartitionKey holds identity fields only, so several cache keys (one per bucket, say) share one
-        // partition id and one thrift value. The scheduler sends it once per fragment instance and drops it from
-        // later ranges (FragmentInstance.removeDuplicatedPartitionValues).
-        partitionValues.computeIfAbsent(partitionId, ignore -> {
-            THdfsPartition value = new THdfsPartition();
-            value.setPartition_key_exprs(partitionKey.getKeys().stream()
-                    .map(ExprToThrift::treeToThrift)
-                    .collect(Collectors.toList()));
-            return value;
-        });
+            // Several cache keys (one per bucket, say) share one partition id and one thrift value. The scheduler
+            // sends it once per fragment instance and drops it from later ranges
+            // (FragmentInstance.removeDuplicatedPartitionValues).
+            partitionValues.computeIfAbsent(partitionId, ignore -> {
+                THdfsPartition value = new THdfsPartition();
+                value.setPartition_key_exprs(partitionKey.getKeys().stream()
+                        .map(ExprToThrift::treeToThrift)
+                        .collect(Collectors.toList()));
+                return value;
+            });
+        }
+        partitionKeyToId.put(cacheKey, partitionId);
         checkPartitionNumLimit(table, partitionKeyToId.size());
         return partitionId;
     }
