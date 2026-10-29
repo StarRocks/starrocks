@@ -221,8 +221,6 @@ public class TransactionState implements Writable, GsonPreProcessable, GsonPostP
         }
     }
 
-<<<<<<< HEAD
-=======
     // The persisted form of a load id. A TUniqueId cannot be persisted as is: it is a Thrift struct whose fields
     // carry no @SerializedName, so GSON writes it as {} and reads it back as 0-0.
     private static class LoadId {
@@ -246,12 +244,6 @@ public class TransactionState implements Writable, GsonPreProcessable, GsonPostP
         }
     }
 
-    // Transaction source types that are NOT a user data write (compaction / replication / shadow-rewrite):
-    // they bump the visible version but must NOT advance a partition's lastUpdateTime. See isUserWriteSource().
-    private static final EnumSet<LoadJobSourceType> NON_USER_WRITE_SOURCE_TYPES =
-            EnumSet.of(LoadJobSourceType.LAKE_COMPACTION, LoadJobSourceType.REPLICATION, LoadJobSourceType.SHADOW_REWRITE);
-
->>>>>>> 9d4f071 ([BugFix] Persist the load ids of explicit transactions so their publish finds the txn logs (#81413))
     @SerializedName("dd")
     private long dbId;
     @SerializedName("tl")

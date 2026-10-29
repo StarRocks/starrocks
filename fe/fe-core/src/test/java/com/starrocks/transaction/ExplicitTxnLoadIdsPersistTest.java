@@ -86,8 +86,7 @@ public class ExplicitTxnLoadIdsPersistTest {
         TransactionState leaderState = newCommittedExplicitTxn(txnId, statementLoadIds);
         assertLoadIds(statementLoadIds, TxnInfoHelper.fromTransactionState(leaderState));
 
-        GlobalStateMgr.getCurrentState().getEditLog().logInsertTransactionState(leaderState, state -> {
-        });
+        GlobalStateMgr.getCurrentState().getEditLog().logInsertTransactionState(leaderState);
 
         // A follower (or the restarted leader) replays the journal and later publishes the transaction.
         TransactionState replayed = (TransactionState) UtFrameUtils.PseudoJournalReplayer
