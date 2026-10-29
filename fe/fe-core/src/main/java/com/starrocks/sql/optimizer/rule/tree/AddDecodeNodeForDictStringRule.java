@@ -486,11 +486,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                                     newPrunedPredicates,
                                     scanOperator.getProjection(), scanOperator.isUsePkIndex(),
                                     scanOperator.getVectorSearchOptions());
-<<<<<<< HEAD
-=======
                     newOlapScan.setParallelRangeScan(scanOperator.isParallelRangeScan());
-                    newOlapScan.setBm25SearchOptions(scanOperator.getBm25SearchOptions());
->>>>>>> cd6dc936f30... [Enhancement][RB-533] Add parallel scheduling for range-colocate scans (#67186)
                     newOlapScan.setScanOptimizeOption(scanOperator.getScanOptimizeOption());
                     newOlapScan.setPreAggregation(scanOperator.isPreAggregation());
                     newOlapScan.setGlobalDicts(globalDicts);

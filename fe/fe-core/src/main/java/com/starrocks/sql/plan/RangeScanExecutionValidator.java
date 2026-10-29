@@ -111,9 +111,8 @@ public final class RangeScanExecutionValidator {
                 "native range distribution and colocate membership are required");
         require(relation.getTableHints().isEmpty() && relation.getTabletIds().isEmpty()
                 && relation.getReplicaIds().isEmpty() && relation.getSampleClause() == null
-                && relation.getBookmarkRange().isEmpty() && relation.getBookmarkId().isEmpty()
                 && relation.getQueryPeriod() == null && relation.getTvrVersionRange() == null
-                && relation.getGtid() == 0 && context.getMvPinnedBookmarkIds() == null
+                && relation.getGtid() == 0
                 && (context.getScanVersionOverride() == null || context.getScanVersionOverride().isEmpty()),
                 "special, hinted, historical and sampled scans are unsupported");
         require(variables.isEnablePipelineEngine(), "pipeline execution is required");

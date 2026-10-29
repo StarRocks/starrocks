@@ -15,10 +15,6 @@
 package com.starrocks.qe.scheduler.assignment;
 
 import com.starrocks.common.StarRocksException;
-<<<<<<< HEAD
-=======
-import com.starrocks.planner.AbstractOlapTableScanNode;
->>>>>>> cd6dc936f30... [Enhancement][RB-533] Add parallel scheduling for range-colocate scans (#67186)
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.SchemaScanNode;

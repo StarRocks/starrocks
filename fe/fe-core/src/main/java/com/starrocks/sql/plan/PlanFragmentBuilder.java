@@ -1227,10 +1227,9 @@ public class PlanFragmentBuilder {
                         Preconditions.checkState(selectTabletIds != null && !selectTabletIds.isEmpty());
                         final MaterializedIndex selectedIndex = physicalPartition.getQueryableIndex(selectedIndexMetaId);
                         totalTabletsNum += selectedIndex.getTablets().size();
-                        List<Long> allTabletIds = selectedIndex.getTabletIdsInOrder();
                         if (!node.isParallelRangeScan()) {
                             OlapScanNode.fillTabletId2BucketSeq(
-                                    dispatch, selectedIndex, allTabletIds, tabletId2BucketSeq);
+                                    dispatch, selectedIndex, selectedIndex.getTabletIdsInOrder(), tabletId2BucketSeq);
                         }
                         List<Tablet> tablets =
                                 selectTabletIds.stream().map(selectedIndex::getTablet).collect(Collectors.toList());
@@ -3113,23 +3112,7 @@ public class PlanFragmentBuilder {
 
         // Check whether colocate Table exists in the same Fragment
         public boolean hasColocateScanChildInFragment(PlanNode node) {
-<<<<<<< HEAD
-            if (node instanceof OlapScanNode scanNode) {
-=======
-            // A CHANGES scan whose delta crosses a tablet reshard mixes generations, so it
-            // advertises no distribution and numbers no buckets: colocate dispatch has no bucket
-            // sequence to align on (range colocate throws, hash colocate would assign no scan range
-            // at all). The scheduler picks its backend selector per fragment, so such a scan
-            // anywhere in the fragment vetoes colocate for the WHOLE fragment; answering only for
-            // the crossing leaf would let an OR over siblings hand the fragment's colocate answer
-            // to a colocate sibling and drag the crossing scan into bucket-aware dispatch anyway.
-            // No colocate scan can actually share the fragment today -- that needs an exchange-free
-            // colocate arrangement, which the ANY distribution spec ChangesScanBuilder forces on a
-            // crossing scan never satisfies -- so the veto is what keeps this guard correct on its
-            // own rather than by that coincidence. Conservative for a delta read as a head-only
-            // full scan, matching the same condition that forces the spec to ANY.
-            return !containsParallelRangeScan(node) && !containsGenerationCrossingChangesScan(node)
-                    && hasColocateScanChild(node);
+            return !containsParallelRangeScan(node) && hasColocateScanChild(node);
         }
 
         private boolean containsParallelRangeScan(PlanNode node) {
@@ -3143,8 +3126,7 @@ public class PlanFragmentBuilder {
         }
 
         private boolean hasColocateScanChild(PlanNode node) {
-            if (node instanceof OlapScanNode || node instanceof ChangesScanNode) {
->>>>>>> cd6dc936f30... [Enhancement][RB-533] Add parallel scheduling for range-colocate scans (#67186)
+            if (node instanceof OlapScanNode scanNode) {
                 ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
                 if (colocateIndex.isColocateTable(scanNode.getOlapTable().getId())) {
                     return true;
@@ -3160,7 +3142,7 @@ public class PlanFragmentBuilder {
             }
             boolean hasColocateChild = false;
             for (PlanNode child : node.getChildren()) {
-                hasColocateChild |= hasColocateScanChildInFragment(child);
+                hasColocateChild |= hasColocateScanChild(child);
             }
             return hasColocateChild;
         }

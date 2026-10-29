@@ -511,6 +511,19 @@ public class RangeParallelScanPlanTest {
     }
 
     @Test
+    public void capturedVersionOverrideRejectsParallelExecution() throws Exception {
+        var saved = connectContext.getScanVersionOverride();
+        mode("parallel");
+        try {
+            connectContext.setScanVersionOverride(java.util.Map.of(1L, 1L));
+            reject("select k1, count(*) from t group by k1");
+        } finally {
+            connectContext.setScanVersionOverride(saved);
+            mode("colocate");
+        }
+    }
+
+    @Test
     public void unsupportedSettingsAreNotSilentlyMutated() throws Exception {
         SessionVariable saved = connectContext.getSessionVariable().clone();
         try {

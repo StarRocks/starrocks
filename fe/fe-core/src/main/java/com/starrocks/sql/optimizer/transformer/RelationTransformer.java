@@ -685,12 +685,8 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
                         .build();
             } else {
                 scanOperator = LogicalOlapScanOperator.builder()
-<<<<<<< HEAD
-                        .setTable(node.getTable())
-=======
                         .setParallelRangeScan(parallelRangeScan)
-                        .setTable(scanTable)
->>>>>>> cd6dc936f30... [Enhancement][RB-533] Add parallel scheduling for range-colocate scans (#67186)
+                        .setTable(node.getTable())
                         .setColRefToColumnMetaMap(colRefToColumnMetaMapBuilder.build())
                         .setColumnMetaToColRefMap(columnMetaToColRefMap)
                         .setDistributionSpec(distributionSpec)

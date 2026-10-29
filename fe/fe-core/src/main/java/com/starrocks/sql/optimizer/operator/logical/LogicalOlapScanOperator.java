@@ -224,11 +224,7 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
 
     @Override
     public int hashCode() {
-<<<<<<< HEAD
-        return Objects.hash(super.hashCode(), selectedIndexMetaId, gtid, selectedPartitionId,
-=======
-        return Objects.hash(super.hashCode(), parallelRangeScan, selectedIndexMetaId, gtid, bookmarkScoped, selectedPartitionId,
->>>>>>> cd6dc936f30... [Enhancement][RB-533] Add parallel scheduling for range-colocate scans (#67186)
+        return Objects.hash(super.hashCode(), parallelRangeScan, selectedIndexMetaId, gtid, selectedPartitionId,
                 selectedTabletId, hintsTabletIds, hintsReplicaIds, sample);
     }
 

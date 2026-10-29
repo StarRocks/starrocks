@@ -536,18 +536,11 @@ public class DefaultCoordinator extends Coordinator {
                 jobSpec.setIncrementalScanRanges(true);
             }
         }
-<<<<<<< HEAD
-=======
         if (jobSpec.getScanNodes().stream()
                 .anyMatch(scan -> scan instanceof OlapScanNode nativeScan && nativeScan.isParallelRangeScan())) {
             // Native parallel tablet tasks use the ordinary one-shot assignment and deployment lifecycle.
             jobSpec.setIncrementalScanRanges(false);
         }
-        if (carriesQueryScopedCredentials(jobSpec)) {
-            // Later batches would be listed on credentials that admission cannot renew.
-            jobSpec.setIncrementalScanRanges(false);
-        }
->>>>>>> cd6dc936f30... [Enhancement][RB-533] Add parallel scheduling for range-colocate scans (#67186)
 
         coordinatorPreprocessor.prepareExec();
 

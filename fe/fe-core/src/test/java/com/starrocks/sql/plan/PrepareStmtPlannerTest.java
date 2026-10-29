@@ -232,6 +232,7 @@ public class PrepareStmtPlannerTest extends PlanTestBase {
             ExecPlan cached = execute(prepared, bigint(1));
             Assertions.assertSame(cached.getPhysicalPlan(), execute(prepared, bigint(2)).getPhysicalPlan());
             Assertions.assertTrue(prepared.context().isCached());
+            String before = cached.getExplainString(TExplainLevel.VERBOSE);
 
             connectContext.getSessionVariable().setRangeScanExecutionMode("parallel");
             SemanticException failure = Assertions.assertThrows(SemanticException.class,
@@ -239,6 +240,9 @@ public class PrepareStmtPlannerTest extends PlanTestBase {
             Assertions.assertTrue(failure.getMessage().contains("range_scan_execution_mode=parallel"));
             Assertions.assertTrue(failure.getMessage().contains("an aggregate is required"));
             Assertions.assertEquals(2, scanPredicateValue(cached));
+            Assertions.assertEquals(before, cached.getExplainString(TExplainLevel.VERBOSE));
+            Assertions.assertTrue(prepared.context().isCached());
+            Assertions.assertSame(cached, prepared.context().getExecPlan());
             Assertions.assertTrue(connectContext.getSessionVariable().isParallelRangeScan());
 
             connectContext.getSessionVariable().setRangeScanExecutionMode("colocate");
