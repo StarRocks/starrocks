@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <cmath>
 #include <limits>
 #include <type_traits>
 
@@ -56,6 +57,18 @@ bool check_signed_number_overflow(FromType value) {
             // whether it is overflow, rather than `value > (Type)2^n-1`.
             return !(value >= floating_to_integral_lower_bound<FromType, ToType> &&
                      value < floating_to_integral_upper_bound<FromType, ToType>);
+        } else if constexpr (std::is_floating_point_v<FromType> && std::is_floating_point_v<ToType>) {
+            // Narrowing conversion between floating-point types (double -> float).
+            //
+            // A double value must be rounded to the target float precision before deciding
+            // whether it overflows. For example, the canonical shortest decimal representation
+            // of FLT_MAX is "3.4028235E38" (as emitted by Java's Float.toString / fastjson2),
+            // whose double value 3.4028235e38 is slightly greater than (double)FLT_MAX
+            // (= 3.4028234663852886e38) but still within half an ULP of FLT_MAX. According to
+            // correct float rounding (e.g. strtof / fast_float::from_chars<float>), it should
+            // round back to FLT_MAX instead of being treated as an overflow.
+            // Only a value that rounds to +/-infinity is a real overflow.
+            return std::isinf(static_cast<ToType>(value));
         } else {
             // std::numeric_limits<T>::lowest() is a finite value x such that there is no other
             // finite value y where y < x.

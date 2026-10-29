@@ -16,6 +16,8 @@
 
 #include <gtest/gtest.h>
 
+#include <limits>
+
 #include "column/fixed_length_column.h"
 #include "types/type_descriptor.h"
 
@@ -168,6 +170,51 @@ TEST_F(AddNumericColumnTest, test_add_int128_big_integer) {
     st = add_numeric_column<int128_t>(column.get(), t, "f_int128", &val);
     ASSERT_TRUE(st.ok());
     ASSERT_EQ("[18446744073709551616]", column->debug_string());
+}
+
+TEST_F(AddNumericColumnTest, test_add_float_max_boundary) {
+    auto column = FixedLengthColumn<float>::create();
+    TypeDescriptor t(TYPE_FLOAT);
+
+    simdjson::ondemand::parser parser;
+    // "3.4028235E38" is the canonical shortest decimal representation of FLT_MAX. Its double
+    // value is slightly greater than (double)FLT_MAX, but it must round back to FLT_MAX
+    // instead of being treated as overflow.
+    auto json = R"(  { "f_float": 3.4028235E38} )"_padded;
+    auto doc = parser.iterate(json);
+    simdjson::ondemand::value val = doc.find_field("f_float");
+
+    auto st = add_numeric_column<float>(column.get(), t, "f_float", &val);
+    ASSERT_TRUE(st.ok());
+    ASSERT_EQ(std::numeric_limits<float>::max(), column->get_data()[0]);
+}
+
+TEST_F(AddNumericColumnTest, test_add_float_lowest_boundary) {
+    auto column = FixedLengthColumn<float>::create();
+    TypeDescriptor t(TYPE_FLOAT);
+
+    simdjson::ondemand::parser parser;
+    auto json = R"(  { "f_float": -3.4028235E38} )"_padded;
+    auto doc = parser.iterate(json);
+    simdjson::ondemand::value val = doc.find_field("f_float");
+
+    auto st = add_numeric_column<float>(column.get(), t, "f_float", &val);
+    ASSERT_TRUE(st.ok());
+    ASSERT_EQ(std::numeric_limits<float>::lowest(), column->get_data()[0]);
+}
+
+TEST_F(AddNumericColumnTest, test_add_float_overflow) {
+    auto column = FixedLengthColumn<float>::create();
+    TypeDescriptor t(TYPE_FLOAT);
+
+    simdjson::ondemand::parser parser;
+    // A value beyond the rounding window of FLT_MAX must still overflow.
+    auto json = R"(  { "f_float": 3.4028236E38} )"_padded;
+    auto doc = parser.iterate(json);
+    simdjson::ondemand::value val = doc.find_field("f_float");
+
+    auto st = add_numeric_column<float>(column.get(), t, "f_float", &val);
+    ASSERT_TRUE(st.is_invalid_argument());
 }
 
 } // namespace starrocks
