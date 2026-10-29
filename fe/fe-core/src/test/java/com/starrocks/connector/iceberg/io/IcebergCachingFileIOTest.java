@@ -146,7 +146,8 @@ public class IcebergCachingFileIOTest {
                 .getBoolean("fs.abfs.impl.disable.cache", false));
         Assertions.assertTrue(buildConf(noCredential, "wasbs://c@a.blob.core.windows.net/p")
                 .getBoolean("fs.wasbs.impl.disable.cache", false));
-        Assertions.assertTrue(buildConf(noCredential, "gs://bucket/p")
+        // gs with the FE's own identity carries no per-catalog secret; see testGcsIsolatedOnlyForExplicitCredential.
+        Assertions.assertFalse(buildConf(noCredential, "gs://bucket/p")
                 .getBoolean("fs.gs.impl.disable.cache", false));
         Assertions.assertTrue(buildConf(noCredential, "adl://a.azuredatalakestore.net/p")
                 .getBoolean("fs.adl.impl.disable.cache", false));
@@ -163,6 +164,26 @@ public class IcebergCachingFileIOTest {
                 .getBoolean("fs.cosn.impl.disable.cache", false));
         Assertions.assertFalse(buildConf(noCredential, "hdfs://nn/p")
                 .getBoolean("fs.hdfs.impl.disable.cache", false));
+    }
+
+    @Test
+    public void testGcsIsolatedOnlyForExplicitCredential() throws StarRocksException {
+        String path = "gs://bucket/p";
+        String flag = GCPCloudConfigurationProvider.DISABLE_FS_CACHE_KEY;
+
+        Assertions.assertFalse(buildConf(baseConf(GCPCloudConfigurationProvider.AUTH_TYPE_KEY, "COMPUTE_ENGINE"),
+                new HashMap<>(), path).getBoolean(flag, false));
+        Assertions.assertFalse(buildConf(baseConf(GCPCloudConfigurationProvider.AUTH_TYPE_KEY, "APPLICATION_DEFAULT"),
+                new HashMap<>(), path).getBoolean(flag, false));
+
+        Assertions.assertTrue(buildConf(baseConf(GCPCloudConfigurationProvider.AUTH_TYPE_KEY,
+                "SERVICE_ACCOUNT_JSON_KEYFILE"), new HashMap<>(), path).getBoolean(flag, false));
+        Assertions.assertTrue(buildConf(baseConf(GCPCloudConfigurationProvider.IMPERSONATION_SERVICE_ACCOUNT_KEY,
+                "sa@project.iam.gserviceaccount.com"), new HashMap<>(), path).getBoolean(flag, false));
+
+        Map<String, String> vendedToken = new HashMap<>();
+        vendedToken.put(GCS_ACCESS_TOKEN, "token");
+        Assertions.assertTrue(buildConf(vendedToken, path).getBoolean(flag, false));
     }
 
     @Test
@@ -200,9 +221,20 @@ public class IcebergCachingFileIOTest {
     }
 
     private static Configuration buildConf(Map<String, String> properties, String path) throws StarRocksException {
+        return buildConf(new Configuration(), properties, path);
+    }
+
+    private static Configuration buildConf(Configuration baseConf, Map<String, String> properties, String path)
+            throws StarRocksException {
         IcebergCachingFileIO cachingFileIO = new IcebergCachingFileIO();
-        cachingFileIO.setConf(new Configuration());
+        cachingFileIO.setConf(baseConf);
         return cachingFileIO.buildConfFromProperties(properties, path);
+    }
+
+    private static Configuration baseConf(String key, String value) {
+        Configuration conf = new Configuration();
+        conf.set(key, value);
+        return conf;
     }
 
     @Test
