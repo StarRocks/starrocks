@@ -24,6 +24,7 @@
 #include "column/arrow/arrow_to_starrocks_converter.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
+#include "column/const_column.h"
 #include "exprs/expr.h"
 #include "formats/arrow/arrow_column_converter.h"
 #include "gen_cpp/CloudConfiguration_types.h"
@@ -320,7 +321,7 @@ Status LanceNativeReader::_append_batch_to_read_chunk(ChunkPtr* chunk) {
     const auto num_elements = std::min<int64_t>(remaining_batch, _max_chunk_size);
     SCOPED_RAW_TIMER(&_convert_time_ns);
     RETURN_IF_ERROR(convert_batch(_state, _tuple, _arrow_batch->Slice(_batch_start_idx, num_elements), chunk,
-                                 _empty_projection));
+                                  _empty_projection));
     _batch_start_idx += num_elements;
     return Status::OK();
 }
@@ -333,12 +334,12 @@ Status LanceNativeReader::convert_batch(RuntimeState* state, const TupleDescript
             return Status::InternalError("Invalid Lance empty projection batch or tuple");
         }
         // Chunk derives its row count from its first column. Retain the planner's unused
-        // slot as a typed placeholder, without reading or converting any dataset values.
+        // slot as a typed constant, without allocating a default value per row and field.
         const auto* slot = tuple->slots()[0];
         auto column = ColumnHelper::create_column(slot->type(), slot->is_nullable());
-        column->append_default(batch->num_rows());
+        column->append_default();
         auto result = std::make_shared<Chunk>();
-        result->append_column(std::move(column), slot->id());
+        result->append_column(ConstColumn::create(std::move(column), batch->num_rows()), slot->id());
         *chunk = std::move(result);
         return Status::OK();
     }

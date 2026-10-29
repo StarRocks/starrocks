@@ -68,7 +68,8 @@ SAS tokens and temporary S3 credentials are static catalog configuration; the co
 
 - Place multiple Lance datasets in the warehouse to query them with joins, aggregations, filters, and projections. Schemas are read when resolving tables, rather than maintained in catalog properties.
 - Each table scan uses one range covering every dataset fragment. Fragment-level parallel scans and predicate pushdown into Lance are not implemented. StarRocks evaluates SQL predicates on the decoded rows.
-- Column pruning reads the projected columns and columns required by predicates. `COUNT(*)` retains a scalar column when available.
+- Column pruning reads the projected columns and columns required by predicates.
+- With `enable_count_star_optimization` enabled, unfiltered, ungrouped `COUNT(*)` and `COUNT(1)` scans that need no column values use an empty Lance projection. Row counts come from the scanner and respect deleted rows; they are not replaced with manifest totals. `COUNT(nullable_column)` and scans requiring values for predicates, runtime filters, or other expressions retain normal column reads. Empty projection does not guarantee zero storage I/O.
 - Arrow large strings and large binary values are supported. Their types are inferred from the dataset schema. Unsigned integers widen without overflow: `uint8` → `SMALLINT`, `uint16` → `INT`, `uint32` → `BIGINT`, and `uint64` → `DECIMAL(20,0)`.
 - Scalar values, dates, timestamps, and lists are supported by the reader. Dates and timestamps retain UTC semantics, including fractional values before the Unix epoch. Unsupported schema conversions fail the query instead of dropping rows.
 - The catalog is read-only. Local file URIs must be accessible at the same path on the FE and the BE selected for the scan.

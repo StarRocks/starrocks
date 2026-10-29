@@ -81,8 +81,8 @@ Status LanceDataSource::open(RuntimeState* state) {
     if (_runtime_profile != nullptr) {
         _runtime_profile->add_info_string("LanceProjection", empty_projection ? "empty" : "columns");
     }
-    RETURN_IF_ERROR(_scanner->open(state, _tuple_desc, std::string(lance_table->lance_dataset_uri()), cloud,
-                                  empty_projection));
+    RETURN_IF_ERROR(
+            _scanner->open(state, _tuple_desc, std::string(lance_table->lance_dataset_uri()), cloud, empty_projection));
     return Status::OK();
 }
 

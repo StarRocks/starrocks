@@ -19,10 +19,12 @@
 
 #include "base/testutil/assert.h"
 #include "base/testutil/sync_point.h"
+#include "column/const_column.h"
 #include "column/fixed_length_column.h"
 #include "compute_env/global_dict/fragment_dict_state.h"
 #include "compute_env/query/fragment_runtime_state.h"
 #include "connector/lance/lance_native_reader.h"
+#include "exprs/agg/count.h"
 #include "exprs/expr_context.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors_ext.h"
@@ -34,8 +36,8 @@ namespace starrocks::connector {
 class StubLanceScanner final : public LanceNativeReader {
 public:
     explicit StubLanceScanner(int* close_count) : _close_count(close_count) {}
-    Status open(RuntimeState*, const TupleDescriptor* tuple, const std::string& uri,
-                const TCloudConfiguration& cloud, bool empty_projection = false) override {
+    Status open(RuntimeState*, const TupleDescriptor* tuple, const std::string& uri, const TCloudConfiguration& cloud,
+                bool empty_projection = false) override {
         this->empty_projection = empty_projection;
         this->tuple = tuple;
         this->uri = uri;
@@ -226,6 +228,63 @@ TEST_F(LanceConnectorTest, EmptyArrowProjectionPreservesRowsAndSlices) {
     EXPECT_FALSE(LanceNativeReader::convert_batch(_state.get(), _tuple, batch, &chunk).ok());
 }
 
+TEST_F(LanceConnectorTest, WideStructPlaceholderIsConstantAndSurvivesChunkOperations) {
+    TypeDescriptor type(TYPE_STRUCT);
+    for (int i = 0; i < 200; ++i) {
+        type.field_names.push_back("field_" + std::to_string(i));
+        type.children.emplace_back(TYPE_INT);
+    }
+    const auto* tuple = tuple_for_type(type, "wide_struct");
+    ASSERT_NE(nullptr, tuple);
+    ChunkPtr small;
+    ChunkPtr large;
+    for (auto [rows, output] : {std::pair<int64_t, ChunkPtr*>{1, &small}, {8192, &large}}) {
+        auto batch = arrow::RecordBatch::Make(arrow::schema({}), rows, std::vector<std::shared_ptr<arrow::Array>>{});
+        ASSERT_OK(LanceNativeReader::convert_batch(_state.get(), tuple, batch, output, true));
+        ASSERT_TRUE((*output)->get_column_by_index(0)->is_constant());
+        EXPECT_EQ(1, down_cast<const ConstColumn*>((*output)->get_column_by_index(0).get())->data_column()->size());
+    }
+    EXPECT_EQ(small->memory_usage(), large->memory_usage());
+    const auto& data = down_cast<const ConstColumn*>(large->get_column_by_index(0).get())->data_column();
+    ASSERT_TRUE(data->is_nullable());
+    EXPECT_TRUE(down_cast<const NullableColumn*>(data.get())->data_column()->is_struct());
+    auto merged = large->clone_empty_with_slot();
+    merged->append(*large);
+    merged->append(*small);
+    EXPECT_EQ(8193, merged->num_rows());
+    merged->set_num_rows(4097);
+    EXPECT_EQ(4097, merged->num_rows());
+    // Local exchange expands constants before buffering them. Preserve type, slot and rows there too.
+    merged->unpack_and_duplicate_const_columns();
+    EXPECT_EQ(4097, merged->num_rows());
+    EXPECT_TRUE(merged->is_slot_exist(tuple->slots()[0]->id()));
+    EXPECT_FALSE(merged->get_column_by_index(0)->is_constant());
+    EXPECT_TRUE(merged->get_column_by_index(0)->is_null(4096));
+    merged->check_or_die();
+}
+
+TEST_F(LanceConnectorTest, LargeEmptyProjectionBatchSlicesBeforeCount) {
+    LanceNativeReader reader;
+    reader._state = _state.get();
+    reader._tuple = _tuple;
+    reader._empty_projection = true;
+    reader._max_chunk_size = 1024;
+    reader._arrow_batch =
+            arrow::RecordBatch::Make(arrow::schema({}), 32771, std::vector<std::shared_ptr<arrow::Array>>{});
+    CountAggregateFunction<false> aggregate;
+    AggregateCountFunctionState<false> count;
+    size_t batches = 0;
+    while (!reader._batch_is_exhausted()) {
+        ChunkPtr chunk;
+        ASSERT_OK(reader._append_batch_to_read_chunk(&chunk));
+        EXPECT_LE(chunk->num_rows(), 1024);
+        aggregate.update_batch_single_state(nullptr, chunk->num_rows(), nullptr, reinterpret_cast<AggDataPtr>(&count));
+        ++batches;
+    }
+    EXPECT_EQ(33, batches);
+    EXPECT_EQ(32771, count.count);
+}
+
 TEST_F(LanceConnectorTest, EmptyProjectionDoesNotReadPlaceholderColumn) {
     // This column does not exist in the dataset. Only an actual empty projection can succeed.
     TypeDescriptor type(TYPE_ARRAY);
@@ -236,20 +295,49 @@ TEST_F(LanceConnectorTest, EmptyProjectionDoesNotReadPlaceholderColumn) {
     cloud.__set_cloud_type(TCloudType::DEFAULT);
     LanceNativeReader reader;
     ASSERT_OK(reader.open(_state.get(), tuple, LANCE_TEST_DATASET, cloud, true));
+    // The Rust fixture has multi-row batches. Force C++ slicing after Arrow C Data import.
+    reader._max_chunk_size = 1;
+    CountAggregateFunction<false> aggregate;
+    AggregateCountFunctionState<false> count;
     size_t rows = 0;
     while (true) {
         ChunkPtr chunk;
         auto status = reader.get_next(_state.get(), &chunk);
         if (status.is_end_of_file()) break;
         ASSERT_OK(status);
+        ASSERT_EQ(1, chunk->num_rows());
+        ASSERT_TRUE(chunk->get_column_by_index(0)->is_constant());
+        aggregate.update_batch_single_state(nullptr, chunk->num_rows(), nullptr, reinterpret_cast<AggDataPtr>(&count));
         rows += chunk->num_rows();
     }
     EXPECT_EQ(7, rows);
+    EXPECT_EQ(7, count.count);
     // Reopening must restore real projection and conversion.
     ASSERT_OK(reader.open(_state.get(), _tuple, LANCE_TEST_DATASET, cloud));
     ChunkPtr chunk;
     ASSERT_OK(reader.get_next(_state.get(), &chunk));
     EXPECT_FALSE(chunk->get_column_by_index(0)->is_null(0));
+    reader.close();
+}
+
+TEST_F(LanceConnectorTest, NativeNullableCountReadsActualValues) {
+    const auto* tuple = tuple_for_type(TypeDescriptor(TYPE_VARCHAR), "label");
+    ASSERT_NE(nullptr, tuple);
+    TCloudConfiguration cloud;
+    cloud.__set_cloud_type(TCloudType::DEFAULT);
+    LanceNativeReader reader;
+    ASSERT_OK(reader.open(_state.get(), tuple, LANCE_TEST_DATASET, cloud));
+    CountNullableAggregateFunction<false> aggregate;
+    AggregateCountFunctionState<false> count;
+    while (true) {
+        ChunkPtr chunk;
+        auto status = reader.get_next(_state.get(), &chunk);
+        if (status.is_end_of_file()) break;
+        ASSERT_OK(status);
+        const Column* column = chunk->get_column_by_index(0).get();
+        aggregate.update_batch_single_state(nullptr, chunk->num_rows(), &column, reinterpret_cast<AggDataPtr>(&count));
+    }
+    EXPECT_EQ(4, count.count); // Seven rows, with NULL labels for 1, 3 and 5.
     reader.close();
 }
 

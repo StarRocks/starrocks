@@ -202,8 +202,13 @@ fn empty_projection_respects_deletions_and_empty_datasets() {
             let r = reader(uri, version, &[]);
             let rows = batches(r);
             sr_lance_reader_close(r);
-            assert_eq!(rows.iter().map(RecordBatch::num_rows).sum::<usize>(), expected);
-            assert!(rows.iter().all(|b| b.num_columns() == 0 && b.num_rows() <= 2));
+            assert_eq!(
+                rows.iter().map(RecordBatch::num_rows).sum::<usize>(),
+                expected
+            );
+            assert!(rows
+                .iter()
+                .all(|b| b.num_columns() == 0 && b.num_rows() <= 2));
         }
     }
     runtime().unwrap().block_on(async {

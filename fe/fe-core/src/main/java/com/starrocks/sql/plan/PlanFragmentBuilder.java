@@ -1985,7 +1985,7 @@ public class PlanFragmentBuilder {
 
             // set slot
             prepareContextSlots(node, context, tupleDescriptor);
-            // JNI always supplies a null bitmap, including for fields declared NOT NULL in the catalog.
+            // Use nullable slots for Arrow conversion, including fields declared NOT NULL in the catalog.
             tupleDescriptor.getSlots().forEach(slot -> slot.setIsNullable(true));
 
             LanceScanNode lanceScanNode =

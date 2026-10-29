@@ -68,7 +68,8 @@ SAS Token 和临时 S3 凭据属于静态 Catalog 配置，Connector 不会从�
 
 - 在 Warehouse 中放置多个 Lance 数据集，即可执行 Join、聚合、过滤和投影。Schema 在解析表时读取，不需要在 Catalog 参数中维护。
 - 每次表扫描使用一个覆盖数据集全部 Fragment 的 Scan Range。尚未实现 Fragment 级并行扫描或向 Lance 下推谓词。StarRocks 在解码后的行上计算 SQL 谓词。
-- 列裁剪会读取投影列和谓词所需的列。`COUNT(*)` 在存在标量列时保留一个标量列。
+- 列裁剪会读取投影列和谓词所需的列。
+- 启用 `enable_count_star_optimization` 时，不带过滤和分组且不需要列值的 `COUNT(*)`、`COUNT(1)` 扫描使用 Lance 空投影。行数来自 Scanner，并遵循删除记录的可见性，不会用 Manifest 总行数替代。`COUNT(nullable_column)` 以及谓词、Runtime Filter 或其他表达式需要列值的扫描仍正常读取数据列。空投影不保证存储 I/O 为零。
 - 支持 Arrow Large String 和 Large Binary，其类型从数据集 Schema 推断。无符号整数通过扩宽类型避免溢出：`uint8` → `SMALLINT`、`uint16` → `INT`、`uint32` → `BIGINT`、`uint64` → `DECIMAL(20,0)`。
 - 读取器支持标量值、日期、时间戳和列表。日期和时间戳保留 UTC 语义，包括 Unix Epoch 之前的小数时间值。不支持的 Schema 转换会导致查询失败，不会丢弃行。
 - Catalog 为只读。本地文件 URI 必须在 FE 和执行扫描的 BE 上以相同路径可访问。

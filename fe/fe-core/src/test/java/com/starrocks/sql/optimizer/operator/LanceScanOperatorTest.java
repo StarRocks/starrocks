@@ -252,9 +252,29 @@ public class LanceScanOperatorTest {
         Assertions.assertEquals(1, pruned.getColRefToColumnMetaMap().size());
         Assertions.assertFalse(pruned.getColRefToColumnMetaMap().containsKey(fixture.embedding));
         Assertions.assertTrue(pruned.getScanOptimizeOption().getCanUseAnyColumn());
+        Assertions.assertNotSame(countScan.getScanOptimizeOption(), pruned.getScanOptimizeOption());
+        Assertions.assertFalse(countScan.getScanOptimizeOption().getCanUseAnyColumn());
+        Assertions.assertFalse(fixture.scan.getScanOptimizeOption().getCanUseAnyColumn());
         Assertions.assertTrue(new PhysicalLanceScanOperator(pruned).getScanOptimizeOption().getCanUseAnyColumn());
         Assertions.assertTrue(fixture.rule.transform(OptExpression.create(pruned), fixture.context).isEmpty());
         Assertions.assertTrue(pruned.getScanOptimizeOption().getCanUseAnyColumn());
+    }
+
+    @Test
+    public void testBuilderCopiesScanOptimizationOptions() {
+        PruningFixture fixture = new PruningFixture();
+        fixture.scan.getScanOptimizeOption().setCanUseAnyColumn(true);
+        fixture.scan.getScanOptimizeOption().setCanUseMinMaxOpt(true);
+        fixture.scan.getScanOptimizeOption().setCanUseCountOpt(true);
+        fixture.scan.getScanOptimizeOption().setUsePartitionColumnValueOnly(true);
+        LogicalLanceScanOperator copy = new LogicalLanceScanOperator.Builder().withOperator(fixture.scan).build();
+        Assertions.assertNotSame(fixture.scan.getScanOptimizeOption(), copy.getScanOptimizeOption());
+        Assertions.assertTrue(copy.getScanOptimizeOption().getCanUseAnyColumn());
+        Assertions.assertTrue(copy.getScanOptimizeOption().getCanUseMinMaxOpt());
+        Assertions.assertTrue(copy.getScanOptimizeOption().getCanUseCountOpt());
+        Assertions.assertTrue(copy.getScanOptimizeOption().getUsePartitionColumnValueOnly());
+        copy.getScanOptimizeOption().setCanUseAnyColumn(false);
+        Assertions.assertTrue(fixture.scan.getScanOptimizeOption().getCanUseAnyColumn());
     }
 
     @Test
