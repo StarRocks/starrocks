@@ -1311,6 +1311,49 @@ public class LakePublishBatchTest {
     }
 
     @Test
+    public void testFailedBatchTakesInNewTxnsWhenRetryFreezeIsOff() throws Exception {
+        boolean oldRetryFreeze = Config.lake_enable_batch_publish_retry_freeze;
+        Config.lake_enable_batch_publish_retry_freeze = false;
+        try {
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
+            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(),
+                    TABLE_AGG_OFF);
+            Partition partition = Lists.newArrayList(table.getPartitions()).get(0);
+            GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+            DatabaseTransactionMgr dbTxnMgr = globalTransactionMgr.getDatabaseTransactionMgr(db.getId());
+            List<Long> txnIds = Lists.newArrayList();
+            VisibleStateWaiter waiter1 = commitOnPartition(db, table, partition, "unfrozen_retry_1_", txnIds);
+            VisibleStateWaiter waiter2 = commitOnPartition(db, table, partition, "unfrozen_retry_2_", txnIds);
+            long headTxnId = txnIds.get(0);
+
+            AtomicReference<PublishVersionDaemon.BatchPublishResult> forcedResult =
+                    new AtomicReference<>(PublishVersionDaemon.BatchPublishResult.FAILED);
+            List<List<Long>> publishedBatches = new CopyOnWriteArrayList<>();
+            forcePartitionBatchPublish(forcedResult, false, publishedBatches);
+            PublishVersionDaemon daemon = new PublishVersionDaemon();
+            Awaitility.await().atMost(60, TimeUnit.SECONDS).pollInterval(1, TimeUnit.SECONDS).until(() -> {
+                daemon.runAfterLeaseValid();
+                return publishedBatches.stream().anyMatch(batch -> batch.contains(headTxnId));
+            });
+            Assertions.assertNull(dbTxnMgr.getFrozenPublishBatch(headTxnId));
+
+            // Two more txns commit while the failed batch waits for its retry: with the policy off they join it.
+            VisibleStateWaiter waiter3 = commitOnPartition(db, table, partition, "unfrozen_retry_3_", txnIds);
+            VisibleStateWaiter waiter4 = commitOnPartition(db, table, partition, "unfrozen_retry_4_", txnIds);
+            TransactionStateBatch retryBatch = globalTransactionMgr.getReadyPublishTransactionsBatch().stream()
+                    .filter(batch -> batch.getTxnIds().contains(headTxnId))
+                    .findFirst().orElse(null);
+            assertNotNull(retryBatch);
+            assertEquals(txnIds, retryBatch.getTxnIds());
+
+            forcedResult.set(null);
+            awaitPublish(daemon, waiter1, waiter2, waiter3, waiter4);
+        } finally {
+            Config.lake_enable_batch_publish_retry_freeze = oldRetryFreeze;
+        }
+    }
+
+    @Test
     public void testFailedSingleTxnBatchIsRetriedAlone() throws Exception {
         // A lone txn is published only when a one-txn batch is allowed.
         int oldMinVersionNum = Config.lake_batch_publish_min_version_num;

@@ -1031,9 +1031,15 @@ public class DatabaseTransactionMgr {
         readLock();
 
         try {
-            // A frozen batch whose head txn is no longer running (finished by another path, or its db
-            // dropped) will never be retried.
-            frozenPublishBatches.keySet().removeIf(headTxnId -> !idToRunningTransactionState.containsKey(headTxnId));
+            if (Config.lake_enable_batch_publish_retry_freeze) {
+                // A frozen batch whose head txn is no longer running (finished by another path, or its db
+                // dropped) will never be retried.
+                frozenPublishBatches.keySet().removeIf(
+                        headTxnId -> !idToRunningTransactionState.containsKey(headTxnId));
+            } else if (!frozenPublishBatches.isEmpty()) {
+                // The policy was turned off: every batch, frozen ones included, is rebuilt as before.
+                frozenPublishBatches.clear();
+            }
             List<Long> txnIds = transactionGraph.getTxnsWithoutDependency();
             for (long txnId : txnIds) {
                 List<Long> txnsWithDependency = null;
@@ -1148,6 +1154,9 @@ public class DatabaseTransactionMgr {
     // Called when a lake publish batch failed: its retry must cover the same txns so that every
     // partition's new version stays the same. See frozenPublishBatches.
     public void freezePublishBatch(List<Long> txnIds) {
+        if (!Config.lake_enable_batch_publish_retry_freeze) {
+            return;
+        }
         long headTxnId = txnIds.get(0);
         List<Long> previous = frozenPublishBatches.put(headTxnId, txnIds);
         if (!txnIds.equals(previous)) {

@@ -1529,6 +1529,55 @@ public class DatabaseTransactionMgrTest {
         assertNull(masterDbTransMgr.getFrozenPublishBatch(txnId1));
     }
 
+    @Test
+    public void testFreezePublishBatchIsIgnoredWhenRetryFreezeIsOff() throws AnalysisException {
+        boolean oldRetryFreeze = Config.lake_enable_batch_publish_retry_freeze;
+        Config.lake_enable_batch_publish_retry_freeze = false;
+        try {
+            DatabaseTransactionMgr masterDbTransMgr = dbTransMgrWithThreeBatchableTxns();
+            long txnId6 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable6);
+            long txnId7 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable7);
+            long txnId8 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable8);
+            // A batch [6, 7] failed before txn 8 committed: with the policy off its retry takes txn 8 in.
+            masterDbTransMgr.freezePublishBatch(List.of(txnId6, txnId7));
+            assertNull(masterDbTransMgr.getFrozenPublishBatch(txnId6));
+            List<TransactionStateBatch> batches = masterDbTransMgr.getReadyToPublishTxnListBatch();
+            assertEquals(1, batches.size());
+            assertEquals(List.of(txnId6, txnId7, txnId8), batches.get(0).getTxnIds());
+        } finally {
+            Config.lake_enable_batch_publish_retry_freeze = oldRetryFreeze;
+        }
+    }
+
+    @Test
+    public void testTurningRetryFreezeOffDropsFrozenBatches() throws AnalysisException {
+        boolean oldRetryFreeze = Config.lake_enable_batch_publish_retry_freeze;
+        Config.lake_enable_batch_publish_retry_freeze = true;
+        try {
+            DatabaseTransactionMgr masterDbTransMgr = dbTransMgrWithThreeBatchableTxns();
+            long txnId6 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable6);
+            long txnId7 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable7);
+            long txnId8 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable8);
+            masterDbTransMgr.freezePublishBatch(List.of(txnId6, txnId7));
+            List<TransactionStateBatch> batches = masterDbTransMgr.getReadyToPublishTxnListBatch();
+            assertEquals(List.of(txnId6, txnId7), batches.get(0).getTxnIds());
+
+            // Turned off while [6, 7] is frozen: the very next round rebuilds the batch as before.
+            Config.lake_enable_batch_publish_retry_freeze = false;
+            batches = masterDbTransMgr.getReadyToPublishTxnListBatch();
+            assertEquals(1, batches.size());
+            assertEquals(List.of(txnId6, txnId7, txnId8), batches.get(0).getTxnIds());
+            assertNull(masterDbTransMgr.getFrozenPublishBatch(txnId6));
+
+            // Turning it back on does not bring the dropped batch back.
+            Config.lake_enable_batch_publish_retry_freeze = true;
+            batches = masterDbTransMgr.getReadyToPublishTxnListBatch();
+            assertEquals(List.of(txnId6, txnId7, txnId8), batches.get(0).getTxnIds());
+        } finally {
+            Config.lake_enable_batch_publish_retry_freeze = oldRetryFreeze;
+        }
+    }
+
     private static TransactionState makeVisibleBatchTxn(long txnId, List<Long> tableIds) {
         return new TransactionState(GlobalStateMgrTestUtil.testDbId1, tableIds, txnId,
                 "replay_mt_" + txnId, UUIDUtil.genTUniqueId(),
