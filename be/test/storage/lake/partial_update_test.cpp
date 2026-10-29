@@ -12,12 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <fcntl.h>
 #include <gtest/gtest.h>
+#include <sys/file.h>
+#include <unistd.h>
 
 #include <algorithm>
 #include <atomic>
+#include <filesystem>
 #include <map>
 #include <random>
+#include <set>
 
 #include "base/container/lru_cache.h"
 #include "base/testutil/assert.h"
@@ -589,6 +594,284 @@ TEST_P(LakePartialUpdateTest, test_column_mode_partial_update_streams_source_seg
 // This test stamps a bundle_file_offset onto a row-mode partial update segment (as a bundled load
 // records it), publishes so rewrite_segment orphans the raw segment, and asserts the orphaned
 // segment is flagged shared.
+// Many update files, each touching rows of every source segment. The update rows are partitioned by
+// source segment into a local spill file, so every update file is read once; the result must equal
+// the per-segment re-read path, whether the partition pass flushes once per update file or on every
+// chunk, and the spill file must be gone when the publish is done.
+TEST_P(LakePartialUpdateTest, test_column_mode_spills_update_rows) {
+    if (GetParam().partial_update_mode != PartialUpdateMode::COLUMN_UPDATE_MODE) {
+        GTEST_SKIP() << "Only column mode reads update files while generating DCGs";
+    }
+    std::vector<uint32_t> indexes(kChunkSize);
+    std::iota(indexes.begin(), indexes.end(), 0);
+    auto version = 1;
+    const auto tablet_id = _tablet_metadata->id();
+    const int kSourceSegments = 4;
+    for (int shift = 0; shift < kSourceSegments; shift++) {
+        auto chunk = generate_data(kChunkSize, shift, false, 3);
+        const auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, ++version, txn_id).status());
+    }
+    ASSERT_EQ(kChunkSize * kSourceSegments,
+              check(version, [](int c0, int c1, int c2) { return (c0 * 3 == c1) && (c0 * 4 == c2); }));
+
+    // Keys k, k + 4, k + 8, ... so that every update file carries rows of every source segment.
+    auto strided_update = [&](int slice, int update_ratio) {
+        std::vector<int> v0(kChunkSize);
+        std::vector<int> v1(kChunkSize);
+        for (int i = 0; i < kChunkSize; i++) {
+            v0[i] = slice + i * kSourceSegments;
+            v1[i] = v0[i] * update_ratio;
+        }
+        auto c0 = Int32Column::create();
+        auto c1 = Int32Column::create();
+        c0->append_numbers(v0.data(), v0.size() * sizeof(int));
+        c1->append_numbers(v1.data(), v1.size() * sizeof(int));
+        return Chunk({std::move(c0), std::move(c1)}, _slot_cid_map);
+    };
+
+    const std::string spill_dir = std::string(kTestDirectory) + "/pcu_spill";
+    const std::string old_spill_dir = config::lake_pk_column_mode_spill_dir;
+    config::lake_pk_column_mode_spill_dir = spill_dir;
+    DeferOp restore_dir([&]() { config::lake_pk_column_mode_spill_dir = old_spill_dir; });
+
+    std::atomic<int> upt_reads{0};
+    SyncPoint::GetInstance()->SetCallBack("ColumnModePartialUpdateHandler::_spill_update_rows:upt_read",
+                                          [&](void*) { upt_reads++; });
+    // Each update file's iterator is released right after the file is read, not at the end of the
+    // pass: the number of live iterators drops by one per file and reaches zero with the last one.
+    std::atomic<int> upt_closes{0};
+    size_t live_iters = SIZE_MAX;
+    SyncPoint::GetInstance()->SetCallBack("ColumnModePartialUpdateHandler::_spill_update_rows:upt_closed",
+                                          [&](void* arg) {
+                                              upt_closes++;
+                                              const size_t live = *static_cast<size_t*>(arg);
+                                              EXPECT_LT(live, live_iters) << "a read update file kept its iterator";
+                                              live_iters = live;
+                                          });
+    // A flush must drop its per-segment buffers, not just clear them: a reset chunk keeps its capacity
+    // for the rest of the partition pass while the tracker already says the bytes are gone.
+    std::atomic<int> flushes{0};
+    SyncPoint::GetInstance()->SetCallBack("ColumnModePartialUpdateHandler::_spill_update_rows:flushed", [&](void* arg) {
+        flushes++;
+        EXPECT_EQ(0, *static_cast<size_t*>(arg)) << "flushed buffers retained after the flush";
+    });
+    // The routing entries of one update file are charged to the update tracker while they are alive.
+    std::atomic<int> charged_routes{0};
+    SyncPoint::GetInstance()->SetCallBack("ColumnModePartialUpdateHandler::_spill_update_rows:routed", [&](void* arg) {
+        charged_routes++;
+        const int64_t bytes = *static_cast<int64_t*>(arg);
+        EXPECT_GT(bytes, 0);
+        EXPECT_GE(_primary_key_mgr->mem_tracker()->consumption(), bytes);
+    });
+    // Every spill record a segment task reads back is charged to the update tracker while it is alive.
+    std::atomic<int> charged_reads{0};
+    SyncPoint::GetInstance()->SetCallBack("ColumnModePartialUpdateHandler::_update_source_chunk_from_spill:charged",
+                                          [&](void* arg) {
+                                              charged_reads++;
+                                              const int64_t bytes = *static_cast<int64_t*>(arg);
+                                              EXPECT_GT(bytes, 0);
+                                              EXPECT_GE(_primary_key_mgr->mem_tracker()->consumption(), bytes);
+                                          });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp sync_point_guard([&]() {
+        SyncPoint::GetInstance()->ClearCallBack("ColumnModePartialUpdateHandler::_spill_update_rows:upt_read");
+        SyncPoint::GetInstance()->ClearCallBack("ColumnModePartialUpdateHandler::_spill_update_rows:upt_closed");
+        SyncPoint::GetInstance()->ClearCallBack("ColumnModePartialUpdateHandler::_spill_update_rows:flushed");
+        SyncPoint::GetInstance()->ClearCallBack("ColumnModePartialUpdateHandler::_spill_update_rows:routed");
+        SyncPoint::GetInstance()->ClearCallBack(
+                "ColumnModePartialUpdateHandler::_update_source_chunk_from_spill:charged");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    auto run_update = [&](int update_ratio) {
+        // One column-mode update that rewrites c1 of every row, flushed as one update file per write.
+        ConfigResetGuard<int64_t> write_buffer_guard(&config::write_buffer_size, 1);
+        upt_reads = 0;
+        upt_closes = 0;
+        live_iters = SIZE_MAX;
+        const auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .set_partial_update_mode(PartialUpdateMode::COLUMN_UPDATE_MODE)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        for (int slice = 0; slice < kSourceSegments; slice++) {
+            auto chunk = strided_update(slice, update_ratio);
+            ASSERT_OK(delta_writer->write(chunk, indexes.data(), indexes.size()));
+        }
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, ++version, txn_id).status());
+        ASSERT_EQ(kChunkSize * kSourceSegments, check(version, [update_ratio](int c0, int c1, int c2) {
+                      return (c0 * update_ratio == c1) && (c0 * 4 == c2);
+                  }));
+    };
+
+    // Spill on: each update file is read exactly once, whatever the number of source segments.
+    const int64_t tracker_before_spill = _primary_key_mgr->mem_tracker()->consumption();
+    run_update(5);
+    EXPECT_EQ(kSourceSegments, upt_reads.load());
+    EXPECT_EQ(kSourceSegments, upt_closes.load());
+    EXPECT_EQ(0, live_iters);
+    EXPECT_GT(flushes.load(), 0);
+    EXPECT_EQ(kSourceSegments, charged_routes.load());
+    EXPECT_GT(charged_reads.load(), 0);
+    // Flushing on every chunk splits a segment's rows of one update file over several records.
+    {
+        ConfigResetGuard<int64_t> buffer_guard(&config::lake_pk_column_mode_spill_buffer_bytes, 1);
+        flushes = 0;
+        run_update(7);
+        EXPECT_EQ(kSourceSegments, upt_reads.load());
+        EXPECT_GT(flushes.load(), kSourceSegments);
+    }
+    // With transparent data encryption on, the spill file is encrypted too: its raw bytes differ
+    // from what the handler reads back with the in-memory key, and the update still applies.
+    {
+        ConfigResetGuard<bool> tde_guard(&config::enable_transparent_data_encryption, true);
+        std::atomic<int> encrypted_spills{0};
+        std::vector<std::pair<std::string, FileEncryptionInfo>> spill_files;
+        SyncPoint::GetInstance()->SetCallBack(
+                "ColumnModePartialUpdateHandler::_spill_update_rows:opened", [&](void* arg) {
+                    spill_files.push_back(*static_cast<std::pair<std::string, FileEncryptionInfo>*>(arg));
+                });
+        SyncPoint::GetInstance()->SetCallBack(
+                "ColumnModePartialUpdateHandler::_update_source_chunk_from_spill:charged", [&](void*) {
+                    for (const auto& [path, info] : spill_files) {
+                        if (!fs::path_exist(path) || !info.is_encrypted()) {
+                            continue;
+                        }
+                        ASSIGN_OR_ABORT(auto raw_file, FileSystem::Default()->new_random_access_file(path));
+                        ASSIGN_OR_ABORT(auto raw, raw_file->read_all());
+                        RandomAccessFileOptions opts{.encryption_info = info};
+                        ASSIGN_OR_ABORT(auto plain_file, FileSystem::Default()->new_random_access_file(opts, path));
+                        ASSIGN_OR_ABORT(auto plain, plain_file->read_all());
+                        EXPECT_FALSE(raw.empty());
+                        EXPECT_EQ(raw.size(), plain.size());
+                        EXPECT_NE(raw, plain);
+                        encrypted_spills++;
+                    }
+                });
+        run_update(8);
+        SyncPoint::GetInstance()->ClearCallBack("ColumnModePartialUpdateHandler::_spill_update_rows:opened");
+        EXPECT_FALSE(spill_files.empty());
+        for (const auto& [path, info] : spill_files) {
+            EXPECT_TRUE(info.is_encrypted()) << path;
+            // The process-owned spill subdirectory is owner-only.
+            const auto perms = std::filesystem::status(std::filesystem::path(path).parent_path()).permissions();
+            EXPECT_EQ(std::filesystem::perms::owner_all, perms & std::filesystem::perms::all) << path;
+        }
+        EXPECT_GT(encrypted_spills.load(), 0);
+        SyncPoint::GetInstance()->SetCallBack("ColumnModePartialUpdateHandler::_update_source_chunk_from_spill:charged",
+                                              [&](void* arg) {
+                                                  charged_reads++;
+                                                  const int64_t bytes = *static_cast<int64_t*>(arg);
+                                                  EXPECT_GT(bytes, 0);
+                                                  EXPECT_GE(_primary_key_mgr->mem_tracker()->consumption(), bytes);
+                                              });
+    }
+    // Everything the spill charged (buffers, records read back) was released again; other caches
+    // may legitimately keep bytes on this tracker, so compare against the pre-spill baseline.
+    EXPECT_EQ(tracker_before_spill, _primary_key_mgr->mem_tracker()->consumption());
+    // The spill files are removed with the handler. The process's own spill subdirectory and its lock
+    // stay for the life of the process.
+    std::set<std::string> leftovers;
+    if (fs::path_exist(spill_dir)) {
+        for (const auto& entry : std::filesystem::recursive_directory_iterator(spill_dir)) {
+            if (entry.is_regular_file() && entry.path().filename() != "LOCK") {
+                leftovers.insert(entry.path().string());
+            }
+        }
+    }
+    EXPECT_TRUE(leftovers.empty()) << *leftovers.begin();
+
+    // Spill off: the previous per-segment re-read path, same result.
+    {
+        ConfigResetGuard<bool> spill_guard(&config::lake_pk_column_mode_spill_update_rows, false);
+        run_update(9);
+        EXPECT_EQ(0, upt_reads.load());
+    }
+    EXPECT_EQ(0, _primary_key_mgr->update_state_mem_tracker()->consumption());
+}
+
+TEST_P(LakePartialUpdateTest, test_column_mode_sweeps_leftover_spill_files) {
+    // A CN that dies between writing a spill file and releasing it leaves its spill subdirectory
+    // behind, and nothing reads it once the process is gone. The sweep run at startup removes the
+    // subdirectories whose owner no longer holds the lock, and leaves alone the ones a live process
+    // (another CN sharing the directory, or this one) still holds, plus anything else in the directory.
+    const std::string spill_dir = std::string(kTestDirectory) + "/pcu_spill_leftover";
+    const std::string old_spill_dir = config::lake_pk_column_mode_spill_dir;
+    config::lake_pk_column_mode_spill_dir = spill_dir;
+    DeferOp restore_dir([&]() { config::lake_pk_column_mode_spill_dir = old_spill_dir; });
+
+    // No directory yet: nothing to do, and nothing gets created.
+    ColumnModePartialUpdateHandler::sweep_leftover_spill_files();
+    EXPECT_FALSE(fs::path_exist(spill_dir));
+
+    auto touch = [&](const std::string& name) {
+        ASSIGN_OR_ABORT(auto file, FileSystem::Default()->new_writable_file(spill_dir + "/" + name));
+        ASSERT_OK(file->append("x"));
+        ASSERT_OK(file->close());
+    };
+    auto make_owner_dir = [&](const std::string& name) {
+        ASSERT_OK(FileSystem::Default()->create_dir_recursive(spill_dir + "/" + name));
+        touch(name + "/LOCK");
+        touch(name + "/pcu_10_20_0.spill");
+    };
+    // Dead owners: an unlocked lock file, and a subdirectory with no lock file at all.
+    make_owner_dir("pcu_123_dead-beef");
+    ASSERT_OK(FileSystem::Default()->create_dir_recursive(spill_dir + "/pcu_124_abc"));
+    touch("pcu_124_abc/pcu_10_21_3.spill");
+    // A live owner: the lock is held through another open file description, as another CN would.
+    make_owner_dir("pcu_456_cafe");
+    int live_fd = ::open((spill_dir + "/pcu_456_cafe/LOCK").c_str(), O_RDWR);
+    ASSERT_GE(live_fd, 0);
+    ASSERT_EQ(0, ::flock(live_fd, LOCK_EX | LOCK_NB));
+    DeferOp close_live([&]() {
+        if (live_fd >= 0) {
+            ::close(live_fd);
+        }
+    });
+    // Not spill subdirectories.
+    touch("keep.txt");
+    touch("pcu_notes.spill");
+    ASSERT_OK(FileSystem::Default()->create_dir_recursive(spill_dir + "/pcu_staging_dir"));
+
+    ColumnModePartialUpdateHandler::sweep_leftover_spill_files();
+
+    std::set<std::string> left;
+    ASSERT_OK(FileSystem::Default()->iterate_dir(spill_dir, [&](std::string_view name) {
+        left.insert(std::string(name));
+        return true;
+    }));
+    EXPECT_EQ((std::set<std::string>{"keep.txt", "pcu_notes.spill", "pcu_staging_dir", "pcu_456_cafe"}), left);
+    EXPECT_TRUE(fs::path_exist(spill_dir + "/pcu_456_cafe/pcu_10_20_0.spill"));
+
+    // Once the live owner exits (its lock is released), the next sweep reclaims it.
+    ::close(live_fd);
+    live_fd = -1;
+    ColumnModePartialUpdateHandler::sweep_leftover_spill_files();
+    EXPECT_FALSE(fs::path_exist(spill_dir + "/pcu_456_cafe"));
+}
+
 TEST_P(LakePartialUpdateTest, test_bundled_orphan_segment_marked_shared) {
     // Column mode orphans the partial-column update segment via a different path; this test targets
     // the row-mode rewrite orphan path.
