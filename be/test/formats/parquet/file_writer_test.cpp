@@ -35,6 +35,7 @@
 #include "gutil/casts.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/runtime_state.h"
+#include "testutil/column_test_helper.h"
 
 namespace starrocks::parquet {
 
@@ -450,11 +451,7 @@ TEST_F(FileWriterTest, TestWriteVarchar) {
     auto chunk = std::make_shared<Chunk>();
     {
         // not-null column
-        auto data_column = BinaryColumn::create();
-        data_column->append("hello");
-        data_column->append("world");
-        data_column->append("starrocks");
-        data_column->append("lakehouse");
+        auto data_column = ColumnTestHelper::build_column<Slice>({"hello", "world", "starrocks", "lakehouse"});
 
         auto null_column = UInt8Column::create();
         std::vector<uint8_t> nulls = {1, 0, 1, 0};
@@ -923,11 +920,7 @@ TEST_F(FileWriterTest, TestWriteVarbinary) {
     auto chunk = std::make_shared<Chunk>();
     {
         // not-null column
-        auto data_column = BinaryColumn::create();
-        data_column->append("hello");
-        data_column->append("world");
-        data_column->append("starrocks");
-        data_column->append("lakehouse");
+        auto data_column = ColumnTestHelper::build_column<Slice>({"hello", "world", "starrocks", "lakehouse"});
 
         auto null_column = UInt8Column::create();
         std::vector<uint8_t> nulls = {1, 0, 1, 0};

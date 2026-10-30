@@ -29,6 +29,7 @@
 #include "exprs/expr_context.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/runtime_state.h"
+#include "testutil/column_test_helper.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -64,22 +65,16 @@ TEST_F(MysqlResultWriterTest, should_set_binary_null_bit_after_fallback_column) 
     constexpr int kNumRows = 2;
 
     // Typed BIGINT column.
-    auto bigint_col = Int64Column::create();
-    bigint_col->append(11);
-    bigint_col->append(22);
+    auto bigint_col = ColumnTestHelper::build_column<int64_t>({11, 22});
 
     // Fallback STRUCT column (non-nullable).
-    auto struct_field = BinaryColumn::create();
-    struct_field->append("first");
-    struct_field->append("second");
+    auto struct_field = ColumnTestHelper::build_column<Slice>({"first", "second"});
     Columns struct_fields{struct_field};
     std::vector<std::string> field_names{"f"};
     auto struct_col = StructColumn::create(struct_fields, field_names);
 
     // Nullable BIGINT column that is NULL for the first row.
-    auto nullable_data = Int64Column::create();
-    nullable_data->append(999);
-    nullable_data->append(888);
+    auto nullable_data = ColumnTestHelper::build_column<int64_t>({999, 888});
     auto null_flags = NullColumn::create();
     null_flags->append(1);
     null_flags->append(0);

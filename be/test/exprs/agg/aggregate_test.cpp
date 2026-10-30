@@ -20,6 +20,7 @@
 
 #include "common/config_exec_fwd.h"
 #include "exprs/agg/base_aggregate_test.h"
+#include "testutil/column_test_helper.h"
 
 namespace starrocks {
 // adaptor to TypeDescriptor
@@ -3225,9 +3226,7 @@ TEST_F(AggregateTest, test_ds_theta_count_distinct) {
     ASSERT_EQ("ds_theta_count_distinct", func->get_name());
     auto reset_state = ManagedAggrState::create(ctx, func);
     func->reset(local_ctx.get(), Columns{}, reset_state->state());
-    auto convert_data_column = DoubleColumn::create();
-    convert_data_column->append(1.0);
-    convert_data_column->append(2.0);
+    auto convert_data_column = ColumnTestHelper::build_column<double>({1.0, 2.0});
     MutableColumnPtr convert_result_column = BinaryColumn::create();
     func->convert_to_serialize_format(local_ctx.get(), Columns{convert_data_column}, 2, convert_result_column);
     const AggregateFunction* str_arg_func =

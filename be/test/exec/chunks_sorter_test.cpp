@@ -1360,12 +1360,8 @@ TEST_F(ChunksSorterTest, get_filter_test) {
 
     ChunkUniquePtr merged_chunk = std::make_unique<Chunk>();
     {
-        auto c0_merged = Int32Column::create();
-        c0_merged->append(3);
-        c0_merged->append(10);
-        auto c1_merged = Int32Column::create();
-        c1_merged->append(5);
-        c1_merged->append(0);
+        auto c0_merged = ColumnTestHelper::build_column<int32_t>({3, 10});
+        auto c1_merged = ColumnTestHelper::build_column<int32_t>({5, 0});
         merged_chunk->append_column(std::move(c0_merged), 0);
         merged_chunk->append_column(std::move(c1_merged), 1);
     }
