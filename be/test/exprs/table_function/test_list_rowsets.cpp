@@ -20,6 +20,7 @@
 #include "runtime/runtime_env.h"
 #include "runtime/runtime_state.h"
 #include "storage/storage_env.h"
+#include "testutil/column_test_helper.h"
 
 namespace starrocks {
 
@@ -56,10 +57,8 @@ protected:
 };
 
 TEST_F(ListRowsetsTableFunctionTest, basic_test) {
-    auto tablet_id_column = Int64Column::create();
-    tablet_id_column->append(12345);
-    auto tablet_version_column = Int64Column::create();
-    tablet_version_column->append(1);
+    auto tablet_id_column = ColumnTestHelper::build_column<int64_t>({12345});
+    auto tablet_version_column = ColumnTestHelper::build_column<int64_t>({1});
 
     Columns input_columns;
     input_columns.push_back(tablet_id_column);

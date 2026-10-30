@@ -23,6 +23,7 @@
 #include "column/column_hash/column_hash.h"
 #include "column/json_column.h"
 #include "column/nullable_column.h"
+#include "testutil/column_test_helper.h"
 
 namespace starrocks {
 namespace {
@@ -186,18 +187,12 @@ TEST(ColumnHashCoreTest, AdaptiveNullableColumnMatchesMaterializedNullable) {
 }
 
 TEST(ColumnHashCoreTest, BinaryColumns) {
-    auto binary = BinaryColumn::create();
-    binary->append("alpha");
-    binary->append("beta");
-    binary->append("gamma");
+    auto binary = ColumnTestHelper::build_column<Slice>({"alpha", "beta", "gamma"});
     verify_hashes_for_column(*binary);
 }
 
 TEST(ColumnHashCoreTest, NullableAndJsonColumns) {
-    auto nullable_data = Int32Column::create();
-    nullable_data->append(1);
-    nullable_data->append(2);
-    nullable_data->append(3);
+    auto nullable_data = ColumnTestHelper::build_column<int32_t>({1, 2, 3});
 
     auto nullable_nulls = NullColumn::create();
     nullable_nulls->append(0);

@@ -26,6 +26,7 @@
 #include "common/config_expr_fwd.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "exprs/string_functions.h"
+#include "testutil/column_test_helper.h"
 #include "types/decimalv3.h"
 #include "types/json_value.h"
 
@@ -2286,10 +2287,7 @@ TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_integer_types) {
         std::vector<FunctionContext::TypeDesc> arg_types = {TypeDescriptor::from_logical_type(TYPE_TINYINT)};
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
         Columns columns;
-        auto col = Int8Column::create();
-        col->append(1);
-        col->append(127);
-        col->append(-128);
+        auto col = ColumnTestHelper::build_column<int8_t>({1, 127, -128});
         columns.emplace_back(std::move(col));
 
         ColumnPtr result = EncryptionFunctions::encode_fingerprint_sha256(ctx.get(), columns).value();
@@ -2305,10 +2303,7 @@ TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_integer_types) {
         std::vector<FunctionContext::TypeDesc> arg_types = {TypeDescriptor::from_logical_type(TYPE_INT)};
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
         Columns columns;
-        auto col = Int32Column::create();
-        col->append(0);
-        col->append(12345);
-        col->append(-67890);
+        auto col = ColumnTestHelper::build_column<int32_t>({0, 12345, -67890});
         columns.emplace_back(std::move(col));
 
         ColumnPtr result = EncryptionFunctions::encode_fingerprint_sha256(ctx.get(), columns).value();
@@ -2357,10 +2352,7 @@ TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_float_types) {
         std::vector<FunctionContext::TypeDesc> arg_types = {TypeDescriptor::from_logical_type(TYPE_FLOAT)};
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
         Columns columns;
-        auto col = FloatColumn::create();
-        col->append(0.0f);
-        col->append(3.14159f);
-        col->append(-2.71828f);
+        auto col = ColumnTestHelper::build_column<float>({0.0f, 3.14159f, -2.71828f});
         columns.emplace_back(std::move(col));
 
         ColumnPtr result = EncryptionFunctions::encode_fingerprint_sha256(ctx.get(), columns).value();
@@ -2374,10 +2366,7 @@ TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_float_types) {
         std::vector<FunctionContext::TypeDesc> arg_types = {TypeDescriptor::from_logical_type(TYPE_DOUBLE)};
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
         Columns columns;
-        auto col = DoubleColumn::create();
-        col->append(0.0);
-        col->append(3.141592653589793);
-        col->append(-2.718281828459045);
+        auto col = ColumnTestHelper::build_column<double>({0.0, 3.141592653589793, -2.718281828459045});
         columns.emplace_back(std::move(col));
 
         ColumnPtr result = EncryptionFunctions::encode_fingerprint_sha256(ctx.get(), columns).value();
@@ -2462,21 +2451,15 @@ TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_multiple_columns) {
     Columns columns;
 
     // Column 1: INT32
-    auto int_col = Int32Column::create();
-    int_col->append(1);
-    int_col->append(2);
+    auto int_col = ColumnTestHelper::build_column<int32_t>({1, 2});
     columns.emplace_back(std::move(int_col));
 
     // Column 2: VARCHAR
-    auto str_col = BinaryColumn::create();
-    str_col->append("alice");
-    str_col->append("bob");
+    auto str_col = ColumnTestHelper::build_column<Slice>({"alice", "bob"});
     columns.emplace_back(std::move(str_col));
 
     // Column 3: DOUBLE
-    auto double_col = DoubleColumn::create();
-    double_col->append(99.5);
-    double_col->append(88.5);
+    auto double_col = ColumnTestHelper::build_column<double>({99.5, 88.5});
     columns.emplace_back(std::move(double_col));
 
     ColumnPtr result = EncryptionFunctions::encode_fingerprint_sha256(ctx.get(), columns).value();
@@ -2500,9 +2483,7 @@ TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_mixed_nullable) {
     Columns columns;
 
     // Non-nullable INT column
-    auto int_col = Int32Column::create();
-    int_col->append(100);
-    int_col->append(200);
+    auto int_col = ColumnTestHelper::build_column<int32_t>({100, 200});
     columns.emplace_back(std::move(int_col));
 
     // Nullable VARCHAR column
@@ -2574,12 +2555,10 @@ TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_deterministic) {
     // Create same data twice
     auto create_columns = []() {
         Columns columns;
-        auto int_col = Int32Column::create();
-        int_col->append(42);
+        auto int_col = ColumnTestHelper::build_column<int32_t>({42});
         columns.emplace_back(std::move(int_col));
 
-        auto str_col = BinaryColumn::create();
-        str_col->append("test");
+        auto str_col = ColumnTestHelper::build_column<Slice>({"test"});
         columns.emplace_back(std::move(str_col));
         return columns;
     };
@@ -2631,8 +2610,7 @@ TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_type_markers) {
     {
         std::vector<FunctionContext::TypeDesc> arg_types = {TypeDescriptor::from_logical_type(TYPE_INT)};
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
-        auto int_col = Int32Column::create();
-        int_col->append(65);
+        auto int_col = ColumnTestHelper::build_column<int32_t>({65});
         columns1.emplace_back(std::move(int_col));
     }
 
@@ -2644,8 +2622,7 @@ TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_type_markers) {
                 FunctionContext::create_test_context({TypeDescriptor::from_logical_type(TYPE_INT)}, return_type));
         std::unique_ptr<FunctionContext> ctx_str(
                 FunctionContext::create_test_context({TypeDescriptor::from_logical_type(TYPE_VARCHAR)}, return_type));
-        auto str_col = BinaryColumn::create();
-        str_col->append("A");
+        auto str_col = ColumnTestHelper::build_column<Slice>({"A"});
         columns2.emplace_back(std::move(str_col));
 
         ColumnPtr result1 = EncryptionFunctions::encode_fingerprint_sha256(ctx_int.get(), columns1).value();

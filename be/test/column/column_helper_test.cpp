@@ -171,8 +171,7 @@ TEST_F(ColumnHelperTest, get_container_get_data_with_row_nullable) {
 }
 
 TEST_F(ColumnHelperTest, get_data_column_from_const_nullable_column) {
-    auto data_column = BinaryColumn::create();
-    data_column->append(Slice("v1"));
+    auto data_column = ColumnTestHelper::build_column<Slice>({"v1"});
     auto null_column = NullColumn::create();
     null_column->append(0);
     ColumnPtr nullable_column = NullableColumn::create(std::move(data_column), std::move(null_column));
@@ -233,8 +232,7 @@ TEST_F(ColumnHelperTest, build_slices_nullable_column) {
 }
 
 TEST_F(ColumnHelperTest, build_slices_const_column) {
-    auto inner = BinaryColumn::create();
-    inner->append(Slice("const"));
+    auto inner = ColumnTestHelper::build_column<Slice>({"const"});
     ColumnPtr const_col = ConstColumn::create(std::move(inner), 3);
 
     Buffer<Slice> slices;

@@ -24,6 +24,7 @@
 #include "column/json_column.h"
 #include "column/nullable_column.h"
 #include "column/type_converter.h"
+#include "testutil/column_test_helper.h"
 #include "types/json_value.h"
 #include "types/type_info.h"
 
@@ -103,8 +104,7 @@ TEST(TypeConverterCoreTest, VarcharToNonNullableIntInvalidValueFails) {
 
     // Unparseable value -> would convert to NULL; the non-nullable target must reject it.
     {
-        auto src = BinaryColumn::create();
-        src->append(Slice("abc"));
+        auto src = ColumnTestHelper::build_column<Slice>({"abc"});
         auto dst = Int32Column::create(); // non-nullable
         ASSERT_FALSE(dst->is_nullable());
         auto status = converter->convert_column(src_type.get(), *src, dst_type.get(), dst.get(), &allocator);
@@ -112,8 +112,7 @@ TEST(TypeConverterCoreTest, VarcharToNonNullableIntInvalidValueFails) {
     }
     // Out-of-range value -> would convert to NULL; same expectation.
     {
-        auto src = BinaryColumn::create();
-        src->append(Slice("99999999999999"));
+        auto src = ColumnTestHelper::build_column<Slice>({"99999999999999"});
         auto dst = Int32Column::create(); // non-nullable
         auto status = converter->convert_column(src_type.get(), *src, dst_type.get(), dst.get(), &allocator);
         EXPECT_FALSE(status.ok());

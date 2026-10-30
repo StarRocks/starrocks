@@ -16,12 +16,12 @@
 
 #include "column/const_column.h"
 #include "column/nullable_column.h"
+#include "testutil/column_test_helper.h"
 
 namespace starrocks {
 
 TEST(ConstNullableCoreTest, ConstColumnSelectiveAndFilter) {
-    auto data = Int32Column::create();
-    data->append(7);
+    auto data = ColumnTestHelper::build_column<int32_t>({7});
 
     auto col = ConstColumn::create(data, 4);
     ASSERT_EQ(4, col->size());
@@ -42,10 +42,7 @@ TEST(ConstNullableCoreTest, ConstColumnSelectiveAndFilter) {
 }
 
 TEST(ConstNullableCoreTest, NullableSelectiveAndNullAccounting) {
-    auto data = Int32Column::create();
-    data->append(10);
-    data->append(20);
-    data->append(30);
+    auto data = ColumnTestHelper::build_column<int32_t>({10, 20, 30});
 
     auto nulls = NullColumn::create();
     nulls->append(0);

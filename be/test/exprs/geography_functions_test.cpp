@@ -48,6 +48,7 @@
 #include "geo/wkb.h"
 #include "gutil/compiler_util.h"
 #include "runtime/runtime_state.h"
+#include "testutil/column_test_helper.h"
 #include "types/geo_wkb.h"
 
 DECLARE_bool(s2debug);
@@ -175,11 +176,8 @@ TEST_F(geographyFunctionsTest, st_pointTest) {
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         Columns columns;
 
-        auto str_1 = DoubleColumn::create();
-        auto str_2 = DoubleColumn::create();
-
-        str_1->append(24.7);
-        str_2->append(56.7);
+        auto str_1 = ColumnTestHelper::build_column<double>({24.7});
+        auto str_2 = ColumnTestHelper::build_column<double>({56.7});
         columns.emplace_back(std::move(str_1));
         columns.emplace_back(std::move(str_2));
         ColumnPtr result = GeoFunctions::st_point(ctx.get(), columns).value();
@@ -196,11 +194,8 @@ TEST_F(geographyFunctionsTest, st_pointTest) {
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         Columns columns;
 
-        auto str_1 = DoubleColumn::create();
-        auto str_2 = DoubleColumn::create();
-
-        str_1->append(24.7);
-        str_2->append(56.7);
+        auto str_1 = ColumnTestHelper::build_column<double>({24.7});
+        auto str_2 = ColumnTestHelper::build_column<double>({56.7});
         columns.emplace_back(std::move(str_1));
         columns.emplace_back(std::move(str_2));
         ColumnPtr result = GeoFunctions::st_point(ctx.get(), columns).value();
@@ -257,15 +252,10 @@ TEST_F(geographyFunctionsTest, st_distance_sphereTest) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     Columns columns;
 
-    auto xlng = DoubleColumn::create();
-    auto xlat = DoubleColumn::create();
-    auto ylng = DoubleColumn::create();
-    auto ylat = DoubleColumn::create();
-
-    xlng->append(0.0);
-    xlat->append(0.0);
-    ylng->append(0.0);
-    ylat->append(0.0);
+    auto xlng = ColumnTestHelper::build_column<double>({0.0});
+    auto xlat = ColumnTestHelper::build_column<double>({0.0});
+    auto ylng = ColumnTestHelper::build_column<double>({0.0});
+    auto ylat = ColumnTestHelper::build_column<double>({0.0});
 
     columns.emplace_back(std::move(xlng));
     columns.emplace_back(std::move(xlat));
@@ -609,8 +599,7 @@ TEST_F(geographyFunctionsTest, nativeGeographyWktAndWkbRoundTrip) {
     auto geography = TypeDescriptor::create_geo_type(TYPE_GEOGRAPHY, descriptor);
     std::unique_ptr<FunctionContext> constructor(FunctionContext::create_test_context({TYPE_VARCHAR_DESC}, geography));
 
-    auto input = BinaryColumn::create();
-    input->append("GEOMETRYCOLLECTION (POINT EMPTY, LINESTRING (1 2, 3 4))");
+    auto input = ColumnTestHelper::build_column<Slice>({"GEOMETRYCOLLECTION (POINT EMPTY, LINESTRING (1 2, 3 4))"});
     auto native = GeoFunctions::st_geog_from_text(constructor.get(), {input}).value();
     ASSERT_FALSE(native->is_null(0));
 
@@ -888,11 +877,7 @@ TEST_F(geographyFunctionsTest, nativeGeographyRejectsInvalidInputAndSrid) {
     nulls->append(0);
     nulls->append(1);
     nulls->append(0);
-    auto srid = Int32Column::create();
-    srid->append(4326);
-    srid->append(3857);
-    srid->append(4326);
-    srid->append(4326);
+    auto srid = ColumnTestHelper::build_column<int32_t>({4326, 3857, 4326, 4326});
 
     auto result = GeoFunctions::st_geog_from_text(context.get(), {NullableColumn::create(input, nulls), srid}).value();
     EXPECT_TRUE(result->is_null(0));
@@ -1648,8 +1633,7 @@ TEST_F(geographyFunctionsTest, nativeGeometryNullInvalidAndCrsChecks) {
     EXPECT_TRUE(result->is_null(1));
     EXPECT_TRUE(result->is_null(2));
 
-    auto malformed_wkb = BinaryColumn::create();
-    malformed_wkb->append("not WKB");
+    auto malformed_wkb = ColumnTestHelper::build_column<Slice>({"not WKB"});
     auto one_crs = ColumnHelper::create_const_column<TYPE_VARCHAR>("EPSG:3857", 1);
     std::unique_ptr<FunctionContext> wkb_context(FunctionContext::create_test_context(
             {TypeDescriptor::create_varbinary_type(TypeDescriptor::MAX_VARCHAR_LENGTH), TYPE_VARCHAR_DESC},
@@ -1668,10 +1652,7 @@ TEST_F(geographyFunctionsTest, nativeGeometryNullInvalidAndCrsChecks) {
     ASSERT_FALSE(mismatch.ok());
     EXPECT_TRUE(mismatch.status().is_invalid_argument());
 
-    auto varying_crs = BinaryColumn::create();
-    varying_crs->append("EPSG:3857");
-    varying_crs->append("EPSG:3857");
-    varying_crs->append("EPSG:3857");
+    auto varying_crs = ColumnTestHelper::build_column<Slice>({"EPSG:3857", "EPSG:3857", "EPSG:3857"});
     auto nonconstant = GeoFunctions::st_geom_from_text(context.get(), {source, varying_crs});
     ASSERT_FALSE(nonconstant.ok());
     EXPECT_TRUE(nonconstant.status().is_invalid_argument());
@@ -4216,9 +4197,7 @@ TEST_F(geographyFunctionsTest, h3ScalarConstantOperandsRetainNullAndErrorPrecede
     ASSERT_EQ(E_SUCCESS, cellToParent(static_cast<H3Index>(valid), 2, &expected_parent));
     EXPECT_EQ(static_cast<int64_t>(expected_parent), ColumnViewer<TYPE_BIGINT>(*parent).value(1));
 
-    auto resolution_values = Int32Column::create();
-    resolution_values->append(16);
-    resolution_values->append(2);
+    auto resolution_values = ColumnTestHelper::build_column<int32_t>({16, 2});
     auto resolution_nulls = NullColumn::create();
     resolution_nulls->append(1);
     resolution_nulls->append(0);
@@ -4330,8 +4309,7 @@ TEST_F(geographyFunctionsTest, h3ParentConstantTargetPreservesEmptyAndInvalidCel
     ASSERT_TRUE(empty.ok()) << empty.status();
     EXPECT_EQ(0, (*empty)->size());
     for (int target : {-1, 0, 15, 16}) {
-        auto cells = Int64Column::create();
-        cells->append(0);
+        auto cells = ColumnTestHelper::build_column<int64_t>({0});
         auto invalid =
                 GeoFunctions::h3_to_parent(nullptr, {cells, ColumnHelper::create_const_column<TYPE_INT>(target, 1)});
         ASSERT_FALSE(invalid.ok());

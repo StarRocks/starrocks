@@ -17,6 +17,7 @@
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "gtest/gtest.h"
+#include "testutil/column_test_helper.h"
 
 namespace starrocks {
 
@@ -37,11 +38,7 @@ TEST(AppendWithMaskCoreTest, appendFixedLengthWithPositiveAndNegativeMask) {
 }
 
 TEST(AppendWithMaskCoreTest, appendBinaryColumnWithMask) {
-    auto src = BinaryColumn::create();
-    src->append("alpha");
-    src->append("beta");
-    src->append("gamma");
-    src->append("delta");
+    auto src = ColumnTestHelper::build_column<Slice>({"alpha", "beta", "gamma", "delta"});
     const uint8_t mask[] = {0, 1, 1, 0};
 
     auto dst = BinaryColumn::create();
