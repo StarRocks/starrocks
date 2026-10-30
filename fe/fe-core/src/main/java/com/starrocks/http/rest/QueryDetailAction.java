@@ -40,6 +40,7 @@ import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
+import com.starrocks.http.JsonArrayChunkedInput;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryDetail;
 import com.starrocks.qe.QueryDetailQueue;
@@ -50,6 +51,7 @@ import io.netty.handler.codec.http.HttpResponseStatus;
 import java.util.List;
 
 public class QueryDetailAction extends RestBaseAction {
+    private static final Gson GSON = new Gson();
 
     public QueryDetailAction(ActionController controller) {
         super(controller);
@@ -73,9 +75,10 @@ public class QueryDetailAction extends RestBaseAction {
         // The records carry profile text, which follows the query-profile access rule.
         List<QueryDetail> queryDetails = Authorizer.redactUnreadableProfiles(ConnectContext.get(),
                 QueryDetailQueue.getQueryDetailsAfterTime(eventTime));
-        Gson gson = new Gson();
-        String jsonString = gson.toJson(queryDetails);
-        response.getContent().append(jsonString);
-        sendResult(request, response);
+        // The window keeps every statement of the last query_detail_cache_time_nanosecond with its full text and
+        // profile, so its size is set by the workload: it is streamed record by record rather than built into one
+        // string, which held several copies of the window in heap at once.
+        writeChunkedResponse(request, response, HttpResponseStatus.OK,
+                new JsonArrayChunkedInput<>(GSON, QueryDetail.class, queryDetails));
     }
 }
