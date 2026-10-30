@@ -45,6 +45,9 @@ class DataTypeTransformer(Transformer):
     def CNAME(self, t: Token) -> str:
         return t.value
 
+    def QUOTED_NAME(self, t: Token) -> str:
+        return t.value[1:-1].replace("``", "`")
+
     def NUMBER(self, n: Token) -> int:
         return int(n)
 
@@ -63,6 +66,15 @@ class DataTypeTransformer(Transformer):
         # This ensures that TINYINT(1) from database is always reflected as BOOLEAN
         if type_name_lower == "tinyint" and args and len(args) == 1 and args[0] == 1:
             return self.type_map["boolean"]
+
+        # A nested LARGEINT is rendered as ``largeint(40)``: a display width,
+        # not a constructor argument.
+        if type_name_lower == "largeint":
+            args = None
+        # mysql.DOUBLE defaults to asdecimal=True, which rounds every value to
+        # ten decimal places; a reflected DOUBLE should return the stored float.
+        if type_name_lower == "double" and not args:
+            return self.type_map["double"](asdecimal=False)
 
         type_class = self.type_map.get(type_name_lower)
         # logger.debug(f"type_class: {type_class}")
