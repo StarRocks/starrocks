@@ -896,8 +896,8 @@ Status Aggregator::evaluate_agg_input_column(Chunk* chunk, std::vector<ExprConte
         ASSIGN_OR_RETURN(auto&& col, agg_expr_ctxs[j]->evaluate(chunk));
         // if first column is const, we have to unpack it. Most agg function only has one arg, and treat it as non-const column
         if (j == 0) {
-            _agg_input_columns[i][j] = ColumnHelper::materialize_const_column(
-                    agg_expr_ctxs[j]->root()->type(), chunk->num_rows(), std::move(col));
+            _agg_input_columns[i][j] = ColumnHelper::materialize_const_column(agg_expr_ctxs[j]->root()->type(),
+                                                                              chunk->num_rows(), std::move(col));
         } else {
             // if function has at least two argument, unpack const column selectively
             // for function like percentile_disc, the second args is const, do not unpack it
@@ -909,8 +909,8 @@ Status Aggregator::evaluate_agg_input_column(Chunk* chunk, std::vector<ExprConte
             if (agg_expr_ctxs[j]->root()->is_constant()) {
                 _agg_input_columns[i][j] = std::move(col);
             } else {
-                _agg_input_columns[i][j] = ColumnHelper::materialize_const_column(
-                        agg_expr_ctxs[j]->root()->type(), chunk->num_rows(), std::move(col));
+                _agg_input_columns[i][j] = ColumnHelper::materialize_const_column(agg_expr_ctxs[j]->root()->type(),
+                                                                                  chunk->num_rows(), std::move(col));
             }
         }
         _agg_input_raw_columns[i][j] = _agg_input_columns[i][j].get();

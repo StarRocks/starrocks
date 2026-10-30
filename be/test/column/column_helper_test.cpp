@@ -102,8 +102,8 @@ TEST_F(ColumnHelperTest, align_return_type) {
 
 TEST_F(ColumnHelperTest, materialize_const_column) {
     // A NULL literal is a Nullable(Int8) column; materializing it must give an all-NULL column of the given type.
-    auto null_col = ColumnHelper::materialize_const_column(TYPE_VARCHAR_DESC, 3,
-                                                           ColumnHelper::create_const_null_column(1));
+    auto null_col =
+            ColumnHelper::materialize_const_column(TYPE_VARCHAR_DESC, 3, ColumnHelper::create_const_null_column(1));
     ASSERT_FALSE(null_col->is_constant());
     ASSERT_FALSE(null_col->only_null());
     ASSERT_EQ(3, null_col->size());
