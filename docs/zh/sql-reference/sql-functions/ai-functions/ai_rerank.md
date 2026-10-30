@@ -22,7 +22,7 @@ ai_rerank(query, documents[, provider[, model[, options]]])
 | 参数 | 类型 | 说明 |
 | --- | --- | --- |
 | `query` | VARCHAR | 查询文本，可以是常量或列表达式。 |
-| `documents` | ARRAY&lt;VARCHAR&gt; | 保持原始顺序的候选文本，可以是常量或列表达式。 |
+| `documents` | `ARRAY<VARCHAR>` | 保持原始顺序的候选文本，可以是常量或列表达式。 |
 | `provider` | 常量 VARCHAR | 可选 Provider 名称；省略、空字符串或 SQL NULL 使用默认 `rerank` Provider。 |
 | `model` | 常量 VARCHAR | 可选模型；省略、空字符串或 SQL NULL 使用 Provider 的默认模型。 |
 | `options` | 常量 JSON | 可选 JSON 对象；省略、`{}` 或 SQL NULL 表示没有额外选项。 |

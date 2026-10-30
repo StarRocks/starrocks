@@ -22,7 +22,7 @@ Use either positional arguments or named arguments (`argument_name => value`) wi
 | Argument | Type | Description |
 | --- | --- | --- |
 | `query` | VARCHAR | Query text; a constant or column expression. |
-| `documents` | ARRAY&lt;VARCHAR&gt; | Candidate text in its original order; a constant or column expression. |
+| `documents` | `ARRAY<VARCHAR>` | Candidate text in its original order; a constant or column expression. |
 | `provider` | Constant VARCHAR | Optional Provider name. Omitted, empty, or SQL NULL selects the default `rerank` Provider. |
 | `model` | Constant VARCHAR | Optional model override. Omitted, empty, or SQL NULL uses the Provider's default model. |
 | `options` | Constant JSON | Optional JSON object. Omitted, `{}`, or SQL NULL passes no extra options. |

@@ -22,7 +22,7 @@ ai_rerank(query, documents[, provider[, model[, options]]])
 | 引数 | 型 | 説明 |
 | --- | --- | --- |
 | `query` | VARCHAR | クエリのテキスト。定数または列の式を指定できます。 |
-| `documents` | ARRAY&lt;VARCHAR&gt; | 元の順序の候補テキスト。定数または列の式を指定できます。 |
+| `documents` | `ARRAY<VARCHAR>` | 元の順序の候補テキスト。定数または列の式を指定できます。 |
 | `provider` | 定数 VARCHAR | 省略、空文字列、SQL NULL はデフォルトの `rerank` Provider を使用します。 |
 | `model` | 定数 VARCHAR | 省略、空文字列、SQL NULL は Provider のデフォルトモデルを使用します。 |
 | `options` | 定数 JSON | オプションの JSON オブジェクト。省略、`{}`、SQL NULL は追加オプションなしを意味します。 |
