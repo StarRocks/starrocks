@@ -198,18 +198,7 @@ TEST_F(ArrayFunctionsTest, array_length) {
                 TYPE_ARRAY_VARCHAR_DESC, true, {{}, NullArrayRow{}, {std::nullopt}, {"a"}, {"a", "b"}});
 
         auto result = ArrayFunctions::array_length(nullptr, {c}).value();
-        EXPECT_EQ(5, result->size());
-
-        ASSERT_FALSE(result->get(0).is_null());
-        ASSERT_TRUE(result->get(1).is_null());
-        ASSERT_FALSE(result->get(2).is_null());
-        ASSERT_FALSE(result->get(3).is_null());
-        ASSERT_FALSE(result->get(4).is_null());
-
-        EXPECT_EQ(0, result->get(0).get_int32());
-        EXPECT_EQ(1, result->get(2).get_int32());
-        EXPECT_EQ(1, result->get(3).get_int32());
-        EXPECT_EQ(2, result->get(4).get_int32());
+        ASSERT_EQ("[0, NULL, 1, 1, 2]", result->debug_string());
     }
 
     // []
@@ -395,11 +384,7 @@ TEST_F(ArrayFunctionsTest, array_contains_empty_array) {
         target->resize(4);
 
         auto result = ArrayFunctions::array_contains_specific<TYPE_INT>(nullptr, {array, target}).value();
-        EXPECT_EQ(4, result->size());
-        EXPECT_EQ(0, result->get(0).get_int8());
-        EXPECT_EQ(0, result->get(1).get_int8());
-        EXPECT_EQ(0, result->get(2).get_int8());
-        EXPECT_EQ(0, result->get(3).get_int8());
+        EXPECT_EQ("[0, 0, 0, 0]", result->debug_string());
     }
     // multiple lines with different target:
     //  array_contains([], 1);
@@ -413,11 +398,7 @@ TEST_F(ArrayFunctionsTest, array_contains_empty_array) {
         auto target = ColumnTestHelper::build_nullable_column<int32_t>({1, 2, 0, 3}, {0, 0, 1, 0});
 
         auto result = ArrayFunctions::array_contains_specific<TYPE_INT>(nullptr, {array, target}).value();
-        EXPECT_EQ(4, result->size());
-        EXPECT_EQ(0, result->get(0).get_int8());
-        EXPECT_EQ(0, result->get(1).get_int8());
-        EXPECT_EQ(0, result->get(2).get_int8());
-        EXPECT_EQ(0, result->get(3).get_int8());
+        EXPECT_EQ("[0, 0, 0, 0]", result->debug_string());
     }
     // multiple lines with Only-NULL target:
     //  array_contains([], NULL);
@@ -432,11 +413,7 @@ TEST_F(ArrayFunctionsTest, array_contains_empty_array) {
         target->as_mutable_ptr()->resize(4);
 
         auto result = ArrayFunctions::array_contains_specific<TYPE_INT>(nullptr, {array, target}).value();
-        EXPECT_EQ(4, result->size());
-        EXPECT_EQ(0, result->get(0).get_int8());
-        EXPECT_EQ(0, result->get(1).get_int8());
-        EXPECT_EQ(0, result->get(2).get_int8());
-        EXPECT_EQ(0, result->get(3).get_int8());
+        EXPECT_EQ("[0, 0, 0, 0]", result->debug_string());
 
         array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR_DESC, false);
         array->append_datum(Datum(DatumArray{}));
@@ -444,11 +421,7 @@ TEST_F(ArrayFunctionsTest, array_contains_empty_array) {
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
         result = ArrayFunctions::array_contains_specific<TYPE_VARCHAR>(nullptr, {array, target}).value();
-        EXPECT_EQ(4, result->size());
-        EXPECT_EQ(0, result->get(0).get_int8());
-        EXPECT_EQ(0, result->get(1).get_int8());
-        EXPECT_EQ(0, result->get(2).get_int8());
-        EXPECT_EQ(0, result->get(3).get_int8());
+        EXPECT_EQ("[0, 0, 0, 0]", result->debug_string());
 
         array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_INT_DESC, false);
         array->append_datum(Datum(DatumArray{}));
@@ -456,11 +429,7 @@ TEST_F(ArrayFunctionsTest, array_contains_empty_array) {
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
         result = ArrayFunctions::array_contains_generic(nullptr, {array, target}).value();
-        EXPECT_EQ(4, result->size());
-        EXPECT_EQ(0, result->get(0).get_int8());
-        EXPECT_EQ(0, result->get(1).get_int8());
-        EXPECT_EQ(0, result->get(2).get_int8());
-        EXPECT_EQ(0, result->get(3).get_int8());
+        EXPECT_EQ("[0, 0, 0, 0]", result->debug_string());
     }
 }
 
@@ -499,15 +468,7 @@ TEST_F(ArrayFunctionsTest, array_contains_no_null) {
         target->append_datum(Datum{(int8_t)1});
 
         auto result = ArrayFunctions::array_contains_specific<TYPE_BOOLEAN>(nullptr, {array, target}).value();
-        EXPECT_EQ(8, result->size());
-        EXPECT_EQ(0, result->get(0).get_int8());
-        EXPECT_EQ(0, result->get(1).get_int8());
-        EXPECT_EQ(1, result->get(2).get_int8());
-        EXPECT_EQ(0, result->get(3).get_int8());
-        EXPECT_EQ(0, result->get(4).get_int8());
-        EXPECT_EQ(1, result->get(5).get_int8());
-        EXPECT_EQ(1, result->get(6).get_int8());
-        EXPECT_EQ(1, result->get(7).get_int8());
+        EXPECT_EQ("[0, 0, 1, 0, 0, 1, 1, 1]", result->debug_string());
     }
     // array_contains([], 3) : 0
     // array_contains([2], 3) : 0
@@ -523,12 +484,7 @@ TEST_F(ArrayFunctionsTest, array_contains_no_null) {
         target->resize(5);
 
         auto result = ArrayFunctions::array_contains_specific<TYPE_INT>(nullptr, {array, target}).value();
-        EXPECT_EQ(5, result->size());
-        EXPECT_EQ(0, result->get(0).get_int8());
-        EXPECT_EQ(0, result->get(1).get_int8());
-        EXPECT_EQ(1, result->get(2).get_int8());
-        EXPECT_EQ(1, result->get(3).get_int8());
-        EXPECT_EQ(1, result->get(4).get_int8());
+        EXPECT_EQ("[0, 0, 1, 1, 1]", result->debug_string());
     }
     // array_contains([], []) : 0
     // array_contains([[]], []) : 1
@@ -558,17 +514,7 @@ TEST_F(ArrayFunctionsTest, array_contains_no_null) {
                 {{}, {}, {}, {"d"}, {"d", "o"}, {"o", "d"}, {"r"}, {"ri"}, {"r", "i"}, {"i", "s"}});
 
         auto result = ArrayFunctions::array_contains_generic(nullptr, {array, target}).value();
-        EXPECT_EQ(10, result->size());
-        EXPECT_EQ(0, result->get(0).get_int8());
-        EXPECT_EQ(1, result->get(1).get_int8());
-        EXPECT_EQ(0, result->get(2).get_int8());
-        EXPECT_EQ(0, result->get(3).get_int8());
-        EXPECT_EQ(1, result->get(4).get_int8());
-        EXPECT_EQ(0, result->get(5).get_int8());
-        EXPECT_EQ(1, result->get(6).get_int8());
-        EXPECT_EQ(0, result->get(7).get_int8());
-        EXPECT_EQ(0, result->get(8).get_int8());
-        EXPECT_EQ(1, result->get(9).get_int8());
+        EXPECT_EQ("[0, 1, 0, 0, 1, 0, 1, 0, 0, 1]", result->debug_string());
     }
 }
 
@@ -587,10 +533,7 @@ TEST_F(ArrayFunctionsTest, array_contains_has_null_element) {
         target->append_datum(Datum{"abc"});
 
         auto result = ArrayFunctions::array_contains_specific<TYPE_VARCHAR>(nullptr, {array, target}).value();
-        EXPECT_EQ(3, result->size());
-        EXPECT_EQ(0, result->get(0).get_int8());
-        EXPECT_EQ(1, result->get(1).get_int8());
-        EXPECT_EQ(1, result->get(2).get_int8());
+        EXPECT_EQ("[0, 1, 1]", result->debug_string());
     }
 }
 
@@ -618,10 +561,7 @@ TEST_F(ArrayFunctionsTest, array_contains_has_null_target) {
         auto target = ColumnTestHelper::build_nullable_column<int8_t>({2, 4, 0}, {0, 0, 1});
 
         auto result = ArrayFunctions::array_contains_specific<TYPE_TINYINT>(nullptr, {array, target}).value();
-        EXPECT_EQ(3, result->size());
-        EXPECT_EQ(1, result->get(0).get_int8());
-        EXPECT_EQ(0, result->get(1).get_int8());
-        EXPECT_EQ(0, result->get(2).get_int8());
+        EXPECT_EQ("[1, 0, 0]", result->debug_string());
     }
 }
 
@@ -637,9 +577,7 @@ TEST_F(ArrayFunctionsTest, array_contains_has_null_element_and_target) {
         MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true, true, 0);
 
         auto result = ArrayFunctions::array_contains_specific<TYPE_VARCHAR>(nullptr, {array, target}).value();
-        EXPECT_EQ(2, result->size());
-        EXPECT_EQ(1, result->get(0).get_int8());
-        EXPECT_EQ(1, result->get(1).get_int8());
+        EXPECT_EQ("[1, 1]", result->debug_string());
     }
     // array_contains([NULL], NULL)
     // array_contains([NULL, [1,2]], NULL)
@@ -662,12 +600,7 @@ TEST_F(ArrayFunctionsTest, array_contains_has_null_element_and_target) {
         target->append_datum(Datum());
 
         auto result = ArrayFunctions::array_contains_generic(nullptr, {array, target}).value();
-        EXPECT_EQ(5, result->size());
-        EXPECT_EQ(1, result->get(0).get_int8());
-        EXPECT_EQ(1, result->get(1).get_int8());
-        EXPECT_EQ(1, result->get(2).get_int8());
-        EXPECT_EQ(1, result->get(3).get_int8());
-        EXPECT_EQ(1, result->get(4).get_int8());
+        EXPECT_EQ("[1, 1, 1, 1, 1]", result->debug_string());
     }
 }
 
@@ -686,10 +619,7 @@ TEST_F(ArrayFunctionsTest, array_contains_nullable_array) {
         target->append_datum(Datum("c"));
 
         auto result = ArrayFunctions::array_contains_specific<TYPE_VARCHAR>(nullptr, {array, target}).value();
-        EXPECT_EQ(3, result->size());
-        EXPECT_EQ(0, result->get(0).get_int8());
-        EXPECT_TRUE(result->get(1).is_null());
-        EXPECT_EQ(1, result->get(2).get_int8());
+        EXPECT_EQ("[0, NULL, 1]", result->debug_string());
     }
     // array_contains([["a"], ["b"]], ["c"])
     // array_contains(NULL, ["c"])
@@ -706,10 +636,7 @@ TEST_F(ArrayFunctionsTest, array_contains_nullable_array) {
         target->append_datum(DatumArray{"c"});
 
         auto result = ArrayFunctions::array_contains_generic(nullptr, {array, target}).value();
-        EXPECT_EQ(3, result->size());
-        EXPECT_EQ(0, result->get(0).get_int8());
-        EXPECT_TRUE(result->get(1).is_null());
-        EXPECT_EQ(1, result->get(2).get_int8());
+        EXPECT_EQ("[0, NULL, 1]", result->debug_string());
     }
     // array_contains(NULL, NULL)
     // array_contains(NULL, ["a"])
@@ -771,17 +698,7 @@ TEST_F(ArrayFunctionsTest, array_contains_all) {
                                                                                {"a", "c"}});
         FunctionContext ctx;
         auto result = ArrayFunctions::array_contains_all_specific<TYPE_VARCHAR>(&ctx, {array, target}).value();
-        EXPECT_EQ(10, result->size());
-        EXPECT_EQ(1, result->get(0).get_int8());
-        EXPECT_TRUE(result->get(1).is_null());
-        EXPECT_TRUE(result->get(2).is_null());
-        EXPECT_TRUE(result->get(3).is_null());
-        EXPECT_EQ(1, result->get(4).get_int8());
-        EXPECT_TRUE(result->get(5).is_null());
-        EXPECT_EQ(1, result->get(6).get_int8());
-        EXPECT_EQ(0, result->get(7).get_int8());
-        EXPECT_EQ(0, result->get(8).get_int8());
-        EXPECT_EQ(1, result->get(9).get_int8());
+        EXPECT_EQ("[1, NULL, NULL, NULL, 1, NULL, 1, 0, 0, 1]", result->debug_string());
     }
     // array_contains_all([["a"], ["b"]], [["c"]])
     // array_contains_all(NULL, [["c"]])
@@ -798,10 +715,7 @@ TEST_F(ArrayFunctionsTest, array_contains_all) {
         target->append_datum(DatumArray{Datum(DatumArray{"a", "b"}), Datum()});
 
         auto result = ArrayFunctions::array_contains_all(nullptr, {array, target}).value();
-        EXPECT_EQ(3, result->size());
-        EXPECT_EQ(0, result->get(0).get_int8());
-        EXPECT_TRUE(result->get(1).is_null());
-        EXPECT_EQ(1, result->get(2).get_int8());
+        EXPECT_EQ("[0, NULL, 1]", result->debug_string());
     }
 }
 
@@ -868,11 +782,7 @@ TEST_F(ArrayFunctionsTest, array_position_empty_array) {
         target->resize(4);
 
         auto result = ArrayFunctions::array_position_specific<TYPE_INT>(nullptr, {array, target}).value();
-        EXPECT_EQ(4, result->size());
-        EXPECT_EQ(0, result->get(0).get_int32());
-        EXPECT_EQ(0, result->get(1).get_int32());
-        EXPECT_EQ(0, result->get(2).get_int32());
-        EXPECT_EQ(0, result->get(3).get_int32());
+        EXPECT_EQ("[0, 0, 0, 0]", result->debug_string());
     }
     // multiple lines with different target:
     //  array_position([], 1): 0;
@@ -886,11 +796,7 @@ TEST_F(ArrayFunctionsTest, array_position_empty_array) {
         auto target = ColumnTestHelper::build_nullable_column<int32_t>({1, 2, 0, 3}, {0, 0, 1, 0});
 
         auto result = ArrayFunctions::array_position_specific<TYPE_INT>(nullptr, {array, target}).value();
-        EXPECT_EQ(4, result->size());
-        EXPECT_EQ(0, result->get(0).get_int32());
-        EXPECT_EQ(0, result->get(1).get_int32());
-        EXPECT_EQ(0, result->get(2).get_int32());
-        EXPECT_EQ(0, result->get(3).get_int32());
+        EXPECT_EQ("[0, 0, 0, 0]", result->debug_string());
     }
     // multiple lines with Only-NULL target:
     //  array_position([], NULL): 0;
@@ -905,11 +811,7 @@ TEST_F(ArrayFunctionsTest, array_position_empty_array) {
         target->as_mutable_ptr()->resize(4);
 
         auto result = ArrayFunctions::array_position_specific<TYPE_INT>(nullptr, {array, target}).value();
-        EXPECT_EQ(4, result->size());
-        EXPECT_EQ(0, result->get(0).get_int32());
-        EXPECT_EQ(0, result->get(1).get_int32());
-        EXPECT_EQ(0, result->get(2).get_int32());
-        EXPECT_EQ(0, result->get(3).get_int32());
+        EXPECT_EQ("[0, 0, 0, 0]", result->debug_string());
 
         array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR_DESC, false);
         array->append_datum(Datum(DatumArray{}));
@@ -917,11 +819,7 @@ TEST_F(ArrayFunctionsTest, array_position_empty_array) {
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
         result = ArrayFunctions::array_position_generic(nullptr, {array, target}).value();
-        EXPECT_EQ(4, result->size());
-        EXPECT_EQ(0, result->get(0).get_int32());
-        EXPECT_EQ(0, result->get(1).get_int32());
-        EXPECT_EQ(0, result->get(2).get_int32());
-        EXPECT_EQ(0, result->get(3).get_int32());
+        EXPECT_EQ("[0, 0, 0, 0]", result->debug_string());
 
         array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_INT_DESC, false);
         array->append_datum(Datum(DatumArray{}));
@@ -929,11 +827,7 @@ TEST_F(ArrayFunctionsTest, array_position_empty_array) {
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
         result = ArrayFunctions::array_position_generic(nullptr, {array, target}).value();
-        EXPECT_EQ(4, result->size());
-        EXPECT_EQ(0, result->get(0).get_int32());
-        EXPECT_EQ(0, result->get(1).get_int32());
-        EXPECT_EQ(0, result->get(2).get_int32());
-        EXPECT_EQ(0, result->get(3).get_int32());
+        EXPECT_EQ("[0, 0, 0, 0]", result->debug_string());
     }
 }
 
@@ -972,15 +866,7 @@ TEST_F(ArrayFunctionsTest, array_position_no_null) {
         target->append_datum(Datum{(int8_t)1});
 
         auto result = ArrayFunctions::array_position_specific<TYPE_BOOLEAN>(nullptr, {array, target}).value();
-        EXPECT_EQ(8, result->size());
-        EXPECT_EQ(0, result->get(0).get_int32());
-        EXPECT_EQ(0, result->get(1).get_int32());
-        EXPECT_EQ(1, result->get(2).get_int32());
-        EXPECT_EQ(0, result->get(3).get_int32());
-        EXPECT_EQ(0, result->get(4).get_int32());
-        EXPECT_EQ(1, result->get(5).get_int32());
-        EXPECT_EQ(2, result->get(6).get_int32());
-        EXPECT_EQ(1, result->get(7).get_int32());
+        EXPECT_EQ("[0, 0, 1, 0, 0, 1, 2, 1]", result->debug_string());
     }
     // array_position([], 3) : 0
     // array_position([2], 3) : 0
@@ -996,12 +882,7 @@ TEST_F(ArrayFunctionsTest, array_position_no_null) {
         target->resize(5);
 
         auto result = ArrayFunctions::array_position_specific<TYPE_INT>(nullptr, {array, target}).value();
-        EXPECT_EQ(5, result->size());
-        EXPECT_EQ(0, result->get(0).get_int32());
-        EXPECT_EQ(0, result->get(1).get_int32());
-        EXPECT_EQ(3, result->get(2).get_int32());
-        EXPECT_EQ(1, result->get(3).get_int32());
-        EXPECT_EQ(3, result->get(4).get_int32());
+        EXPECT_EQ("[0, 0, 3, 1, 3]", result->debug_string());
     }
     // array_position([], []) : 0
     // array_position([[]], []) : 1
@@ -1031,17 +912,7 @@ TEST_F(ArrayFunctionsTest, array_position_no_null) {
                 {{}, {}, {}, {"d"}, {"d", "o"}, {"o", "d"}, {"r"}, {"ri"}, {"r", "i"}, {"i", "s"}});
 
         auto result = ArrayFunctions::array_position_generic(nullptr, {array, target}).value();
-        EXPECT_EQ(10, result->size());
-        EXPECT_EQ(0, result->get(0).get_int32());
-        EXPECT_EQ(1, result->get(1).get_int32());
-        EXPECT_EQ(0, result->get(2).get_int32());
-        EXPECT_EQ(0, result->get(3).get_int32());
-        EXPECT_EQ(1, result->get(4).get_int32());
-        EXPECT_EQ(0, result->get(5).get_int32());
-        EXPECT_EQ(2, result->get(6).get_int32());
-        EXPECT_EQ(0, result->get(7).get_int32());
-        EXPECT_EQ(0, result->get(8).get_int32());
-        EXPECT_EQ(3, result->get(9).get_int32());
+        EXPECT_EQ("[0, 1, 0, 0, 1, 0, 2, 0, 0, 3]", result->debug_string());
     }
 }
 
@@ -1060,10 +931,7 @@ TEST_F(ArrayFunctionsTest, array_position_has_null_element) {
         target->append_datum(Datum{"abc"});
 
         auto result = ArrayFunctions::array_position_specific<TYPE_VARCHAR>(nullptr, {array, target}).value();
-        EXPECT_EQ(3, result->size());
-        EXPECT_EQ(0, result->get(0).get_int32());
-        EXPECT_EQ(1, result->get(1).get_int32());
-        EXPECT_EQ(2, result->get(2).get_int32());
+        EXPECT_EQ("[0, 1, 2]", result->debug_string());
     }
 }
 
@@ -1091,10 +959,7 @@ TEST_F(ArrayFunctionsTest, array_position_has_null_target) {
         auto target = ColumnTestHelper::build_nullable_column<int8_t>({2, 4, 0}, {0, 0, 1});
 
         auto result = ArrayFunctions::array_position_specific<TYPE_TINYINT>(nullptr, {array, target}).value();
-        EXPECT_EQ(3, result->size());
-        EXPECT_EQ(2, result->get(0).get_int32());
-        EXPECT_EQ(0, result->get(1).get_int32());
-        EXPECT_EQ(0, result->get(2).get_int32());
+        EXPECT_EQ("[2, 0, 0]", result->debug_string());
     }
 }
 
@@ -1110,9 +975,7 @@ TEST_F(ArrayFunctionsTest, array_position_has_null_element_and_target) {
         MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true, true, 1);
 
         auto result = ArrayFunctions::array_position_specific<TYPE_VARCHAR>(nullptr, {array, target}).value();
-        EXPECT_EQ(2, result->size());
-        EXPECT_EQ(1, result->get(0).get_int32());
-        EXPECT_EQ(1, result->get(1).get_int32());
+        EXPECT_EQ("[1, 1]", result->debug_string());
     }
     // array_position([NULL], NULL): 1
     // array_position([NULL, [1,2]], NULL): 1
@@ -1135,12 +998,7 @@ TEST_F(ArrayFunctionsTest, array_position_has_null_element_and_target) {
         target->append_datum(Datum());
 
         auto result = ArrayFunctions::array_position_generic(nullptr, {array, target}).value();
-        EXPECT_EQ(5, result->size());
-        EXPECT_EQ(1, result->get(0).get_int32());
-        EXPECT_EQ(1, result->get(1).get_int32());
-        EXPECT_EQ(2, result->get(2).get_int32());
-        EXPECT_EQ(1, result->get(3).get_int32());
-        EXPECT_EQ(2, result->get(4).get_int32());
+        EXPECT_EQ("[1, 1, 2, 1, 2]", result->debug_string());
     }
 }
 
@@ -1155,9 +1013,7 @@ TEST_F(ArrayFunctionsTest, array_position_has_null_element_and_target_and_check_
         MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true, true, 0);
 
         auto result = ArrayFunctions::array_position_specific<TYPE_VARCHAR>(nullptr, {array, target}).value();
-        EXPECT_EQ(2, result->size());
-        EXPECT_EQ(1, result->get(0).get_int32());
-        EXPECT_EQ(1, result->get(1).get_int32());
+        EXPECT_EQ("[1, 1]", result->debug_string());
     }
     // array_position([NULL], NULL): 1
     // array_position([NULL, [1,2]], NULL): 1
@@ -1181,12 +1037,7 @@ TEST_F(ArrayFunctionsTest, array_position_has_null_element_and_target_and_check_
 
         auto result = ColumnHelper::cast_to<TYPE_INT>(
                 ArrayFunctions::array_position_generic(nullptr, {array, target}).value());
-        EXPECT_EQ(5, result->size());
-        EXPECT_EQ(1, result->get(0).get_int32());
-        EXPECT_EQ(1, result->get(1).get_int32());
-        EXPECT_EQ(2, result->get(2).get_int32());
-        EXPECT_EQ(1, result->get(3).get_int32());
-        EXPECT_EQ(2, result->get(4).get_int32());
+        EXPECT_EQ("[1, 1, 2, 1, 2]", result->debug_string());
     }
 }
 
@@ -1205,10 +1056,7 @@ TEST_F(ArrayFunctionsTest, array_position_nullable_array) {
         target->append_datum(Datum("c"));
 
         auto result = ArrayFunctions::array_position_specific<TYPE_VARCHAR>(nullptr, {array, target}).value();
-        EXPECT_EQ(3, result->size());
-        EXPECT_EQ(0, result->get(0).get_int32());
-        EXPECT_TRUE(result->get(1).is_null());
-        EXPECT_EQ(3, result->get(2).get_int32());
+        EXPECT_EQ("[0, NULL, 3]", result->debug_string());
     }
     // array_position([["a"], ["b"]], ["c"]): 0
     // array_position(NULL, ["c"]): null
@@ -1225,10 +1073,7 @@ TEST_F(ArrayFunctionsTest, array_position_nullable_array) {
         target->append_datum(DatumArray{"c"});
 
         auto result = ArrayFunctions::array_position_generic(nullptr, {array, target}).value();
-        EXPECT_EQ(3, result->size());
-        EXPECT_EQ(0, result->get(0).get_int32());
-        EXPECT_TRUE(result->get(1).is_null());
-        EXPECT_EQ(2, result->get(2).get_int32());
+        EXPECT_EQ("[0, NULL, 2]", result->debug_string());
     }
     // array_position(NULL, NULL): null
     // array_position(NULL, ["a"]): null
@@ -1867,22 +1712,7 @@ TEST_F(ArrayFunctionsTest, array_remove_nullable_array) {
         target->append_datum(DatumArray{"c"});
 
         auto result = ArrayFunctions::array_remove(nullptr, {array, target}).value();
-        EXPECT_EQ(3, result->size());
-
-        // 1st row: array_remove([["a"], ["b"]], ["c"]) -> [["a"], ["b"]]
-        DatumArray row = result->get(0).get_array();
-        EXPECT_EQ(2, row.size());
-        EXPECT_EQ("a", row[0].get_array()[0].get_slice());
-        EXPECT_EQ("b", row[1].get_array()[0].get_slice());
-
-        // 2nd row: array_remove(NULL, ["c"]) -> NULL
-        EXPECT_TRUE(result->get(1).is_null());
-
-        // 3rd row: array_remove([["a", "b"], ["c"]])   -> [["a", "b"]]
-        row = result->get(0).get_array();
-        EXPECT_EQ(2, row.size());
-        EXPECT_EQ("a", row[0].get_array()[0].get_slice());
-        EXPECT_EQ("b", row[1].get_array()[0].get_slice());
+        EXPECT_EQ("[[['a'],['b']], NULL, [['a','b']]]", result->debug_string());
     }
 
     // array_remove(NULL, NULL)  -> NULL
@@ -2053,11 +1883,7 @@ TEST_F(ArrayFunctionsTest, array_sum_empty_array) {
                 ColumnTestHelper::build_array_column<int32_t>(TYPE_ARRAY_INT_DESC, false, {{}, {}, {}, {}});
 
         auto result = ArrayFunctions::array_sum<TYPE_INT>(nullptr, {array}).value();
-        EXPECT_EQ(4, result->size());
-        EXPECT_TRUE(result->is_null(0));
-        EXPECT_TRUE(result->is_null(1));
-        EXPECT_TRUE(result->is_null(2));
-        EXPECT_TRUE(result->is_null(3));
+        EXPECT_EQ("[NULL, NULL, NULL, NULL]", result->debug_string());
     }
 
     {
@@ -2065,11 +1891,7 @@ TEST_F(ArrayFunctionsTest, array_sum_empty_array) {
                 ColumnTestHelper::build_array_column<int8_t>(TYPE_ARRAY_TINYINT_DESC, false, {{}, {}, {}, {}});
 
         auto result = ArrayFunctions::array_sum<TYPE_TINYINT>(nullptr, {array}).value();
-        EXPECT_EQ(4, result->size());
-        EXPECT_TRUE(result->is_null(0));
-        EXPECT_TRUE(result->is_null(1));
-        EXPECT_TRUE(result->is_null(2));
-        EXPECT_TRUE(result->is_null(3));
+        EXPECT_EQ("[NULL, NULL, NULL, NULL]", result->debug_string());
     }
 
     {
@@ -2077,11 +1899,7 @@ TEST_F(ArrayFunctionsTest, array_sum_empty_array) {
                 ColumnTestHelper::build_array_column<int32_t>(TYPE_ARRAY_INT_DESC, false, {{}, {}, {}, {}});
 
         auto result = ArrayFunctions::array_sum<TYPE_INT>(nullptr, {array}).value();
-        EXPECT_EQ(4, result->size());
-        EXPECT_TRUE(result->is_null(0));
-        EXPECT_TRUE(result->is_null(1));
-        EXPECT_TRUE(result->is_null(2));
-        EXPECT_TRUE(result->is_null(3));
+        EXPECT_EQ("[NULL, NULL, NULL, NULL]", result->debug_string());
 
         array = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN_DESC, false);
         array->append_datum(Datum(DatumArray{}));
@@ -2090,11 +1908,7 @@ TEST_F(ArrayFunctionsTest, array_sum_empty_array) {
         array->append_datum(Datum(DatumArray{}));
 
         result = ArrayFunctions::array_sum<TYPE_BOOLEAN>(nullptr, {array}).value();
-        EXPECT_EQ(4, result->size());
-        EXPECT_TRUE(result->is_null(0));
-        EXPECT_TRUE(result->is_null(1));
-        EXPECT_TRUE(result->is_null(2));
-        EXPECT_TRUE(result->is_null(3));
+        EXPECT_EQ("[NULL, NULL, NULL, NULL]", result->debug_string());
     }
 }
 
@@ -2120,11 +1934,7 @@ TEST_F(ArrayFunctionsTest, array_avg_empty_array) {
                 ColumnTestHelper::build_array_column<int32_t>(TYPE_ARRAY_INT_DESC, false, {{}, {}, {}, {}});
 
         auto result = ArrayFunctions::array_avg<TYPE_INT>(nullptr, {array}).value();
-        EXPECT_EQ(4, result->size());
-        EXPECT_TRUE(result->is_null(0));
-        EXPECT_TRUE(result->is_null(1));
-        EXPECT_TRUE(result->is_null(2));
-        EXPECT_TRUE(result->is_null(3));
+        EXPECT_EQ("[NULL, NULL, NULL, NULL]", result->debug_string());
     }
 
     {
@@ -2132,11 +1942,7 @@ TEST_F(ArrayFunctionsTest, array_avg_empty_array) {
                 ColumnTestHelper::build_array_column<int8_t>(TYPE_ARRAY_TINYINT_DESC, false, {{}, {}, {}, {}});
 
         auto result = ArrayFunctions::array_avg<TYPE_TINYINT>(nullptr, {array}).value();
-        EXPECT_EQ(4, result->size());
-        EXPECT_TRUE(result->is_null(0));
-        EXPECT_TRUE(result->is_null(1));
-        EXPECT_TRUE(result->is_null(2));
-        EXPECT_TRUE(result->is_null(3));
+        EXPECT_EQ("[NULL, NULL, NULL, NULL]", result->debug_string());
     }
 
     {
@@ -2144,11 +1950,7 @@ TEST_F(ArrayFunctionsTest, array_avg_empty_array) {
                 ColumnTestHelper::build_array_column<int32_t>(TYPE_ARRAY_INT_DESC, false, {{}, {}, {}, {}});
 
         auto result = ArrayFunctions::array_avg<TYPE_INT>(nullptr, {array}).value();
-        EXPECT_EQ(4, result->size());
-        EXPECT_TRUE(result->is_null(0));
-        EXPECT_TRUE(result->is_null(1));
-        EXPECT_TRUE(result->is_null(2));
-        EXPECT_TRUE(result->is_null(3));
+        EXPECT_EQ("[NULL, NULL, NULL, NULL]", result->debug_string());
 
         array = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN_DESC, false);
         array->append_datum(Datum(DatumArray{}));
@@ -2157,11 +1959,7 @@ TEST_F(ArrayFunctionsTest, array_avg_empty_array) {
         array->append_datum(Datum(DatumArray{}));
 
         result = ArrayFunctions::array_avg<TYPE_BOOLEAN>(nullptr, {array}).value();
-        EXPECT_EQ(4, result->size());
-        EXPECT_TRUE(result->is_null(0));
-        EXPECT_TRUE(result->is_null(1));
-        EXPECT_TRUE(result->is_null(2));
-        EXPECT_TRUE(result->is_null(3));
+        EXPECT_EQ("[NULL, NULL, NULL, NULL]", result->debug_string());
     }
 }
 
@@ -2187,11 +1985,7 @@ TEST_F(ArrayFunctionsTest, array_min_empty_array) {
                 ColumnTestHelper::build_array_column<int32_t>(TYPE_ARRAY_INT_DESC, false, {{}, {}, {}, {}});
 
         auto result = ArrayFunctions::array_min<TYPE_INT>(nullptr, {array}).value();
-        EXPECT_EQ(4, result->size());
-        EXPECT_TRUE(result->is_null(0));
-        EXPECT_TRUE(result->is_null(1));
-        EXPECT_TRUE(result->is_null(2));
-        EXPECT_TRUE(result->is_null(3));
+        EXPECT_EQ("[NULL, NULL, NULL, NULL]", result->debug_string());
     }
 
     {
@@ -2199,11 +1993,7 @@ TEST_F(ArrayFunctionsTest, array_min_empty_array) {
                 ColumnTestHelper::build_array_column<int8_t>(TYPE_ARRAY_TINYINT_DESC, false, {{}, {}, {}, {}});
 
         auto result = ArrayFunctions::array_min<TYPE_TINYINT>(nullptr, {array}).value();
-        EXPECT_EQ(4, result->size());
-        EXPECT_TRUE(result->is_null(0));
-        EXPECT_TRUE(result->is_null(1));
-        EXPECT_TRUE(result->is_null(2));
-        EXPECT_TRUE(result->is_null(3));
+        EXPECT_EQ("[NULL, NULL, NULL, NULL]", result->debug_string());
     }
 
     {
@@ -2211,11 +2001,7 @@ TEST_F(ArrayFunctionsTest, array_min_empty_array) {
                 ColumnTestHelper::build_array_column<int32_t>(TYPE_ARRAY_INT_DESC, false, {{}, {}, {}, {}});
 
         auto result = ArrayFunctions::array_min<TYPE_INT>(nullptr, {array}).value();
-        EXPECT_EQ(4, result->size());
-        EXPECT_TRUE(result->is_null(0));
-        EXPECT_TRUE(result->is_null(1));
-        EXPECT_TRUE(result->is_null(2));
-        EXPECT_TRUE(result->is_null(3));
+        EXPECT_EQ("[NULL, NULL, NULL, NULL]", result->debug_string());
 
         array = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN_DESC, false);
         array->append_datum(Datum(DatumArray{}));
@@ -2224,11 +2010,7 @@ TEST_F(ArrayFunctionsTest, array_min_empty_array) {
         array->append_datum(Datum(DatumArray{}));
 
         result = ArrayFunctions::array_min<TYPE_BOOLEAN>(nullptr, {array}).value();
-        EXPECT_EQ(4, result->size());
-        EXPECT_TRUE(result->is_null(0));
-        EXPECT_TRUE(result->is_null(1));
-        EXPECT_TRUE(result->is_null(2));
-        EXPECT_TRUE(result->is_null(3));
+        EXPECT_EQ("[NULL, NULL, NULL, NULL]", result->debug_string());
     }
 }
 
@@ -2254,11 +2036,7 @@ TEST_F(ArrayFunctionsTest, array_max_empty_array) {
                 ColumnTestHelper::build_array_column<int32_t>(TYPE_ARRAY_INT_DESC, false, {{}, {}, {}, {}});
 
         auto result = ArrayFunctions::array_max<TYPE_INT>(nullptr, {array}).value();
-        EXPECT_EQ(4, result->size());
-        EXPECT_TRUE(result->is_null(0));
-        EXPECT_TRUE(result->is_null(1));
-        EXPECT_TRUE(result->is_null(2));
-        EXPECT_TRUE(result->is_null(3));
+        EXPECT_EQ("[NULL, NULL, NULL, NULL]", result->debug_string());
     }
 
     {
@@ -2266,11 +2044,7 @@ TEST_F(ArrayFunctionsTest, array_max_empty_array) {
                 ColumnTestHelper::build_array_column<int8_t>(TYPE_ARRAY_TINYINT_DESC, false, {{}, {}, {}, {}});
 
         auto result = ArrayFunctions::array_max<TYPE_TINYINT>(nullptr, {array}).value();
-        EXPECT_EQ(4, result->size());
-        EXPECT_TRUE(result->is_null(0));
-        EXPECT_TRUE(result->is_null(1));
-        EXPECT_TRUE(result->is_null(2));
-        EXPECT_TRUE(result->is_null(3));
+        EXPECT_EQ("[NULL, NULL, NULL, NULL]", result->debug_string());
     }
 
     {
@@ -2278,11 +2052,7 @@ TEST_F(ArrayFunctionsTest, array_max_empty_array) {
                 ColumnTestHelper::build_array_column<int32_t>(TYPE_ARRAY_INT_DESC, false, {{}, {}, {}, {}});
 
         auto result = ArrayFunctions::array_max<TYPE_INT>(nullptr, {array}).value();
-        EXPECT_EQ(4, result->size());
-        EXPECT_TRUE(result->is_null(0));
-        EXPECT_TRUE(result->is_null(1));
-        EXPECT_TRUE(result->is_null(2));
-        EXPECT_TRUE(result->is_null(3));
+        EXPECT_EQ("[NULL, NULL, NULL, NULL]", result->debug_string());
 
         array = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN_DESC, false);
         array->append_datum(Datum(DatumArray{}));
@@ -2291,11 +2061,7 @@ TEST_F(ArrayFunctionsTest, array_max_empty_array) {
         array->append_datum(Datum(DatumArray{}));
 
         result = ArrayFunctions::array_max<TYPE_BOOLEAN>(nullptr, {array}).value();
-        EXPECT_EQ(4, result->size());
-        EXPECT_TRUE(result->is_null(0));
-        EXPECT_TRUE(result->is_null(1));
-        EXPECT_TRUE(result->is_null(2));
-        EXPECT_TRUE(result->is_null(3));
+        EXPECT_EQ("[NULL, NULL, NULL, NULL]", result->debug_string());
     }
 }
 
@@ -2312,15 +2078,7 @@ TEST_F(ArrayFunctionsTest, array_sum_no_null) {
         array->append_datum(DatumArray{(int8_t) true, (int8_t) false});
 
         auto result = ArrayFunctions::array_sum<TYPE_BOOLEAN>(nullptr, {array}).value();
-        EXPECT_EQ(8, result->size());
-        EXPECT_TRUE(result->is_null(0));
-        EXPECT_TRUE(result->is_null(1));
-        EXPECT_EQ(0, result->get(2).get_int64());
-        EXPECT_EQ(0, result->get(3).get_int64());
-        EXPECT_EQ(1, result->get(4).get_int64());
-        EXPECT_EQ(1, result->get(5).get_int64());
-        EXPECT_EQ(1, result->get(6).get_int64());
-        EXPECT_EQ(1, result->get(7).get_int64());
+        EXPECT_EQ("[NULL, NULL, 0, 0, 1, 1, 1, 1]", result->debug_string());
     }
 
     {
@@ -2328,13 +2086,7 @@ TEST_F(ArrayFunctionsTest, array_sum_no_null) {
                 TYPE_ARRAY_INT_DESC, false, {{}, {2}, {1, 2, 3}, {3, 2, 1}, {2, 1, 3}, {1, 2, 3, std::nullopt}});
 
         auto result = ArrayFunctions::array_sum<TYPE_INT>(nullptr, {array}).value();
-        EXPECT_EQ(6, result->size());
-        EXPECT_TRUE(result->is_null(0));
-        EXPECT_EQ(2, result->get(1).get_int64());
-        EXPECT_EQ(6, result->get(2).get_int64());
-        EXPECT_EQ(6, result->get(3).get_int64());
-        EXPECT_EQ(6, result->get(4).get_int64());
-        EXPECT_EQ(6, result->get(5).get_int64());
+        EXPECT_EQ("[NULL, 2, 6, 6, 6, 6]", result->debug_string());
     }
 
     {
@@ -2342,10 +2094,7 @@ TEST_F(ArrayFunctionsTest, array_sum_no_null) {
                                                                               {{}, {127, 100, -1}, {-128, -1, 10}});
 
         auto result = ArrayFunctions::array_sum<TYPE_TINYINT>(nullptr, {array}).value();
-        EXPECT_EQ(3, result->size());
-        EXPECT_TRUE(result->is_null(0));
-        EXPECT_EQ(226, result->get(1).get_int64());
-        EXPECT_EQ(-119, result->get(2).get_int64());
+        EXPECT_EQ("[NULL, 226, -119]", result->debug_string());
     }
 }
 
@@ -2440,15 +2189,7 @@ TEST_F(ArrayFunctionsTest, array_min_no_null) {
         array->append_datum(DatumArray{(int8_t) true, (int8_t) false});
 
         auto result = ArrayFunctions::array_min<TYPE_BOOLEAN>(nullptr, {array}).value();
-        EXPECT_EQ(8, result->size());
-        EXPECT_TRUE(result->is_null(0));
-        EXPECT_TRUE(result->is_null(1));
-        EXPECT_EQ(0, result->get(2).get_int8());
-        EXPECT_EQ(0, result->get(3).get_int8());
-        EXPECT_EQ(1, result->get(4).get_int8());
-        EXPECT_EQ(1, result->get(5).get_int8());
-        EXPECT_EQ(0, result->get(6).get_int8());
-        EXPECT_EQ(0, result->get(7).get_int8());
+        EXPECT_EQ("[NULL, NULL, 0, 0, 1, 1, 0, 0]", result->debug_string());
     }
 
     {
@@ -2456,12 +2197,7 @@ TEST_F(ArrayFunctionsTest, array_min_no_null) {
                 TYPE_ARRAY_INT_DESC, false, {{}, {2}, {1, 2, 3}, {3, 2, 1}, {2, 1, 3}});
 
         auto result = ArrayFunctions::array_min<TYPE_INT>(nullptr, {array}).value();
-        EXPECT_EQ(5, result->size());
-        EXPECT_TRUE(result->is_null(0));
-        EXPECT_EQ(2, result->get(1).get_int32());
-        EXPECT_EQ(1, result->get(2).get_int32());
-        EXPECT_EQ(1, result->get(3).get_int32());
-        EXPECT_EQ(1, result->get(4).get_int32());
+        EXPECT_EQ("[NULL, 2, 1, 1, 1]", result->debug_string());
     }
 }
 
@@ -2478,15 +2214,7 @@ TEST_F(ArrayFunctionsTest, array_max_no_null) {
         array->append_datum(DatumArray{(int8_t) true, (int8_t) false});
 
         auto result = ArrayFunctions::array_max<TYPE_BOOLEAN>(nullptr, {array}).value();
-        EXPECT_EQ(8, result->size());
-        EXPECT_TRUE(result->is_null(0));
-        EXPECT_TRUE(result->is_null(1));
-        EXPECT_EQ(0, result->get(2).get_int8());
-        EXPECT_EQ(0, result->get(3).get_int8());
-        EXPECT_EQ(1, result->get(4).get_int8());
-        EXPECT_EQ(1, result->get(5).get_int8());
-        EXPECT_EQ(1, result->get(6).get_int8());
-        EXPECT_EQ(1, result->get(7).get_int8());
+        EXPECT_EQ("[NULL, NULL, 0, 0, 1, 1, 1, 1]", result->debug_string());
     }
 
     {
@@ -2494,12 +2222,7 @@ TEST_F(ArrayFunctionsTest, array_max_no_null) {
                 TYPE_ARRAY_INT_DESC, false, {{}, {2}, {1, 2, 3}, {3, 2, 1}, {2, 1, 3}});
 
         auto result = ArrayFunctions::array_max<TYPE_INT>(nullptr, {array}).value();
-        EXPECT_EQ(5, result->size());
-        EXPECT_TRUE(result->is_null(0));
-        EXPECT_EQ(2, result->get(1).get_int32());
-        EXPECT_EQ(3, result->get(2).get_int32());
-        EXPECT_EQ(3, result->get(3).get_int32());
-        EXPECT_EQ(3, result->get(4).get_int32());
+        EXPECT_EQ("[NULL, 2, 3, 3, 3]", result->debug_string());
     }
 }
 
@@ -2510,13 +2233,7 @@ TEST_F(ArrayFunctionsTest, array_sum_has_null_element) {
                 {{}, {2000}, {1000, 2, 3}, {3, 2, 1}, {200000000, 121, 300}, {33, std::nullopt, 300}});
 
         auto result = ArrayFunctions::array_sum<TYPE_BIGINT>(nullptr, {array}).value();
-        EXPECT_EQ(6, result->size());
-        EXPECT_TRUE(result->is_null(0));
-        EXPECT_EQ(2000, result->get(1).get_int64());
-        EXPECT_EQ(1005, result->get(2).get_int64());
-        EXPECT_EQ(6, result->get(3).get_int64());
-        EXPECT_EQ(200000421, result->get(4).get_int64());
-        EXPECT_EQ(333, result->get(5).get_int64());
+        EXPECT_EQ("[NULL, 2000, 1005, 6, 200000421, 333]", result->debug_string());
     }
 
     {
@@ -2572,13 +2289,7 @@ TEST_F(ArrayFunctionsTest, array_min_has_null_element) {
                 TYPE_ARRAY_BIGINT_DESC, false, {{}, {2000}, {1000, 2, 3}, {3, 2, 1}, {1, 1, 1}, {1, std::nullopt, 1}});
 
         auto result = ArrayFunctions::array_min<TYPE_BIGINT>(nullptr, {array}).value();
-        EXPECT_EQ(6, result->size());
-        EXPECT_TRUE(result->is_null(0));
-        EXPECT_EQ(2000, result->get(1).get_int64());
-        EXPECT_EQ(2, result->get(2).get_int64());
-        EXPECT_EQ(1, result->get(3).get_int64());
-        EXPECT_EQ(1, result->get(4).get_int64());
-        EXPECT_EQ(1, result->get(5).get_int64());
+        EXPECT_EQ("[NULL, 2000, 2, 1, 1, 1]", result->debug_string());
     }
 
     {
@@ -2646,13 +2357,7 @@ TEST_F(ArrayFunctionsTest, array_min_has_null_element) {
                                                                               {std::nullopt, "varchar4"}});
 
         auto result = ArrayFunctions::array_min<TYPE_VARCHAR>(nullptr, {array}).value();
-        EXPECT_EQ(6, result->size());
-        EXPECT_TRUE(result->is_null(0));
-        EXPECT_EQ("varchar", result->get(1).get_slice());
-        EXPECT_EQ("varchar1", result->get(2).get_slice());
-        EXPECT_EQ("varchar1", result->get(3).get_slice());
-        EXPECT_EQ("varchar1", result->get(4).get_slice());
-        EXPECT_EQ("varchar4", result->get(5).get_slice());
+        EXPECT_EQ("[NULL, 'varchar', 'varchar1', 'varchar1', 'varchar1', 'varchar4']", result->debug_string());
     }
 }
 
@@ -2662,12 +2367,7 @@ TEST_F(ArrayFunctionsTest, array_max_has_null_element) {
                 TYPE_ARRAY_BIGINT_DESC, false, {{}, {2000}, {1000, 2, 3}, {3, 2, 1}, {1, 1, 1}});
 
         auto result = ArrayFunctions::array_max<TYPE_BIGINT>(nullptr, {array}).value();
-        EXPECT_EQ(5, result->size());
-        EXPECT_TRUE(result->is_null(0));
-        EXPECT_EQ(2000, result->get(1).get_int64());
-        EXPECT_EQ(1000, result->get(2).get_int64());
-        EXPECT_EQ(3, result->get(3).get_int64());
-        EXPECT_EQ(1, result->get(4).get_int64());
+        EXPECT_EQ("[NULL, 2000, 1000, 3, 1]", result->debug_string());
     }
 
     {
@@ -2735,13 +2435,7 @@ TEST_F(ArrayFunctionsTest, array_max_has_null_element) {
                                                                               {"varchar1", std::nullopt}});
 
         auto result = ArrayFunctions::array_max<TYPE_VARCHAR>(nullptr, {array}).value();
-        EXPECT_EQ(6, result->size());
-        EXPECT_TRUE(result->is_null(0));
-        EXPECT_EQ("varchar", result->get(1).get_slice());
-        EXPECT_EQ("varchar2", result->get(2).get_slice());
-        EXPECT_EQ("varchar3", result->get(3).get_slice());
-        EXPECT_EQ("varchar4", result->get(4).get_slice());
-        EXPECT_EQ("varchar1", result->get(5).get_slice());
+        EXPECT_EQ("[NULL, 'varchar', 'varchar2', 'varchar3', 'varchar4', 'varchar1']", result->debug_string());
     }
 }
 
@@ -2751,10 +2445,7 @@ TEST_F(ArrayFunctionsTest, array_sum_nullable_array) {
                 TYPE_ARRAY_INT_DESC, true, {{3, 5}, {std::nullopt, 54}, {5352, 121, 30}});
 
         auto result = ArrayFunctions::array_sum<TYPE_INT>(nullptr, {array}).value();
-        EXPECT_EQ(3, result->size());
-        EXPECT_EQ(8, result->get(0).get_int64());
-        EXPECT_EQ(54, result->get(1).get_int64());
-        EXPECT_EQ(5503, result->get(2).get_int64());
+        EXPECT_EQ("[8, 54, 5503]", result->debug_string());
     }
 }
 
@@ -2777,10 +2468,7 @@ TEST_F(ArrayFunctionsTest, array_min_nullable_array) {
                 TYPE_ARRAY_INT_DESC, true, {{3, 5}, {std::nullopt, 54}, {5352, 121, 32}});
 
         auto result = ArrayFunctions::array_min<TYPE_INT>(nullptr, {array}).value();
-        EXPECT_EQ(3, result->size());
-        EXPECT_EQ(3, result->get(0).get_int32());
-        EXPECT_EQ(54, result->get(1).get_int32());
-        EXPECT_EQ(32, result->get(2).get_int32());
+        EXPECT_EQ("[3, 54, 32]", result->debug_string());
     }
 }
 
@@ -2790,10 +2478,7 @@ TEST_F(ArrayFunctionsTest, array_max_nullable_array) {
                 TYPE_ARRAY_INT_DESC, true, {{3, 5}, {std::nullopt, 54}, {5352, 121, 32}});
 
         auto result = ArrayFunctions::array_max<TYPE_INT>(nullptr, {array}).value();
-        EXPECT_EQ(3, result->size());
-        EXPECT_EQ(5, result->get(0).get_int32());
-        EXPECT_EQ(54, result->get(1).get_int32());
-        EXPECT_EQ(5352, result->get(2).get_int32());
+        EXPECT_EQ("[5, 54, 5352]", result->debug_string());
     }
 }
 
@@ -2806,11 +2491,7 @@ TEST_F(ArrayFunctionsTest, array_all_null) {
                                                                     {std::nullopt, std::nullopt, std::nullopt}});
 
         auto result = ArrayFunctions::array_sum<TYPE_BIGINT>(nullptr, {array}).value();
-        EXPECT_EQ(4, result->size());
-        EXPECT_TRUE(result->is_null(0));
-        EXPECT_TRUE(result->is_null(1));
-        EXPECT_TRUE(result->is_null(2));
-        EXPECT_TRUE(result->is_null(3));
+        EXPECT_EQ("[NULL, NULL, NULL, NULL]", result->debug_string());
     }
 
     {
@@ -2821,11 +2502,7 @@ TEST_F(ArrayFunctionsTest, array_all_null) {
                                                                     {std::nullopt, std::nullopt, std::nullopt}});
 
         auto result = ArrayFunctions::array_avg<TYPE_BIGINT>(nullptr, {array}).value();
-        EXPECT_EQ(4, result->size());
-        EXPECT_TRUE(result->is_null(0));
-        EXPECT_TRUE(result->is_null(1));
-        EXPECT_TRUE(result->is_null(2));
-        EXPECT_TRUE(result->is_null(3));
+        EXPECT_EQ("[NULL, NULL, NULL, NULL]", result->debug_string());
     }
 
     {
@@ -2836,11 +2513,7 @@ TEST_F(ArrayFunctionsTest, array_all_null) {
                                                                     {std::nullopt, std::nullopt, std::nullopt}});
 
         auto result = ArrayFunctions::array_min<TYPE_BIGINT>(nullptr, {array}).value();
-        EXPECT_EQ(4, result->size());
-        EXPECT_TRUE(result->is_null(0));
-        EXPECT_TRUE(result->is_null(1));
-        EXPECT_TRUE(result->is_null(2));
-        EXPECT_TRUE(result->is_null(3));
+        EXPECT_EQ("[NULL, NULL, NULL, NULL]", result->debug_string());
     }
 
     {
@@ -2851,11 +2524,7 @@ TEST_F(ArrayFunctionsTest, array_all_null) {
                                                                   {std::nullopt, std::nullopt, std::nullopt}});
 
         auto result = ArrayFunctions::array_min<TYPE_VARCHAR>(nullptr, {array}).value();
-        EXPECT_EQ(4, result->size());
-        EXPECT_TRUE(result->is_null(0));
-        EXPECT_TRUE(result->is_null(1));
-        EXPECT_TRUE(result->is_null(2));
-        EXPECT_TRUE(result->is_null(3));
+        EXPECT_EQ("[NULL, NULL, NULL, NULL]", result->debug_string());
     }
 
     {
@@ -2866,11 +2535,7 @@ TEST_F(ArrayFunctionsTest, array_all_null) {
                                                                     {std::nullopt, std::nullopt, std::nullopt}});
 
         auto result = ArrayFunctions::array_max<TYPE_BIGINT>(nullptr, {array}).value();
-        EXPECT_EQ(4, result->size());
-        EXPECT_TRUE(result->is_null(0));
-        EXPECT_TRUE(result->is_null(1));
-        EXPECT_TRUE(result->is_null(2));
-        EXPECT_TRUE(result->is_null(3));
+        EXPECT_EQ("[NULL, NULL, NULL, NULL]", result->debug_string());
     }
 
     {
@@ -2881,11 +2546,7 @@ TEST_F(ArrayFunctionsTest, array_all_null) {
                                                                   {std::nullopt, std::nullopt, std::nullopt}});
 
         auto result = ArrayFunctions::array_max<TYPE_VARCHAR>(nullptr, {array}).value();
-        EXPECT_EQ(4, result->size());
-        EXPECT_TRUE(result->is_null(0));
-        EXPECT_TRUE(result->is_null(1));
-        EXPECT_TRUE(result->is_null(2));
-        EXPECT_TRUE(result->is_null(3));
+        EXPECT_EQ("[NULL, NULL, NULL, NULL]", result->debug_string());
     }
 }
 
@@ -2896,10 +2557,7 @@ TEST_F(ArrayFunctionsTest, array_reverse_int) {
     ArrayReverse<LogicalType::TYPE_INT> reverse;
     auto dest_column = reverse.process(nullptr, {src_column});
 
-    ASSERT_EQ(dest_column->size(), 3);
-    ASSERT_EQ("[6,3,5]", dest_column->debug_item(0));
-    ASSERT_EQ("[8,7,3,2]", dest_column->debug_item(1));
-    ASSERT_EQ("[1,2,3,4]", dest_column->debug_item(2));
+    ASSERT_EQ("[[6,3,5], [8,7,3,2], [1,2,3,4]]", dest_column->debug_string());
 }
 
 TEST_F(ArrayFunctionsTest, array_reverse_string) {
@@ -2910,10 +2568,7 @@ TEST_F(ArrayFunctionsTest, array_reverse_string) {
     ArrayReverse<LogicalType::TYPE_VARCHAR> reverse;
     auto dest_column = reverse.process(nullptr, {src_column});
 
-    ASSERT_EQ(dest_column->size(), 3);
-    ASSERT_EQ("['4325','66','352']", dest_column->debug_item(0));
-    ASSERT_EQ("['43251','8','99','235']", dest_column->debug_item(1));
-    ASSERT_EQ("['112','22','33','44']", dest_column->debug_item(2));
+    ASSERT_EQ("[['4325','66','352'], ['43251','8','99','235'], ['112','22','33','44']]", dest_column->debug_string());
 }
 
 TEST_F(ArrayFunctionsTest, array_reverse_nullable_elements) {
@@ -2926,10 +2581,7 @@ TEST_F(ArrayFunctionsTest, array_reverse_nullable_elements) {
     ArrayReverse<LogicalType::TYPE_INT> reverse;
     auto dest_column = reverse.process(nullptr, {src_column});
 
-    ASSERT_EQ(dest_column->size(), 3);
-    ASSERT_EQ("[6,3,NULL,5]", dest_column->debug_item(0));
-    ASSERT_EQ("[NULL,NULL,3,2]", dest_column->debug_item(1));
-    ASSERT_EQ("[NULL,NULL,NULL,NULL]", dest_column->debug_item(2));
+    ASSERT_EQ("[[6,3,NULL,5], [NULL,NULL,3,2], [NULL,NULL,NULL,NULL]]", dest_column->debug_string());
 }
 
 TEST_F(ArrayFunctionsTest, array_reverse_nullable_array) {
@@ -2940,10 +2592,7 @@ TEST_F(ArrayFunctionsTest, array_reverse_nullable_array) {
     ArrayReverse<LogicalType::TYPE_INT> reverse;
     auto dest_column = reverse.process(nullptr, {src_column});
 
-    ASSERT_EQ(dest_column->size(), 3);
-    ASSERT_EQ("[6,3,NULL,5]", dest_column->debug_item(0));
-    ASSERT_TRUE(dest_column->get(1).is_null());
-    ASSERT_EQ("[NULL,NULL,NULL,NULL]", dest_column->debug_item(2));
+    ASSERT_EQ("[[6,3,NULL,5], NULL, [NULL,NULL,NULL,NULL]]", dest_column->debug_string());
 }
 
 TEST_F(ArrayFunctionsTest, array_reverse_only_null) {
@@ -3000,10 +2649,7 @@ TEST_F(ArrayFunctionsTest, array_difference_boolean) {
 
     auto dest_column = call_array_difference(TYPE_BOOLEAN, src_column);
 
-    ASSERT_EQ(dest_column->size(), 3);
-    ASSERT_EQ("[0,-2,3]", dest_column->debug_item(0));
-    ASSERT_EQ("[0,1,4,1]", dest_column->debug_item(1));
-    ASSERT_EQ("[0,-1,-1,-1]", dest_column->debug_item(2));
+    ASSERT_EQ("[[0,-2,3], [0,1,4,1], [0,-1,-1,-1]]", dest_column->debug_string());
 }
 
 TEST_F(ArrayFunctionsTest, array_difference_boolean_with_entry_null) {
@@ -3039,10 +2685,7 @@ TEST_F(ArrayFunctionsTest, array_difference_int) {
 
     auto dest_column = call_array_difference(TYPE_INT, src_column);
 
-    ASSERT_EQ(dest_column->size(), 3);
-    ASSERT_EQ("[0,-2,3]", dest_column->debug_item(0));
-    ASSERT_EQ("[0,1,4,1]", dest_column->debug_item(1));
-    ASSERT_EQ("[0,-1,-1,-1]", dest_column->debug_item(2));
+    ASSERT_EQ("[[0,-2,3], [0,1,4,1], [0,-1,-1,-1]]", dest_column->debug_string());
 }
 
 TEST_F(ArrayFunctionsTest, array_difference_int_overflow) {
@@ -3054,9 +2697,7 @@ TEST_F(ArrayFunctionsTest, array_difference_int_overflow) {
 
     auto dest_column = call_array_difference(TYPE_INT, src_column);
 
-    ASSERT_EQ(dest_column->size(), 2);
-    ASSERT_EQ("[0,-4294967295]", dest_column->debug_item(0));
-    ASSERT_EQ("[0,4294967295]", dest_column->debug_item(1));
+    ASSERT_EQ("[[0,-4294967295], [0,4294967295]]", dest_column->debug_string());
 }
 
 TEST_F(ArrayFunctionsTest, array_difference_int_with_entry_null) {
@@ -3090,10 +2731,7 @@ TEST_F(ArrayFunctionsTest, array_difference_bigint) {
 
     auto dest_column = call_array_difference(TYPE_BIGINT, src_column);
 
-    ASSERT_EQ(dest_column->size(), 3);
-    ASSERT_EQ("[0,-2,3]", dest_column->debug_item(0));
-    ASSERT_EQ("[0,1,4,1]", dest_column->debug_item(1));
-    ASSERT_EQ("[0,-1,-1,-1]", dest_column->debug_item(2));
+    ASSERT_EQ("[[0,-2,3], [0,1,4,1], [0,-1,-1,-1]]", dest_column->debug_string());
 }
 
 TEST_F(ArrayFunctionsTest, array_difference_bigint_with_entry_null) {
@@ -3127,10 +2765,7 @@ TEST_F(ArrayFunctionsTest, array_difference_double) {
 
     auto dest_column = call_array_difference(TYPE_DOUBLE, src_column);
 
-    ASSERT_EQ(dest_column->size(), 3);
-    ASSERT_EQ("[0,-2,3]", dest_column->debug_item(0));
-    ASSERT_EQ("[0,1,4,1]", dest_column->debug_item(1));
-    ASSERT_EQ("[0,-1,-1,-1]", dest_column->debug_item(2));
+    ASSERT_EQ("[[0,-2,3], [0,1,4,1], [0,-1,-1,-1]]", dest_column->debug_string());
 }
 
 TEST_F(ArrayFunctionsTest, array_slice_int) {
@@ -3750,11 +3385,7 @@ TEST_F(ArrayFunctionsTest, array_intersect_int) {
     ArrayIntersect<LogicalType::TYPE_INT> intersect;
     auto dest_column = intersect.process(nullptr, {src_column, src_column2, src_column3});
 
-    ASSERT_EQ(dest_column->size(), 4);
-    ASSERT_EQ("[5]", dest_column->debug_item(0));
-    ASSERT_EQ("[]", dest_column->debug_item(1));
-    ASSERT_EQ("[4,1]", dest_column->debug_item(2));
-    ASSERT_TRUE(dest_column->get(3).is_null());
+    ASSERT_EQ("[[5], [], [4,1], NULL]", dest_column->debug_string());
 }
 
 TEST_F(ArrayFunctionsTest, array_intersect_int_with_not_null) {
@@ -3814,11 +3445,7 @@ TEST_F(ArrayFunctionsTest, array_intersect_varchar) {
     ArrayIntersect<LogicalType::TYPE_VARCHAR> intersect;
     auto dest_column = intersect.process(nullptr, {src_column, src_column2, src_column3});
 
-    ASSERT_EQ(dest_column->size(), 4);
-    ASSERT_EQ("['5']", dest_column->debug_item(0));
-    ASSERT_EQ("[]", dest_column->debug_item(1));
-    ASSERT_EQ("['4','1']", dest_column->debug_item(2));
-    ASSERT_TRUE(dest_column->get(3).is_null());
+    ASSERT_EQ("[['5'], [], ['4','1'], NULL]", dest_column->debug_string());
 }
 
 TEST_F(ArrayFunctionsTest, array_intersect_varchar_with_not_null) {
@@ -3878,16 +3505,10 @@ TEST_F(ArrayFunctionsTest, array_join_string) {
     auto null_column = ColumnHelper::create_const_column<LogicalType::TYPE_VARCHAR>(null_str, 3);
 
     auto dest_column = ArrayJoin::process(nullptr, {src_column, sep_column});
-    ASSERT_EQ(dest_column->size(), 3);
-    ASSERT_EQ(Slice("352__66__4325"), dest_column->get(0).get_slice());
-    ASSERT_EQ(Slice("235__99__8__43251"), dest_column->get(1).get_slice());
-    ASSERT_EQ(Slice("44__33__22__112"), dest_column->get(2).get_slice());
+    ASSERT_EQ("['352__66__4325', '235__99__8__43251', '44__33__22__112']", dest_column->debug_string());
 
     dest_column = ArrayJoin::process(nullptr, {src_column, sep_column, null_column});
-    ASSERT_EQ(dest_column->size(), 3);
-    ASSERT_EQ(Slice("352__66__4325"), dest_column->get(0).get_slice());
-    ASSERT_EQ(Slice("235__99__8__43251"), dest_column->get(1).get_slice());
-    ASSERT_EQ(Slice("44__33__22__112"), dest_column->get(2).get_slice());
+    ASSERT_EQ("['352__66__4325', '235__99__8__43251', '44__33__22__112']", dest_column->debug_string());
 }
 
 TEST_F(ArrayFunctionsTest, array_concat_ws) {
@@ -3899,10 +3520,7 @@ TEST_F(ArrayFunctionsTest, array_concat_ws) {
     auto sep_column = ColumnHelper::create_const_column<LogicalType::TYPE_VARCHAR>(sep_str, 3);
 
     ColumnPtr dest_column = ArrayFunctions::array_concat_ws(nullptr, {sep_column, src_column}).value();
-    ASSERT_EQ(dest_column->size(), 3);
-    ASSERT_EQ(Slice("352__66__4325"), dest_column->get(0).get_slice());
-    ASSERT_EQ(Slice("235__99__8__43251"), dest_column->get(1).get_slice());
-    ASSERT_EQ(Slice("44__33__22__112"), dest_column->get(2).get_slice());
+    ASSERT_EQ("['352__66__4325', '235__99__8__43251', '44__33__22__112']", dest_column->debug_string());
 }
 
 // NOLINTNEXTLINE
@@ -3920,16 +3538,10 @@ TEST_F(ArrayFunctionsTest, array_join_nullable_elements) {
     auto null_column = ColumnHelper::create_const_column<LogicalType::TYPE_VARCHAR>(null_str, 3);
 
     auto dest_column = ArrayJoin::process(nullptr, {src_column, sep_column});
-    ASSERT_EQ(dest_column->size(), 3);
-    ASSERT_EQ(Slice("55__333__6666"), dest_column->get(0).get_slice());
-    ASSERT_EQ(Slice("22__333"), dest_column->get(1).get_slice());
-    ASSERT_EQ(Slice(""), dest_column->get(2).get_slice());
+    ASSERT_EQ("['55__333__6666', '22__333', '']", dest_column->debug_string());
 
     dest_column = ArrayJoin::process(nullptr, {src_column, sep_column, null_column});
-    ASSERT_EQ(dest_column->size(), 3);
-    ASSERT_EQ(Slice("55__NULL__333__6666"), dest_column->get(0).get_slice());
-    ASSERT_EQ(Slice("22__333__NULL__NULL"), dest_column->get(1).get_slice());
-    ASSERT_EQ(Slice("NULL__NULL__NULL__NULL"), dest_column->get(2).get_slice());
+    ASSERT_EQ("['55__NULL__333__6666', '22__333__NULL__NULL', 'NULL__NULL__NULL__NULL']", dest_column->debug_string());
 }
 
 TEST_F(ArrayFunctionsTest, array_concat_ws_nullable_elements) {
@@ -3943,10 +3555,7 @@ TEST_F(ArrayFunctionsTest, array_concat_ws_nullable_elements) {
     auto sep_column = ColumnHelper::create_const_column<LogicalType::TYPE_VARCHAR>(sep_str, 3);
 
     ColumnPtr dest_column = ArrayFunctions::array_concat_ws(nullptr, {sep_column, src_column}).value();
-    ASSERT_EQ(dest_column->size(), 3);
-    ASSERT_EQ(Slice("55__333__6666"), dest_column->get(0).get_slice());
-    ASSERT_EQ(Slice("22__333"), dest_column->get(1).get_slice());
-    ASSERT_EQ(Slice(""), dest_column->get(2).get_slice());
+    ASSERT_EQ("['55__333__6666', '22__333', '']", dest_column->debug_string());
 }
 
 // NOLINTNEXTLINE
@@ -3964,16 +3573,10 @@ TEST_F(ArrayFunctionsTest, array_join_nullable_array) {
     auto null_column = ColumnHelper::create_const_column<LogicalType::TYPE_VARCHAR>(null_str, 3);
 
     auto dest_column = ArrayJoin::process(nullptr, {src_column, sep_column});
-    ASSERT_EQ(dest_column->size(), 3);
-    ASSERT_EQ(Slice("5__33__666"), dest_column->get(0).get_slice());
-    ASSERT_TRUE(dest_column->get(1).is_null());
-    ASSERT_EQ(Slice(""), dest_column->get(2).get_slice());
+    ASSERT_EQ("['5__33__666', NULL, '']", dest_column->debug_string());
 
     dest_column = ArrayJoin::process(nullptr, {src_column, sep_column, null_column});
-    ASSERT_EQ(dest_column->size(), 3);
-    ASSERT_EQ(Slice("5__NULL__33__666"), dest_column->get(0).get_slice());
-    ASSERT_TRUE(dest_column->get(1).is_null());
-    ASSERT_EQ(Slice("NULL__NULL__NULL__NULL"), dest_column->get(2).get_slice());
+    ASSERT_EQ("['5__NULL__33__666', NULL, 'NULL__NULL__NULL__NULL']", dest_column->debug_string());
 }
 
 TEST_F(ArrayFunctionsTest, array_concat_ws_nullable_array) {
@@ -3987,10 +3590,7 @@ TEST_F(ArrayFunctionsTest, array_concat_ws_nullable_array) {
     auto sep_column = ColumnHelper::create_const_column<LogicalType::TYPE_VARCHAR>(sep_str, 3);
 
     ColumnPtr dest_column = ArrayFunctions::array_concat_ws(nullptr, {sep_column, src_column}).value();
-    ASSERT_EQ(dest_column->size(), 3);
-    ASSERT_EQ(Slice("5__33__666"), dest_column->get(0).get_slice());
-    ASSERT_TRUE(dest_column->get(1).is_null());
-    ASSERT_EQ(Slice(""), dest_column->get(2).get_slice());
+    ASSERT_EQ("['5__33__666', NULL, '']", dest_column->debug_string());
 }
 
 // NOLINTNEXTLINE
@@ -4506,13 +4106,7 @@ TEST_F(ArrayFunctionsTest, array_sortby_varchar_with_nullable) {
         auto dest_column = sort.process(nullptr, {src_column, src_column2});
 
         ASSERT_TRUE(dest_column->is_nullable());
-        ASSERT_EQ(dest_column->size(), 6);
-        ASSERT_EQ("['5','3','6']", dest_column->debug_item(0));
-        ASSERT_EQ("['8']", dest_column->debug_item(1));
-        ASSERT_EQ("['4']", dest_column->debug_item(2));
-        ASSERT_TRUE(dest_column->get(3).is_null());
-        ASSERT_EQ("['1','4']", dest_column->debug_item(4));
-        ASSERT_EQ("['4','1']", dest_column->debug_item(5));
+        ASSERT_EQ("[['5','3','6'], ['8'], ['4'], NULL, ['1','4'], ['4','1']]", dest_column->debug_string());
     }
     {
         ArraySortBy<LogicalType::TYPE_VARCHAR> sort;
@@ -4589,10 +4183,7 @@ TEST_F(ArrayFunctionsTest, array_generate_when_overflow) {
     auto dest_column = ArrayGenerate<TYPE_TINYINT>::process(nullptr, {start_column, stop_column, step_column}).value();
 
     ASSERT_TRUE(!dest_column->is_nullable());
-    ASSERT_EQ(dest_column->size(), 2);
-
-    ASSERT_EQ("[9,97]", dest_column->debug_item(0));
-    ASSERT_EQ("[-9,-97]", dest_column->debug_item(1));
+    ASSERT_EQ("[[9,97], [-9,-97]]", dest_column->debug_string());
 }
 
 TEST_F(ArrayFunctionsTest, array_generate_rejects_too_many_elements) {
@@ -4856,11 +4447,7 @@ TEST_F(ArrayFunctionsTest, array_intersect_any_type_int) {
     auto dest_column =
             ArrayFunctions::array_intersect_any_type(nullptr, {src_column, src_column2, src_column3}).value();
 
-    ASSERT_EQ(dest_column->size(), 4);
-    ASSERT_EQ("[5]", dest_column->debug_item(0));
-    ASSERT_EQ("[]", dest_column->debug_item(1));
-    ASSERT_EQ("[4,1]", dest_column->debug_item(2));
-    ASSERT_TRUE(dest_column->get(3).is_null());
+    ASSERT_EQ("[[5], [], [4,1], NULL]", dest_column->debug_string());
 }
 
 TEST_F(ArrayFunctionsTest, array_intersect_any_type_int_with_not_null) {
@@ -4920,11 +4507,7 @@ TEST_F(ArrayFunctionsTest, array_intersect_any_type_varchar) {
     auto dest_column =
             ArrayFunctions::array_intersect_any_type(nullptr, {src_column, src_column2, src_column3}).value();
 
-    ASSERT_EQ(dest_column->size(), 4);
-    ASSERT_EQ("['5']", dest_column->debug_item(0));
-    ASSERT_EQ("[]", dest_column->debug_item(1));
-    ASSERT_EQ("['4','1']", dest_column->debug_item(2));
-    ASSERT_TRUE(dest_column->get(3).is_null());
+    ASSERT_EQ("[['5'], [], ['4','1'], NULL]", dest_column->debug_string());
 }
 
 TEST_F(ArrayFunctionsTest, array_intersect_any_type_varchar_with_not_null) {
@@ -4978,10 +4561,7 @@ TEST_F(ArrayFunctionsTest, array_reverse_any_types_int) {
     ArrayReverse<LogicalType::TYPE_INT> reverse;
     auto dest_column = reverse.process(nullptr, {src_column});
 
-    ASSERT_EQ(dest_column->size(), 3);
-    ASSERT_EQ("[6,3,5]", dest_column->debug_item(0));
-    ASSERT_EQ("[8,7,3,2]", dest_column->debug_item(1));
-    ASSERT_EQ("[1,2,3,4]", dest_column->debug_item(2));
+    ASSERT_EQ("[[6,3,5], [8,7,3,2], [1,2,3,4]]", dest_column->debug_string());
 }
 
 TEST_F(ArrayFunctionsTest, array_reverse_any_types_string) {
@@ -4991,10 +4571,7 @@ TEST_F(ArrayFunctionsTest, array_reverse_any_types_string) {
 
     auto dest_column = ArrayFunctions::array_reverse_any_types(nullptr, {src_column}).value();
 
-    ASSERT_EQ(dest_column->size(), 3);
-    ASSERT_EQ("['4325','66','352']", dest_column->debug_item(0));
-    ASSERT_EQ("['43251','8','99','235']", dest_column->debug_item(1));
-    ASSERT_EQ("['112','22','33','44']", dest_column->debug_item(2));
+    ASSERT_EQ("[['4325','66','352'], ['43251','8','99','235'], ['112','22','33','44']]", dest_column->debug_string());
 }
 
 TEST_F(ArrayFunctionsTest, array_reverse_any_types_nullable_elements) {
@@ -5006,10 +4583,7 @@ TEST_F(ArrayFunctionsTest, array_reverse_any_types_nullable_elements) {
 
     auto dest_column = ArrayFunctions::array_reverse_any_types(nullptr, {src_column}).value();
 
-    ASSERT_EQ(dest_column->size(), 3);
-    ASSERT_EQ("[6,3,NULL,5]", dest_column->debug_item(0));
-    ASSERT_EQ("[NULL,NULL,3,2]", dest_column->debug_item(1));
-    ASSERT_EQ("[NULL,NULL,NULL,NULL]", dest_column->debug_item(2));
+    ASSERT_EQ("[[6,3,NULL,5], [NULL,NULL,3,2], [NULL,NULL,NULL,NULL]]", dest_column->debug_string());
 }
 
 TEST_F(ArrayFunctionsTest, array_reverse_any_types_nullable_array) {
@@ -5019,10 +4593,7 @@ TEST_F(ArrayFunctionsTest, array_reverse_any_types_nullable_array) {
 
     auto dest_column = ArrayFunctions::array_reverse_any_types(nullptr, {src_column}).value();
 
-    ASSERT_EQ(dest_column->size(), 3);
-    ASSERT_EQ("[6,3,NULL,5]", dest_column->debug_item(0));
-    ASSERT_TRUE(dest_column->get(1).is_null());
-    ASSERT_EQ("[NULL,NULL,NULL,NULL]", dest_column->debug_item(2));
+    ASSERT_EQ("[[6,3,NULL,5], NULL, [NULL,NULL,NULL,NULL]]", dest_column->debug_string());
 }
 
 TEST_F(ArrayFunctionsTest, array_reverse_any_types_only_null) {
@@ -5179,17 +4750,7 @@ TEST_F(ArrayFunctionsTest, array_contains_seq) {
                                                                    {"a", "c"}});
         FunctionContext ctx;
         auto result = ArrayFunctions::array_contains_seq_specific<TYPE_VARCHAR>(&ctx, {array, target}).value();
-        EXPECT_EQ(10, result->size());
-        EXPECT_EQ(1, result->get(0).get_int8());
-        EXPECT_TRUE(result->get(1).is_null());
-        EXPECT_TRUE(result->get(2).is_null());
-        EXPECT_TRUE(result->get(3).is_null());
-        EXPECT_EQ(0, result->get(4).get_int8());
-        EXPECT_TRUE(result->get(5).is_null());
-        EXPECT_EQ(1, result->get(6).get_int8());
-        EXPECT_EQ(0, result->get(7).get_int8());
-        EXPECT_EQ(0, result->get(8).get_int8());
-        EXPECT_EQ(0, result->get(9).get_int8());
+        EXPECT_EQ("[1, NULL, NULL, NULL, 0, NULL, 1, 0, 0, 0]", result->debug_string());
     }
 
     // array_contains_seq([["a"], ["b"]], [["c"]])
@@ -5207,10 +4768,7 @@ TEST_F(ArrayFunctionsTest, array_contains_seq) {
         target->append_datum(DatumArray{Datum(DatumArray{"a", "b"})});
 
         auto result = ArrayFunctions::array_contains_seq(nullptr, {array, target}).value();
-        EXPECT_EQ(3, result->size());
-        EXPECT_EQ(0, result->get(0).get_int8());
-        EXPECT_EQ(0, result->get(1).get_int8());
-        EXPECT_EQ(1, result->get(2).get_int8());
+        EXPECT_EQ("[0, 0, 1]", result->debug_string());
     }
     // array_contains_seq([["a"], ["b"], [NULL]], [["c"]])
     // array_contains_seq([["a","d","c"]], [["e"]])
@@ -5227,10 +4785,7 @@ TEST_F(ArrayFunctionsTest, array_contains_seq) {
         target->append_datum(DatumArray{Datum(DatumArray{"a", "b"})});
 
         auto result = ArrayFunctions::array_contains_seq(nullptr, {array, target}).value();
-        EXPECT_EQ(3, result->size());
-        EXPECT_EQ(0, result->get(0).get_int8());
-        EXPECT_EQ(0, result->get(1).get_int8());
-        EXPECT_EQ(1, result->get(2).get_int8());
+        EXPECT_EQ("[0, 0, 1]", result->debug_string());
     }
     // array_contains_seq([["a"], ["b"]], [["c"], [NULL]])
     // array_contains_seq([["a","d","c"]], [["e", NULL]])
@@ -5247,10 +4802,7 @@ TEST_F(ArrayFunctionsTest, array_contains_seq) {
         target->append_datum(DatumArray{Datum(DatumArray{"a", "b"})});
 
         auto result = ArrayFunctions::array_contains_seq(nullptr, {array, target}).value();
-        EXPECT_EQ(3, result->size());
-        EXPECT_EQ(0, result->get(0).get_int8());
-        EXPECT_EQ(0, result->get(1).get_int8());
-        EXPECT_EQ(1, result->get(2).get_int8());
+        EXPECT_EQ("[0, 0, 1]", result->debug_string());
     }
 }
 
@@ -5640,10 +5192,7 @@ TEST_F(ArrayFunctionsTest, array_flatten_int) {
         array->append_datum(DatumArray{DatumArray{1, 2}, DatumArray{3}});
 
         auto result = ArrayFunctions::array_flatten(nullptr, {std::move(array)}).value();
-        EXPECT_EQ(3, result->size());
-        EXPECT_TRUE(result->get(0).is_null());
-        EXPECT_EQ("[1,2,1,4]", result->debug_item(1));
-        EXPECT_EQ("[1,2,3]", result->debug_item(2));
+        EXPECT_EQ("[NULL, [1,2,1,4], [1,2,3]]", result->debug_string());
     }
 }
 
@@ -5767,10 +5316,7 @@ TEST_F(ArrayFunctionsTest, null_or_empty) {
                                                                    {NullArrayRow{}, {{1, 2}}, {}});
 
         auto result = ArrayFunctions::null_or_empty(nullptr, {std::move(array)}).value();
-        EXPECT_EQ(3, result->size());
-        EXPECT_EQ("1", result->debug_item(0));
-        EXPECT_EQ("0", result->debug_item(1));
-        EXPECT_EQ("1", result->debug_item(2));
+        EXPECT_EQ("[1, 0, 1]", result->debug_string());
     }
     {
         auto array = ColumnTestHelper::build_array_column<int32_t>(TYPE_ARRAY_INT_DESC, false, {{{1, 2}}, {}});
