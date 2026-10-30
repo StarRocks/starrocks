@@ -63,8 +63,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 
 public class LakeRestoreJob extends RestoreJob {
     private static final Logger LOG = LogManager.getLogger(LakeRestoreJob.class);
@@ -226,8 +224,9 @@ public class LakeRestoreJob extends RestoreJob {
             Iterator<Map.Entry<Long, Future<RestoreSnapshotsResponse>>> entries = responses.entrySet().iterator();
             while (entries.hasNext()) {
                 Map.Entry<Long, Future<RestoreSnapshotsResponse>> entry = entries.next();
-                getRestoreSnapshotsResponse(entry);
-                entries.remove();
+                if (getRestoreSnapshotsResponse(entry)) {
+                    entries.remove();
+                }
             }
             super.waitingAllDownloadFinished();
         } catch (InterruptedException | ExecutionException e) {
@@ -235,14 +234,15 @@ public class LakeRestoreJob extends RestoreJob {
         }
     }
 
-    private void getRestoreSnapshotsResponse(Map.Entry<Long, Future<RestoreSnapshotsResponse>> entry)
+    // Returns false while the response has not arrived; the entry is then kept and polled again on the next run.
+    private boolean getRestoreSnapshotsResponse(Map.Entry<Long, Future<RestoreSnapshotsResponse>> entry)
             throws ExecutionException, InterruptedException {
-        try {
-            entry.getValue().get(1000, TimeUnit.MILLISECONDS);
-            unfinishedSignatureToId.remove(entry.getKey());
-        } catch (TimeoutException e) {
-            // Maybe there are many download tasks, so we ignore timeout exception.
+        if (!entry.getValue().isDone()) {
+            return false;
         }
+        entry.getValue().get();
+        unfinishedSignatureToId.remove(entry.getKey());
+        return true;
     }
 
     @Override

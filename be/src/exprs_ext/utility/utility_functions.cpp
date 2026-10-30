@@ -505,8 +505,7 @@ struct EncoderVisitor : public ColumnVisitorAdapter<EncoderVisitor> {
     }
 
     // Strings/binary
-    template <typename T>
-    Status do_visit(const BinaryColumnBase<T>& column) {
+    Status do_visit(const BinaryColumn& column) {
         for (size_t i = 0; i < column.size(); i++) {
             // Skip processing for null rows
             if (null_mask && (*null_mask)[i]) {

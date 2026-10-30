@@ -115,6 +115,13 @@ struct TypeDescriptor {
         return res;
     }
 
+    // FILE is an opaque scalar here; its fixed field layout lives in FileColumn, not in children.
+    static TypeDescriptor create_file_type() {
+        TypeDescriptor res;
+        res.type = TYPE_FILE;
+        return res;
+    }
+
     static TypeDescriptor create_array_type(const TypeDescriptor& children) {
         TypeDescriptor res;
         res.type = TYPE_ARRAY;
@@ -191,9 +198,13 @@ struct TypeDescriptor {
 
     static TypeDescriptor create_geo_type(LogicalType type, GeoTypeDescriptor descriptor);
 
-    static TypeDescriptor from_logical_type(LogicalType type,
-                                            [[maybe_unused]] int len = TypeDescriptor::MAX_VARCHAR_LENGTH,
-                                            [[maybe_unused]] int precision = 27, [[maybe_unused]] int scale = 9) {
+    // Builds the descriptor of |type| when only the logical type is known. String types never take a length here:
+    // CHAR and VARCHAR get their maximum length (MAX_CHAR_LENGTH, MAX_VARCHAR_LENGTH), and VARBINARY falls through
+    // to TypeDescriptor(type) and keeps len = -1, which length checks treat as unbounded. Note that -1 differs from
+    // TYPE_VARBINARY_DESC (len = MAX_VARCHAR_LENGTH) under operator==. Use create_char_type(),
+    // create_varchar_type() or create_varbinary_type() when a specific length is needed. |precision| and |scale|
+    // apply to decimal types only.
+    static TypeDescriptor from_logical_type(LogicalType type, int precision = 27, int scale = 9) {
         switch (type) {
         case TYPE_CHAR:
             return TypeDescriptor::create_char_type(MAX_CHAR_LENGTH);
@@ -217,6 +228,8 @@ struct TypeDescriptor {
             return TypeDescriptor::create_json_type();
         case TYPE_VARIANT:
             return TypeDescriptor::create_variant_type();
+        case TYPE_FILE:
+            return TypeDescriptor::create_file_type();
         case TYPE_OBJECT:
             return TypeDescriptor::create_bitmap_type();
         default:
@@ -312,6 +325,8 @@ struct TypeDescriptor {
 
     inline bool is_struct_type() const { return type == TYPE_STRUCT; }
 
+    inline bool is_file_type() const { return type == TYPE_FILE; }
+
     inline bool is_array_type() const { return type == TYPE_ARRAY; }
 
     inline bool is_map_type() const { return type == TYPE_MAP; }
@@ -334,9 +349,10 @@ struct TypeDescriptor {
 
     // For some types with potential huge length, whose memory consumption is far more than normal types,
     // they need a different chunk_size setting
-    bool is_huge_type() const {
-        return type == TYPE_JSON || type == TYPE_OBJECT || type == TYPE_HLL || type == TYPE_VARIANT;
-    }
+    // Exactly the ObjectColumn-backed types: a single row can hold an arbitrarily large blob.
+    // TYPE_PERCENTILE used to be missing here, which was inconsistent with get_type_avg_size(),
+    // where it is budgeted at 1MB alongside TYPE_OBJECT.
+    bool is_huge_type() const { return is_object_type(type); }
 
     /// Returns the size of a slot for this type.
     int get_slot_size() const;
@@ -376,7 +392,6 @@ private:
     void to_protobuf(PTypeDesc* proto_type) const;
 };
 
-static const TypeDescriptor TYPE_UNKNOWN_DESC = TypeDescriptor(LogicalType::TYPE_UNKNOWN);
 static const TypeDescriptor TYPE_BOOLEAN_DESC = TypeDescriptor{LogicalType::TYPE_BOOLEAN};
 static const TypeDescriptor TYPE_TINYINT_DESC = TypeDescriptor{LogicalType::TYPE_TINYINT};
 static const TypeDescriptor TYPE_SMALLINT_DESC = TypeDescriptor{LogicalType::TYPE_SMALLINT};
@@ -387,13 +402,9 @@ static const TypeDescriptor TYPE_DOUBLE_DESC = TypeDescriptor(LogicalType::TYPE_
 static const TypeDescriptor TYPE_TIME_DESC = TypeDescriptor(LogicalType::TYPE_TIME);
 static const TypeDescriptor TYPE_DATE_DESC = TypeDescriptor(LogicalType::TYPE_DATE);
 static const TypeDescriptor TYPE_DATETIME_DESC = TypeDescriptor(LogicalType::TYPE_DATETIME);
-static const TypeDescriptor TYPE_CHAR_DESC = TypeDescriptor::create_char_type(TypeDescriptor::MAX_CHAR_LENGTH);
 static const TypeDescriptor TYPE_VARCHAR_DESC = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
 static const TypeDescriptor TYPE_VARBINARY_DESC =
         TypeDescriptor::create_varbinary_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
-static const TypeDescriptor TYPE_JSON_DESC = TypeDescriptor::create_json_type();
-
-static const TypeDescriptor TYPE_INT_ARRAY_DESC = TypeDescriptor::create_array_type(TYPE_INT_DESC);
 
 inline std::ostream& operator<<(std::ostream& os, const TypeDescriptor& type) {
     os << type.debug_string();

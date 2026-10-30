@@ -49,9 +49,11 @@ namespace starrocks::lake {
 // releasing per-segment state, accumulating IO stats -- that must still happen on a publish that is
 // going to fail. The first error is kept and returned from join().
 //
-// Not thread-safe: run() and join() belong to the single thread driving the loop. The runner must
-// outlive its tasks, so join() before letting it go out of scope -- the destructor does that anyway,
-// because a task that outlived the runner would write into a destroyed mutex.
+// run() may be called concurrently by multiple producers. Finish all producers before calling
+// join() or destroying the runner; otherwise a new task could be submitted after the wait returns.
+// When producers and their tasks share a pool, join from outside that pool after the producers
+// finish, so no worker waits for queued work in its own pool. The runner must outlive its tasks;
+// the destructor joins them to keep them from writing into a destroyed mutex.
 class ParallelTaskRunner {
 public:
     // `token` may be null (inline mode). When non-null it must outlive this runner.

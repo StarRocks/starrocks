@@ -27,6 +27,8 @@ import com.starrocks.catalog.TableFunction;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.type.AnyArrayType;
 import com.starrocks.type.AnyElementType;
+import com.starrocks.type.AnyGeographyType;
+import com.starrocks.type.AnyGeometryType;
 import com.starrocks.type.AnyMapType;
 import com.starrocks.type.AnyStructType;
 import com.starrocks.type.ArrayType;
@@ -34,6 +36,7 @@ import com.starrocks.type.BooleanType;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.MapType;
+import com.starrocks.type.ScalarType;
 import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
@@ -67,6 +70,13 @@ public class PolymorphicFunctionAnalyzer {
         for (int i = 0; i < size; ++i) {
             Type declType = i >= argsTypes.length ? argsTypes[argsTypes.length - 1] : argsTypes[i];
             Type inputType = inputArgTypes[i];
+
+            // A wildcard decimal declaration (map_agg's key) has no precision or scale; take them from the input,
+            // or the deduced return type hands the BE a decimal of precision -1.
+            if (declType.isDecimalV3() && ((ScalarType) declType).isWildcardDecimal() && inputType.isDecimalV3()) {
+                resolvedTypes[i] = inputType;
+                continue;
+            }
 
             // If declaration type is not a pseudo type, use it.
             if (!declType.isPseudoType()) {
@@ -456,6 +466,16 @@ public class PolymorphicFunctionAnalyzer {
                     continue;
                 }
                 allRealElementType.add(realType);
+            } else if (declType instanceof AnyGeographyType) {
+                if (realType.isNull()) {
+                    continue;
+                }
+                allRealElementType.add(realType);
+            } else if (declType instanceof AnyGeometryType) {
+                if (realType.isNull()) {
+                    continue;
+                }
+                allRealElementType.add(realType);
             }
         }
 
@@ -465,8 +485,18 @@ public class PolymorphicFunctionAnalyzer {
             // Rather than the Common Type of all AnyArray Types
             if (!FunctionSet.ARRAY_SORTBY.equals(fn.functionName()) &&
                     !FunctionSet.ARRAY_SORT_LAMBDA.equals(fn.functionName())) {
-                for (Type type : allRealElementType) {
-                    commonType = TypeManager.getCommonSuperType(commonType, type);
+                for (int i = 1; i < allRealElementType.size(); i++) {
+                    Type nextType = allRealElementType.get(i);
+                    if ((commonType instanceof AnyGeographyType || commonType instanceof AnyGeometryType) &&
+                            commonType.matchesType(nextType)) {
+                        commonType = nextType;
+                        continue;
+                    }
+                    if ((nextType instanceof AnyGeographyType || nextType instanceof AnyGeometryType) &&
+                            nextType.matchesType(commonType)) {
+                        continue;
+                    }
+                    commonType = TypeManager.getCommonSuperType(commonType, nextType);
                     if (commonType == null) {
                         LOGGER.warn("could not determine polymorphic type because input has non-match types");
                         return null;
@@ -485,6 +515,10 @@ public class PolymorphicFunctionAnalyzer {
             retType = typeArray;
         } else if (retType instanceof AnyElementType) {
             retType = typeElement;
+        } else if (retType instanceof AnyGeographyType) {
+            retType = typeElement;
+        } else if (retType instanceof AnyGeometryType) {
+            retType = typeElement;
         } else {
             Preconditions.checkState(fn instanceof TableFunction || !retType.isPseudoType());
         }
@@ -494,6 +528,10 @@ public class PolymorphicFunctionAnalyzer {
             if (declTypes[i] instanceof AnyArrayType) {
                 realTypes[i] = typeArray;
             } else if (declTypes[i] instanceof AnyElementType) {
+                realTypes[i] = typeElement;
+            } else if (declTypes[i] instanceof AnyGeographyType) {
+                realTypes[i] = typeElement;
+            } else if (declTypes[i] instanceof AnyGeometryType) {
                 realTypes[i] = typeElement;
             } else {
                 realTypes[i] = declTypes[i];

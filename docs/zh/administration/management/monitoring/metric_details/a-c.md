@@ -48,6 +48,27 @@ description: "Alphabetical a - c"
 - 单位：计数
 - 描述：tablet delta writer 线程池中排队的任务数量。
 
+## `authentication_failure_reason_total`
+
+- 单位: 个
+- 类型: Counter
+- 描述: 认证失败次数，按失败原因（`reason`）打标签，取值为 `malformed`、`no_matching_si`、`signature_fail`、`expired`、`claim_mismatch`、`bad_credential`、`disabled`、`internal`。HTTP 响应对客户端一律只报 `invalid_token`，真实原因只能从这个指标看。
+- 引入版本: v4.2
+
+## `authentication_failure_total`
+
+- 单位: 个
+- 类型: Counter
+- 描述: 认证失败次数，用两个相互独立的标签：`channel` 表示凭据从哪条通道进来，取值为 `mysql`、`http`、`arrow_flight`、`thrift_load`、`thrift_gateway`；`kind` 表示凭据该怎么解读，取值为 `mysql_native_scramble`、`mysql_oauth2_client`、`gssapi_token`、`plain_password`、`bearer_token`。按 `channel` 聚合可区分是哪条通道在失败——HTTP、Arrow Flight，还是 BE 到 FE 的导入 RPC；按 `kind` 聚合可看 Bearer 认证整体是否健康。
+- 引入版本: v4.2
+
+## `authentication_success_total`
+
+- 单位: 个
+- 类型: Counter
+- 描述: 认证成功次数，按 `channel` 和 `kind` 打标签，取值同 `authentication_failure_total`。
+- 引入版本: v4.2
+
 ## `base_compaction_task_byte_per_second`
 
 - 单位：字节/秒

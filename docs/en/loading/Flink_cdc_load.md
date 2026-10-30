@@ -12,6 +12,7 @@ description: "How to use Flink CDC to capture MySQL change data in real time and
 # Realtime synchronization from MySQL
 
 import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.mdx'
+import FlinkStarRocksConnection from '../_assets/commonMarkdown/Edition_Specific_Flink_StarRocks_Connection.mdx'
 
 StarRocks supports multiple methods to synchronize data from MySQL to StarRocks in real time, delivering low latency real-time analytics of massive data.
 
@@ -190,6 +191,12 @@ To synchronize data from MySQL in real time, the system needs to read data from 
     +---------------+-------+
     1 row in set (0.00 sec)
     ```
+
+### Connect to StarRocks
+
+The SMT configuration file sets these addresses in `flink.starrocks.jdbc-url` and `flink.starrocks.load-url`.
+
+<FlinkStarRocksConnection />
 
 ## Synchronize database & table schema
 

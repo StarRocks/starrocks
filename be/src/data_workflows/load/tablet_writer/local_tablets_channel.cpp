@@ -14,9 +14,11 @@
 
 #include "data_workflows/load/tablet_writer/local_tablets_channel.h"
 
+#include <butil/time.h>
 #include <fmt/format.h>
 
 #include <atomic>
+#include <cerrno>
 #include <chrono>
 #include <cstdint>
 #include <unordered_map>
@@ -198,7 +200,8 @@ Status LocalTabletsChannel::open(const PTabletWriterOpenRequest& params, PTablet
 }
 
 void LocalTabletsChannel::add_segment(brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
-                                      PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done) const {
+                                      PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done,
+                                      const timespec& deadline) const {
     // NOTE: This entrypoint does NOT deduplicate duplicate RPCs (unlike
     // add_chunk below, which dedups by packet_seq sliding window).
     // Duplicate tablet_writer_add_segment requests - whether from brpc
@@ -228,8 +231,21 @@ void LocalTabletsChannel::add_segment(brpc::Controller* cntl, const PTabletWrite
     // If you change any of those invariants - or add a new method that
     // mutates per-writer state from this path - you must keep the
     // duplicate-RPC contract intact.
-    std::shared_lock<bthreads::BThreadSharedMutex> lk(_rw_mtx);
     ClosureGuard closure_guard(done);
+    const int rc = _rw_mtx.lock_shared_until(deadline);
+    if (rc != 0) {
+        auto message = fmt::format(
+                "failed to acquire LocalTabletsChannel::_rw_mtx shared lock for segment replication, txn_id: {}, "
+                "load_id: {}, sink_id: {}, index_id: {}, tablet_id: {}, error code: {}",
+                request->txn_id(), print_id(request->id()), request->sink_id(), request->index_id(),
+                request->tablet_id(), rc);
+        auto st = rc == ETIMEDOUT ? Status::TimedOut(message) : Status::InternalError(message);
+        LOG(WARNING) << st;
+        st.to_protobuf(response->mutable_status());
+        // Complete this RPC without submitting a segment or entering cancellation/profile lock paths.
+        return;
+    }
+    std::shared_lock<bthreads::BThreadSharedMutex> lk(_rw_mtx, std::adopt_lock);
     auto it = _delta_writers.find(request->tablet_id());
     if (it == _delta_writers.end()) {
         response->mutable_status()->set_status_code(TStatusCode::INTERNAL_ERROR);
@@ -806,6 +822,9 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
             GlobalDictsWithVersion<GlobalDictMap> dict;
             dict.dict = std::move(global_dict);
             dict.version = slot.has_global_dict_version() ? slot.global_dict_version() : 0;
+            if (slot.has_global_dict_content_identity()) {
+                dict.content_identity = slot.global_dict_content_identity();
+            }
             _global_dicts.emplace(std::string(slot.col_name()), std::move(dict));
         }
     }
@@ -1062,6 +1081,10 @@ void LocalTabletsChannel::WriteCallback::run(const Status& st, const CommittedRo
                 rowset_global_dicts->find(item.first) != rowset_global_dicts->end()) {
                 tablet_info.add_valid_dict_cache_columns(item.first);
                 tablet_info.add_valid_dict_collected_version(rowset_global_dicts->at(item.first).version);
+                const auto& identity = rowset_global_dicts->at(item.first).content_identity;
+                if (identity.has_value()) {
+                    tablet_info.add_valid_dict_content_identities(*identity);
+                }
             } else {
                 tablet_info.add_invalid_dict_cache_columns(item.first);
             }

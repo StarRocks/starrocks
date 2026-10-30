@@ -62,14 +62,6 @@ TEST_F(AggregateTraitsTest, StringOrBinary_append_values_varchar) {
     EXPECT_EQ(col->debug_string(), "['hello', 'hello', 'hello', 'hello']");
 }
 
-TEST_F(AggregateTraitsTest, StringOrBinary_append_values_large_binary) {
-    using Traits = AggDataTypeTraits<TYPE_VARCHAR>;
-    auto col = LargeBinaryColumn::create();
-    Traits::ValueType value{'f', 'o', 'o'};
-    Traits::append_values(col.get(), value, 3);
-    EXPECT_EQ(col->debug_string(), "['foo', 'foo', 'foo']");
-}
-
 TEST_F(AggregateTraitsTest, Array_append_values) {
     using Traits = AggDataTypeTraits<TYPE_ARRAY>;
 

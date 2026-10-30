@@ -13,6 +13,14 @@ But serverl dependencies are under imcompatible licenses.
 This file will give an interpretation of these licenses.
 
 ============================================================================================
+H3
+source: https://github.com/uber/h3/tree/v4.5.0
+license: Apache License, Version 2.0
+
+StarRocks builds the H3 C library from the pinned upstream source archive.
+Its LICENSE and NOTICE are included in the upstream source distribution.
+
+============================================================================================
 LZ4
 source: https://github.com/lz4/lz4
 

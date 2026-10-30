@@ -37,6 +37,7 @@ import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.ProfileManager;
+import com.starrocks.context.ai.AIProvider;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryDetail;
 import com.starrocks.server.CatalogMgr;
@@ -49,6 +50,7 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.pipe.PipeName;
+import com.starrocks.sql.common.AIModelConfigs;
 import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections4.ListUtils;
@@ -72,6 +74,43 @@ public class Authorizer {
 
     public static void check(StatementBase statement, ConnectContext context) {
         getInstance().getPrivilegeCheckerVisitor().check(statement, context);
+    }
+
+    public static void checkAIFunctionUsage(ConnectContext context, FunctionCallExpr call) {
+        Function function = call.getFn();
+        if (!function.isAI()) {
+            return;
+        }
+        if (context.getCurrentUserIdentity() == null) {
+            throw new SemanticException("AI functions require a user identity in the execution context", call.getPos());
+        }
+        try {
+            checkAIFunctionAction(context, function.functionName(), PrivilegeType.USAGE);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(null, context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.USAGE.name(), "AI FUNCTION", function.functionName());
+        }
+        AIProvider provider = AIModelConfigs.resolveProvider(context.getGlobalStateMgr().getAIProviderMgr(), call);
+        String name = provider.getName();
+        try {
+            checkAIProviderAction(context, provider, PrivilegeType.USAGE);
+            AIModelConfigs.validateProvider(provider);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(null, context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.USAGE.name(), "AI PROVIDER", name);
+        }
+    }
+
+    public static void checkAIFunctionAction(ConnectContext context, String family, PrivilegeType privilegeType)
+            throws AccessDeniedException {
+        getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
+                .checkAIFunctionAction(context, family, privilegeType);
+    }
+
+    public static void checkAIProviderAction(ConnectContext context, AIProvider provider, PrivilegeType privilegeType)
+            throws AccessDeniedException {
+        getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
+                .checkAIProviderAction(context, provider, privilegeType);
     }
 
     public static void checkSystemAction(ConnectContext context, PrivilegeType privilegeType)
@@ -449,6 +488,16 @@ public class Authorizer {
     public static Expr getRowAccessPolicy(ConnectContext currentUser, TableName tableName) {
         String catalog = tableName.getCatalog() == null ? InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME : tableName.getCatalog();
         return getInstance().getAccessControlOrDefault(catalog).getRowAccessPolicy(currentUser, tableName);
+    }
+
+    /** See {@link com.starrocks.authorization.AccessController#mayHavePolicy}; the name is fully qualified. */
+    public static boolean mayHavePolicy(ConnectContext context, TableName tableName) {
+        return getInstance().getAccessControlOrDefault(tableName.getCatalog()).mayHavePolicy(context, tableName);
+    }
+
+    /** See {@link com.starrocks.authorization.AccessController#preResolvePolicyTarget}; the name is fully qualified. */
+    public static void preResolvePolicyTarget(ConnectContext context, TableName tableName, Table table) {
+        getInstance().getAccessControlOrDefault(tableName.getCatalog()).preResolvePolicyTarget(context, tableName, table);
     }
 
     /**

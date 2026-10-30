@@ -48,6 +48,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 import static com.starrocks.qe.WorkerProviderHelper.getNextWorker;
+import static com.starrocks.qe.WorkerProviderHelper.rendezvousWeight;
 
 /**
  * WorkerProvider for SHARED_DATA mode. Compared to its counterpart for SHARED_NOTHING mode:
@@ -62,7 +63,9 @@ import static com.starrocks.qe.WorkerProviderHelper.getNextWorker;
  *   primary worker id; they must have been available when this provider was built from the warehouse snapshot, and must
  *   pass blacklist checks at backup resolution time as well as at snapshot creation. Which algorithm is used depends
  *   on {@code BlacklistBackupRoutingPolicy}: {@code CIRCULAR} walks the sorted node id ring
- *   starting after the primary; {@code RANDOM} picks uniformly among eligible nodes. The default policy is {@code CIRCULAR}
+ *   starting after the primary; {@code RANDOM} picks uniformly among eligible nodes; {@code TABLET_HASH} picks the
+ *   eligible node with the highest rendezvous hash of (affinity key, node id), and falls back to {@code CIRCULAR}
+ *   when the caller has no affinity key. The default policy is {@code TABLET_HASH}
  *   unless another value is passed at construction, and stays fixed for the lifetime of this provider.
  * Also in shared-data mode, all nodes will be treated as compute nodes. so the session variable @@prefer_compute_node
  * will be always true, and @@use_compute_nodes will be always -1 which means using all the available compute nodes.
@@ -249,14 +252,46 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
 
     @Override
     public long selectBackupWorker(long workerId) {
-        if (blacklistBackupRoutingPolicy == BlacklistBackupRoutingPolicy.CIRCULAR) {
-            return selectBackupWorkerCircular(workerId);
-        } else if (blacklistBackupRoutingPolicy == BlacklistBackupRoutingPolicy.RANDOM) {
-            return selectBackupWorkerRandom(workerId);
-        } else {
-            throw new IllegalArgumentException("Invalid blacklist backup routing policy: "
-                    + blacklistBackupRoutingPolicy);
+        return switch (blacklistBackupRoutingPolicy) {
+            // TABLET_HASH has no affinity key to hash here, so it keeps the CIRCULAR behavior.
+            case CIRCULAR, TABLET_HASH -> selectBackupWorkerCircular(workerId);
+            case RANDOM -> selectBackupWorkerRandom(workerId);
+        };
+    }
+
+    @Override
+    public long selectBackupWorker(long workerId, long affinityKey) {
+        if (blacklistBackupRoutingPolicy == BlacklistBackupRoutingPolicy.TABLET_HASH) {
+            return selectBackupWorkerTabletHash(workerId, affinityKey);
         }
+        return selectBackupWorker(workerId);
+    }
+
+    /**
+     * Picks the eligible buddy with the highest rendezvous weight for {@code affinityKey}, so the backup is a function
+     * of the routed data instead of the primary alone: the primary's tablets spread over all eligible buddies, while
+     * one tablet keeps the same backup as long as the eligible set does not change. When a backup becomes ineligible,
+     * only the keys it owned move, each to its next highest weighted buddy.
+     * Single pass, no allocation; ties go to the smaller node id, so the result does not depend on iteration order.
+     */
+    protected long selectBackupWorkerTabletHash(long workerId, long affinityKey) {
+        if (availableID2ComputeNode.isEmpty() || !id2ComputeNode.containsKey(workerId)) {
+            return -1;
+        }
+
+        long chosen = -1;
+        long chosenWeight = 0;
+        for (long buddyId : availableID2ComputeNode.keySet()) {
+            if (!isBuddyEligibleForBackup(buddyId, workerId)) {
+                continue;
+            }
+            long weight = rendezvousWeight(affinityKey, buddyId);
+            if (chosen == -1 || weight > chosenWeight || (weight == chosenWeight && buddyId < chosen)) {
+                chosen = buddyId;
+                chosenWeight = weight;
+            }
+        }
+        return chosen;
     }
 
     /**

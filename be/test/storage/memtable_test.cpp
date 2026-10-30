@@ -510,6 +510,38 @@ TEST_F(MemTableTest, testPrimaryKeysSizeLimitCompositePK) {
     ASSERT_FALSE(_mem_table->finalize().ok());
 }
 
+TEST_F(MemTableTest, testWriteBufferRowLimit) {
+    const string path = "./MemTableTest_testWriteBufferRowLimit";
+    MySetUp(create_tablet_schema("pk int,name varchar,pv int", 1, KeysType::PRIMARY_KEYS), "pk int,name varchar,pv int",
+            path);
+    // A load passes the same chunk to every tablet it covers and picks each tablet's rows with a window
+    // of `indexes`. Lay the indexes out that way for 4 tablets and feed all 4 windows to one memtable, so
+    // it holds every row exactly once and the row count it reports can be checked exactly.
+    const uint32_t n = 1000;
+    const uint32_t num_windows = 4;
+    const uint32_t window_rows = n / num_windows;
+    auto pchunk = gen_chunk(*_slots, n);
+    vector<uint32_t> indexes;
+    indexes.reserve(n);
+    for (uint32_t w = 0; w < num_windows; w++) {
+        for (uint32_t i = w; i < n; i += num_windows) {
+            indexes.emplace_back(i);
+        }
+    }
+    _mem_table->set_write_buffer_row(n);
+    struct Expected {
+        size_t buffered_rows;
+        bool full;
+    };
+    const Expected expected[num_windows] = {{250, false}, {500, false}, {750, false}, {1000, true}};
+    for (uint32_t w = 0; w < num_windows; w++) {
+        auto res = _mem_table->insert(*pchunk, indexes.data(), w * window_rows, window_rows);
+        ASSERT_TRUE(res.ok()) << res.status();
+        ASSERT_EQ(expected[w].buffered_rows, _mem_table->write_buffer_rows()) << "window " << w;
+        ASSERT_EQ(expected[w].full, res.value()) << "window " << w;
+    }
+}
+
 TEST_F(MemTableTest, test_metrics) {
     const string path = "./MemTableTest_test_metrics";
     MySetUp(create_tablet_schema("pk int,name varchar,pv int", 1, KeysType::DUP_KEYS), "pk int,name varchar,pv int",

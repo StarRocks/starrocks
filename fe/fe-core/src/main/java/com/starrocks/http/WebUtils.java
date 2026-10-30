@@ -36,13 +36,16 @@ package com.starrocks.http;
 
 import com.google.common.base.Charsets;
 import com.google.common.collect.ImmutableSet;
+import com.starrocks.common.ConfigBase;
 import com.starrocks.common.path.PathTrie;
-import org.jetbrains.annotations.NotNull;
+import io.netty.handler.codec.http.QueryStringDecoder;
 
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.net.URLEncoder;
 import java.nio.charset.Charset;
-import java.util.HashMap;
+import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -51,6 +54,10 @@ public class WebUtils {
 
     private static final Set<String> SANITIZED_HTTP_PARAMS =
             ImmutableSet.of("file_id", "cluster_id", "token");
+
+    // The query parameters of this path are config names and values; credential ones are masked as in
+    // ConfigBase.maskIfSensitive.
+    private static final String SET_CONFIG_PATH = "/api/_set_config";
 
     /**
      * Decodes a bit of an URL encoded by a browser.
@@ -174,45 +181,62 @@ public class WebUtils {
 
     /**
      * This method sanitizes the input URI by replacing the values of certain query parameters with "*".
-     * The parameters to be sanitized are listed in `SANITIZED_HTTP_PARAMS`.
-     * If these parameters are not present in the URI, the method returns the original URI.
+     * The parameters to be sanitized are listed in `SANITIZED_HTTP_PARAMS`. For /api/_set_config, the values of
+     * credential configs are also replaced, with {@link ConfigBase#maskIfSensitive(String, String)}.
+     * <p>
+     * The query is parsed the same way as {@link BaseRequest} parses it for the actions, and rebuilt from the parsed
+     * parameters: a value an action reads as a sanitized parameter is always masked, however the query is written
+     * (e.g. with ';' as a separator, or an escaped '&' in a value), and what is not parsed as a parameter is left
+     * out. If the URI has no query, it is returned as is, except that anything after a '?' is hidden.
      *
      * @param uri The input URI to be sanitized.
-     * @return The sanitized URI with the values of certain query parameters replaced with "*".
+     * @return The sanitized URI with the values of certain query parameters replaced.
      * @throws URISyntaxException If the input string can't be parsed as a URI reference.
      */
     public static String sanitizeHttpReqUri(String uri) throws URISyntaxException {
         URI inputUri = new URI(uri);
-        Map<String, String> queryMap = getQueryMap(inputUri);
-
-        StringBuilder sanitizedQuery = new StringBuilder();
-        for (Map.Entry<String, String> entry : queryMap.entrySet()) {
-            if (sanitizedQuery.length() > 0) {
-                sanitizedQuery.append('&');
-            }
-            sanitizedQuery.append(entry.getKey()).append('=').append(entry.getValue());
+        if (inputUri.getRawQuery() == null) {
+            // What follows a '?' may still not be a query to java.net.URI, e.g. in an opaque uri (http:foo?...) or a
+            // fragment (/api#frag?...), but it would be logged as is: hide it.
+            return uri.indexOf('?') < 0 ? uri : hideHttpReqQuery(uri);
         }
+        boolean isSetConfig = SET_CONFIG_PATH.equals(inputUri.getPath());
 
-        return new URI(inputUri.getScheme(), inputUri.getAuthority(), inputUri.getPath(),
-                sanitizedQuery.toString(), inputUri.getFragment()).toString();
+        QueryStringDecoder decoder = BaseRequest.newQueryStringDecoder(uri);
+        StringBuilder sanitized = new StringBuilder(decoder.rawPath());
+        char separator = '?';
+        for (Map.Entry<String, List<String>> param : decoder.parameters().entrySet()) {
+            String key = param.getKey();
+            for (String value : param.getValue()) {
+                if (SANITIZED_HTTP_PARAMS.contains(key)) {
+                    value = "*";
+                } else if (isSetConfig) {
+                    value = ConfigBase.maskIfSensitive(key, value);
+                }
+                sanitized.append(separator).append(URLEncoder.encode(key, StandardCharsets.UTF_8))
+                        .append('=').append(URLEncoder.encode(value, StandardCharsets.UTF_8));
+                separator = '&';
+            }
+        }
+        return sanitized.toString();
     }
 
-    @NotNull
-    private static Map<String, String> getQueryMap(URI inputUri) {
-        // Initialize queryPairs array to avoid NullPointerException
-        String query = inputUri.getQuery();
-        String[] queryPairs = query != null ? query.split("&") : new String[0];
-        Map<String, String> queryMap = new HashMap<>();
-
-        for (String pair : queryPairs) {
-            int idx = pair.indexOf("=");
-            String key = idx > 0 ? pair.substring(0, idx) : pair;
-            String value = idx > 0 && pair.length() > idx + 1 ? pair.substring(idx + 1) : null;
-            if (SANITIZED_HTTP_PARAMS.contains(key)) {
-                value = "*";
-            }
-            queryMap.put(key, value);
+    /**
+     * {@link #sanitizeHttpReqUri(String)} for a log line. If the uri cannot be parsed, only its path is returned,
+     * since the query may hold a credential.
+     */
+    public static String sanitizeHttpReqUriForLog(String uri) {
+        try {
+            return sanitizeHttpReqUri(uri);
+        } catch (URISyntaxException e) {
+            // Not e.getMessage(): it quotes the whole input.
+            return hideHttpReqQuery(uri) + " (failed to sanitize uri: " + e.getReason() + ")";
         }
-        return queryMap;
+    }
+
+    // The uri with its query, if any, replaced, for when it cannot be sanitized.
+    public static String hideHttpReqQuery(String uri) {
+        int queryStart = uri.indexOf('?');
+        return queryStart < 0 ? uri : uri.substring(0, queryStart) + "?<query not shown>";
     }
 }

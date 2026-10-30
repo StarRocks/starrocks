@@ -22,14 +22,13 @@
 
 #include "base/testutil/assert.h"
 #include "column/fixed_length_column.h"
+#include "testutil/column_test_helper.h"
 #include "types/type_descriptor.h"
 
 namespace starrocks {
 
 TEST(RecordBatchConverterTest, ConvertsColumnsAndSerializesBatches) {
-    auto column = Int32Column::create();
-    column->append(7);
-    column->append(8);
+    auto column = ColumnTestHelper::build_column<int32_t>({7, 8});
 
     Columns columns;
     columns.emplace_back(std::move(column));

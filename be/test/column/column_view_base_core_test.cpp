@@ -16,10 +16,13 @@
 
 #include <string>
 
+#include "base/testutil/assert.h"
 #include "column/binary_column.h"
 #include "column/column_view/column_view.h"
+#include "column/const_column.h"
 #include "column/nullable_column.h"
 #include "gutil/casts.h"
+#include "testutil/column_test_helper.h"
 
 namespace starrocks {
 namespace {
@@ -33,15 +36,10 @@ std::string slice_to_string(const Slice& s) {
 TEST(ColumnViewBaseCoreTest, AppendSelectiveToWithoutConcat) {
     auto view = ColumnView::create(BinaryColumn::create(), 1, -1);
 
-    auto src0 = BinaryColumn::create();
-    src0->append("a");
-    src0->append("b");
-    src0->append("c");
+    auto src0 = ColumnTestHelper::build_column<Slice>({"a", "b", "c"});
     view->append(*src0, 0, 2);
 
-    auto src1 = BinaryColumn::create();
-    src1->append("x");
-    src1->append("y");
+    auto src1 = ColumnTestHelper::build_column<Slice>({"x", "y"});
     const uint32_t selective[] = {1, 0};
     view->append_selective(*src1, selective, 0, 2);
 
@@ -59,9 +57,7 @@ TEST(ColumnViewBaseCoreTest, AppendSelectiveToWithoutConcat) {
 TEST(ColumnViewBaseCoreTest, AppendSelectiveToWithConcatAndNulls) {
     auto view = ColumnView::create(NullableColumn::create(BinaryColumn::create(), NullColumn::create()), -1, -1);
 
-    auto data = BinaryColumn::create();
-    data->append("v0");
-    data->append("ignored");
+    auto data = ColumnTestHelper::build_column<Slice>({"v0", "ignored"});
 
     auto nulls = NullColumn::create();
     nulls->append(0);
@@ -80,6 +76,47 @@ TEST(ColumnViewBaseCoreTest, AppendSelectiveToWithConcatAndNulls) {
 
     auto* data_column = down_cast<BinaryColumn*>(dst->data_column_raw_ptr());
     EXPECT_EQ("v0", slice_to_string(data_column->get_slice(0)));
+}
+
+// ColumnViewBase::capacity_limit_reached() used to throw. It must return a Status for a view with or without a
+// concatenated column, without forcing the deferred concatenation.
+TEST(ColumnViewBaseCoreTest, CapacityLimitReached) {
+    auto src = ColumnTestHelper::build_column<Slice>({"a", "b"});
+
+    // Concatenation disabled by the rows limit: reads stay on the habitats.
+    auto view = ColumnView::create(BinaryColumn::create(), 1, -1);
+    view->append(*src, 0, 2);
+    ASSERT_OK(view->capacity_limit_reached());
+    auto dst = BinaryColumn::create();
+    const uint32_t indexes[] = {0, 1};
+    view->append_selective_to(*dst, indexes, 0, 2);
+    ASSERT_OK(view->capacity_limit_reached());
+
+    // Both limits are -1, so the first read concatenates the rows into _concat_column, which is then checked.
+    auto concat_view = ColumnView::create(BinaryColumn::create(), -1, -1);
+    concat_view->append(*src, 0, 2);
+    ASSERT_OK(concat_view->capacity_limit_reached());
+    auto concat_dst = BinaryColumn::create();
+    concat_view->append_selective_to(*concat_dst, indexes, 0, 2);
+    ASSERT_OK(concat_view->capacity_limit_reached());
+    ASSERT_EQ(2, concat_dst->size());
+    EXPECT_EQ("b", slice_to_string(concat_dst->get_slice(1)));
+}
+
+// Reach the row limit of a view without allocating it: the source is a ConstColumn that holds one binary value but
+// reports MAX_CAPACITY_LIMIT rows, so both appends stay within the source. The view is never read.
+TEST(ColumnViewBaseCoreTest, CapacityLimitReachedRejectsTooManyRows) {
+    const uint64_t capacity_limit = Column::MAX_CAPACITY_LIMIT;
+    auto value = ColumnTestHelper::build_column<Slice>({"a"});
+    auto src = ConstColumn::create(std::move(value), capacity_limit);
+    ASSERT_OK(src->capacity_limit_reached());
+
+    auto view = ColumnView::create(BinaryColumn::create(), 0, -1);
+    view->append(*src, 0, capacity_limit);
+    ASSERT_OK(view->capacity_limit_reached());
+    view->append(*src, 0, 1);
+    auto status = view->capacity_limit_reached();
+    ASSERT_TRUE(status.is_capacity_limit_exceeded()) << status;
 }
 
 } // namespace starrocks

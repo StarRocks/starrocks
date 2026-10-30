@@ -490,7 +490,8 @@ public class StatisticUtils {
 
     public static Optional<Double> convertStatisticsToDouble(Type type, String statistic) {
         if (!type.canStatistic()) {
-            throw new StarRocksPlannerException("Error statistic type : " + type.toSql(), ErrorType.INTERNAL_ERROR);
+            // No statistics for this type (e.g. VARBINARY): the caller estimates without a value, as for VARCHAR.
+            return Optional.empty();
         }
         try {
             switch (type.getPrimitiveType()) {

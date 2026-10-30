@@ -1,0 +1,35 @@
+-- name: test_date_function_on_out_of_range_numeric_stats
+
+-- A date function applied to a numeric column goes through an implicit cast to DATETIME. When the
+-- cast cannot fold that column's statistic bounds into a datetime it falls back to the raw numeric
+-- statistic, so the planner ends up converting a bound that sits far outside the DATETIME domain.
+-- Converting it unguarded throws "Instant exceeds minimum or maximum instant" out of statistics
+-- derivation, which nothing on that path catches, and the whole query fails. Nanosecond epoch
+-- timestamps kept in a BIGINT are the everyday way to land there.
+
+create database test_date_stats_${uuid0};
+use test_date_stats_${uuid0};
+
+CREATE TABLE t_ns (
+    k INT,
+    ts_nanos BIGINT
+)
+DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+
+INSERT INTO t_ns VALUES (1, 1758412800000000000), (2, 1758499200000000000);
+
+-- The bad bound only reaches the planner once min/max have actually been collected.
+[UC] ANALYZE TABLE t_ns WITH SYNC MODE;
+
+SELECT k FROM t_ns WHERE date_trunc('day', ts_nanos) > '2020-01-01' ORDER BY k;
+SELECT k, date_trunc('day', ts_nanos) FROM t_ns ORDER BY k;
+SELECT k FROM t_ns WHERE to_date(ts_nanos) > '2020-01-01' ORDER BY k;
+SELECT k, to_days(ts_nanos) FROM t_ns ORDER BY k;
+SELECT k, week(ts_nanos, 0) FROM t_ns ORDER BY k;
+
+-- year() already guarded the same conversion, so it is the control that was never broken.
+SELECT k, year(ts_nanos) FROM t_ns ORDER BY k;
+
+drop database test_date_stats_${uuid0};

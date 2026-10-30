@@ -16,6 +16,7 @@
 
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
+#include "testutil/column_test_helper.h"
 
 namespace starrocks {
 
@@ -32,10 +33,7 @@ TEST(ColumnViewerCoreTest, ConstColumnMaskExpansion) {
 }
 
 TEST(ColumnViewerCoreTest, NullableColumnUsesNullBitmap) {
-    auto data = Int32Column::create();
-    data->append(10);
-    data->append(20);
-    data->append(30);
+    auto data = ColumnTestHelper::build_column<int32_t>({10, 20, 30});
 
     auto nulls = NullColumn::create();
     nulls->append(0);
@@ -54,10 +52,7 @@ TEST(ColumnViewerCoreTest, NullableColumnUsesNullBitmap) {
 }
 
 TEST(ColumnViewerCoreTest, NonNullableColumnNoNulls) {
-    auto col = Int32Column::create();
-    col->append(7);
-    col->append(8);
-    col->append(9);
+    auto col = ColumnTestHelper::build_column<int32_t>({7, 8, 9});
 
     ColumnViewer<TYPE_INT> viewer(col);
 

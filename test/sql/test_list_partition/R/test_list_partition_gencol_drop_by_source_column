@@ -1,0 +1,42 @@
+-- name: test_list_partition_gencol_drop_by_source_column
+create database test_db_${uuid0};
+-- result:
+-- !result
+use test_db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE t_multi (c1 datetime NOT NULL, v int NOT NULL)
+DUPLICATE KEY(c1)
+PARTITION BY v, date_trunc('day', c1)
+DISTRIBUTED BY HASH(c1) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into t_multi values ('2024-01-01 10:00:00', 1), ('2024-01-02 13:00:00', 1), ('2024-01-03 09:00:00', 1);
+-- result:
+-- !result
+alter table t_multi drop partitions where c1 < '2024-01-02 00:00:00';
+-- result:
+E: (1064, "Getting analyzing error. Detail message: Column `c1` in the partition condition is not a table's partition expression, please use table's partition expressions: `v`/`date_trunc('day', c1)`.")
+-- !result
+alter table t_multi drop partitions where c1 = '2024-01-02 12:00:00';
+-- result:
+E: (1064, "Getting analyzing error. Detail message: Column `c1` in the partition condition is not a table's partition expression, please use table's partition expressions: `v`/`date_trunc('day', c1)`.")
+-- !result
+select c1 from t_multi order by c1;
+-- result:
+2024-01-01 10:00:00
+2024-01-02 13:00:00
+2024-01-03 09:00:00
+-- !result
+alter table t_multi drop partitions where date_trunc('day', c1) < '2024-01-02 00:00:00';
+-- result:
+-- !result
+select c1 from t_multi order by c1;
+-- result:
+2024-01-02 13:00:00
+2024-01-03 09:00:00
+-- !result
+drop database test_db_${uuid0} force;
+-- result:
+-- !result

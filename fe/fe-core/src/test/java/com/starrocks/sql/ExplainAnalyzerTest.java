@@ -159,6 +159,20 @@ public class ExplainAnalyzerTest {
                 new Counter(TUnit.TIME_NS, null, 9000000));
         uniqueMetrics.addCounter("VectorResultProcess", RuntimeProfile.ROOT_COUNTER,
                 new Counter(TUnit.TIME_NS, null, 3000000));
+        uniqueMetrics.addCounter("SegmentInit", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.TIME_NS, null, 9000000));
+        uniqueMetrics.addCounter("SegmentInitPrepare", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.TIME_NS, null, 1200000));
+        uniqueMetrics.addCounter("RowidRangeFilter", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.TIME_NS, null, 1500000));
+        uniqueMetrics.addCounter("PrecomputedRangeFilter", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.TIME_NS, null, 1100000));
+        uniqueMetrics.addCounter("TabletRangeFilter", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.TIME_NS, null, 1300000));
+        uniqueMetrics.addCounter("DelVectorApply", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.TIME_NS, null, 1400000));
+        uniqueMetrics.addCounter("SegmentInitFinalize", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.TIME_NS, null, 1600000));
         uniqueMetrics.addCounter("Unknown", RuntimeProfile.ROOT_COUNTER,
                 new Counter(TUnit.BYTES, null, 12 * 1024 * 1024));
         olapScanProfile.addChild(uniqueMetrics);
@@ -208,6 +222,15 @@ public class ExplainAnalyzerTest {
         assertTrue(result.contains("ZoneMapIndexFilter: "), result);
         assertTrue(result.contains("PredFilter: "), result);
         assertTrue(result.contains("ShortKeyFilter:"), result);
+        // SegmentInit and the remaining init phases are known metrics, so they render under
+        // SegmentProcessing rather than falling into the Others bucket.
+        assertTrue(result.contains("SegmentInit: "), result);
+        assertTrue(result.contains("SegmentInitPrepare: "), result);
+        assertTrue(result.contains("RowidRangeFilter: "), result);
+        assertTrue(result.contains("PrecomputedRangeFilter: "), result);
+        assertTrue(result.contains("TabletRangeFilter: "), result);
+        assertTrue(result.contains("DelVectorApply: "), result);
+        assertTrue(result.contains("SegmentInitFinalize: "), result);
         assertTrue(result.contains("Others"), result);
     }
 

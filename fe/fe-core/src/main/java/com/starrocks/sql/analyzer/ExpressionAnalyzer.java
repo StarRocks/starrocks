@@ -36,7 +36,6 @@ import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.UserIdentity;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.qe.ConnectContext;
@@ -47,6 +46,7 @@ import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.OrderByElement;
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.ast.expression.AnalyticExpr;
 import com.starrocks.sql.ast.expression.ArithmeticExpr;
@@ -452,6 +452,28 @@ public class ExpressionAnalyzer {
         }
 
         @Override
+        public Void visit(ParseNode node, Scope scope) {
+            node.accept(this, scope);
+            if (node instanceof Expr expression) {
+                checkNestedGeoType(expression.getType(), expression);
+                if (expression instanceof FunctionCallExpr call && call.getFn() != null) {
+                    // The final argument type also covers varargs.
+                    for (Type argumentType : call.getFn().getArgs()) {
+                        checkNestedGeoType(argumentType, expression);
+                    }
+                }
+            }
+            return null;
+        }
+
+        private void checkNestedGeoType(Type type, Expr expression) {
+            if (type.hasNestedGeoType()) {
+                throw new SemanticException("Nested GEOGRAPHY/GEOMETRY types are not supported in ARRAY, MAP or STRUCT: "
+                        + type.toSql() + " in " + ExprToSql.toSql(expression), expression.getPos());
+            }
+        }
+
+        @Override
         public Void visitExpression(Expr node, Scope scope) {
             throw new SemanticException("not yet implemented: expression analyzer for " + node.getClass().getName(),
                     node.getPos());
@@ -761,11 +783,11 @@ public class ExpressionAnalyzer {
         public Void visitBinaryPredicate(BinaryPredicate node, Scope scope) {
             Type type1 = node.getChild(0).getType();
             Type type2 = node.getChild(1).getType();
+            final String ERROR_MSG = "Column type %s does not support binary predicate operation with type %s";
 
             Type compatibleType =
                     TypeManager.getCompatibleTypeForBinary(!node.getOp().isNotRangeComparison(), type1, type2);
             // check child type can be cast
-            final String ERROR_MSG = "Column type %s does not support binary predicate operation with type %s";
             if (!TypeManager.canCastTo(type1, compatibleType)) {
                 throw new SemanticException(String.format(ERROR_MSG, type1.toSql(), type2.toSql()), node.getPos());
             }
@@ -905,7 +927,6 @@ public class ExpressionAnalyzer {
                         "subquery must return the same number of columns as provided by the IN predicate",
                         node.getPos());
             }
-
             for (int i = 0; i < rightTypes.size(); ++i) {
                 if (leftTypes.get(i).isJsonType() || rightTypes.get(i).isJsonType() || leftTypes.get(i).isMapType() ||
                         rightTypes.get(i).isMapType() || leftTypes.get(i).isStructType() ||
@@ -1155,8 +1176,9 @@ public class ExpressionAnalyzer {
                 node.setFn(fn);
                 node.setType(fn.getReturnType());
                 FunctionAnalyzer.analyze(node);
-                verifyNoAiInConditionalFunction(node);
+                verifyNoAIInConditionalFunction(node);
                 checkGetQueryProfileAccess(node);
+                Authorizer.checkAIFunctionUsage(session, node);
                 return null;
             }
 
@@ -1181,8 +1203,9 @@ public class ExpressionAnalyzer {
                     node.setFn(fn);
                     node.setType(fn.getReturnType());
                     FunctionAnalyzer.analyze(node);
-                    verifyNoAiInConditionalFunction(node);
+                    verifyNoAIInConditionalFunction(node);
                     checkGetQueryProfileAccess(node);
+                    Authorizer.checkAIFunctionUsage(session, node);
                     return null;
                 }
                 // Try to provide a more user-friendly error message for positional calls
@@ -1197,8 +1220,9 @@ public class ExpressionAnalyzer {
             node.setFn(fn);
             node.setType(fn.getReturnType());
             FunctionAnalyzer.analyze(node);
-            verifyNoAiInConditionalFunction(node);
+            verifyNoAIInConditionalFunction(node);
             checkGetQueryProfileAccess(node);
+            Authorizer.checkAIFunctionUsage(session, node);
             return null;
         }
 
@@ -1211,7 +1235,7 @@ public class ExpressionAnalyzer {
             }
         }
 
-        private void verifyNoAiInConditionalFunction(FunctionCallExpr node) {
+        private void verifyNoAIInConditionalFunction(FunctionCallExpr node) {
             String resolvedFunctionName = node.getFn().functionName();
             if (FunctionSet.IF.equalsIgnoreCase(resolvedFunctionName)
                     || FunctionSet.IFNULL.equalsIgnoreCase(resolvedFunctionName)
@@ -1695,7 +1719,7 @@ public class ExpressionAnalyzer {
             String funcType = node.getFuncType();
             if (funcType.equalsIgnoreCase(FunctionSet.DATABASE) || funcType.equalsIgnoreCase(FunctionSet.SCHEMA)) {
                 node.setType(VarcharType.VARCHAR);
-                node.setStrValue(ClusterNamespace.getNameFromFullName(session.getDatabase()));
+                node.setStrValue(session.getDatabase());
             } else if (funcType.equalsIgnoreCase(FunctionSet.USER)
                     || funcType.equalsIgnoreCase(FunctionSet.SESSION_USER)) {
                 node.setType(VarcharType.VARCHAR);

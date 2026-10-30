@@ -169,11 +169,7 @@ void test_all_float_variants(const std::string& s, StringParser::ParseResult exp
             for (auto& k : sign) {
                 // All combinations of leading and/or trailing whitespace and +/- sign.
                 std::string str = i + k + s + j;
-                if (exp_result == StringParser::PARSE_SUCCESS && (s == "1.7e-294" || s == "1.7E-294")) {
-                    test_float_value<float>(str, StringParser::PARSE_UNDERFLOW);
-                } else {
-                    test_float_value<float>(str, exp_result);
-                }
+                test_float_value<float>(str, exp_result);
                 test_float_value<double>(str, exp_result);
             }
         }
@@ -688,34 +684,36 @@ TEST(StringToFloat, OverflowBehaviour) {
     test_float_value<double>(double_max_str, StringParser::PARSE_SUCCESS);
 }
 
-// Explicit verification of enhanced underflow behaviour (PARSE_UNDERFLOW returned)
+// A value below the smallest subnormal rounds to +-0. That is the correctly rounded result,
+// not a parse error, so it must stay PARSE_SUCCESS: every caller treats a non-success result
+// as unparseable input and would turn such a value into a NULL or a rejected row.
 TEST(StringToFloat, UnderflowBehaviour) {
     // Single precision underflow (< FLT_TRUE_MIN ~1.4e-45)
     {
         StringParser::ParseResult res;
         float val = StringParser::string_to_float<float>("1e-46", 5, &res);
-        EXPECT_EQ(StringParser::PARSE_UNDERFLOW, res);
+        EXPECT_EQ(StringParser::PARSE_SUCCESS, res);
         EXPECT_EQ(0.0f, val);
         EXPECT_FALSE(std::signbit(val));
     }
     {
         StringParser::ParseResult res;
         float val = StringParser::string_to_float<float>("-1e-46", 6, &res);
-        EXPECT_EQ(StringParser::PARSE_UNDERFLOW, res);
+        EXPECT_EQ(StringParser::PARSE_SUCCESS, res);
         EXPECT_EQ(0.0f, val);
         EXPECT_TRUE(std::signbit(val));
     }
     {
         StringParser::ParseResult res;
         float val = StringParser::string_to_float<float>("1e-100", 6, &res);
-        EXPECT_EQ(StringParser::PARSE_UNDERFLOW, res);
+        EXPECT_EQ(StringParser::PARSE_SUCCESS, res);
         EXPECT_EQ(0.0f, val);
         EXPECT_FALSE(std::signbit(val));
     }
     {
         StringParser::ParseResult res;
         float val = StringParser::string_to_float<float>("-1e-100", 7, &res);
-        EXPECT_EQ(StringParser::PARSE_UNDERFLOW, res);
+        EXPECT_EQ(StringParser::PARSE_SUCCESS, res);
         EXPECT_EQ(0.0f, val);
         EXPECT_TRUE(std::signbit(val));
     }
@@ -724,28 +722,28 @@ TEST(StringToFloat, UnderflowBehaviour) {
     {
         StringParser::ParseResult res;
         double val = StringParser::string_to_float<double>("1e-325", 6, &res);
-        EXPECT_EQ(StringParser::PARSE_UNDERFLOW, res);
+        EXPECT_EQ(StringParser::PARSE_SUCCESS, res);
         EXPECT_EQ(0.0, val);
         EXPECT_FALSE(std::signbit(val));
     }
     {
         StringParser::ParseResult res;
         double val = StringParser::string_to_float<double>("-1e-325", 7, &res);
-        EXPECT_EQ(StringParser::PARSE_UNDERFLOW, res);
+        EXPECT_EQ(StringParser::PARSE_SUCCESS, res);
         EXPECT_EQ(0.0, val);
         EXPECT_TRUE(std::signbit(val));
     }
     {
         StringParser::ParseResult res;
         double val = StringParser::string_to_float<double>("1e-999", 6, &res);
-        EXPECT_EQ(StringParser::PARSE_UNDERFLOW, res);
+        EXPECT_EQ(StringParser::PARSE_SUCCESS, res);
         EXPECT_EQ(0.0, val);
         EXPECT_FALSE(std::signbit(val));
     }
     {
         StringParser::ParseResult res;
         double val = StringParser::string_to_float<double>("-1e-999", 7, &res);
-        EXPECT_EQ(StringParser::PARSE_UNDERFLOW, res);
+        EXPECT_EQ(StringParser::PARSE_SUCCESS, res);
         EXPECT_EQ(0.0, val);
         EXPECT_TRUE(std::signbit(val));
     }
@@ -754,28 +752,28 @@ TEST(StringToFloat, UnderflowBehaviour) {
     {
         StringParser::ParseResult res;
         float val = StringParser::string_to_float<float>("1e-10000", 8, &res);
-        EXPECT_EQ(StringParser::PARSE_UNDERFLOW, res);
+        EXPECT_EQ(StringParser::PARSE_SUCCESS, res);
         EXPECT_EQ(0.0f, val);
         EXPECT_FALSE(std::signbit(val));
     }
     {
         StringParser::ParseResult res;
         float val = StringParser::string_to_float<float>("-1e-10000", 9, &res);
-        EXPECT_EQ(StringParser::PARSE_UNDERFLOW, res);
+        EXPECT_EQ(StringParser::PARSE_SUCCESS, res);
         EXPECT_EQ(0.0f, val);
         EXPECT_TRUE(std::signbit(val));
     }
     {
         StringParser::ParseResult res;
         double val = StringParser::string_to_float<double>("1e-10000", 8, &res);
-        EXPECT_EQ(StringParser::PARSE_UNDERFLOW, res);
+        EXPECT_EQ(StringParser::PARSE_SUCCESS, res);
         EXPECT_EQ(0.0, val);
         EXPECT_FALSE(std::signbit(val));
     }
     {
         StringParser::ParseResult res;
         double val = StringParser::string_to_float<double>("-1e-10000", 9, &res);
-        EXPECT_EQ(StringParser::PARSE_UNDERFLOW, res);
+        EXPECT_EQ(StringParser::PARSE_SUCCESS, res);
         EXPECT_EQ(0.0, val);
         EXPECT_TRUE(std::signbit(val));
     }

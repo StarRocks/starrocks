@@ -23,15 +23,16 @@
 #include "common/status.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/delta_writer.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/tablet_reshard.h"
 #include "storage/lake/transactions.h"
 #include "storage/lake/txn_log.h"
-#include "storage/lake/update_manager.h"
 #include "storage/lake/versioned_tablet.h"
 #include "storage/tablet_schema.h"
 #include "test_util.h"
+#include "testutil/column_test_helper.h"
 
 namespace starrocks::lake {
 
@@ -103,10 +104,8 @@ protected:
 
     // Write one (c0, c1) row to |tablet_id| under |txn_id| as a plain op_write (no publish).
     void write_row(int64_t tablet_id, int64_t txn_id, int32_t c0_val, int32_t c1_val) {
-        auto c0 = Int32Column::create();
-        auto c1 = Int32Column::create();
-        c0->append_datum(Datum(c0_val));
-        c1->append_datum(Datum(c1_val));
+        auto c0 = ColumnTestHelper::build_column<int32_t>({c0_val});
+        auto c1 = ColumnTestHelper::build_column<int32_t>({c1_val});
         VChunk chunk({std::move(c0), std::move(c1)}, _schema);
         uint32_t indexes[1] = {0};
 

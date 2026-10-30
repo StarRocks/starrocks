@@ -32,11 +32,7 @@ void BuildKeyConstructorForOneKey<LT>::build_key(RuntimeState* state, JoinHashTa
     // results, it provides only minor performance benefits in medium-cardinality scenarios.
     if constexpr (lt_is_string<LT>) {
         const auto* data_column = ColumnHelper::get_data_column(table_items->key_columns[0]);
-        if (UNLIKELY(data_column->is_large_binary())) {
-            ColumnHelper::as_raw_column<LargeBinaryColumn>(data_column)->build_slices(table_items->build_slice);
-        } else {
-            ColumnHelper::as_raw_column<BinaryColumn>(data_column)->build_slices(table_items->build_slice);
-        }
+        ColumnHelper::as_raw_column<BinaryColumn>(data_column)->build_slices(table_items->build_slice);
     }
 }
 

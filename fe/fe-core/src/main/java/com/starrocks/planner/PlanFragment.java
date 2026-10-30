@@ -485,7 +485,14 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     }
 
     public TPlanFragment toThrift() {
-        TPlanFragment result = new TPlanFragment();
+        return toThrift(new TPlanFragment());
+    }
+
+    /**
+     * Fill the thrift fragment into {@code result}, which lets the caller choose a subclass such as
+     * {@link com.starrocks.qe.scheduler.SerializeOnceTPlanFragment}.
+     */
+    public <T extends TPlanFragment> T toThrift(T result) {
         if (planRoot != null) {
             result.setPlan(planRoot.treeToThrift());
         }
@@ -507,7 +514,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
             result.setQuery_global_dict_exprs(exprs);
         }
         if (!loadGlobalDicts.isEmpty()) {
-            result.setLoad_global_dicts(dictToThrift(loadGlobalDicts));
+            result.setLoad_global_dicts(loadDictToThrift(loadGlobalDicts));
         }
         if (cacheParam != null) {
             if (ConnectContext.get() != null) {
@@ -531,6 +538,15 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     }
 
     /**
+     * Whether the thrift output sink differs between the instances of this fragment: a multicast sink only sends to
+     * the instance's own destinations, and an export sink adds the instance index to the file name prefix. These are
+     * the only parts of the thrift fragment that differ between instances.
+     */
+    public boolean hasInstanceSpecificSink() {
+        return sink != null && (this instanceof MultiCastPlanFragment || sink instanceof ExportSink);
+    }
+
+    /**
      * Create thrift fragment with the unique fields, including
      * - output_sink (only for MultiCastDataStreamSink and ExportSink).
      *
@@ -541,7 +557,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         // Fill the required field.
         result.setPartition(dataPartition.toThrift());
 
-        if (sink != null && (this instanceof MultiCastPlanFragment || sink instanceof ExportSink)) {
+        if (hasInstanceSpecificSink()) {
             result.setOutput_sink(sink.toThrift());
         }
 
@@ -567,6 +583,14 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         return result;
     }
 
+    private List<TGlobalDict> loadDictToThrift(List<Pair<Integer, ColumnDict>> dicts) {
+        List<TGlobalDict> result = dictToThrift(dicts);
+        for (int i = 0; i < dicts.size(); i++) {
+            result.get(i).setContent_identity(dicts.get(i).second.getContentIdentity());
+        }
+        return result;
+    }
+
     // normalize dicts of the fragment, it is different from dictToThrift in three points:
     // 1. SlotIds must be replaced by remapped SlotIds;
     // 2. dict should be sorted according to its corresponding remapped SlotIds;
@@ -580,7 +604,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         for (Pair<Integer, ColumnDict> dictPair : sortedDicts) {
             TGlobalDict globalDict = new TGlobalDict();
             globalDict.setColumnId(dictPair.first);
-            globalDict.setVersion(dictPair.second.getCollectedVersion());
+            globalDict.setVersion(dictPair.second.getContentIdentity());
             result.add(globalDict);
         }
         return result;

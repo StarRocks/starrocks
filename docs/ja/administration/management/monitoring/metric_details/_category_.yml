@@ -1,5 +1,5 @@
-position: 100
-label: 'メトリクス詳細'
+position: 10
+label: '一般的なモニタリングメトリクス'
 collapsible: true
 collapsed: true
 link:

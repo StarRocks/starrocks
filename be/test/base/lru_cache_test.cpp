@@ -503,6 +503,115 @@ TEST_F(CacheTest, InsertIfAbsentIsAtomicUnderConcurrency) {
     ASSERT_TRUE(_deleted_keys.empty());
 }
 
+static bool replace_cache(Cache* cache, int key, int value, size_t charge, int expected) {
+    std::string encoded;
+    return cache->replace_if(EncodeKey(&encoded, key), EncodeValue(value), charge, &CacheTest::Deleter, value_equals,
+                             reinterpret_cast<const void*>(static_cast<intptr_t>(expected)));
+}
+
+TEST_F(CacheTest, ReplaceIfDefaultDoesNotAdoptOrModify) {
+    std::unique_ptr<Cache> cache(new_lru_cache(entry_charge_for_int_key() * 32 * kNumShards));
+    insert_cache(cache.get(), 100, 1000, 1);
+    const auto usage = cache->get_memory_usage();
+    std::string encoded;
+    EXPECT_FALSE(cache->Cache::replace_if(EncodeKey(&encoded, 100), EncodeValue(2000), 101, &CacheTest::Deleter,
+                                          value_equals, reinterpret_cast<const void*>(static_cast<intptr_t>(1000))));
+    EXPECT_EQ(1000, lookup_cache(cache.get(), 100));
+    EXPECT_EQ(usage, cache->get_memory_usage());
+    EXPECT_TRUE(_deleted_values.empty());
+    encoded.clear();
+    cache->erase(EncodeKey(&encoded, 100));
+    EXPECT_EQ(std::vector<int>({1000}), _deleted_values);
+}
+
+TEST_F(CacheTest, ReplaceIfReclaimsOldChargeBeforeEvictingOtherEntries) {
+    const auto keys = find_int_keys_in_same_shard();
+    std::unique_ptr<Cache> cache(new_lru_cache(entry_charge_for_int_key() * 2 * kNumShards));
+    insert_cache(cache.get(), keys[0], 1000, 1);
+    insert_cache(cache.get(), keys[1], 2000, 1);
+    const auto usage = cache->get_memory_usage();
+    ASSERT_TRUE(replace_cache(cache.get(), keys[0], 3000, 1, 1000));
+    EXPECT_EQ(3000, lookup_cache(cache.get(), keys[0]));
+    EXPECT_EQ(2000, lookup_cache(cache.get(), keys[1]));
+    EXPECT_EQ(usage, cache->get_memory_usage());
+    EXPECT_EQ(std::vector<int>({1000}), _deleted_values);
+}
+
+TEST_F(CacheTest, ReplaceIfKeepsPinnedOldHandleAndChargesReplacement) {
+    const size_t entry_charge = entry_charge_for_int_key();
+    std::unique_ptr<Cache> cache(new_lru_cache(entry_charge * 32 * kNumShards));
+    insert_cache(cache.get(), 100, 1000, 1);
+    const size_t old_usage = cache->get_memory_usage();
+    std::string encoded;
+    auto* old_handle = cache->lookup(EncodeKey(&encoded, 100));
+    ASSERT_NE(nullptr, old_handle);
+
+    ASSERT_TRUE(replace_cache(cache.get(), 100, 2000, 101, 1000));
+    EXPECT_EQ(2000, lookup_cache(cache.get(), 100));
+    EXPECT_EQ(1000, DecodeValue(cache->value(old_handle)));
+    EXPECT_TRUE(_deleted_values.empty());
+    // Pinned old handles retain their charge until release, just as with insert().
+    EXPECT_EQ(old_usage * 2 + 100, cache->get_memory_usage());
+    cache->release(old_handle);
+    EXPECT_EQ(std::vector<int>({1000}), _deleted_values);
+    EXPECT_EQ(old_usage + 100, cache->get_memory_usage());
+
+    // A stale owner's late accounting update cannot change the replacement's charge.
+    EXPECT_FALSE(update_charge_cache(cache.get(), 100, 999, value_equals,
+                                     reinterpret_cast<const void*>(static_cast<intptr_t>(1000))));
+    EXPECT_EQ(old_usage + 100, cache->get_memory_usage());
+    EXPECT_TRUE(update_charge_cache(cache.get(), 100, 201, value_equals,
+                                    reinterpret_cast<const void*>(static_cast<intptr_t>(2000))));
+    EXPECT_EQ(old_usage + 200, cache->get_memory_usage());
+}
+
+TEST_F(CacheTest, ReplaceIfRejectsMissingAndChangedEntriesWithoutAdoptingValue) {
+    std::unique_ptr<Cache> cache(new_lru_cache(entry_charge_for_int_key() * 32 * kNumShards));
+    EXPECT_FALSE(replace_cache(cache.get(), 100, 2000, 101, 1000));
+    EXPECT_EQ(-1, lookup_cache(cache.get(), 100));
+    EXPECT_EQ(0, cache->get_memory_usage());
+    EXPECT_TRUE(_deleted_values.empty());
+
+    insert_cache(cache.get(), 100, 1000, 1);
+    const size_t usage = cache->get_memory_usage();
+    EXPECT_FALSE(replace_cache(cache.get(), 100, 2000, 101, 999));
+    EXPECT_EQ(1000, lookup_cache(cache.get(), 100));
+    EXPECT_EQ(usage, cache->get_memory_usage());
+    EXPECT_TRUE(_deleted_values.empty());
+
+    ASSERT_TRUE(replace_cache(cache.get(), 100, 3000, 1, 1000));
+    EXPECT_FALSE(replace_cache(cache.get(), 100, 4000, 101, 1000));
+    EXPECT_EQ(3000, lookup_cache(cache.get(), 100));
+    EXPECT_EQ(usage, cache->get_memory_usage());
+    EXPECT_EQ(std::vector<int>({1000}), _deleted_values);
+    std::string encoded;
+    cache->erase(EncodeKey(&encoded, 100));
+    EXPECT_EQ(std::vector<int>({1000, 3000}), _deleted_values);
+}
+
+TEST_F(CacheTest, ReplaceIfHasOnlyOneWinnerForTheSameExpectedValue) {
+    constexpr int kThreads = 16;
+    std::unique_ptr<Cache> cache(new_lru_cache(entry_charge_for_int_key() * 64 * kNumShards));
+    insert_cache(cache.get(), 100, 1000, 1);
+    std::atomic<int> replaced_count{0};
+    std::vector<std::thread> threads;
+    for (int i = 0; i < kThreads; ++i) {
+        threads.emplace_back([&, i]() {
+            if (replace_cache(cache.get(), 100, 2000 + i, 1, 1000)) {
+                replaced_count.fetch_add(1);
+            }
+        });
+    }
+    for (auto& thread : threads) {
+        thread.join();
+    }
+    EXPECT_EQ(1, replaced_count.load());
+    const auto winner = lookup_cache(cache.get(), 100);
+    EXPECT_GE(winner, 2000);
+    EXPECT_LT(winner, 2000 + kThreads);
+    EXPECT_EQ(std::vector<int>({1000}), _deleted_values);
+}
+
 TEST_F(CacheTest, UpdateChargeIfAdjustsUsage) {
     const size_t entry_charge = entry_charge_for_int_key();
     std::unique_ptr<Cache> cache(new_lru_cache(entry_charge * 16 * kNumShards));

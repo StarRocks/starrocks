@@ -14,22 +14,13 @@
 
 package com.starrocks.sql;
 
-import com.google.common.collect.Maps;
-import com.starrocks.catalog.Table;
-import com.starrocks.common.util.concurrent.lock.LockHoldDepth;
-import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.CatalogMgr;
-import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
-import mockit.Invocation;
-import mockit.Mock;
-import mockit.MockUp;
+import com.starrocks.utframe.LockProbe;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
-import java.util.Map;
 
 /**
  * The unlocked pre-pass that keeps connector metadata off the lock critical path only sees the relations
@@ -45,37 +36,15 @@ import java.util.Map;
  */
 public class ViewExpansionLockConnectorIOTest extends ConnectorPlanTestBase {
 
-    private final Map<String, Boolean> underLock = Maps.newConcurrentMap();
-    private volatile Thread testThread;
-
-    private void record(String key) {
-        if (Thread.currentThread() != testThread) {
-            return;
-        }
-        underLock.merge(key, LockHoldDepth.isUnderLock(), Boolean::logicalOr);
-    }
+    private LockProbe probe;
 
     private void probeConnectorCalls() {
-        testThread = Thread.currentThread();
-        new MockUp<MetadataMgr>() {
-            @Mock
-            public Table getTable(Invocation invocation, ConnectContext context, String catalogName, String dbName,
-                                  String tblName) {
-                if (!CatalogMgr.isInternalCatalog(catalogName)) {
-                    record("getTable:" + catalogName + "." + tblName);
-                }
-                return invocation.proceed(context, catalogName, dbName, tblName);
-            }
-        };
+        probe = LockProbe.onCurrentThread();
+        probe.probeExternalGetTable();
     }
 
     private void assertNothingWentRemoteUnderTheLock(String sql) {
-        // Without this the check below passes on an empty map, i.e. whenever the probe never fired.
-        Assertions.assertFalse(underLock.isEmpty(),
-                "planning never reached the external catalog, the probe proves nothing, for: " + sql);
-        underLock.forEach((site, held) -> Assertions.assertFalse(held,
-                "an FE metadata lock was held while the view body was resolved, at " + site + ", for: " + sql
-                        + "; full samples: " + underLock));
+        probe.assertNothingUnderTheLock("the view body was resolved from the external catalog, for: " + sql);
     }
 
     @AfterEach

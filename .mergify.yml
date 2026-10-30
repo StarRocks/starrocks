@@ -20,10 +20,12 @@ pull_request_rules:
         add_users:
           - "{{ author }}"
 
-  - name: close pr when conflict
+  - name: notify author when backport conflicts
     conditions:
       - label=conflicts
     actions:
-      close:
-        message: "@{{author}}: Backport conflict, please reslove the conflict and resubmit the
-          pr"
+      comment:
+        # The author of a backport is Mergify itself; its assignees are the people to ping.
+        message: "{% for login in assignee %}@{{ login }} {% endfor %}This backport has
+          conflicts. Resolve them on this branch and push, then remove the `conflicts`
+          label; or close it and open your own backport PR."

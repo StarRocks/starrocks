@@ -14,13 +14,18 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.collect.HashMultimap;
+import com.google.common.collect.Multimap;
+import com.starrocks.clone.TabletChecker;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.StarRocksTestBase;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -32,6 +37,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.LongStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -72,6 +78,16 @@ public class CatalogUtilsTest extends StarRocksTestBase {
         when(olapTable.getPartitions()).thenReturn(new ArrayList<>());
         when(olapTable.getPartitionInfo()).thenReturn(partitionInfo);
         when(partitionInfo.isPartitioned()).thenReturn(false);
+        when(olapTable.getLocation()).thenReturn(null);
+        when(olapTable.getDefaultReplicationNum()).thenReturn((short) 3);
+        when(olapTable.isLightWeightTabletCreation()).thenReturn(false);
+
+        new MockUp<SystemInfoService>() {
+            @mockit.Mock
+            public int getTotalBackendNumber() {
+                return 3;
+            }
+        };
 
         int bucketNum = CatalogUtils.calAvgBucketNumOfRecentPartitions(olapTable, 5, true);
 
@@ -102,13 +118,99 @@ public class CatalogUtilsTest extends StarRocksTestBase {
         partitions.add(partition);
         when(olapTable.getPartitions()).thenReturn(partitions);
         when(olapTable.getRecentPartitions(anyInt())).thenReturn(partitions);
+        when(olapTable.getLocation()).thenReturn(null);
+        when(olapTable.getDefaultReplicationNum()).thenReturn((short) 3);
+        when(olapTable.isLightWeightTabletCreation()).thenReturn(false);
         when(partition.getDefaultPhysicalPartition()).thenReturn(physicalPartition);
         when(physicalPartition.getVisibleVersion()).thenReturn(2L);
         when(partition.getDataSize()).thenReturn(2L * FeConstants.AUTO_DISTRIBUTION_UNIT);
 
+        // Keep backend-based estimate at 0 so the data-size path determines the result.
+        new MockUp<SystemInfoService>() {
+            @mockit.Mock
+            public int getTotalBackendNumber() {
+                return 0;
+            }
+        };
+
         int bucketNum = CatalogUtils.calAvgBucketNumOfRecentPartitions(olapTable, 1, true);
 
         assertEquals(2, bucketNum); // 2 tablets based on 2GB size
+    }
+
+    @Test
+    public void testCalBucketNumAccordingToBackendsAndPhysicalPartitionBucketNum() {
+        Multimap<String, String> location = HashMultimap.create();
+        location.put("rack", "r1");
+        when(olapTable.getLocation()).thenReturn(location);
+        when(olapTable.getDefaultReplicationNum()).thenReturn((short) 3);
+        when(olapTable.isLightWeightTabletCreation()).thenReturn(false);
+
+        new MockUp<SystemInfoService>() {
+            @mockit.Mock
+            public List<Long> getLocationMatchedBackendIds(Multimap<String, String> location) {
+                if (location.containsEntry("rack", "r1")) {
+                    return LongStream.rangeClosed(1, 6).boxed().toList();
+                }
+                // no matching BEs for other labels
+                return new ArrayList<>();
+            }
+
+            @mockit.Mock
+            public int getTotalBackendNumber() {
+                return 30;
+            }
+        };
+
+        // Single-value pin cannot cover replication_num=3 distinct locations, so
+        // placement falls back to all BEs — sizing must use total (30) -> 36.
+        new MockUp<TabletChecker>() {
+            @mockit.Mock
+            public boolean preCheckEnoughLocationMatchedBackends(Multimap<String, String> requiredLocation,
+                                                                 int replicaNum) {
+                return false;
+            }
+        };
+        assertEquals(36, CatalogUtils.calBucketNumAccordingToBackends(olapTable));
+        assertEquals(CatalogUtils.divisibleBucketNum(30),
+                CatalogUtils.calPhysicalPartitionBucketNum(olapTable, (short) 3));
+
+        // When location placement is feasible, use the labelled BE count (6 -> 12).
+        new MockUp<TabletChecker>() {
+            @mockit.Mock
+            public boolean preCheckEnoughLocationMatchedBackends(Multimap<String, String> requiredLocation,
+                                                                 int replicaNum) {
+                return true;
+            }
+        };
+        assertEquals(12, CatalogUtils.calBucketNumAccordingToBackends(olapTable, (short) 3));
+        assertEquals(CatalogUtils.divisibleBucketNum(6),
+                CatalogUtils.calPhysicalPartitionBucketNum(olapTable, (short) 3));
+
+        // With RF=1 the same pin is feasible for placement → labelled sizing (12).
+        // With RF=3 and infeasible gate → total BE sizing (36). Covered above via mocks.
+        assertEquals(12, CatalogUtils.calBucketNumAccordingToBackends(olapTable, (short) 1));
+        assertEquals(CatalogUtils.divisibleBucketNum(6),
+                CatalogUtils.calPhysicalPartitionBucketNum(olapTable, (short) 1));
+
+        // labels set but no BE matches -> fall back to total BE count (30)
+        Multimap<String, String> unmatched = HashMultimap.create();
+        unmatched.put("rack", "gone");
+        when(olapTable.getLocation()).thenReturn(unmatched);
+        assertEquals(36, CatalogUtils.calBucketNumAccordingToBackends(olapTable));
+        assertEquals(CatalogUtils.divisibleBucketNum(30),
+                CatalogUtils.calPhysicalPartitionBucketNum(olapTable, (short) 3));
+
+        // null / empty location short-circuits to total BE count (30) -> 36
+        when(olapTable.getLocation()).thenReturn(null);
+        assertEquals(36, CatalogUtils.calBucketNumAccordingToBackends(olapTable));
+        assertEquals(CatalogUtils.divisibleBucketNum(30),
+                CatalogUtils.calPhysicalPartitionBucketNum(olapTable, (short) 3));
+
+        when(olapTable.getLocation()).thenReturn(HashMultimap.create());
+        assertEquals(36, CatalogUtils.calBucketNumAccordingToBackends(olapTable));
+        assertEquals(CatalogUtils.divisibleBucketNum(30),
+                CatalogUtils.calPhysicalPartitionBucketNum(olapTable, (short) 3));
     }
 
     @Test

@@ -46,7 +46,7 @@ select col1, sum(col2) AS sum_col2, sum(if(error_code = 'TIMEOUT', col3, 0)) AS 
 drop materialized view test_empty_partition_mv1;
 drop table test_empty_partition_tbl;
 
---name: test_mv_rewrite_with_having
+-- name: test_mv_rewrite_with_having
 CREATE TABLE IF NOT EXISTS `lineorder` (
     `lo_orderkey` int(11) NOT NULL COMMENT "",
     `lo_linenumber` int(11) NOT NULL COMMENT "",

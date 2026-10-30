@@ -68,4 +68,24 @@ TEST(FragmentDictStateTest, InitQueryAndLoadGlobalDicts) {
     fragment_dict_state.close(&state);
 }
 
+TEST(FragmentDictStateTest, LoadIdentityIsOptionalAndDoesNotReplaceVersion) {
+    RuntimeState state;
+    state._obj_pool = std::make_shared<ObjectPool>();
+    state._instance_mem_pool = std::make_unique<MemPool>();
+    FragmentDictState dictionaries;
+    auto legacy = make_global_dict(1, 100, {1}, {"A"});
+    auto zero = make_global_dict(2, 200, {1}, {"B"});
+    auto negative = make_global_dict(3, 300, {1}, {"C"});
+    zero.__set_content_identity(0);
+    negative.__set_content_identity(-7);
+    ASSERT_OK(dictionaries.init_load_global_dict(&state, {legacy, zero, negative}));
+    EXPECT_EQ(0, dictionaries.load_dict_content_identities().count(1));
+    EXPECT_EQ(0, dictionaries.load_dict_content_identities().at(2));
+    EXPECT_EQ(-7, dictionaries.load_dict_content_identities().at(3));
+    EXPECT_EQ(100, dictionaries.load_dict_versions().at(1));
+    EXPECT_EQ(200, dictionaries.load_dict_versions().at(2));
+    EXPECT_EQ(300, dictionaries.load_dict_versions().at(3));
+    dictionaries.close(&state);
+}
+
 } // namespace starrocks

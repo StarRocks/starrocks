@@ -1,0 +1,88 @@
+{
+  "statement": "SELECT row_number() OVER (PARTITION BY d.k, d.g ORDER BY f.id) FROM synthetic.fact f LEFT OUTER JOIN synthetic.dim d ON f.fk = d.k",
+  "table_meta": {
+    "synthetic.fact": "CREATE TABLE `synthetic`.`fact` (`id` BIGINT NOT NULL, `fk` BIGINT NULL) ENGINE=OLAP DUPLICATE KEY(`id`) DISTRIBUTED BY HASH(`id`) BUCKETS 3 PROPERTIES (\"replication_num\" = \"1\");",
+    "synthetic.dim": "CREATE TABLE `synthetic`.`dim` (`k` BIGINT NOT NULL, `g` INT NULL) ENGINE=OLAP DUPLICATE KEY(`k`) DISTRIBUTED BY HASH(`k`) BUCKETS 3 PROPERTIES (\"replication_num\" = \"1\");"
+  },
+  "table_row_count": {
+    "synthetic.fact": {
+      "fact": 1000
+    },
+    "synthetic.dim": {
+      "dim": 1000
+    }
+  },
+  "column_statistics": {
+    "synthetic.fact": {
+      "id": {
+        "version": 1,
+        "min": "1.0",
+        "max": "1000.0",
+        "nullsFraction": "0.0",
+        "averageRowSize": "8.0",
+        "distinctValuesCount": "1000.0",
+        "collectionSize": "-1.0",
+        "type": "ESTIMATE"
+      },
+      "fk": {
+        "version": 1,
+        "min": "1.0",
+        "max": "1001.0",
+        "nullsFraction": "0.5",
+        "averageRowSize": "8.0",
+        "distinctValuesCount": "500.0",
+        "collectionSize": "-1.0",
+        "type": "ESTIMATE",
+        "histogram": {
+          "buckets": [
+            {
+              "lower": "1.0",
+              "upper": "1001.0",
+              "count": 500,
+              "upperRepeats": 1
+            }
+          ],
+          "mcv": {}
+        }
+      }
+    },
+    "synthetic.dim": {
+      "k": {
+        "version": 1,
+        "min": "1.0",
+        "max": "1001.0",
+        "nullsFraction": "0.0",
+        "averageRowSize": "8.0",
+        "distinctValuesCount": "1000.0",
+        "collectionSize": "-1.0",
+        "type": "ESTIMATE",
+        "histogram": {
+          "buckets": [
+            {
+              "lower": "1.0",
+              "upper": "1001.0",
+              "count": 1000,
+              "upperRepeats": 1
+            }
+          ],
+          "mcv": {}
+        }
+      },
+      "g": {
+        "version": 1,
+        "min": "0.0",
+        "max": "99.0",
+        "nullsFraction": "0.3",
+        "averageRowSize": "4.0",
+        "distinctValuesCount": "100.0",
+        "collectionSize": "-1.0",
+        "type": "ESTIMATE"
+      }
+    }
+  },
+  "session_variables": "{\"cbo_enable_histogram_join_estimation\":true,\"enable_window_skew_merge_sort\":true,\"enable_split_window_skew_to_union\":true,\"data_skew_row_percentage_threshold\":0.2}",
+  "be_number": 3,
+  "exception": [],
+  "version": "UNKNOWN",
+  "commit_version": "UNKNOWN"
+}

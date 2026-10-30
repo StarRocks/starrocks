@@ -487,11 +487,11 @@ StatusOr<TxnStateDynamicCacheEntry*> TxnStateCache::_get_txn_entry(TxnStateDynam
         DCHECK(entry != nullptr);
         // need to set txn_id for the new entry whose initial txn_id is -1
         if (entry->value().txn_id() == -1) {
-            g_mc_txn_cache_hit << 1;
-        } else {
             g_mc_txn_cache_miss << 1;
+            entry->value().set_txn_id(txn_id);
+        } else {
+            g_mc_txn_cache_hit << 1;
         }
-        entry->value().set_txn_id(txn_id);
     } else {
         entry = cache->get(txn_id);
     }

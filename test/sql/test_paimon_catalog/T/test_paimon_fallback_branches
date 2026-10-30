@@ -1,0 +1,71 @@
+-- name: test_paimon_fallback_branch_same
+create external catalog paimon_boundaries_${uuid0}
+properties (
+"type" = "paimon",
+"paimon.catalog.type" = "filesystem",
+"paimon.catalog.warehouse" = "oss://${oss_bucket}/ci_catalog_test_data/paimon/",
+"aws.s3.access_key" = "${oss_ak}",
+"aws.s3.secret_key" = "${oss_sk}",
+"aws.s3.endpoint" = "${oss_endpoint}"
+);
+set time_zone = 'UTC';
+set enable_count_star_optimization = false;
+set paimon_reader_mode = 'auto';
+[ORDER]select id,v,p from paimon_boundaries_${uuid0}.paimon_test.reader_fallback_same_v1 order by id;
+function: assert_paimon_readers("select id,v,p from paimon_boundaries_${uuid0}.paimon_test.reader_fallback_same_v1 order by id", "reader_fallback_same_v1", "native", "NATIVE_SUPPORTED")
+[ORDER]select id,v,p from paimon_boundaries_${uuid0}.paimon_test.reader_fallback_same_v1 where p='east' order by id;
+function: assert_paimon_readers("select id,v,p from paimon_boundaries_${uuid0}.paimon_test.reader_fallback_same_v1 where p='east' order by id", "reader_fallback_same_v1", "native", "NATIVE_SUPPORTED")
+set paimon_reader_mode = 'native';
+[ORDER]select id,v,p from paimon_boundaries_${uuid0}.paimon_test.reader_fallback_same_v1 order by id;
+function: assert_paimon_readers("select id,v,p from paimon_boundaries_${uuid0}.paimon_test.reader_fallback_same_v1 order by id", "reader_fallback_same_v1", "native", "NATIVE_SUPPORTED")
+set paimon_reader_mode = 'jni';
+[ORDER]select id,v,p from paimon_boundaries_${uuid0}.paimon_test.reader_fallback_same_v1 order by id;
+function: assert_paimon_readers("select id,v,p from paimon_boundaries_${uuid0}.paimon_test.reader_fallback_same_v1 order by id", "reader_fallback_same_v1", "jni", "EXPLICIT_MODE")
+set catalog default_catalog;
+drop catalog paimon_boundaries_${uuid0};
+
+-- name: test_paimon_fallback_branch_json
+create external catalog paimon_boundaries_${uuid0}
+properties (
+"type" = "paimon",
+"paimon.catalog.type" = "filesystem",
+"paimon.catalog.warehouse" = "oss://${oss_bucket}/ci_catalog_test_data/paimon/",
+"aws.s3.access_key" = "${oss_ak}",
+"aws.s3.secret_key" = "${oss_sk}",
+"aws.s3.endpoint" = "${oss_endpoint}"
+);
+set time_zone = 'UTC';
+set enable_count_star_optimization = false;
+set paimon_reader_mode = 'auto';
+[ORDER]select id,v,p from paimon_boundaries_${uuid0}.paimon_test.reader_fallback_json_v1 order by id;
+function: assert_paimon_readers("select id,v,p from paimon_boundaries_${uuid0}.paimon_test.reader_fallback_json_v1 order by id", "reader_fallback_json_v1", "jni", "FILE_FORMAT")
+[ORDER]select id,v,p from paimon_boundaries_${uuid0}.paimon_test.reader_fallback_json_v1 where p='east' order by id;
+function: assert_paimon_readers("select id,v,p from paimon_boundaries_${uuid0}.paimon_test.reader_fallback_json_v1 where p='east' order by id", "reader_fallback_json_v1", "jni", "FILE_FORMAT")
+set paimon_reader_mode = 'native';
+function: assert_query_error_contains("select id,v,p from paimon_boundaries_${uuid0}.paimon_test.reader_fallback_json_v1 where p='east' order by id", "FILE_FORMAT")
+set paimon_reader_mode = 'jni';
+[ORDER]select id,v,p from paimon_boundaries_${uuid0}.paimon_test.reader_fallback_json_v1 order by id;
+function: assert_paimon_readers("select id,v,p from paimon_boundaries_${uuid0}.paimon_test.reader_fallback_json_v1 order by id", "reader_fallback_json_v1", "jni", "EXPLICIT_MODE")
+set catalog default_catalog;
+drop catalog paimon_boundaries_${uuid0};
+
+-- name: test_paimon_fallback_branch_schema_mismatch
+create external catalog paimon_boundaries_${uuid0}
+properties (
+"type" = "paimon",
+"paimon.catalog.type" = "filesystem",
+"paimon.catalog.warehouse" = "oss://${oss_bucket}/ci_catalog_test_data/paimon/",
+"aws.s3.access_key" = "${oss_ak}",
+"aws.s3.secret_key" = "${oss_sk}",
+"aws.s3.endpoint" = "${oss_endpoint}"
+);
+set time_zone = 'UTC';
+set enable_count_star_optimization = false;
+set paimon_reader_mode = 'auto';
+function: assert_query_error_contains("select id,v,p from paimon_boundaries_${uuid0}.paimon_test.reader_fallback_schema_v1 order by id", "does not have the same row type")
+set paimon_reader_mode = 'native';
+function: assert_query_error_contains("select id,v,p from paimon_boundaries_${uuid0}.paimon_test.reader_fallback_schema_v1 order by id", "does not have the same row type")
+set paimon_reader_mode = 'jni';
+function: assert_query_error_contains("select id,v,p from paimon_boundaries_${uuid0}.paimon_test.reader_fallback_schema_v1 order by id", "does not have the same row type")
+set catalog default_catalog;
+drop catalog paimon_boundaries_${uuid0};

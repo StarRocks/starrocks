@@ -486,6 +486,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                                     newPrunedPredicates,
                                     scanOperator.getProjection(), scanOperator.isUsePkIndex(),
                                     scanOperator.getVectorSearchOptions());
+                    newOlapScan.setParallelRangeScan(scanOperator.isParallelRangeScan());
                     newOlapScan.setScanOptimizeOption(scanOperator.getScanOptimizeOption());
                     newOlapScan.setPreAggregation(scanOperator.isPreAggregation());
                     newOlapScan.setGlobalDicts(globalDicts);
@@ -998,7 +999,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                 // Condition 3: the varchar column has collected global dict
                 Column columnObj = table.getColumn(column.getName());
                 if (columnObj != null
-                        && IDictManager.getInstance().hasGlobalDict(table.getId(), columnObj.getColumnId(), version)) {
+                        && IDictManager.getInstance().hasGlobalDict(table, columnObj.getColumnId(), version)) {
                     Optional<ColumnDict> dict =
                             IDictManager.getInstance().getGlobalDict(table.getId(), columnObj.getColumnId());
                     // cache reaches capacity limit, randomly eliminate some keys
