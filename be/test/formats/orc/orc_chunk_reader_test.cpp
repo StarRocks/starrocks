@@ -1323,7 +1323,7 @@ Padding ratio: 0%
 TEST_F(OrcChunkReaderTest, TestReadBinaryColumn) {
     SlotDesc slot_descs[] = {
             {"k1", TYPE_INT_DESC},
-            {"k2", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARBINARY)},
+            {"k2", TYPE_VARBINARY_DESC},
             {""},
     };
     static const std::string input_orc_file = "./be/test/exec/test_data/orc_scanner/orc_test_binary_column.orc";

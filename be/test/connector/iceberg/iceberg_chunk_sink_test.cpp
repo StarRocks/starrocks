@@ -377,9 +377,9 @@ TEST_F(IcebergChunkSinkTest, test_utils) {
         // Unlock during merging partition chunks into a full chunk.
         chunk->set_extra_data(chunk_extra_data);
         std::vector<int8_t> field_is_null;
-        std::vector<std::unique_ptr<ColumnEvaluator>> partition_column_evaluators = ColumnSlotIdEvaluator::from_types(
-                {TypeDescriptor::from_logical_type(TYPE_VARBINARY), TYPE_CHAR_DESC, TYPE_DATETIME_DESC,
-                 TYPE_TINYINT_DESC, TYPE_INT_DESC, TYPE_BIGINT_DESC});
+        std::vector<std::unique_ptr<ColumnEvaluator>> partition_column_evaluators =
+                ColumnSlotIdEvaluator::from_types({TYPE_VARBINARY_DESC, TYPE_CHAR_DESC, TYPE_DATETIME_DESC,
+                                                   TYPE_TINYINT_DESC, TYPE_INT_DESC, TYPE_BIGINT_DESC});
         auto ret = IcebergUtils::iceberg_make_partition_name(
                 {"k1", "k2", "k3", "k4", "k5", "k6", "k7"}, partition_column_evaluators,
                 {"bucket", "identity", "truncate", "truncate", "truncate", "truncate", "truncate"}, chunk.get(), true,
