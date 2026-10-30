@@ -35,6 +35,10 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
+import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
+import com.starrocks.sql.optimizer.rewrite.scalar.FoldConstantsRule;
+import com.starrocks.sql.optimizer.rewrite.scalar.NormalizePredicateRule;
+import com.starrocks.sql.optimizer.rewrite.scalar.ScalarOperatorRewriteRule;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.HashSet;
@@ -46,6 +50,10 @@ import java.util.stream.Collectors;
 // for aggregate queries with group by keys like `group by col,expr(col),constant` or `group by constant`,
 // these expr and constant won't affect the effect of aggregation grouping, we can remove them
 public class PruneGroupByKeysRule extends TransformationRule {
+    private static final List<ScalarOperatorRewriteRule> CONSTANT_REPLACEMENT_REWRITE_RULES = Lists.newArrayList(
+            new NormalizePredicateRule(),
+            new FoldConstantsRule());
+
     public PruneGroupByKeysRule() {
         super(RuleType.TF_PRUNE_GROUP_BY_KEYS, Pattern.create(OperatorType.LOGICAL_AGGR)
                 .addChildren(Pattern.create(OperatorType.LOGICAL_PROJECT, OperatorType.PATTERN_LEAF)));
@@ -180,6 +188,13 @@ public class PruneGroupByKeysRule extends TransformationRule {
         if (null != aggOperator.getPredicate()) {
             ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(newPostAggProjections);
             newPredicate = rewriter.rewrite(aggOperator.getPredicate());
+            // A removed constant key is written into the predicate as the constant itself, which can leave
+            // it on the left of a comparison: `b.s <> a.s` becomes `NULL <> a.s` when b is the empty side
+            // of a full join. Statistics estimation refuses a constant on the left, so normalise and fold
+            // the predicate the way it would have been had the constant been there from the start.
+            if (firstConstantGroupingKey != null) {
+                newPredicate = new ScalarOperatorRewriter().rewrite(newPredicate, CONSTANT_REPLACEMENT_REWRITE_RULES);
+            }
         }
 
         // update projection by aggregation
