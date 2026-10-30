@@ -1466,7 +1466,7 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
     }
 
     @VisibleForTesting
-    synchronized RecyclePartitionInfo getRecyclePartitionInfo(long id) {
+    public synchronized RecyclePartitionInfo getRecyclePartitionInfo(long id) {
         return idToPartition.get(id);
     }
 
