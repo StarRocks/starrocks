@@ -14,7 +14,10 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.catalog.Table;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.MockedMetadataMgr;
 import com.starrocks.connector.iceberg.MockIcebergMetadata;
 import com.starrocks.planner.IcebergScanNode;
 import com.starrocks.planner.PlanFragment;
@@ -25,9 +28,11 @@ import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.qe.scheduler.dag.ExecutionFragment;
 import com.starrocks.qe.scheduler.dag.FragmentInstance;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TPartitionType;
 import mockit.Mock;
@@ -102,6 +107,32 @@ public class DeletePlanTest extends PlanTestBase {
         String sql = "delete from iceberg0.unpartitioned_db.t0 where id in (select id from iceberg0.partitioned_db.t1)";
         String explainString = getDeleteExecPlanString(sql);
         assertTrue(explainString.contains("ICEBERG DELETE SINK"));
+    }
+
+    @Test
+    public void testIcebergMetadataDeleteOnlyWhenFilterIsWholeCondition() throws Exception {
+        MockedMetadataMgr metadataMgr = (MockedMetadataMgr) GlobalStateMgr.getCurrentState().getMetadataMgr();
+        String catalog = MockIcebergMetadata.MOCKED_ICEBERG_CATALOG_NAME;
+        ConnectorMetadata original = metadataMgr.getOptionalMetadata(catalog).orElseThrow();
+        // Accept every predicate, so the plan shows whether the planner offers a metadata delete at all
+        metadataMgr.registerMockedMetadata(catalog, new MockIcebergMetadata() {
+            @Override
+            public boolean canDeleteUsingMetadata(Table table, ScalarOperator predicate) {
+                return true;
+            }
+        });
+        try {
+            String plan = getDeleteExecPlanString("delete from iceberg0.unpartitioned_db.t0 where id > 0");
+            assertTrue(plan.contains("ICEBERG METADATA DELETE"), plan);
+
+            // The subquery match is an apply below the filter, so the filter alone is not the delete condition
+            plan = getDeleteExecPlanString("delete from iceberg0.unpartitioned_db.t0 "
+                    + "where id in (select id from iceberg0.partitioned_db.t1) and id > 0");
+            assertFalse(plan.contains("ICEBERG METADATA DELETE"), plan);
+            assertTrue(plan.contains("ICEBERG DELETE SINK"), plan);
+        } finally {
+            metadataMgr.registerMockedMetadata(catalog, original);
+        }
     }
 
     @Test
