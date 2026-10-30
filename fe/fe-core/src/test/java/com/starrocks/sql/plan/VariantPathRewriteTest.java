@@ -120,16 +120,16 @@ public class VariantPathRewriteTest extends ConnectorPlanTestBase {
     }
 
     @Test
-    public void testCastVariantQueryToDecimalIsNotRewritten() throws Exception {
+    public void testCastVariantQueryRewriteToDecimal() throws Exception {
         connectContext.getSessionVariable().setEnableVariantPathRewrite(true);
-        // The scan reads a DECIMAL path without checking its precision, so the explicit cast, which checks it, stays
         String sql = "select cast(variant_query(v, '$.profile.rank') as decimal(10, 2)) from " + VARIANT_TABLE;
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "variant_query");
-        assertNotContains(plan, "v.profile.rank");
+        assertContains(plan, "v.profile.rank");
 
         String verbose = getVerboseExplain(sql);
-        assertNotContains(verbose, "ExtendedColumnAccessPath");
+        assertContains(verbose, "ExtendedColumnAccessPath");
+        assertContains(verbose,
+                "/v(decimal(10, 2))/profile(decimal(10, 2))/rank(decimal(10, 2))");
     }
 
     @Test
