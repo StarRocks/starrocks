@@ -47,6 +47,11 @@ import com.starrocks.connector.index.ConnectorIndexMetadata;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudType;
 import com.starrocks.ha.FrontendNodeType;
+import com.starrocks.planner.DescriptorTable;
+import com.starrocks.planner.PaimonScanNode;
+import com.starrocks.planner.PlanNodeId;
+import com.starrocks.planner.SlotDescriptor;
+import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
@@ -80,6 +85,7 @@ import com.starrocks.sql.optimizer.rule.transformation.ExternalScanPartitionPrun
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.system.Frontend;
+import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.DateType;
 import com.starrocks.type.FloatType;
@@ -152,6 +158,7 @@ import org.apache.paimon.types.IntType;
 import org.apache.paimon.types.LocalZonedTimestampType;
 import org.apache.paimon.types.RowType;
 import org.apache.paimon.types.TimestampType;
+import org.apache.paimon.utils.InstantiationUtil;
 import org.apache.paimon.utils.JsonSerdeUtil;
 import org.apache.paimon.utils.SerializationUtils;
 import org.apache.paimon.utils.SnapshotManager;
@@ -164,6 +171,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -1233,7 +1241,7 @@ public class PaimonMetadataTest {
     }
 
     @Test
-    public void testBranchRequestIsIsolatedByTable() throws Exception {
+    public void testBranchSurvivesStatisticsAndAliasesAtEveryIndexStage() throws Exception {
         java.nio.file.Path tmpDir = Files.createTempDirectory("paimon_branch_isolation_");
         ConnectContext context = UtFrameUtils.createDefaultCtx();
         context.setThreadLocalInfo();
@@ -1251,20 +1259,33 @@ public class PaimonMetadataTest {
             FileStoreTable branchedNativeTable = (FileStoreTable) catalog.getTable(branchedIdentifier);
             FileStoreTable mainNativeTable = (FileStoreTable) catalog.getTable(mainIdentifier);
             writeRows(branchedNativeTable, GenericRow.of(1));
-            writeRows(mainNativeTable, GenericRow.of(2));
+            writeRows(mainNativeTable, GenericRow.of(2), GenericRow.of(3));
             branchedNativeTable.createBranch("dev");
+            catalog.alterTable(new Identifier("test_db", "branched_table", "dev"),
+                    SchemaChange.addColumn("dev_only", DataTypes.INT()), false);
+            FileStoreTable devTable = (FileStoreTable) catalog.getTable(
+                    new Identifier("test_db", "branched_table", "dev"));
+            writeRows(devTable, GenericRow.of(10, 100), GenericRow.of(11, 110), GenericRow.of(12, 120));
+            assertEquals(branchedNativeTable.latestSnapshot().orElseThrow().id(), devTable.latestSnapshot().orElseThrow().id());
 
             PaimonMetadata branchMetadata = new PaimonMetadata(
                     "paimon", new HdfsEnvironment(), catalog,
                     new ConnectorProperties(ConnectorType.PAIMON));
             ConnectorTableVersion branchVersion = new ConnectorTableVersion(
                     PointerType.VERSION, new ConstantOperator("branch:dev", VARCHAR));
-            long branchSnapshotId = branchMetadata.getSnapshotIdFromVersion(branchedNativeTable, branchVersion);
-
             PaimonTable branchedTable = (PaimonTable) branchMetadata.getTable(
                     context, "test_db", "branched_table");
             PaimonTable mainTable = (PaimonTable) branchMetadata.getTable(
                     context, "test_db", "main_table");
+            TvrVersionRange devVersion = branchMetadata.getTableVersionRange("test_db", branchedTable,
+                    Optional.empty(), Optional.of(branchVersion));
+            // The same catalog table object is used by two aliases. Numeric main and branch
+            // snapshots deliberately have identical IDs, but different data and cache entries.
+            TvrVersionRange mainVersion = branchMetadata.getTableVersionRange("test_db", branchedTable,
+                    Optional.empty(), Optional.of(new ConnectorTableVersion(PointerType.VERSION,
+                            ConstantOperator.createBigint(devVersion.end().orElseThrow()))));
+            assertNotEquals(devVersion, mainVersion);
+            assertEquals(devVersion, devVersion.copy(devVersion.from(), devVersion.to()));
             GetRemoteFilesParams mainParams = GetRemoteFilesParams.newBuilder()
                     .setFieldNames(List.of("id"))
                     .setLimit(-1)
@@ -1273,19 +1294,106 @@ public class PaimonMetadataTest {
             GetRemoteFilesParams branchParams = GetRemoteFilesParams.newBuilder()
                     .setFieldNames(List.of("id"))
                     .setLimit(-1)
-                    .setTableVersionRange(TvrTableSnapshot.of(branchSnapshotId))
+                    .setTableVersionRange(devVersion)
                     .build();
-
-            // Planning another table must neither consume nor inherit the pending branch request.
-            branchMetadata.getRemoteFiles(mainTable, mainParams);
-            branchMetadata.getRemoteFiles(branchedTable, branchParams);
-
+            new MockUp<MetadataMgr>() {
+                @Mock
+                public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
+                    return branchMetadata.getRemoteFiles(table, params);
+                }
+            };
+            ColumnRefOperator id = new ColumnRefOperator(1, IntegerType.INT, "id", true);
+            OptimizerContext optimizer = OptimizerFactory.mockContext(context, new ColumnRefFactory());
+            for (boolean columnStatistics : List.of(false, true)) {
+                context.getSessionVariable().setEnablePaimonColumnStatistics(columnStatistics);
+                for (int stage : List.of(0, 1, 2)) {
+                    context.getSessionVariable().setPaimonGlobalIndexScanStage(stage);
+                    for (TvrVersionRange version : List.of(devVersion, mainVersion, devVersion)) {
+                        long expected = version.equals(devVersion) ? 3 : 1;
+                        assertEquals(expected, branchMetadata.getTableStatistics(optimizer, branchedTable,
+                                Map.of(id, new Column("id", IntegerType.INT)), null, null, -1, version).getOutputRowCount());
+                        GetRemoteFilesParams finalParams = branchParams.copy();
+                        finalParams.setTableVersionRange(version);
+                        assertEquals(expected, plannedRowCount(branchMetadata.getRemoteFiles(branchedTable, finalParams)));
+                    }
+                    assertEquals(2, plannedRowCount(branchMetadata.getRemoteFiles(mainTable, mainParams)));
+                    assertBranchScanDescriptors(context, branchedTable, devVersion, mainVersion);
+                }
+            }
             assertNotEquals("dev", CoreOptions.branch(mainTable.getNativeTable().options()));
-            assertEquals("dev", CoreOptions.branch(branchedTable.getNativeTable().options()));
+            assertNotEquals("dev", CoreOptions.branch(branchedTable.getNativeTable().options()));
         } finally {
             ConnectContext.remove();
             FileUtils.deleteDirectory(tmpDir.toFile());
         }
+    }
+
+    private static void assertBranchScanDescriptors(ConnectContext context, PaimonTable catalogTable,
+                                                     TvrVersionRange devVersion, TvrVersionRange mainVersion)
+            throws Exception {
+        // Both aliases start from one main catalog object. A null test catalog avoids
+        // credential lookup; MetadataMgr above still dispatches the real split planner.
+        PaimonTable sharedTable = new PaimonTable(null, catalogTable.getCatalogDBName(),
+                catalogTable.getCatalogTableName(), catalogTable.getFullSchema(), catalogTable.getNativeTable());
+        DescriptorTable descriptors = new DescriptorTable();
+        Map<Long, List<Split>> splitsByTable = new HashMap<>();
+        Map<Long, List<Integer>> expectedByTable = new HashMap<>();
+        String readerMode = context.getSessionVariable().getPaimonReaderMode().name();
+        context.getSessionVariable().setPaimonReaderMode("JNI");
+        try {
+            for (TvrVersionRange version : List.of(devVersion, mainVersion, devVersion)) {
+                TupleDescriptor tuple = descriptors.createTupleDescriptor();
+                tuple.setTable(sharedTable);
+                SlotDescriptor slot = descriptors.addSlotDescriptor(tuple);
+                slot.setColumn(new Column("id", IntegerType.INT));
+                slot.setType(IntegerType.INT);
+                slot.setIsMaterialized(true);
+                PaimonScanNode scan = new PaimonScanNode(new PlanNodeId(tuple.getId().asInt()), tuple, "PAIMON_SCAN");
+                scan.setTvrVersionRange(version);
+                scan.setupScanRangeLocations(tuple, null, -1);
+                assertNotEquals(sharedTable.getId(), tuple.getTable().getId());
+                List<Split> splits = new ArrayList<>();
+                for (var range : scan.getScanRangeLocations(0)) {
+                    splits.add(InstantiationUtil.deserializeObject(Base64.getUrlDecoder().decode(
+                            range.getScan_range().getHdfs_scan_range().getPaimon_split_info()),
+                            PaimonMetadataTest.class.getClassLoader()));
+                }
+                splitsByTable.put(tuple.getTable().getId(), splits);
+                expectedByTable.put(tuple.getTable().getId(), version.equals(devVersion) ? List.of(10, 11, 12) : List.of(1));
+            }
+            List<TTableDescriptor> tables = descriptors.toThrift().getTableDescriptors();
+            assertEquals(3, tables.size(), "main/dev aliases must not deduplicate to one serialized native table");
+            for (TTableDescriptor table : tables) {
+                FileStoreTable nativeTable = InstantiationUtil.deserializeObject(Base64.getUrlDecoder().decode(
+                        table.getPaimonTable().getPaimon_native_table()), PaimonMetadataTest.class.getClassLoader());
+                boolean branch = expectedByTable.get(table.getId()).size() == 3;
+                assertEquals(branch ? "dev" : "main", CoreOptions.branch(nativeTable.options()));
+                assertEquals(branch ? 1 : 0, nativeTable.schema().id());
+                TableSchema nativeSchema = JsonSerdeUtil.fromJson(
+                        table.getPaimonTable().getPaimon_table_schema_json(), TableSchema.class);
+                assertEquals(branch ? 1 : 0, nativeSchema.id());
+                assertEquals(branch ? "dev" : "main", CoreOptions.branch(nativeSchema.options()));
+                // This is the same deserialized native table + split path used by PaimonSplitScanner.initReader.
+                List<Integer> ids = new ArrayList<>();
+                try (RecordReaderIterator<InternalRow> rows = new RecordReaderIterator<>(nativeTable.newReadBuilder()
+                        .withProjection(new int[] {0}).newRead().executeFilter()
+                        .createReader(splitsByTable.get(table.getId())))) {
+                    while (rows.hasNext()) {
+                        ids.add(rows.next().getInt(0));
+                    }
+                }
+                Collections.sort(ids);
+                assertEquals(expectedByTable.get(table.getId()), ids);
+            }
+            assertEquals("main", CoreOptions.branch(sharedTable.getNativeTable().options()));
+        } finally {
+            context.getSessionVariable().setPaimonReaderMode(readerMode);
+        }
+    }
+
+    private static long plannedRowCount(List<RemoteFileInfo> files) {
+        return ((PaimonRemoteFileDesc) files.get(0).getFiles().get(0)).getPaimonSplitsInfo()
+                .getPaimonSplits().stream().mapToLong(Split::rowCount).sum();
     }
 
     private static void createEmptyTable(Catalog catalog, String tableName, boolean dataEvolution) throws Exception {

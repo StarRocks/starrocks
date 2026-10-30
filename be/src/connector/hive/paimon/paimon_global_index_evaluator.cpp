@@ -19,7 +19,10 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <cstdint>
+#include <limits>
+#include <regex>
 #include <string>
 #include <utility>
 #include <vector>
@@ -60,7 +63,21 @@ Status paimon_error(std::string_view operation, const paimon::Status& status) {
     return Status::InternalError(fmt::format("Paimon Global Index {} failed: {}", operation, status.ToString()));
 }
 
-StatusOr<paimon::Literal> literal_from_json(const rapidjson::Value& node) {
+StatusOr<std::string> json_type(const rapidjson::Value& node) {
+    if (!node.IsObject() || !node.HasMember(kType.data()) || !node[kType.data()].IsString()) {
+        return invalid_node("missing type");
+    }
+    if (node[kType.data()].GetStringLength() > 64) {
+        return invalid_node("type token is too long");
+    }
+    std::string type(node[kType.data()].GetString(), node[kType.data()].GetStringLength());
+    std::transform(type.begin(), type.end(), type.begin(),
+                   [](unsigned char value) { return static_cast<char>(std::tolower(value)); });
+    static const std::regex string_type("(string|varchar|char)(\\([0-9]+\\))?");
+    return std::regex_match(type, string_type) ? "string" : type;
+}
+
+StatusOr<paimon::Literal> literal_from_json(const rapidjson::Value& node, const std::string& field_type) {
     if (!node.IsObject() || !node.HasMember(kOperatorType.data()) || !node[kOperatorType.data()].IsString() ||
         std::string_view(node[kOperatorType.data()].GetString(), node[kOperatorType.data()].GetStringLength()) !=
                 kConstant ||
@@ -68,32 +85,35 @@ StatusOr<paimon::Literal> literal_from_json(const rapidjson::Value& node) {
         return invalid_node("expected a typed constant");
     }
 
-    std::string type = node[kType.data()].GetString();
-    std::transform(type.begin(), type.end(), type.begin(),
-                   [](unsigned char value) { return static_cast<char>(std::tolower(value)); });
+    ASSIGN_OR_RETURN(std::string type, json_type(node));
+    if (type != field_type) {
+        return invalid_node(fmt::format("literal type '{}' does not match schema type '{}'", type, field_type));
+    }
     const rapidjson::Value& value = node[kValue.data()];
     if (type == "boolean" && value.IsBool()) {
         return paimon::Literal(value.GetBool());
     }
-    if (type == "tinyint" && value.IsInt64()) {
+    if (type == "tinyint" && value.IsInt64() && value.GetInt64() >= INT8_MIN && value.GetInt64() <= INT8_MAX) {
         return paimon::Literal(static_cast<int8_t>(value.GetInt64()));
     }
-    if (type == "smallint" && value.IsInt64()) {
+    if (type == "smallint" && value.IsInt64() && value.GetInt64() >= INT16_MIN && value.GetInt64() <= INT16_MAX) {
         return paimon::Literal(static_cast<int16_t>(value.GetInt64()));
     }
-    if (type == "int" && value.IsInt64()) {
+    if (type == "int" && value.IsInt64() && value.GetInt64() >= INT32_MIN && value.GetInt64() <= INT32_MAX) {
         return paimon::Literal(static_cast<int32_t>(value.GetInt64()));
     }
     if (type == "bigint" && value.IsInt64()) {
         return paimon::Literal(value.GetInt64());
     }
-    if (type == "float" && value.IsNumber()) {
+    if (type == "float" && value.IsNumber() && std::isfinite(value.GetDouble()) &&
+        std::abs(value.GetDouble()) <= std::numeric_limits<float>::max() &&
+        (value.GetDouble() == 0 || static_cast<float>(value.GetDouble()) != 0)) {
         return paimon::Literal(value.GetFloat());
     }
-    if (type == "double" && value.IsNumber()) {
+    if (type == "double" && value.IsNumber() && std::isfinite(value.GetDouble())) {
         return paimon::Literal(value.GetDouble());
     }
-    if ((type == "string" || type.rfind("varchar", 0) == 0 || type.rfind("char", 0) == 0) && value.IsString()) {
+    if (type == "string" && value.IsString()) {
         return paimon::Literal(paimon::FieldType::STRING, value.GetString(), value.GetStringLength());
     }
     return invalid_node(fmt::format("unsupported or malformed literal type '{}'", type));
@@ -121,6 +141,20 @@ StatusOr<std::shared_ptr<paimon::GlobalIndexResult>> checked_result(
 }
 
 } // namespace
+
+StatusOr<std::string> PaimonGlobalIndexEvaluator::_column_type(const rapidjson::Value& node) const {
+    ASSIGN_OR_RETURN(auto column, column_name(node));
+    ASSIGN_OR_RETURN(auto type, _field_type_getter(column));
+    ASSIGN_OR_RETURN(auto declared_type, json_type(node));
+    if (type != declared_type) {
+        return invalid_node(fmt::format("column '{}' does not match schema type '{}'", column, type));
+    }
+    if (type != "boolean" && type != "tinyint" && type != "smallint" && type != "int" && type != "bigint" &&
+        type != "float" && type != "double" && type != "string") {
+        return invalid_node("unsupported schema field type");
+    }
+    return type;
+}
 
 StatusOr<std::shared_ptr<paimon::GlobalIndexResult>> PaimonGlobalIndexEvaluator::evaluate(
         const rapidjson::Value& node) const {
@@ -154,10 +188,13 @@ StatusOr<std::shared_ptr<paimon::GlobalIndexResult>> PaimonGlobalIndexEvaluator:
     }
     const rapidjson::Value& children = node[kChildren.data()];
     ASSIGN_OR_RETURN(std::string_view column, column_name(children[0]));
-    ASSIGN_OR_RETURN(paimon::Literal literal, literal_from_json(children[1]));
-    ASSIGN_OR_RETURN(std::shared_ptr<paimon::GlobalIndexReader> reader, _reader_getter(column));
-
+    ASSIGN_OR_RETURN(auto field_type, _column_type(children[0]));
+    ASSIGN_OR_RETURN(paimon::Literal literal, literal_from_json(children[1], field_type));
     const std::string_view type(node[kBinaryType.data()].GetString(), node[kBinaryType.data()].GetStringLength());
+    if (type != "EQ" && type != "NE" && type != "LT" && type != "LE" && type != "GT" && type != "GE") {
+        return invalid_node(fmt::format("unsupported binary predicate '{}'", type));
+    }
+    ASSIGN_OR_RETURN(std::shared_ptr<paimon::GlobalIndexReader> reader, _reader_getter(column));
     if (type == "EQ") {
         return checked_result("equality evaluation", reader->VisitEqual(literal));
     }
@@ -186,9 +223,12 @@ StatusOr<std::shared_ptr<paimon::GlobalIndexResult>> PaimonGlobalIndexEvaluator:
         return invalid_node("malformed compound predicate");
     }
     const rapidjson::Value& children = node[kChildren.data()];
+    const std::string_view type(node[kCompoundType.data()].GetString(), node[kCompoundType.data()].GetStringLength());
+    if (type != "AND" && type != "OR") {
+        return invalid_node(fmt::format("unsupported compound predicate '{}'", type));
+    }
     ASSIGN_OR_RETURN(std::shared_ptr<paimon::GlobalIndexResult> left, evaluate(children[0]));
     ASSIGN_OR_RETURN(std::shared_ptr<paimon::GlobalIndexResult> right, evaluate(children[1]));
-    const std::string_view type(node[kCompoundType.data()].GetString(), node[kCompoundType.data()].GetStringLength());
     if (type == "AND") {
         return checked_result("AND evaluation", left->And(right));
     }
@@ -206,14 +246,15 @@ StatusOr<std::shared_ptr<paimon::GlobalIndexResult>> PaimonGlobalIndexEvaluator:
     }
     const rapidjson::Value& children = node[kChildren.data()];
     ASSIGN_OR_RETURN(std::string_view column, column_name(children[0]));
-    ASSIGN_OR_RETURN(std::shared_ptr<paimon::GlobalIndexReader> reader, _reader_getter(column));
+    ASSIGN_OR_RETURN(auto field_type, _column_type(children[0]));
     std::vector<paimon::Literal> literals;
     literals.reserve(children.Size() - 1);
     for (rapidjson::SizeType i = 1; i < children.Size(); ++i) {
-        ASSIGN_OR_RETURN(paimon::Literal literal, literal_from_json(children[i]));
+        ASSIGN_OR_RETURN(paimon::Literal literal, literal_from_json(children[i], field_type));
         literals.emplace_back(std::move(literal));
     }
     const bool negated = node[kNegated.data()].GetBool();
+    ASSIGN_OR_RETURN(std::shared_ptr<paimon::GlobalIndexReader> reader, _reader_getter(column));
     return checked_result(negated ? "NOT IN evaluation" : "IN evaluation",
                           negated ? reader->VisitNotIn(literals) : reader->VisitIn(literals));
 }
@@ -225,6 +266,7 @@ StatusOr<std::shared_ptr<paimon::GlobalIndexResult>> PaimonGlobalIndexEvaluator:
         return invalid_node("malformed IS NULL predicate");
     }
     ASSIGN_OR_RETURN(std::string_view column, column_name(node[kChildren.data()][0]));
+    ASSIGN_OR_RETURN(auto field_type, _column_type(node[kChildren.data()][0]));
     ASSIGN_OR_RETURN(std::shared_ptr<paimon::GlobalIndexReader> reader, _reader_getter(column));
     const bool not_null = node[kNegated.data()].GetBool();
     return checked_result(not_null ? "IS NOT NULL evaluation" : "IS NULL evaluation",
@@ -245,7 +287,11 @@ StatusOr<std::shared_ptr<paimon::GlobalIndexResult>> PaimonGlobalIndexEvaluator:
     }
     const rapidjson::Value& arguments = node[kArguments.data()];
     ASSIGN_OR_RETURN(std::string_view column, column_name(arguments[0]));
-    ASSIGN_OR_RETURN(paimon::Literal prefix, literal_from_json(arguments[1]));
+    ASSIGN_OR_RETURN(auto field_type, _column_type(arguments[0]));
+    if (field_type != "string") {
+        return invalid_node("starts_with requires a string field");
+    }
+    ASSIGN_OR_RETURN(paimon::Literal prefix, literal_from_json(arguments[1], field_type));
     ASSIGN_OR_RETURN(std::shared_ptr<paimon::GlobalIndexReader> reader, _reader_getter(column));
     return checked_result("starts_with evaluation", reader->VisitStartsWith(prefix));
 }

@@ -34,12 +34,15 @@ class PaimonGlobalIndexEvaluator {
 public:
     using ReaderGetter =
             std::function<StatusOr<std::shared_ptr<paimon::GlobalIndexReader>>(std::string_view column_name)>;
+    using FieldTypeGetter = std::function<StatusOr<std::string>(std::string_view column_name)>;
 
-    explicit PaimonGlobalIndexEvaluator(ReaderGetter reader_getter) : _reader_getter(std::move(reader_getter)) {}
+    PaimonGlobalIndexEvaluator(ReaderGetter reader_getter, FieldTypeGetter field_type_getter)
+            : _reader_getter(std::move(reader_getter)), _field_type_getter(std::move(field_type_getter)) {}
 
     StatusOr<std::shared_ptr<paimon::GlobalIndexResult>> evaluate(const rapidjson::Value& node) const;
 
 private:
+    StatusOr<std::string> _column_type(const rapidjson::Value& node) const;
     StatusOr<std::shared_ptr<paimon::GlobalIndexResult>> _evaluate_binary(const rapidjson::Value& node) const;
     StatusOr<std::shared_ptr<paimon::GlobalIndexResult>> _evaluate_compound(const rapidjson::Value& node) const;
     StatusOr<std::shared_ptr<paimon::GlobalIndexResult>> _evaluate_in(const rapidjson::Value& node) const;
@@ -47,6 +50,7 @@ private:
     StatusOr<std::shared_ptr<paimon::GlobalIndexResult>> _evaluate_call(const rapidjson::Value& node) const;
 
     ReaderGetter _reader_getter;
+    FieldTypeGetter _field_type_getter;
 };
 
 } // namespace starrocks

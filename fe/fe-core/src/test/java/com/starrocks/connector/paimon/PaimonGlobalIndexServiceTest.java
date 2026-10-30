@@ -123,6 +123,51 @@ public class PaimonGlobalIndexServiceTest {
         Assertions.assertThrows(IllegalStateException.class, empty::evaluate);
     }
 
+    @Test
+    public void testManyDisjointContainersAndInvalidResults(@Mocked PaimonTable table) throws Exception {
+        new Expectations() {{
+                table.getCatalogName();
+                result = "paimon";
+                table.getCatalogDBName();
+                result = "db";
+                table.getCatalogTableName();
+                result = "orders";
+            }};
+        ColumnRefOperator column = new ColumnRefOperator(1, IntegerType.INT, "k", true);
+        IndexCondition condition = new IndexCondition(new BinaryPredicateOperator(
+                BinaryType.EQ, column, ConstantOperator.createInt(1)), Map.of(1, 7));
+        PaimonGlobalIndexRequest request = PaimonGlobalIndexRequest.create(
+                "file:/tmp/orders", "main", 9L, 0L, 1000L, condition);
+        GlobalIndexResult[] partials = new GlobalIndexResult[4096];
+        for (int i = 0; i < partials.length; i++) {
+            // Separate both 64-bit map entries and 16-bit containers.
+            partials[i] = result(((long) i << 32) + (1L << 16), ((long) i << 32) + (1L << 16) + 1);
+        }
+        TResultBatch results = batch(partials);
+        GlobalIndexResult aggregate = new PaimonGlobalIndexService(table, request,
+                (sql, timeout) -> List.of(results)).evaluate().getResult();
+        Assertions.assertEquals(partials.length * 2L, aggregate.results().getLongCardinality());
+        for (int i = 0; i < partials.length; i++) {
+            Assertions.assertTrue(aggregate.results().contains(((long) i << 32) + (1L << 16)));
+            Assertions.assertEquals(2, partials[i].results().getLongCardinality());
+        }
+        TResultBatch missing = batch(result(1), null);
+        Assertions.assertThrows(IllegalStateException.class, () -> new PaimonGlobalIndexService(table, request,
+                (sql, timeout) -> List.of(missing)).evaluate());
+        TResultBatch malformed = new TResultBatch();
+        malformed.addToRows(ByteBuffer.wrap("{\"data\":[\"AAAA\"]}".getBytes(StandardCharsets.UTF_8)));
+        Assertions.assertThrows(RuntimeException.class, () -> new PaimonGlobalIndexService(table, request,
+                (sql, timeout) -> List.of(malformed)).evaluate());
+        Assertions.assertEquals(0, new PaimonGlobalIndexService(table, request,
+                (sql, timeout) -> {
+                    try {
+                        return List.of(batch(result()));
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
+                }).evaluate().getResult().results().getLongCardinality());
+    }
+
     private static GlobalIndexResult result(long... rowIds) {
         RoaringNavigableMap64 rows = new RoaringNavigableMap64();
         for (long rowId : rowIds) {

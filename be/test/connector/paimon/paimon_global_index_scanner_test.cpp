@@ -21,11 +21,15 @@
 #include <rapidjson/stringbuffer.h>
 #include <rapidjson/writer.h>
 
+#include <atomic>
+#include <condition_variable>
 #include <cstdlib>
 #include <functional>
+#include <future>
 #include <memory>
 #include <optional>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -54,12 +58,22 @@ public:
 
     static void set_scan(PaimonGlobalIndexScanner* scanner, std::unique_ptr<paimon::GlobalIndexScan> scan) {
         scanner->_global_index_scan = std::move(scan);
+        scanner->_field_type_getter_for_test = [](std::string_view) -> StatusOr<std::string> { return "int"; };
     }
 
     static void set_scan_factory(
             PaimonGlobalIndexScanner* scanner,
             std::function<paimon::Result<std::unique_ptr<paimon::GlobalIndexScan>>()> scan_factory) {
         scanner->_scan_factory_for_test = std::move(scan_factory);
+        scanner->_field_type_getter_for_test = [](std::string_view) -> StatusOr<std::string> { return "int"; };
+    }
+
+    static std::shared_ptr<PaimonFileSystem> file_system(PaimonGlobalIndexScanner* scanner) {
+        return scanner->_paimon_file_system;
+    }
+
+    static std::shared_ptr<paimon::MemoryPool> memory_pool(PaimonGlobalIndexScanner* scanner) {
+        return scanner->_memory_pool;
     }
 
     static void set_memory_pool(PaimonGlobalIndexScanner* scanner, std::shared_ptr<paimon::MemoryPool> pool) {
@@ -186,8 +200,13 @@ public:
         if (_return_null) {
             return std::vector<std::shared_ptr<paimon::GlobalIndexReader>>{};
         }
+        if (reader_factory) {
+            return std::vector<std::shared_ptr<paimon::GlobalIndexReader>>{reader_factory()};
+        }
         return std::vector<std::shared_ptr<paimon::GlobalIndexReader>>{_reader};
     }
+
+    std::function<std::shared_ptr<paimon::GlobalIndexReader>()> reader_factory;
 
     void fail_with(paimon::Status status) { _status = std::move(status); }
     void set_return_null(bool return_null) { _return_null = return_null; }
@@ -571,6 +590,206 @@ TEST(PaimonGlobalIndexScannerTest, PropagatesSerializationFailureAndReportsInjec
     Status status = scanner.do_get_next(&runtime_state, &chunk);
     EXPECT_TRUE(status.is_internal_error());
     EXPECT_NE(std::string::npos, status.message().find("serialization"));
+}
+
+TEST(PaimonGlobalIndexScannerTest, ReusesInitializationAndOwnsFilesystemUntilLastSdkReference) {
+    auto context = std::make_shared<PaimonGlobalIndexScanContext>();
+    auto fs = std::make_shared<MemoryFileSystem>();
+    auto output = fs->new_writable_file("/manifest");
+    ASSERT_TRUE(output.ok());
+    ASSERT_TRUE(output.value()->append("data").ok());
+    ASSERT_TRUE(output.value()->close().ok());
+    std::weak_ptr<FileSystem> weak_fs = fs;
+    std::shared_ptr<PaimonFileSystem> retained_fs;
+    std::shared_ptr<paimon::MemoryPool> retained_pool;
+    std::weak_ptr<MemTracker> weak_tracker;
+    int initializations = 0;
+    {
+        RuntimeState runtime{TUniqueId(), TQueryOptions(), TQueryGlobals(), static_cast<ExecEnv*>(nullptr)};
+        runtime.init_mem_trackers(TUniqueId());
+        weak_tracker = runtime.query_mem_tracker_ptr();
+        RuntimeProfile profile("shared-paimon");
+        HdfsScannerProfile scanner_profile;
+        scanner_profile.runtime_profile = &profile;
+        for (int shard = 0; shard < 16; ++shard) {
+            HdfsScannerContext scanner_ctx;
+            scanner_ctx.paimon_global_index_context = context;
+            scanner_ctx.paimon_global_index_file_system = fs;
+            THdfsScanRange range = valid_hdfs_scan_range();
+            range.paimon_global_index_scan_range.__set_shard_id(shard);
+            range.paimon_global_index_scan_range.__set_range_from(shard * 10);
+            range.paimon_global_index_scan_range.__set_range_to(shard * 10 + 9);
+            PaimonGlobalIndexScanner scanner;
+            ASSERT_TRUE(init_scanner(&scanner, &runtime, &scanner_ctx, &range, fs.get()).ok());
+            PaimonGlobalIndexScannerTestAccessor::set_scan_factory(
+                    &scanner, [&]() -> paimon::Result<std::unique_ptr<paimon::GlobalIndexScan>> {
+                        ++initializations;
+                        auto input = PaimonGlobalIndexScannerTestAccessor::file_system(&scanner)->Open("/manifest");
+                        if (!input.ok()) return input.status();
+                        char bytes[4];
+                        auto read = input.value()->Read(bytes, sizeof(bytes));
+                        if (!read.ok()) return read.status();
+                        return std::make_unique<FakeGlobalIndexScan>(
+                                std::make_shared<FakeGlobalIndexReader>(result_from_ranges({paimon::Range(1, 2)})));
+                    });
+            ASSERT_TRUE(scanner.do_open(&runtime).ok());
+            retained_fs = PaimonGlobalIndexScannerTestAccessor::file_system(&scanner);
+            retained_pool = PaimonGlobalIndexScannerTestAccessor::memory_pool(&scanner);
+            void* memory = retained_pool->Malloc(32, 8);
+            ASSERT_NE(nullptr, memory);
+            retained_pool->Free(memory, 32);
+            EXPECT_EQ(0, scanner.estimated_mem_usage());
+            scanner.do_update_counter(&scanner_profile);
+            scanner.do_close(&runtime);
+        }
+        EXPECT_EQ(1, initializations);
+        EXPECT_EQ(1, profile.get_counter("AppIOCount")->value());
+        EXPECT_EQ(4, profile.get_counter("AppIOBytes")->value());
+    }
+    context.reset();
+    fs.reset();
+    EXPECT_FALSE(weak_fs.expired());
+    EXPECT_FALSE(weak_tracker.expired());
+    // This check runs after RuntimeState destruction, and must not dereference it.
+    EXPECT_FALSE(retained_fs->Exists("/manifest").ok());
+    void* memory = retained_pool->Malloc(32, 8);
+    ASSERT_NE(nullptr, memory);
+    retained_pool->Free(memory, 32);
+    retained_fs.reset();
+    EXPECT_TRUE(weak_fs.expired());
+    EXPECT_FALSE(weak_tracker.expired());
+    retained_pool.reset();
+    EXPECT_TRUE(weak_tracker.expired());
+}
+
+TEST(PaimonGlobalIndexScannerTest, RejectsReuseAcrossRequestConfigurationAndQuery) {
+    RuntimeState first{TUniqueId(), TQueryOptions(), TQueryGlobals(), static_cast<ExecEnv*>(nullptr)};
+    RuntimeState other_query{TUniqueId(), TQueryOptions(), TQueryGlobals(), static_cast<ExecEnv*>(nullptr)};
+    first.init_mem_trackers(TUniqueId());
+    other_query.init_mem_trackers(TUniqueId());
+    auto context = std::make_shared<PaimonGlobalIndexScanContext>();
+    auto fs = std::make_shared<MemoryFileSystem>();
+    int creations = 0;
+    auto open = [&](RuntimeState* runtime, THdfsScanRange range, bool populate,
+                    const std::shared_ptr<PaimonGlobalIndexScanContext>& owner) {
+        HdfsScannerContext scanner_ctx;
+        scanner_ctx.paimon_global_index_context = owner;
+        scanner_ctx.paimon_global_index_file_system = fs;
+        scanner_ctx.datacache_options.enable_populate_datacache = populate;
+        PaimonGlobalIndexScanner scanner;
+        EXPECT_TRUE(init_scanner(&scanner, runtime, &scanner_ctx, &range, fs.get()).ok());
+        PaimonGlobalIndexScannerTestAccessor::set_scan_factory(
+                &scanner, [&]() -> paimon::Result<std::unique_ptr<paimon::GlobalIndexScan>> {
+                    ++creations;
+                    return std::make_unique<FakeGlobalIndexScan>(nullptr);
+                });
+        auto status = scanner.do_open(runtime);
+        scanner.do_close(runtime);
+        return status;
+    };
+    ASSERT_TRUE(open(&first, valid_hdfs_scan_range(), false, context).ok());
+    EXPECT_TRUE(open(&first, valid_hdfs_scan_range(), true, context).is_invalid_argument());
+    EXPECT_TRUE(open(&other_query, valid_hdfs_scan_range(), false, context).is_invalid_argument());
+    THdfsScanRange changed = valid_hdfs_scan_range();
+    changed.__set_paimon_global_index_scan_range(
+            scan_range_with_request_change([](auto& request) { request["schemaTimeMillis"].SetInt64(1001); }));
+    EXPECT_TRUE(open(&first, changed, false, context).is_invalid_argument());
+    EXPECT_EQ(1, creations);
+    EXPECT_TRUE(open(&first, valid_hdfs_scan_range(), false, std::make_shared<PaimonGlobalIndexScanContext>()).ok());
+    EXPECT_EQ(2, creations);
+}
+
+TEST(PaimonGlobalIndexScannerTest, FailedInitializationIsNotPublishedAndWaitersCanCancel) {
+    RuntimeState runtime{TUniqueId(), TQueryOptions(), TQueryGlobals(), static_cast<ExecEnv*>(nullptr)};
+    runtime.init_mem_trackers(TUniqueId());
+    auto context = std::make_shared<PaimonGlobalIndexScanContext>();
+    auto fs = std::make_shared<MemoryFileSystem>();
+    THdfsScanRange range = valid_hdfs_scan_range();
+    HdfsScannerContext scanner_ctx;
+    scanner_ctx.paimon_global_index_context = context;
+    scanner_ctx.paimon_global_index_file_system = fs;
+    PaimonGlobalIndexScanner scanner;
+    ASSERT_TRUE(init_scanner(&scanner, &runtime, &scanner_ctx, &range, fs.get()).ok());
+    PaimonGlobalIndexScannerTestAccessor::set_scan_factory(
+            &scanner, []() -> paimon::Result<std::unique_ptr<paimon::GlobalIndexScan>> {
+                return paimon::Status::IOError("failed manifest");
+            });
+    EXPECT_TRUE(scanner.do_open(&runtime).is_internal_error());
+    EXPECT_EQ(nullptr, context->state);
+    PaimonGlobalIndexScannerTestAccessor::set_scan_factory(
+            &scanner, []() -> paimon::Result<std::unique_ptr<paimon::GlobalIndexScan>> {
+                return std::make_unique<FakeGlobalIndexScan>(nullptr);
+            });
+    EXPECT_TRUE(scanner.do_open(&runtime).ok());
+    EXPECT_NE(nullptr, context->state);
+    context->state.reset();
+    std::unique_lock lock(context->mutex);
+    std::promise<Status> finished;
+    auto result = finished.get_future();
+    std::thread waiter([&] { finished.set_value(scanner.do_open(&runtime)); });
+    runtime.set_is_cancelled(true);
+    EXPECT_EQ(std::future_status::ready, result.wait_for(std::chrono::seconds(2)));
+    lock.unlock();
+    waiter.join();
+    EXPECT_TRUE(result.get().is_cancelled());
+    EXPECT_EQ(nullptr, context->state);
+    scanner.do_close(&runtime);
+}
+
+TEST(PaimonGlobalIndexScannerTest, ShardsMaterializeConcurrentlyAfterSharedInitialization) {
+    RuntimeState runtime{TUniqueId(), TQueryOptions(), TQueryGlobals(), static_cast<ExecEnv*>(nullptr)};
+    runtime.init_mem_trackers(TUniqueId());
+    ObjectPool pool;
+    parquet::Utils::SlotDesc slots[] = {{"index_result", TYPE_VARBINARY_DESC, 1}, {""}};
+    TupleDescriptor* tuple = parquet::Utils::create_tuple_descriptor(&runtime, &pool, slots);
+    auto context = std::make_shared<PaimonGlobalIndexScanContext>();
+    auto fs = std::make_shared<MemoryFileSystem>();
+    THdfsScanRange range = valid_hdfs_scan_range();
+    std::mutex mutex;
+    std::condition_variable ready;
+    int materializing = 0;
+    auto factory = [&]() -> paimon::Result<std::unique_ptr<paimon::GlobalIndexScan>> {
+        auto scan = std::make_unique<FakeGlobalIndexScan>(nullptr);
+        scan->reader_factory = [&] {
+            auto result =
+                    std::make_shared<paimon::BitmapGlobalIndexResult>([&]() -> paimon::Result<paimon::RoaringBitmap64> {
+                        std::unique_lock lock(mutex);
+                        ++materializing;
+                        ready.notify_all();
+                        if (!ready.wait_for(lock, std::chrono::seconds(2), [&] { return materializing == 2; })) {
+                            return paimon::Status::Invalid("shard evaluation was serialized");
+                        }
+                        return paimon::RoaringBitmap64();
+                    });
+            return std::make_shared<FakeGlobalIndexReader>(result);
+        };
+        return scan;
+    };
+    HdfsScannerContext contexts[2];
+    PaimonGlobalIndexScanner scanners[2];
+    for (int i = 0; i < 2; ++i) {
+        contexts[i].paimon_global_index_context = context;
+        contexts[i].paimon_global_index_file_system = fs;
+        contexts[i].materialize_slots = tuple->slots();
+        ASSERT_TRUE(init_scanner(&scanners[i], &runtime, &contexts[i], &range, fs.get()).ok());
+        PaimonGlobalIndexScannerTestAccessor::set_scan_factory(&scanners[i], factory);
+        ASSERT_TRUE(scanners[i].do_open(&runtime).ok());
+    }
+    Status statuses[2];
+    auto evaluate = [&](int i) {
+        ChunkPtr chunk = std::make_shared<Chunk>();
+        statuses[i] = scanners[i].do_get_next(&runtime, &chunk);
+    };
+    std::thread first(evaluate, 0);
+    std::thread second(evaluate, 1);
+    first.join();
+    second.join();
+    EXPECT_TRUE(statuses[0].ok()) << statuses[0];
+    EXPECT_TRUE(statuses[1].ok()) << statuses[1];
+    EXPECT_EQ(2, materializing);
+    for (auto& scanner : scanners) {
+        scanner.do_close(&runtime);
+    }
 }
 
 } // namespace
