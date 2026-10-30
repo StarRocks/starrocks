@@ -100,81 +100,95 @@ public class StatisticsUtils {
 
     public static ConnectorTableColumnStats estimateColumnStatistics(Table table, String columnName,
                                                                      ConnectorTableColumnStats connectorTableColumnStats) {
+        return estimateColumnStatistics(table, columnName, connectorTableColumnStats, getExternalBasicStatsMeta(table));
+    }
+
+    /**
+     * The analyze metadata of a connector table. Resolving it rebuilds the table from the connector
+     * (a 1000-column Iceberg table takes about 1 ms), so callers estimating several columns of the same
+     * table look it up once and pass it to
+     * {@link #estimateColumnStatistics(Table, String, ConnectorTableColumnStats, ExternalBasicStatsMeta)}.
+     */
+    public static ExternalBasicStatsMeta getExternalBasicStatsMeta(Table table) {
         try (ConnectContext.ContextScope scope = ConnectContext.enterOnlyReadIcebergCacheScope(ConnectContext.get())) {
             Triple<String, Database, Table> tableIdentifier = getTableTripleByUUID(scope.getContext(), table.getUUID());
-            ExternalBasicStatsMeta externalBasicStatsMeta = GlobalStateMgr.getCurrentState().getAnalyzeMgr().
+            return GlobalStateMgr.getCurrentState().getAnalyzeMgr().
                     getExternalTableBasicStatsMeta(tableIdentifier.getLeft(), tableIdentifier.getMiddle().getFullName(),
                             tableIdentifier.getRight().getName());
-
-            // Rows in external_column_statistics only ever reach the CBO through this method, and they are
-            // per-partition rows aggregated with no partition filter and no completeness gate (see
-            // StatisticSQLBuilder#buildQueryExternalFullStatisticsSQL). ColumnStatsMeta is what says how many
-            // partitions those rows actually cover, so without it the aggregate is an unknown fraction of the
-            // table. A collection job that dies partway can leave exactly that state behind: its rows are
-            // flushed but its metadata is never committed. Trusting them as whole-table values hands the
-            // optimizer a confident underestimate, which is worse than having no statistics at all - so treat
-            // any row set we cannot size as unknown.
-            if (externalBasicStatsMeta == null) {
-                LOG.warn("External statistics rows exist without any ExternalBasicStatsMeta, treating column {} of " +
-                        "table {} as unknown (a previous collection likely failed before committing metadata)",
-                        columnName, table.getName());
-                return ConnectorTableColumnStats.unknown();
-            }
-
-            Map<String, ColumnStatsMeta> columnStatsMetaMap = externalBasicStatsMeta.getColumnStatsMetaMap();
-            if (!columnStatsMetaMap.containsKey(columnName)) {
-                LOG.warn("External statistics rows exist without a ColumnStatsMeta, treating column {} of table {} " +
-                        "as unknown (a previous collection likely failed before committing metadata)",
-                        columnName, table.getName());
-                return ConnectorTableColumnStats.unknown();
-            }
-
-            ColumnStatsMeta columnStatsMeta = columnStatsMetaMap.get(columnName);
-            if (columnStatsMeta.getType() == StatsConstants.AnalyzeType.FULL) {
-                return connectorTableColumnStats;
-            }
-
-            // The column statistics analyze type is sample, so scale it up to the whole table.
-            //
-            // The denominator comes from the rows themselves - how many partitions actually contributed
-            // to the aggregate - rather than from the partition set recorded in the metadata. The two are
-            // maintained on different paths: the rows in external_column_statistics accumulate across
-            // runs, while the recorded set is written by whichever collection job last committed, and a
-            // run that only covered part of what it asked for makes them disagree. Dividing a numerator
-            // by a denominator derived from somewhere else is what produced both of the estimation bugs
-            // this replaced; taken from the same aggregate, they cannot disagree by construction.
-            //
-            // A backend too old to report it sends 0, and then the recorded set is all there is.
-            int sampledPartitionSize =
-                    (int) Math.min(Integer.MAX_VALUE, connectorTableColumnStats.getCollectedPartitionCount());
-            if (sampledPartitionSize <= 0) {
-                sampledPartitionSize = columnStatsMeta.getSampledPartitionsHashValue().size();
-            }
-            int totalPartitionSize = columnStatsMeta.getAllPartitionSize();
-
-            // A SAMPLE meta that covers no partition cannot scale anything (and would divide by zero).
-            if (sampledPartitionSize <= 0 || totalPartitionSize <= 0) {
-                LOG.warn("Unusable sampled partition counts in ColumnStatsMeta for column {} of table {}: " +
-                        "sampled={} total={}, treating it as unknown",
-                        columnName, table.getName(), sampledPartitionSize, totalPartitionSize);
-                return ConnectorTableColumnStats.unknown();
-            }
-
-            double avgPartitionRowCount = connectorTableColumnStats.getRowCount() * 1.0 / sampledPartitionSize;
-            // Round once, at the end. Truncating the average first - (long) avg * total - throws away
-            // everything below a whole row per partition before it is multiplied back up, so a column
-            // whose sampled partitions hold less than one row each scales to zero however large the
-            // table is. The result also feeds the distinct-value ceiling below, so a zero row count
-            // takes the distinct count down with it.
-            long totalRowCount = Math.round(avgPartitionRowCount * totalPartitionSize);
-
-            ColumnStatistic columnStatistic = scaleNdv(connectorTableColumnStats, sampledPartitionSize,
-                    totalPartitionSize, totalRowCount);
-            return new ConnectorTableColumnStats(columnStatistic, totalRowCount,
-                    connectorTableColumnStats.getUpdateTime(),
-                    connectorTableColumnStats.getCollectedPartitionCount(),
-                    connectorTableColumnStats.getPerPartitionNdvSum());
         }
+    }
+
+    public static ConnectorTableColumnStats estimateColumnStatistics(Table table, String columnName,
+                                                                     ConnectorTableColumnStats connectorTableColumnStats,
+                                                                     ExternalBasicStatsMeta externalBasicStatsMeta) {
+        // Rows in external_column_statistics only ever reach the CBO through this method, and they are
+        // per-partition rows aggregated with no partition filter and no completeness gate (see
+        // StatisticSQLBuilder#buildQueryExternalFullStatisticsSQL). ColumnStatsMeta is what says how many
+        // partitions those rows actually cover, so without it the aggregate is an unknown fraction of the
+        // table. A collection job that dies partway can leave exactly that state behind: its rows are
+        // flushed but its metadata is never committed. Trusting them as whole-table values hands the
+        // optimizer a confident underestimate, which is worse than having no statistics at all - so treat
+        // any row set we cannot size as unknown.
+        if (externalBasicStatsMeta == null) {
+            LOG.warn("External statistics rows exist without any ExternalBasicStatsMeta, treating column {} of " +
+                    "table {} as unknown (a previous collection likely failed before committing metadata)",
+                    columnName, table.getName());
+            return ConnectorTableColumnStats.unknown();
+        }
+
+        Map<String, ColumnStatsMeta> columnStatsMetaMap = externalBasicStatsMeta.getColumnStatsMetaMap();
+        if (!columnStatsMetaMap.containsKey(columnName)) {
+            LOG.warn("External statistics rows exist without a ColumnStatsMeta, treating column {} of table {} " +
+                    "as unknown (a previous collection likely failed before committing metadata)",
+                    columnName, table.getName());
+            return ConnectorTableColumnStats.unknown();
+        }
+
+        ColumnStatsMeta columnStatsMeta = columnStatsMetaMap.get(columnName);
+        if (columnStatsMeta.getType() == StatsConstants.AnalyzeType.FULL) {
+            return connectorTableColumnStats;
+        }
+
+        // The column statistics analyze type is sample, so scale it up to the whole table.
+        //
+        // The denominator comes from the rows themselves - how many partitions actually contributed
+        // to the aggregate - rather than from the partition set recorded in the metadata. The two are
+        // maintained on different paths: the rows in external_column_statistics accumulate across
+        // runs, while the recorded set is written by whichever collection job last committed, and a
+        // run that only covered part of what it asked for makes them disagree. Dividing a numerator
+        // by a denominator derived from somewhere else is what produced both of the estimation bugs
+        // this replaced; taken from the same aggregate, they cannot disagree by construction.
+        //
+        // A backend too old to report it sends 0, and then the recorded set is all there is.
+        int sampledPartitionSize =
+                (int) Math.min(Integer.MAX_VALUE, connectorTableColumnStats.getCollectedPartitionCount());
+        if (sampledPartitionSize <= 0) {
+            sampledPartitionSize = columnStatsMeta.getSampledPartitionsHashValue().size();
+        }
+        int totalPartitionSize = columnStatsMeta.getAllPartitionSize();
+
+        // A SAMPLE meta that covers no partition cannot scale anything (and would divide by zero).
+        if (sampledPartitionSize <= 0 || totalPartitionSize <= 0) {
+            LOG.warn("Unusable sampled partition counts in ColumnStatsMeta for column {} of table {}: " +
+                    "sampled={} total={}, treating it as unknown",
+                    columnName, table.getName(), sampledPartitionSize, totalPartitionSize);
+            return ConnectorTableColumnStats.unknown();
+        }
+
+        double avgPartitionRowCount = connectorTableColumnStats.getRowCount() * 1.0 / sampledPartitionSize;
+        // Round once, at the end. Truncating the average first - (long) avg * total - throws away
+        // everything below a whole row per partition before it is multiplied back up, so a column
+        // whose sampled partitions hold less than one row each scales to zero however large the
+        // table is. The result also feeds the distinct-value ceiling below, so a zero row count
+        // takes the distinct count down with it.
+        long totalRowCount = Math.round(avgPartitionRowCount * totalPartitionSize);
+
+        ColumnStatistic columnStatistic = scaleNdv(connectorTableColumnStats, sampledPartitionSize,
+                totalPartitionSize, totalRowCount);
+        return new ConnectorTableColumnStats(columnStatistic, totalRowCount,
+                connectorTableColumnStats.getUpdateTime(),
+                connectorTableColumnStats.getCollectedPartitionCount(),
+                connectorTableColumnStats.getPerPartitionNdvSum());
     }
 
     /**
