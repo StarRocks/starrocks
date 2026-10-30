@@ -226,8 +226,9 @@ public class PruneSubfieldRule extends TransformationRule {
                     return new CallOperator(func.functionName(), cast.getType(), childCall.getChildren(), func);
                 } else if (SUPPORT_CAST_TYPE.containsKey(cast.getType().getPrimitiveType())) {
                     Function func = SUPPORT_CAST_TYPE.get(cast.getType().getPrimitiveType());
+                    // Keep an assignment cast implicit: only an explicit cast checks the precision of a DECIMAL
                     return new CastOperator(cast.getType(), new CallOperator(func.functionName(), func.getReturnType(),
-                            childCall.getChildren(), func));
+                            childCall.getChildren(), func), cast.isImplicit());
                 }
             }
             return cast;

@@ -357,8 +357,10 @@ public class VariantPathRewriteRule extends TransformationRule {
             return isSupportedVariantFunction(call);
         }
 
+        // The scan reads a DECIMAL path without checking its precision, so an explicit cast that checks it is kept
         static boolean isRewriteCandidate(CastOperator operator, CallOperator call) {
-            return isSupportedVariantQuery(call) && isSupportedCastTarget(operator.getType());
+            return isSupportedVariantQuery(call) && isSupportedCastTarget(operator.getType())
+                    && !(operator.getType().isDecimalV3() && operator.checksDecimalPrecision());
         }
 
         private ScalarOperator rewriteVariantFunction(CallOperator call) {

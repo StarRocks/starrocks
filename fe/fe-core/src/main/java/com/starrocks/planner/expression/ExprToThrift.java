@@ -574,9 +574,6 @@ public final class ExprToThrift {
             }
             msg.setOpcode(ExprOpcodeRegistry.getCastOpcode());
             Type childType = node.getChild(0).getType();
-            if (CastOperator.checksDecimalPrecision(childType, node.getType(), node.isImplicit())) {
-                msg.setCast_decimal_check_precision(true);
-            }
             if (childType.isComplexType() || childType.isDecimalOfAnyVersion() || childType.isChar()
                     || childType.isVarchar()) {
                 msg.setChild_type_desc(TypeSerializer.toThrift(childType));
@@ -590,6 +587,10 @@ public final class ExprToThrift {
                         SqlModeHelper.MODE_STRUCT_CAST_BY_NAME)) {
                     msg.setCast_struct_by_name(true);
                 }
+            }
+            if (CastOperator.checksDecimalPrecision(childType, node.getType(), node.isImplicit(),
+                    msg.isCast_struct_by_name())) {
+                msg.setCast_decimal_check_precision(true);
             }
             return null;
         }

@@ -50,7 +50,16 @@ public class CastOperator extends CallOperator {
     // STRUCT, into NULL. Only an explicit cast does: an implicit one keeps the value for the sink to check. Nor does
     // a cast between fully compatible types, which the planner takes for one that gives no NULL (isNullable).
     public static boolean checksDecimalPrecision(Type childType, Type type, boolean isImplicit) {
-        return !isImplicit && (type.isDecimalV3() || type.isComplexType()) && !childType.isFullyCompatible(type);
+        return checksDecimalPrecision(childType, type, isImplicit, false);
+    }
+
+    // A STRUCT cast by name pairs the fields by name, where isFullyCompatible pairs them by position, so an explicit
+    // one is checked anyway: a NULL field doesn't make the STRUCT NULL
+    public static boolean checksDecimalPrecision(Type childType, Type type, boolean isImplicit, boolean structByName) {
+        if (isImplicit || !(type.isDecimalV3() || type.isComplexType())) {
+            return false;
+        }
+        return (structByName && childType.isStructType() && type.isStructType()) || !childType.isFullyCompatible(type);
     }
 
     public boolean checksDecimalPrecision() {

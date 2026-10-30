@@ -73,9 +73,6 @@ public class ExecCast extends ExecExpr {
     public void toThrift(TExprNode node) {
         node.setOpcode(TExprOpcode.CAST);
         Type childType = children.get(0).getType();
-        if (CastOperator.checksDecimalPrecision(childType, type, isImplicit)) {
-            node.setCast_decimal_check_precision(true);
-        }
         if (childType.isComplexType() || childType.isDecimalOfAnyVersion()
                 || childType.isChar() || childType.isVarchar()) {
             node.setChild_type_desc(TypeSerializer.toThrift(childType));
@@ -89,6 +86,9 @@ public class ExecCast extends ExecExpr {
                     SqlModeHelper.MODE_STRUCT_CAST_BY_NAME)) {
                 node.setCast_struct_by_name(true);
             }
+        }
+        if (CastOperator.checksDecimalPrecision(childType, type, isImplicit, node.isCast_struct_by_name())) {
+            node.setCast_decimal_check_precision(true);
         }
     }
 
