@@ -32,6 +32,7 @@
 #include "storage/lake/versioned_tablet.h"
 #include "storage/merge_iterator.h"
 #include "storage/predicate_parser.h"
+#include "storage/query/range_group_task.h"
 #include "storage/row_source_mask.h"
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/rowset_options.h"
@@ -129,6 +130,13 @@ Status TabletReader::prepare() {
 }
 
 Status TabletReader::open(const TabletReaderParams& read_params) {
+    if (read_params.grouped_range_task != nullptr) {
+        if ((_need_split && (!_could_split_physically || read_params.rowid_range_option != nullptr)) ||
+            read_params.short_key_ranges_option != nullptr) {
+            return Status::NotSupported("grouped range task does not support logical split readers");
+        }
+        RETURN_IF_ERROR(validate_range_group_schema(*read_params.grouped_range_task, *_tablet_schema));
+    }
     if (read_params.reader_type != ReaderType::READER_QUERY && read_params.reader_type != ReaderType::READER_CHECKSUM &&
         read_params.reader_type != ReaderType::READER_ALTER_TABLE && !is_compaction(read_params.reader_type) &&
         read_params.reader_type != ReaderType::READER_BYPASS_QUERY) {
@@ -142,6 +150,19 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
     }
 
     if (_need_split) {
+        if (read_params.grouped_range_task != nullptr) {
+            // Validate captured sources before index pruning can discard them without a child reader.
+            for (const auto& rowset : _rowsets) {
+                RETURN_IF_ERROR(validate_range_group_schema(*read_params.grouped_range_task, *rowset->tablet_schema()));
+                ASSIGN_OR_RETURN(auto segments, rowset->get_segments_checked());
+                for (const auto& segment : segments) {
+                    if (segment != nullptr) {
+                        RETURN_IF_ERROR(
+                                validate_range_group_schema(*read_params.grouped_range_task, segment->tablet_schema()));
+                    }
+                }
+            }
+        }
         std::vector<BaseTabletSharedPtr> tablets;
         auto tablet_shared_ptr = std::make_shared<Tablet>(_tablet_mgr, _tablet_metadata->id());
         // to avoid list tablet metadata by set version_hint
@@ -348,6 +369,7 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     RETURN_IF_ERROR(init_delete_predicates(params, &_delete_predicates));
     RETURN_IF_ERROR(parse_seek_range(*_tablet_schema, params.range, params.end_range, params.start_key, params.end_key,
                                      &rs_opts.ranges, &_mempool));
+    rs_opts.grouped_range_task = params.grouped_range_task;
     rs_opts.pred_tree = params.pred_tree;
     rs_opts.runtime_filter_preds = params.runtime_filter_preds;
     PredicateTree pred_tree_for_zone_map;
