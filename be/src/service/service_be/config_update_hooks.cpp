@@ -54,6 +54,7 @@
 #include "common/thread/priority_thread_pool.hpp"
 #include "common/util/bthreads/executor.h"
 #include "compute_env/ai/ai_executor.h"
+#include "compute_env/arrow_io_thread_pool.h"
 #include "compute_env/compute_env.h"
 #include "compute_env/load_spill/load_spill_block_merge_executor.h"
 #include "compute_env/workgroup/scan_executor.h"
@@ -555,6 +556,9 @@ void register_config_update_hooks(ExecEnv* exec_env, const RuntimeEnv& runtime_e
                     config::pipeline_connector_scan_thread_num_per_cpu * CpuInfo::num_cores());
         }
         return Status::OK();
+    });
+    registry->register_callback("arrow_io_thread_pool_size", [=]() -> Status {
+        return apply_arrow_io_thread_pool_size(config::arrow_io_thread_pool_size);
     });
     registry->register_callback("enable_resource_group_cpu_borrowing", [=]() -> Status {
         LOG(INFO) << "set enable_resource_group_cpu_borrowing:" << config::enable_resource_group_cpu_borrowing;

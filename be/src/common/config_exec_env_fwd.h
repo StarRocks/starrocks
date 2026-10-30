@@ -162,6 +162,16 @@ CONF_Int64(pipeline_scan_thread_pool_thread_num, "0");
 
 CONF_mDouble(pipeline_connector_scan_thread_num_per_cpu, "8");
 
+// Threads in Arrow's process-wide IO pool, which runs Arrow async IO (for example Parquet pre-buffer
+// reads through a file without its own ReadAsync). No BE read path uses this pool today: Parquet
+// pre-buffer reads run on the scan thread (ParquetChunkFile::ReadAsync). The setting stays as a
+// safety valve in case some IO falls into the pool by accident again, such as a new Arrow reader
+// over a file without a ReadAsync override. Applied at startup and on every update, so it can be
+// changed without a restart. 0 keeps the size Arrow chose for itself: the ARROW_IO_THREADS
+// environment variable when it holds a positive integer, 8 otherwise. A value > 0 overrides that.
+// Accepted range: [0, 32768].
+CONF_mInt32(arrow_io_thread_pool_size, "0");
+
 // The number of execution threads for pipeline engine.
 CONF_Int64(pipeline_exec_thread_pool_thread_num, "0");
 

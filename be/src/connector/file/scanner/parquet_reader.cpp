@@ -580,6 +580,21 @@ arrow::Result<int64_t> ParquetChunkFile::ReadAt(int64_t position, int64_t nbytes
                    : arrow::Result<int64_t>(arrow::Status(arrow::StatusCode::IOError, std::string(status.message())));
 }
 
+<<<<<<< HEAD
+=======
+// Arrow's default ReadAsync() runs ReadAt() on its process-wide IO pool (8 threads unless
+// arrow_io_thread_pool_size or ARROW_IO_THREADS says otherwise), so every connector scan thread
+// on the node queues behind those threads. The lazy read cache waits on the result right away, so read here, on the scan
+// thread. IO concurrency then follows the connector scan pool, and the buffer is charged to
+// the query's mem tracker.
+arrow::Future<std::shared_ptr<arrow::Buffer>> ParquetChunkFile::ReadAsync(const arrow::io::IOContext& /*ctx*/,
+                                                                          int64_t position, int64_t nbytes) {
+    // Qualified call: the base ReadAt(position, nbytes) is hidden by the ReadAt override above.
+    return arrow::Future<std::shared_ptr<arrow::Buffer>>::MakeFinished(
+            arrow::io::RandomAccessFile::ReadAt(position, nbytes));
+}
+
+>>>>>>> a2cbe29 ([Enhancement][RB-648] Add BE config to resize Arrow's IO thread pool (#81860))
 arrow::Result<int64_t> ParquetChunkFile::GetSize() {
     const StatusOr<uint64_t> status_or = _file->get_size();
     return status_or.ok() ? status_or.value()
