@@ -175,13 +175,7 @@ TEST_F(ArrayFunctionsTest, array_length) {
                 TYPE_ARRAY_INT_DESC, true, {{}, NullArrayRow{}, {std::nullopt}, {1}, {1, 2}});
 
         auto result = ArrayFunctions::array_length(nullptr, {c}).value();
-        EXPECT_EQ(5, result->size());
-
-        EXPECT_EQ(result->get(0), Datum(0));
-        EXPECT_EQ(result->get(1), kNullDatum);
-        EXPECT_EQ(result->get(2), Datum(1));
-        EXPECT_EQ(result->get(3), Datum(1));
-        EXPECT_EQ(result->get(4), Datum(2));
+        EXPECT_EQ("[0, NULL, 1, 1, 2]", result->debug_string());
 
         // array_length should not mutate input nullable null bitmap.
         auto* nullable = down_cast<NullableColumn*>(c.get());

@@ -3004,9 +3004,7 @@ TEST_F(GroupReaderTest, FillDstChunkProjectsVirtualVarcharColumnFromPhysicalSour
 
     ASSERT_OK(fill_dst_chunk_without_projected(group_reader, read_chunk, &dst_chunk));
     const auto& result = dst_chunk->get_column_by_slot_id(virtual_slot->id());
-    ASSERT_EQ(2, result->size());
-    EXPECT_EQ("11", result->get(0).get_slice().to_string());
-    EXPECT_EQ("22", result->get(1).get_slice().to_string());
+    ASSERT_EQ("['11', '22']", result->debug_string());
 }
 
 TEST_F(GroupReaderTest, FillDstChunkProjectsVirtualColumnFromHiddenVariantSource) {
