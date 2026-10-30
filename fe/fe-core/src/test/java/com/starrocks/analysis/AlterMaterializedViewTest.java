@@ -221,6 +221,10 @@ public class AlterMaterializedViewTest extends MVTestBase  {
                     : refresh;
             Assertions.assertTrue(showCreateStmt.contains(expected),
                     String.format("alter to %s \nbut got \n%s", refresh, showCreateStmt));
+            if (!refresh.contains("EVERY")) {
+                Assertions.assertFalse(showCreateStmt.contains("START(") || showCreateStmt.contains("EVERY("),
+                        String.format("alter to %s \nbut got \n%s", refresh, showCreateStmt));
+            }
             Assertions.assertEquals(taskDefinition, mv.getTaskDefinition());
         }
     }

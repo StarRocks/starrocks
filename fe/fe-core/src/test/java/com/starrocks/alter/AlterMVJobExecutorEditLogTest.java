@@ -14,6 +14,7 @@
 
 package com.starrocks.alter;
 
+import com.google.common.collect.Sets;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -34,6 +35,8 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.constraint.ForeignKeyConstraint;
 import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.Pair;
+import com.starrocks.common.tvr.TvrTableDelta;
+import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.persist.AlterMaterializedViewStatusLog;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
@@ -42,6 +45,9 @@ import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.RenameMaterializedViewLog;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.scheduler.Constants;
+import com.starrocks.scheduler.Task;
+import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
@@ -54,6 +60,7 @@ import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.TableRef;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
@@ -67,6 +74,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.threeten.extra.PeriodDuration;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -92,6 +100,10 @@ public class AlterMVJobExecutorEditLogTest {
     private static final long PHYSICAL_PARTITION_ID = 10005L;
     private static final long INDEX_ID = 10006L;
     private static final long TABLET_ID = 10007L;
+    private static final BaseTableInfo SEEDED_BASE_TABLE =
+            new BaseTableInfo(DB_ID, DB_NAME, BASE_TABLE_NAME, BASE_TABLE_ID);
+    private static final BaseTableInfo SEEDED_EXTERNAL_TABLE =
+            new BaseTableInfo("hive_catalog", "hive_db", "hive_table", "hive_table:1");
 
     @BeforeEach
     public void setUp() throws Exception {
@@ -1235,28 +1247,104 @@ public class AlterMVJobExecutorEditLogTest {
         Assertions.assertEquals(mv.getId(), replayInfo.getId());
         Assertions.assertEquals(MaterializedViewRefreshType.MANUAL, replayInfo.getRefreshType());
 
+        MaterializedView replayed = replayRefreshSchemeOnFollower(replayInfo);
+        Assertions.assertEquals(MaterializedViewRefreshType.MANUAL, replayed.getRefreshScheme().getType());
+    }
+
+    @Test
+    public void testVisitRefreshSchemeClauseOnChangeKeepsVersionState() throws Exception {
+        MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getDb(DB_NAME).getTable(MV_NAME);
+        seedVersionState(mv.getRefreshScheme().getAsyncRefreshContext());
+
+        alterRefreshScheme("refresh schedule start('2122-12-31 00:00:00') every(interval 1 hour)");
+        alterRefreshScheme("refresh on_change");
+
+        MaterializedView.AsyncRefreshContext context = mv.getRefreshScheme().getAsyncRefreshContext();
+        assertVersionStateKept(context);
+        Assertions.assertTrue(mv.isLoadTriggeredRefresh());
+        Assertions.assertFalse(context.isDefineStartTime());
+        Task task = GlobalStateMgr.getCurrentState().getTaskManager().getTask(TaskBuilder.getMvTaskName(MV_ID));
+        Assertions.assertEquals(Constants.TaskType.EVENT_TRIGGERED, task.getType());
+        Assertions.assertNull(task.getSchedule());
+
+        UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_CHANGE_MATERIALIZED_VIEW_REFRESH_SCHEME);
+        ChangeMaterializedViewRefreshSchemeLog onChangeLog = (ChangeMaterializedViewRefreshSchemeLog)
+                UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_CHANGE_MATERIALIZED_VIEW_REFRESH_SCHEME);
+        MaterializedView replayed = replayRefreshSchemeOnFollower(onChangeLog);
+        assertVersionStateKept(replayed.getRefreshScheme().getAsyncRefreshContext());
+        Assertions.assertTrue(replayed.isLoadTriggeredRefresh());
+        Assertions.assertFalse(replayed.getRefreshScheme().getAsyncRefreshContext().isDefineStartTime());
+    }
+
+    @Test
+    public void testVisitRefreshSchemeClauseEveryAndManualKeepVersionState() throws Exception {
+        MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getDb(DB_NAME).getTable(MV_NAME);
+        seedVersionState(mv.getRefreshScheme().getAsyncRefreshContext());
+
+        alterRefreshScheme("refresh schedule start('2122-12-31 00:00:00') every(interval 2 hour)");
+        MaterializedView.AsyncRefreshContext context = mv.getRefreshScheme().getAsyncRefreshContext();
+        assertVersionStateKept(context);
+        Assertions.assertTrue(context.isDefineStartTime());
+        Assertions.assertEquals(Utils.getLongFromDateTime(LocalDateTime.of(2122, 12, 31, 0, 0)), context.getStartTime());
+        Assertions.assertEquals(2, context.getStep());
+        Assertions.assertEquals("HOUR", context.getTimeUnit());
+
+        alterRefreshScheme("refresh manual");
+        context = mv.getRefreshScheme().getAsyncRefreshContext();
+        Assertions.assertEquals(MaterializedViewRefreshType.MANUAL, mv.getRefreshScheme().getType());
+        assertVersionStateKept(context);
+        Assertions.assertEquals(2, context.getStep());
+        Assertions.assertEquals("HOUR", context.getTimeUnit());
+    }
+
+    private static void seedVersionState(MaterializedView.AsyncRefreshContext context) {
+        context.getBaseTableVisibleVersionMap().put(BASE_TABLE_ID,
+                new HashMap<>(Map.of("p1", new MaterializedView.BasePartitionInfo(PARTITION_ID, 7L, 100L))));
+        context.getBaseTableInfoVisibleVersionMap().put(SEEDED_EXTERNAL_TABLE,
+                new HashMap<>(Map.of("p1", new MaterializedView.BasePartitionInfo(-1L, 3L, 200L))));
+        context.getMvPartitionNameRefBaseTablePartitionMap().put("p1", Sets.newHashSet("p1"));
+        context.getBaseTableInfoTvrVersionRangeMap().put(SEEDED_BASE_TABLE, TvrTableSnapshot.of(7L));
+        context.replaceTempBaseTableInfoTvrDeltaMap("in-flight", Map.of(SEEDED_BASE_TABLE, TvrTableDelta.of(7L, 9L)));
+    }
+
+    private static void assertVersionStateKept(MaterializedView.AsyncRefreshContext context) {
+        Assertions.assertEquals(Set.of(BASE_TABLE_ID), context.getBaseTableVisibleVersionMap().keySet());
+        Assertions.assertEquals(7L, context.getBaseTableVisibleVersionMap().get(BASE_TABLE_ID).get("p1").getVersion());
+        Assertions.assertEquals(Set.of(SEEDED_EXTERNAL_TABLE), context.getBaseTableInfoVisibleVersionMap().keySet());
+        Assertions.assertEquals(3L,
+                context.getBaseTableInfoVisibleVersionMap().get(SEEDED_EXTERNAL_TABLE).get("p1").getVersion());
+        Assertions.assertEquals(Set.of("p1"), context.getMvPartitionNameRefBaseTablePartitionMap().get("p1"));
+        Assertions.assertEquals(TvrTableSnapshot.of(7L), context.getBaseTableInfoTvrVersionRangeMap().get(SEEDED_BASE_TABLE));
+        Assertions.assertEquals(TvrTableDelta.of(7L, 9L), context.getTempBaseTableInfoTvrDeltaMap().get(SEEDED_BASE_TABLE));
+        Assertions.assertEquals("in-flight", context.getTempTvrOwnerStartTaskRunId());
+    }
+
+    private static void alterRefreshScheme(String refreshClause) throws Exception {
+        String sql = "alter materialized view " + DB_NAME + "." + MV_NAME + " " + refreshClause;
+        AlterMaterializedViewStmt stmt = (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        new AlterMVJobExecutor().process(stmt, connectContext);
+    }
+
+    private static MaterializedView replayRefreshSchemeOnFollower(ChangeMaterializedViewRefreshSchemeLog log) {
         LocalMetastore followerMetastore = new LocalMetastore(GlobalStateMgr.getCurrentState(), null, null);
         Database followerDb = new Database(DB_ID, DB_NAME);
         followerMetastore.unprotectCreateDb(followerDb);
         OlapTable followerBaseTable = createHashOlapTable(BASE_TABLE_ID, BASE_TABLE_NAME, 3);
         followerDb.registerTableUnlocked(followerBaseTable);
-        MaterializedView followerMv = createMaterializedView(MV_ID, MV_NAME, followerBaseTable, 3);
-        followerDb.registerTableUnlocked(followerMv);
-        Assertions.assertEquals(MaterializedViewRefreshType.ASYNC, followerMv.getRefreshScheme().getType());
+        followerDb.registerTableUnlocked(createMaterializedView(MV_ID, MV_NAME, followerBaseTable, 3));
 
         LocalMetastore originalMetastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
         GlobalStateMgr.getCurrentState().setLocalMetastore(followerMetastore);
         try {
             AlterJobMgr followerAlterJobMgr = new AlterJobMgr(
                     new SchemaChangeHandler(), new MaterializedViewHandler(), new SystemHandler());
-            followerAlterJobMgr.replayChangeMaterializedViewRefreshScheme(replayInfo);
+            followerAlterJobMgr.replayChangeMaterializedViewRefreshScheme(log);
         } finally {
             GlobalStateMgr.getCurrentState().setLocalMetastore(originalMetastore);
         }
-
-        MaterializedView replayed = (MaterializedView) followerDb.getTable(MV_ID);
-        Assertions.assertNotNull(replayed);
-        Assertions.assertEquals(MaterializedViewRefreshType.MANUAL, replayed.getRefreshScheme().getType());
+        return (MaterializedView) followerDb.getTable(MV_ID);
     }
 
     @Test
