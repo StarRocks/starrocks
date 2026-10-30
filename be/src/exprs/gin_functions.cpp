@@ -20,7 +20,9 @@
 #include <boost/locale/encoding_utf.hpp>
 
 #include "column/array_column.h"
+#include "column/column_helper.h"
 #include "column/column_viewer.h"
+#include "column/const_column.h"
 #include "exprs/function_context.h"
 #include "types/datum.h"
 
@@ -101,7 +103,14 @@ StatusOr<ColumnPtr> GinFunctions::tokenize(FunctionContext* context, const starr
     auto* analyzer = ts->analyzer;
 
     ColumnViewer<TYPE_VARCHAR> value_viewer(columns[1]);
-    size_t num_rows = value_viewer.size();
+    // ColumnViewer unwraps a constant column, so its size() is the length of the underlying data
+    // column -- always 1 for a constant -- and not the number of rows being evaluated. Tokenizing
+    // that many rows and returning an ordinary column produced a column shorter than the chunk it
+    // was appended to. Tokenize the single value and return a constant column instead, which is the
+    // contract every other function here follows through ColumnBuilder::build(is_const).
+    const bool value_is_constant = columns[1]->is_constant();
+    const size_t num_input_rows = columns[1]->size();
+    const size_t num_rows = value_is_constant ? std::min<size_t>(num_input_rows, 1) : num_input_rows;
 
     // Array Offset
     int offset = 0;
@@ -113,7 +122,7 @@ StatusOr<ColumnPtr> GinFunctions::tokenize(FunctionContext* context, const starr
 
     NullColumn::MutablePtr null_array = NullColumn::create();
 
-    for (int row = 0; row < num_rows; ++row) {
+    for (size_t row = 0; row < num_rows; ++row) {
         array_offsets->append(offset);
 
         if (value_viewer.is_null(row) || value_viewer.value(row).empty()) {
@@ -139,7 +148,14 @@ StatusOr<ColumnPtr> GinFunctions::tokenize(FunctionContext* context, const starr
     array_offsets->append(offset);
     auto result_array = ArrayColumn::create(NullableColumn::create(array_binary_column, NullColumn::create(offset, 0)),
                                             array_offsets);
-    return NullableColumn::create(result_array, null_array);
+    if (value_is_constant) {
+        // A constant column carries its value unwrapped, so a null one has to be built as such.
+        if (num_rows == 0 || null_array->get_data()[0] != 0) {
+            return ColumnHelper::create_const_null_column(num_input_rows);
+        }
+        return ConstColumn::create(std::move(result_array), num_input_rows);
+    }
+    return NullableColumn::create(std::move(result_array), std::move(null_array));
 }
 
 } // namespace starrocks

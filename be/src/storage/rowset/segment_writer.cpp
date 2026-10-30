@@ -34,6 +34,7 @@
 
 #include "storage/rowset/segment_writer.h"
 
+#include <algorithm>
 #include <memory>
 #include <utility>
 
@@ -123,6 +124,15 @@ void SegmentWriter::_init_column_meta(ColumnMetaPB* meta, uint32_t column_id, co
     // Here we set the compression from _tablet_schema which given from CREATE TABLE statement.
     meta->set_compression(_tablet_schema->compression_type());
     meta->set_compression_level(_tablet_schema->compression_level());
+    // A column listed in zstd_compression_columns carries its own ZSTD codec,
+    // overriding the table-level compression. This is the user's request and does
+    // NOT depend on enable_zstd_compression_dict: that switch only governs whether
+    // the internal shared dictionary is built, never whether the column is ZSTD.
+    // The per-column flag lives only on the top-level column, so the subcolumn
+    // recursion below never re-triggers this.
+    if (column.use_zstd_compression()) {
+        meta->set_compression(CompressionTypePB::ZSTD);
+    }
     meta->set_is_nullable(column.is_nullable());
 
     // TODO(mofei) set the format_version from column
@@ -182,6 +192,10 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
     _column_writers.reserve(_column_indexes.size());
     size_t num_columns = _tablet_schema->num_columns();
     std::map<uint32_t, uint32_t> sort_column_idx_by_column_index;
+    size_t json_columns = 0;
+    for (uint32_t column_index : _column_indexes) {
+        json_columns += column_index < num_columns && _tablet_schema->column(column_index).type() == TYPE_JSON;
+    }
     for (uint32_t i = 0; i < _column_indexes.size(); i++) {
         uint32_t column_index = _column_indexes[i];
         if (column_index >= num_columns) {
@@ -199,6 +213,28 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
             _init_column_meta(opts.meta, _opts.referenced_column_ids[column_index], column);
         } else {
             _init_column_meta(opts.meta, column_index, column);
+        }
+
+        // turn on the compression-dictionary write path for this column. The
+        // ScalarColumnWriter samples/builds the dict; for JSON columns the flag
+        // is further propagated to the flat-json sub-columns by
+        // FlatJsonColumnWriter. Gated on the master switch so it can be disabled
+        // at runtime.
+        // The dictionary itself IS gated on the switch: with it off the column is
+        // still ZSTD, just without a shared dictionary.
+        if (config::enable_zstd_compression_dict && column.use_zstd_compression()) {
+            opts.use_zstd_compression = true;
+        }
+
+        // Per-column data page size. Unset (0) keeps config::data_page_size, so a
+        // table that does not ask for one is written exactly as before. The bound
+        // mirrors the one the FE validates against; it is repeated here because the
+        // value arrives over the wire and the page size decides how much a single
+        // point lookup has to decompress.
+        if (column.zstd_compression_page_size() > 0) {
+            constexpr uint32_t kMinDataPageSize = 4 * 1024;
+            constexpr uint32_t kMaxDataPageSize = 1024 * 1024;
+            opts.data_page_size = std::clamp(column.zstd_compression_page_size(), kMinDataPageSize, kMaxDataPageSize);
         }
 
         // now we create zone map for key columns
@@ -300,6 +336,7 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
 
         opts.need_flat = config::enable_json_flat;
         opts.is_compaction = _opts.is_compaction;
+        opts.json_columns_in_segment = std::max<size_t>(1, json_columns);
 
         if (column.type() == LogicalType::TYPE_JSON && _opts.flat_json_config != nullptr) {
             opts.need_flat = _opts.flat_json_config->is_flat_json_enabled();

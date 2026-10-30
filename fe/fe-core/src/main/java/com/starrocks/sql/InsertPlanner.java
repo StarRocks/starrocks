@@ -19,6 +19,7 @@ import com.google.common.base.Stopwatch;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.alter.SchemaChangeHandler;
+import com.starrocks.alter.reshard.presplit.PreSplitEstimates;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
@@ -28,6 +29,8 @@ import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.catalog.TableName;
@@ -72,6 +75,7 @@ import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.expression.CastExpr;
 import com.starrocks.sql.ast.expression.DefaultValueExpr;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
@@ -145,6 +149,23 @@ public class InsertPlanner {
     private boolean forceReplicatedStorage = false;
     private boolean useOptimisticLock;
     private PlannerMetaLocker plannerMetaLocker;
+    /**
+     * Non-null on the optimistic path: the live tables the statement's copies were made from, revalidated
+     * after planning. Handed in by {@link StatementPlanner} when it took the snapshot under the lock it was
+     * already holding; otherwise taken at the top of {@link #plan}.
+     */
+    private Set<OlapTable> originalOlapTables;
+    /**
+     * The target table as the statement carried it in, so planning can hand the statement back unchanged.
+     * See {@link #plan} for why that matters.
+     */
+    private Table originalInsertTarget;
+    /**
+     * The version every attempt's copies are validated against. Taken from the snapshot when
+     * {@link StatementPlanner} made one, because it has to predate those copies -- between the snapshot and
+     * here the lock is already released and the authorization check has run.
+     */
+    private Long planStartTime;
 
     private List<Column> outputBaseSchema;
     private List<Column> outputFullSchema;
@@ -156,8 +177,16 @@ public class InsertPlanner {
     }
 
     public InsertPlanner(PlannerMetaLocker plannerMetaLocker, boolean optimisticLock) {
+        this(plannerMetaLocker, optimisticLock, null);
+    }
+
+    public InsertPlanner(PlannerMetaLocker plannerMetaLocker, boolean optimisticLock,
+                         StatementPlanner.PlanningSnapshot snapshot) {
         this.useOptimisticLock = optimisticLock;
         this.plannerMetaLocker = plannerMetaLocker;
+        this.originalOlapTables = snapshot == null ? null : snapshot.originalOlapTables();
+        this.originalInsertTarget = snapshot == null ? null : snapshot.originalWriteTarget();
+        this.planStartTime = snapshot == null ? null : snapshot.planStartTime();
     }
 
     private enum GenColumnDependency {
@@ -191,6 +220,63 @@ public class InsertPlanner {
             return GenColumnDependency.NONE_DEPEND_ON_TARGET_COLUMNS;
         }
         return GenColumnDependency.PARTIALLY_DEPEND_ON_TARGET_COLUMNS;
+    }
+
+    // A column-subset INSERT into a primary key table only needs the partial update machinery when
+    // its rows may land on existing rows. If no transaction has ever committed to any target
+    // partition there are no existing rows, so the INSERT can be a plain insert that fills the
+    // missing columns with their defaults and skips the publish-time segment rewrite. "Never
+    // committed" is read off the partition's nextVersion, which only advances when a transaction is
+    // assigned its version at commit. The value read here is an optimistic snapshot: the commit
+    // re-checks it under the transaction manager lock (see DatabaseTransactionMgr), so a writer that
+    // got in between cannot have its columns overwritten by the filled defaults.
+    private static boolean canPlanAsPlainInsertOnEmptyPartitions(InsertStmt insertStmt, OlapTable olapTable,
+                                                                 ConnectContext session) {
+        // INSERT OVERWRITE keeps the partial update, both as parsed and after InsertOverwriteJobRunner has
+        // rewritten it onto its temporary partitions (overwrite cleared, isFromOverwrite set) for the
+        // plan that actually runs.
+        if (insertStmt.isOverwrite() || insertStmt.isFromOverwrite() || insertStmt.isShadowRewrite()
+                || insertStmt.getTargetColumnNames() == null) {
+            return false;
+        }
+        // Inside an explicit transaction (BEGIN ... COMMIT) an earlier statement of the same
+        // transaction may already have written rows to these partitions. Those rows are not
+        // committed, so nextVersion cannot show them, and the commit re-check could not catch the
+        // overwrite either; the explicit-transaction path also builds its own commit attachment.
+        // Keep the partial update there: ExplicitTxnStatementValidator already governs it.
+        if (session.getTxnId() != 0) {
+            return false;
+        }
+        Set<String> mentionedColumns = insertStmt.getTargetColumnNames().stream()
+                .map(String::toLowerCase).collect(Collectors.toSet());
+        for (Column column : olapTable.getBaseSchema()) {
+            if (mentionedColumns.contains(column.getName().toLowerCase()) || column.isGeneratedColumn()) {
+                continue;
+            }
+            // The plain insert path must be able to fill the column itself. An auto increment column
+            // is left to the partial update path, which has its own handling for it; a NOT NULL
+            // column without a default cannot be filled at all.
+            if (column.isAutoIncrement()) {
+                return false;
+            }
+            if (column.getDefaultValueType() == Column.DefaultValueType.NULL && !column.isAllowNull()) {
+                return false;
+            }
+        }
+        // An automatic-partition table may have no partition yet: the ones this load creates start at
+        // the initial version, and the commit check covers whatever it actually wrote to.
+        for (Long partitionId : insertStmt.getTargetPartitionIds()) {
+            Partition partition = olapTable.getPartition(partitionId);
+            if (partition == null) {
+                return false;
+            }
+            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                if (physicalPartition.getNextVersion() != PhysicalPartition.PARTITION_INIT_VERSION + 1) {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 
     private static boolean checkIfUseColumnUpsertMode(ConnectContext session,
@@ -274,12 +360,110 @@ public class InsertPlanner {
         }
     }
 
+    /**
+     * On the optimistic path the statement is planned off private copies, and taking them replaces the
+     * target table on the statement itself ({@code OlapTableCollector.visitInsertStatement}). That copy must
+     * not outlive this call: a statement can be planned more than once -- {@code InsertOverwriteJobRunner}
+     * re-plans after creating the temporary partitions it will swap in -- and re-analysis does not resolve
+     * the target again, it reuses whatever the statement carries ({@code InsertAnalyzer}). Leaving a copy
+     * behind makes the second analysis look for those partitions in a table object that predates them.
+     */
     public ExecPlan plan(InsertStmt insertStmt, ConnectContext session) {
+        if (!useOptimisticLock) {
+            return doPlan(insertStmt, session);
+        }
+        if (originalInsertTarget == null) {
+            originalInsertTarget = insertStmt.getTargetTable();
+        }
+        if (planStartTime == null) {
+            // Only when no snapshot was handed in; the lock is still held here, so this is the same
+            // "generated before the copy" ordering StatementPlanner uses.
+            planStartTime = OptimisticVersion.generate();
+        }
+        if (originalOlapTables == null) {
+            // Snapshot before anything below reads the target's schema or transforms the query: on this path
+            // the optimizer runs with the meta lock released, so every table the plan reaches has to be a
+            // private copy. Collecting it inside buildExecPlanWithRetry -- where it used to live -- was too
+            // late, because the logical plan built here would still point at the live objects.
+            originalOlapTables = StatementPlanner.collectOriginalOlapTables(session, insertStmt, plannerMetaLocker);
+        }
+        try {
+            return planWithRetry(insertStmt, session);
+        } finally {
+            insertStmt.setTargetTable(originalInsertTarget);
+        }
+    }
+
+    /**
+     * Plan with the meta lock released, then re-acquire it and check that nothing the plan was built on has
+     * changed underneath. An attempt is one whole pass of {@link #doPlan}: the output schema, the logical
+     * plan and the sink are all derived from the table objects of that attempt, so a retry that reused them
+     * would re-validate fresh copies while returning a plan built for the schema that was just rejected.
+     *
+     * <p>{@code planStartTime} is always generated <em>before</em> the copies it will be compared against,
+     * never after: a version that is too early only costs a spurious retry, while one that is too late makes
+     * a racing schema change sort before it and be accepted.
+     */
+    private ExecPlan planWithRetry(InsertStmt insertStmt, ConnectContext session) {
+        Set<OlapTable> olapTables = originalOlapTables;
+        Stopwatch watch = Stopwatch.createStarted();
+
+        for (int i = 0; i < Config.max_query_retry_time; i++) {
+            if (i > 0) {
+                planStartTime = OptimisticVersion.generate();
+                // Re-analysis reuses the target the statement carries instead of resolving it again, so put
+                // the live table back first: the copy from the previous attempt is the stale schema that
+                // sent us here.
+                insertStmt.setTargetTable(originalInsertTarget);
+                olapTables = StatementPlanner.reAnalyzeStmt(insertStmt, session, plannerMetaLocker);
+            }
+
+            // Release the lock during planning, and reacquire it before validating. A no-op when the caller
+            // already released it (StatementPlanner does, so that the authorization check runs off the lock
+            // too); either way the finally below leaves it held, as the caller expects.
+            plannerMetaLocker.unlock();
+            ExecPlan plan;
+            Throwable planFailure = null;
+            try {
+                plan = doPlan(insertStmt, session);
+            } catch (Throwable t) {
+                planFailure = t;
+                throw t;
+            } finally {
+                try (Timer ignore = Tracers.watchScope("Lock")) {
+                    StatementPlanner.lock(plannerMetaLocker);
+                } catch (PlannerMetaLocker.AcquireTimeoutException e) {
+                    // A bounded re-acquire that ran out must not hide why planning failed: report that failure,
+                    // as the caller would have seen it had the lock come back.
+                    if (planFailure == null) {
+                        throw e;
+                    }
+                    planFailure.addSuppressed(e);
+                }
+            }
+            long validateAgainst = planStartTime;
+            if (olapTables.stream().allMatch(t -> OptimisticVersion.validateTableUpdate(t, validateAgainst))) {
+                return plan;
+            }
+        }
+        throw new StarRocksPlannerException(String.format("failed to generate plan for the statement after %dms",
+                watch.elapsed(TimeUnit.MILLISECONDS)), ErrorType.INTERNAL_ERROR);
+    }
+
+    private ExecPlan doPlan(InsertStmt insertStmt, ConnectContext session) {
         QueryRelation queryRelation = insertStmt.getQueryStatement().getQueryRelation();
         List<ColumnRefOperator> outputColumns = new ArrayList<>();
         Table targetTable = insertStmt.getTargetTable();
 
-        if (insertStmt.usePartialUpdate()) {
+        // Decided per planning attempt and recorded on this attempt's ExecPlan, never on the statement:
+        // planWithRetry re-analyzes and re-plans the same InsertStmt, and a decision left over from an
+        // earlier attempt could flag a plan that is in fact a partial update.
+        final boolean plainInsertOnEmptyPartitions = insertStmt.usePartialUpdate() &&
+                targetTable instanceof OlapTable &&
+                canPlanAsPlainInsertOnEmptyPartitions(insertStmt, (OlapTable) targetTable, session);
+        final boolean partialUpdate = insertStmt.usePartialUpdate() && !plainInsertOnEmptyPartitions;
+
+        if (partialUpdate) {
             inferOutputSchemaForPartialUpdate(insertStmt);
         } else {
             outputBaseSchema = targetTable.getBaseSchema();
@@ -357,13 +541,9 @@ public class InsertPlanner {
             session.getSessionVariable().setEnableLocalShuffleAgg(false);
             session.getSessionVariable().setEnableMaterializedViewRewrite(enableMVRewrite);
 
-            ExecPlan execPlan =
-                    useOptimisticLock ?
-                            buildExecPlanWithRetry(insertStmt, session, outputColumns, logicalPlan, columnRefFactory,
-                                    queryRelation, targetTable) :
-                            buildExecPlan(insertStmt, session, outputColumns, logicalPlan, columnRefFactory,
-                                    queryRelation,
-                                    targetTable);
+            ExecPlan execPlan = buildExecPlan(insertStmt, session, outputColumns, logicalPlan, columnRefFactory,
+                    queryRelation, targetTable);
+            execPlan.setPlainInsertOnEmptyPartitions(plainInsertOnEmptyPartitions);
 
             DescriptorTable descriptorTable = execPlan.getDescTbl();
             TupleDescriptor tupleDesc = descriptorTable.createTupleDescriptor();
@@ -451,7 +631,7 @@ public class InsertPlanner {
                         olapTable.writeQuorum(),
                         forceReplicatedStorage ? true : olapTable.enableReplicatedStorage(),
                         nullExprInAutoIncrement, enableAutomaticPartition, session.getCurrentComputeResource());
-                if (insertStmt.usePartialUpdate()) {
+                if (partialUpdate) {
                     TPartialUpdateMode partialUpdateMode = TPartialUpdateMode.AUTO_MODE;
                     if (checkIfUseColumnUpsertMode(session, insertStmt, olapTable)) {
                         partialUpdateMode = TPartialUpdateMode.COLUMN_UPSERT_MODE;
@@ -489,6 +669,10 @@ public class InsertPlanner {
                     Load.checkMergeCondition(insertStmt.getMergingCondition(), olapTable, outputFullSchema,
                             ((OlapTableSink) dataSink).missAutoIncrementColumn());
                     olapTableSink.init(session.getExecutionId(), insertStmt.getTxnId(), db.getId(), session.getExecTimeout());
+                    // Same estimate pre-split sizes its tablet count from, reused to size the local-first
+                    // write set. Reading it here rather than inside the sink keeps the sink free of the
+                    // exec plan; complete() below is what consumes it.
+                    olapTableSink.setEstimatedWriteBytes(PreSplitEstimates.fromExecPlan(execPlan).totalBytes());
                     olapTableSink.complete(insertStmt.getMergingCondition());
                 } catch (StarRocksException e) {
                     throw new SemanticException(e.getMessage());
@@ -557,44 +741,6 @@ public class InsertPlanner {
             sinkFragment.setLoadGlobalDicts(globalDicts);
             return execPlan;
         }
-    }
-
-    /**
-     * The workhorse of InsertPlanner, which may takes a lot of time, so we would release the lock during planning
-     */
-    private ExecPlan buildExecPlanWithRetry(InsertStmt insertStmt, ConnectContext session,
-                                            List<ColumnRefOperator> outputColumns,
-                                            LogicalPlan logicalPlan, ColumnRefFactory columnRefFactory,
-                                            QueryRelation queryRelation, Table targetTable) {
-        boolean isSchemaValid = true;
-        Set<OlapTable> olapTables = StatementPlanner.collectOriginalOlapTables(session, insertStmt);
-        Stopwatch watch = Stopwatch.createStarted();
-
-        for (int i = 0; i < Config.max_query_retry_time; i++) {
-            long planStartTime = OptimisticVersion.generate();
-            if (!isSchemaValid) {
-                olapTables = StatementPlanner.reAnalyzeStmt(insertStmt, session, plannerMetaLocker);
-            }
-
-            // Release the lock during planning, and reacquire the lock before validating
-            plannerMetaLocker.unlock();
-            ExecPlan plan;
-            try {
-                plan = buildExecPlan(insertStmt, session, outputColumns, logicalPlan, columnRefFactory, queryRelation,
-                        targetTable);
-            } finally {
-                try (Timer ignore2 = Tracers.watchScope("Lock")) {
-                    StatementPlanner.lock(plannerMetaLocker);
-                }
-            }
-            isSchemaValid =
-                    olapTables.stream().allMatch(t -> OptimisticVersion.validateTableUpdate(t, planStartTime));
-            if (isSchemaValid) {
-                return plan;
-            }
-        }
-        throw new StarRocksPlannerException(String.format("failed to generate plan for the statement after %dms",
-                watch.elapsed(TimeUnit.MILLISECONDS)), ErrorType.INTERNAL_ERROR);
     }
 
     private List<Column> getOptimizeOutputFullSchema(Table targetTable) {
@@ -947,7 +1093,9 @@ public class InsertPlanner {
                         new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields()),
                                 Lists.newArrayList());
 
-                List<SlotRef> slots = targetColumn.getRefColumns();
+                Expr definition = ExprUtils.rewriteStructFieldSlotRefs(targetColumn.getDefineExpr());
+                List<SlotRef> slots = Lists.newArrayList();
+                definition.collect(SlotRef.class, slots);
                 for (SlotRef slot : slots) {
                     String originName = slot.getColumnName();
                     Optional<Column> optOriginColumn = outputFullSchema.stream()
@@ -959,7 +1107,7 @@ public class InsertPlanner {
                 }
 
                 ScalarOperator scalarOperator =
-                        SqlToScalarOperatorTranslator.translate(targetColumn.getDefineExpr(), expressionMapping,
+                        SqlToScalarOperatorTranslator.translate(definition, expressionMapping,
                                 columnRefFactory);
 
                 ColumnRefOperator columnRefOperator =
@@ -1203,8 +1351,8 @@ public class InsertPlanner {
                 PartitionSpec partitionSpec = icebergTable.getNativeTable().spec();
                 boolean isInvalid = partitionSpec.fields().stream().anyMatch(field -> !field.transform().isIdentity());
                 if (isInvalid) {
-                    throw new SemanticException("Staitc insert into Iceberg table %s is not supported" +
-                            " for not partitioned by identity transform", icebergTable.getName());
+                    throw new SemanticException("Static partition insert into Iceberg table %s is not supported" +
+                            " because it has a non-identity partition transform", icebergTable.getName());
                 }
             }
         }
@@ -1258,8 +1406,14 @@ public class InsertPlanner {
                 }
             }
         }
-        checkPartitionInsertValid(targetTable);
-        return true;
+        // constant partition values make a static insert only under identity transforms; otherwise the insert stays
+        // dynamic, and the sink computes the transformed partition values
+        return !hasNonIdentityPartitionTransform(targetTable);
+    }
+
+    private static boolean hasNonIdentityPartitionTransform(Table targetTable) {
+        return targetTable instanceof IcebergTable icebergTable && icebergTable.isPartitioned() &&
+                icebergTable.getNativeTable().spec().fields().stream().anyMatch(field -> !field.transform().isIdentity());
     }
 
 

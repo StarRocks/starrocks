@@ -21,6 +21,7 @@ import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.TypeFactory;
 import com.starrocks.type.VarcharType;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.common.type.HiveDecimal;
 import org.apache.hadoop.hive.ql.exec.vector.BytesColumnVector;
@@ -43,6 +44,21 @@ class OrcStripeStatisticsReaderTest {
 
     @TempDir
     java.nio.file.Path tempDirectory;
+
+    @Test
+    void footerIoFailureSignalsDataTierFallback() {
+        Path missingPath = new Path(tempDirectory.resolve("missing.orc").toUri());
+        FileStatus missingFile = new FileStatus(
+                1L, false, 0, 0L, 0L, missingPath);
+
+        MetaTierUnavailableException failure = Assertions.assertThrows(MetaTierUnavailableException.class,
+                () -> OrcStripeStatisticsReader.read(
+                        missingFile, new Configuration(),
+                        List.of(new Column("sort_key", IntegerType.BIGINT)), null));
+
+        Assertions.assertTrue(failure.getMessage().contains("failed to read ORC footer"));
+        Assertions.assertInstanceOf(IOException.class, failure.getCause());
+    }
 
     @Test
     void readsBigintStatisticsAcrossWholeFile() throws Exception {

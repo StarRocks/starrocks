@@ -72,9 +72,6 @@ public:
     // Clear all headers
     void clear_headers();
 
-    // Set Authorization header with Bearer token (useful for LLM APIs)
-    void set_bearer_token(const std::string& token) { set_header("Authorization", "Bearer " + token); }
-
     std::string get_response_content_type() {
         char* ct = nullptr;
         auto code = curl_easy_getinfo(_curl, CURLINFO_CONTENT_TYPE, &ct);

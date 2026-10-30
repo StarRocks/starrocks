@@ -38,6 +38,7 @@
 #include "common/status.h"
 #include "common/system/backend_options.h"
 #include "common/thread/priority_thread_pool.hpp"
+#include "common/thread/threadpool.h"
 #include "compute_env/compute_env.h"
 #include "compute_env/staros/staros_worker_runtime.h"
 #include "data_workflows/data_workflows_env.h"
@@ -74,6 +75,7 @@ namespace brpc {
 DECLARE_uint64(max_body_size);
 DECLARE_int64(socket_max_unwritten_bytes);
 DECLARE_bool(socket_keepalive);
+DECLARE_int32(max_connection_pool_size);
 
 } // namespace brpc
 
@@ -320,6 +322,11 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     brpc::FLAGS_socket_keepalive = config::brpc_socket_keepalive;
 
     brpc::FLAGS_socket_max_unwritten_bytes = config::brpc_socket_max_unwritten_bytes;
+
+    // Client-side flag, only consulted when brpc_connection_type is "pooled". brpc re-reads it on every
+    // pooled get/return, so it can also be tuned at runtime through brpc's builtin /flags page.
+    brpc::FLAGS_max_connection_pool_size = config::brpc_max_connection_pool_size;
+
     auto brpc_server = std::make_unique<brpc::Server>();
 
     auto* load_channel_mgr = data_workflows_env->load_channel_mgr();
@@ -481,6 +488,14 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 
     compute_env->stop();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": compute env stop successfully";
+
+    // Executors and pollers can no longer submit closes. Join running closes and cancel queued ones before
+    // freeing the operators, sinks and RuntimeStates they reference. Their object-store dependencies and
+    // put_combined_txn_log pool must remain alive until this completes.
+    if (auto* close_pool = runtime_env->load_sink_close_thread_pool(); close_pool != nullptr) {
+        close_pool->shutdown();
+    }
+    LOG(INFO) << process_name << " exit step " << exit_step++ << ": load sink close thread pool shutdown successfully";
 
     exec_env->clear_query_contexts();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": query contexts clear successfully";

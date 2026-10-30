@@ -22,6 +22,9 @@ import java.nio.ByteBuffer;
 import java.util.List;
 
 public class ManifestFileBean implements ManifestFile, Serializable {
+    // The default UID before firstRowId was added. Pinning it keeps a bean serialized by an FE and read by a BE of
+    // the other version compatible during an upgrade; the missing field deserializes as null.
+    private static final long serialVersionUID = 408212748665378941L;
 
     private String path = null;
     private Long length = null;
@@ -29,6 +32,9 @@ public class ManifestFileBean implements ManifestFile, Serializable {
     private Long addedSnapshotId = null;
     private Integer content = null;
     private Long sequenceNumber = null;
+    // Format v3: the row id of the manifest's first row. Reading the manifest assigns each data file without an
+    // explicit first_row_id its row id range from it; without it _row_id reads NULL.
+    private Long firstRowId = null;
 
     public static ManifestFileBean fromManifest(ManifestFile manifest) {
         ManifestFileBean bean = new ManifestFileBean();
@@ -39,6 +45,7 @@ public class ManifestFileBean implements ManifestFile, Serializable {
         bean.setAddedSnapshotId(manifest.snapshotId());
         bean.setContent(manifest.content().id());
         bean.setSequenceNumber(manifest.sequenceNumber());
+        bean.setFirstRowId(manifest.firstRowId());
 
         return bean;
     }
@@ -89,6 +96,19 @@ public class ManifestFileBean implements ManifestFile, Serializable {
 
     public void setSequenceNumber(Long sequenceNumber) {
         this.sequenceNumber = sequenceNumber;
+    }
+
+    public Long getFirstRowId() {
+        return firstRowId;
+    }
+
+    public void setFirstRowId(Long firstRowId) {
+        this.firstRowId = firstRowId;
+    }
+
+    @Override
+    public Long firstRowId() {
+        return firstRowId;
     }
 
     @Override

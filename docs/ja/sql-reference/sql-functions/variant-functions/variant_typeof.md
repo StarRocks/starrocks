@@ -24,7 +24,7 @@ VARCHAR variant_typeof(variant_expr)
 型名を表す VARCHAR 値を返します。
 
 主な戻り値は次のとおりです。
-- `"Null"` - NULL 値
+- `"Null"` - VARIANT null（JSON null など）。SQL NULL（パスが存在しない場合の `variant_query` の戻り値を含む）に対しては NULL を返します。VARIANT null を判定するには [is_variant_null](./is_variant_null.md) を使用します。
 - `"Boolean(true)"` - true のブール値
 - `"Boolean(false)"` - false のブール値
 - `"Int8"`, `"Int16"`, `"Int32"`, `"Int64"` - 整数値

@@ -42,7 +42,8 @@ struct LowCardPercentileDispatcher {
             resolver->add_aggregate_mapping_variadic<pt, pt, LowCardPercentileState<pt>>(
                     "percentile_disc_lc", false, AggregateFactory::MakeLowCardPercentileCntAggregateFunction<pt>());
             resolver->add_aggregate_mapping<pt, TYPE_VARCHAR, LowCardPercentileState<pt>>(
-                    "percentile_build_lc", false, AggregateFactory::MakeLowCardPercentileBinAggregateFunction<pt>());
+                    "percentile_build_lc", kWithoutWindow,
+                    AggregateFactory::MakeLowCardPercentileBinAggregateFunction<pt>());
         }
     }
 };
@@ -73,7 +74,7 @@ void AggregateFuncResolver::register_others() {
             AggregateFactory::MakePercentileApproxWeightedArrayAggregateFunction());
 
     add_aggregate_mapping<TYPE_PERCENTILE, TYPE_PERCENTILE, PercentileValue>(
-            "percentile_union", false, AggregateFactory::MakePercentileUnionAggregateFunction());
+            "percentile_union", kWithoutWindow, AggregateFactory::MakePercentileUnionAggregateFunction());
 
     add_aggregate_mapping_variadic<TYPE_DOUBLE, TYPE_DOUBLE, PercentileState<TYPE_DOUBLE>>(
             "percentile_cont", false, AggregateFactory::MakePercentileContAggregateFunction<TYPE_DOUBLE>());

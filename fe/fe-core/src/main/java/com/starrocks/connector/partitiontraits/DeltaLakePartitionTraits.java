@@ -36,6 +36,11 @@ public class DeltaLakePartitionTraits extends DefaultTraits {
     }
 
     @Override
+    public boolean readsPartitionInfoToDetectUpdates() {
+        return false;
+    }
+
+    @Override
     public Set<String> getUpdatedPartitionNames(List<BaseTableInfo> baseTables,
                                                 MaterializedView.AsyncRefreshContext context) {
         // TODO: Implement Delta Lake partition update tracking. Until then, return an empty set (meaning

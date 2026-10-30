@@ -49,6 +49,12 @@ public interface DumpInfo {
     default void addExternalTableRowCount(Table table, long rowCount) {
     }
 
+    default void addExternalColumnRowCount(Table table, String column, long rowCount) {
+    }
+
+    default void addExternalTableFormatVersion(Table table, int formatVersion) {
+    }
+
     default void addExternalTablePartitions(Table table, List<String> partitionSpec,
                                             List<String> partitionNames) {
     }

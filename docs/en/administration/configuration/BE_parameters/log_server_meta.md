@@ -110,7 +110,7 @@ This topic introduces the following types of BE configurations:
 - Type: String
 - Unit: -
 - Is mutable: Yes (from v3.3.0, v3.2.7, and v3.1.12)
-- Description: The severity levels into which system log entries are classified. Valid values: INFO, WARNING, ERROR, and FATAL. This item was changed to a dynamic configuration from v3.3.0, v3.2.7, and v3.1.12 onwards.
+- Description: The severity levels into which system log entries are classified. Valid values: INFO, WARNING, ERROR, and FATAL. At startup, if the value in the configuration file is none of these, it is reported in the log and INFO is used, so an invalid value cannot leave the BE without working logging. At runtime, an invalid value is instead rejected with an error and the level in effect is left unchanged. This item was changed to a dynamic configuration from v3.3.0, v3.2.7, and v3.1.12 onwards.
 - Introduced in: -
 
 ### sys_log_roll_mode
@@ -119,7 +119,7 @@ This topic introduces the following types of BE configurations:
 - Type: String
 - Unit: -
 - Is mutable: No
-- Description: The mode in which system logs are segmented into log rolls. Valid values include `TIME-DAY`, `TIME-HOUR`, and `SIZE-MB-`size. The default value indicates that logs are segmented into rolls, each of which is 1 GB.
+- Description: The mode in which system logs are segmented into log rolls. Valid values include `TIME-DAY`, `TIME-HOUR`, and `SIZE-MB-`size. The default value indicates that logs are segmented into rolls, each of which is 1 GB. If the configured value cannot be parsed, it is reported in the log and the default is used.
 - Introduced in: -
 
 ### sys_log_roll_num
@@ -258,6 +258,15 @@ This topic introduces the following types of BE configurations:
   The choice affects per-socket buffering behavior and can influence `Socket.Write` failures (EOVERCROWDED) when unwritten bytes exceed socket limits.
 - Introduced in: v3.2.5
 
+### brpc_failed_channel_reset_interval_s
+
+- Default: 10
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The interval at which the BE checks its cached bRPC stubs and resets the stubs whose connection has failed. bRPC health-checks a failed connection every few seconds until the connection is released, and logs `Fail to wait EPOLLOUT` on every check against an unreachable address, such as the old IP address of a restarted BE pod in Kubernetes. Resetting a stub releases the failed connection, and the stub opens a new connection for its next RPC. A value less than or equal to `0` disables the check.
+- Introduced in: -
+
 ### brpc_max_body_size
 
 - Default: 2147483648
@@ -266,6 +275,15 @@ This topic introduces the following types of BE configurations:
 - Is mutable: No
 - Description: The maximum body size of a bRPC.
 - Introduced in: -
+
+### brpc_max_connection_pool_size
+
+- Default: 100
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The number of idle connections the client caches for each remote server endpoint. Only takes effect when `brpc_connection_type` is set to `"pooled"`. This is the capacity of the idle-connection cache, not a cap on the number of connections: when no idle connection is available a new one is always created, and when a connection is returned it is closed if the pool already holds this many. Setting the value below the peak number of in-flight RPCs to a single peer makes the excess connections be created and closed repeatedly, which behaves like short connections and consumes ephemeral ports. Set it no lower than that peak. Increasing the value raises the number of file descriptors and the memory held by idle connections. A value of `0` or below disables connection reuse, which makes `"pooled"` behave like `"short"`. Changing the value takes effect immediately and only affects connections returned afterwards.
+- Introduced in: v4.2.0
 
 ### brpc_max_connections_per_server
 
@@ -366,13 +384,22 @@ This topic introduces the following types of BE configurations:
 - Description: When this item is set to `true`, the BE starts a background thread (jemalloc_tracker_daemon) that polls jemalloc statistics (once per second) and updates the RuntimeEnv jemalloc metadata MemTracker with the jemalloc "stats.metadata" value. This ensures jemalloc metadata consumption is included in StarRocks process memory accounting and prevents under‑reporting of memory used by jemalloc internals. The tracker is only compiled/started on non‑macOS builds (#ifndef __APPLE__) and runs as a daemon thread named "jemalloc_tracker_daemon". Because this setting affects startup behaviour and threads that maintain MemTracker state, changing it requires a restart. Disable only if jemalloc is not used or when jemalloc tracking is intentionally managed differently; otherwise keep enabled to maintain accurate memory accounting and allocation safeguards.
 - Introduced in: v3.2.12
 
+### enable_jvm_memory_tracker
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to count the memory used by the JVM toward the BE memory limit (`mem_limit`). The JVM maps its heap and non-heap memory (such as Metaspace and the code cache) itself, outside the BE memory allocator, so this memory is otherwise not counted. When this item is `true`, each time the JVM metrics are collected (every 15 seconds when `enable_metric_calculator` is `true`), BE sets the `jvm` memory tracker, under the `process` tracker, to the committed heap plus non-heap memory of the JVM. The `jvm` tracker is shown on the `/mem_tracker` page. When this item is changed to `false`, the next collection resets the `jvm` tracker to 0. This item takes effect only when `enable_jvm_metrics` is `true`. Before a JVM is created in the BE process, the `jvm` tracker is 0.
+- Introduced in: -
+
 ### enable_jvm_metrics
 
-- Default: false
+- Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: No
-- Description: Controls whether the system initializes and registers JVM-specific metrics at startup. When enabled the metrics subsystem will create JVM-related collectors (for example, heap, GC and thread metrics) for export, and when disabled, those collectors are not initialized. This parameter is intended for forward compatibility and may be removed in a future release. Use `enable_system_metrics` to control system-level metric collection.
+- Description: Whether to collect JVM memory metrics on the BE. The metrics are `jvm_heap_size_bytes` and `jvm_non_heap_size_bytes` for heap and non-heap memory, and `jvm_young_size_bytes`, `jvm_survivor_size_bytes`, `jvm_old_size_bytes`, and `jvm_perm_size_bytes` (Metaspace) for memory pools. The `type` label of each metric is `used`, `committed`, `max`, `peak_used`, or `peak_max`. Enabling this item does not start a JVM. The BE starts collecting the metrics only after a JVM is created in the BE process by a feature that uses Java, such as HDFS access, JNI-based readers, or Java UDFs. Until then, the metrics are 0. The metrics are refreshed every 15 seconds when `enable_metric_calculator` is `true`. When `enable_jvm_memory_tracker` is `true`, each refresh also counts the memory of the JVM toward the BE memory limit. See `enable_jvm_memory_tracker`. If `JAVA_HOME` is not set, the metrics are not registered. A `max` or `peak_max` value of -1 means that the memory pool has no defined maximum. With the default G1 garbage collector, this applies to `jvm_young_size_bytes` and `jvm_survivor_size_bytes` (the Eden and Survivor spaces), and to `jvm_perm_size_bytes` (Metaspace) unless `MaxMetaspaceSize` is set. The memory pool metrics are populated only for the Serial, Parallel, and G1 garbage collectors. Use `enable_system_metrics` to control system-level metric collection.
 - Introduced in: v4.0.0
 
 ### get_pindex_worker_count
@@ -410,6 +437,15 @@ This topic introduces the following types of BE configurations:
 - Is mutable: Yes (only some options)
 - Description: The jemalloc runtime options that `bin/start_backend.sh` exports as the `JEMALLOC_CONF` environment variable when the BE is started in the normal mode. This item is ignored if `JEMALLOC_CONF` is already set in the environment, and if the BE is started with `--jemalloc_debug` or `--check_mem_leak`, because those modes force their own option string. jemalloc reads `JEMALLOC_CONF` before the BE parses its configuration, so modifying this item at runtime only re-applies the options that jemalloc itself allows to be changed after initialization: `dirty_decay_ms`, `muzzy_decay_ms`, and `prof_active`. Adding, removing, or changing any other option is rejected with an error and the configuration value is rolled back, which means those options require restarting the BE. `prof_active` can only be changed if the BE was started with `prof:true`. Setting `dirty_decay_ms` or `muzzy_decay_ms` to `0` purges all unused pages synchronously and can therefore make the modification take a while, and setting it to `-1` disables purging.
 - Introduced in: v4.0.15, v4.1.3
+
+### large_memory_alloc_report_threshold
+
+- Default: 1073741824
+- Type: Int
+- Unit: Bytes
+- Is mutable: Yes
+- Description: When a single allocation requests more than this many bytes, the BE logs a WARNING containing the query ID, the fragment instance ID, the requested size, and the allocating stack trace. A value of `0` or below disables the report. The threshold check runs on every allocation, but it is only a comparison and its cost is negligible. The report is not: it captures and symbolizes a stack trace and takes the logging lock, so a threshold low enough that ordinary allocations cross it floods the log and slows down the whole process. Lower it only temporarily, to find the source of an unexpected memory spike, and restore it afterwards. The default only applies once BE configuration has been loaded; allocations made earlier, during process startup, are never reported.
+- Introduced in: v4.2.0
 
 ### local_library_dir
 
@@ -543,7 +579,7 @@ This topic introduces the following types of BE configurations:
 - Type: Int
 - Unit: Milliseconds
 - Is mutable: Yes
-- Description: The time interval at which a thrift client retries.
+- Description: The base retry interval for BE Thrift RPCs. Before each retry, the client waits a uniformly random duration from 0 to `min(1000, base * 2^retry_index)` milliseconds, where `base` is this value clamped to [0, 1000] and `retry_index` starts at 0. The value is read once per RPC. Zero or negative values disable the wait. No wait is added after the final failed attempt.
 - Introduced in: -
 
 ### thrift_connect_timeout_seconds

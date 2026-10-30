@@ -48,6 +48,10 @@ CONF_Int32(brpc_max_connections_per_server, "1");
 // The expire time of BRPC stub cache, default 60 minutes.
 CONF_mInt32(brpc_stub_expire_s, "3600"); // 60 minutes
 
+// The interval of the background check that resets BRPC stubs whose connection has failed, default 10 seconds.
+// A value <= 0 disables the check.
+CONF_mInt32(brpc_failed_channel_reset_interval_s, "10");
+
 // Whether to resolve backend hostnames to IP addresses in generated error URLs.
 // - true: StarRocks will attempt to resolve hostnames to IPs.
 //  Useful in debugging scenarios where internal hostnames (e.g., K8s pod names)
@@ -87,6 +91,15 @@ CONF_Int64(brpc_max_body_size, "2147483648");
 
 // Max unwritten bytes in each socket, if the limit is reached, Socket.Write fails with EOVERCROWDED.
 CONF_Int64(brpc_socket_max_unwritten_bytes, "1073741824");
+
+// Only takes effect when brpc_connection_type is "pooled". Maps to brpc's -max_connection_pool_size.
+// Note this is the capacity of the idle-connection cache of a single remote endpoint, NOT a cap on the
+// number of connections: when no idle connection is available a new one is always created, and on return
+// the connection is closed if the pool already holds this many. A value below the peak concurrency makes
+// the excess connections be created and closed repeatedly, which behaves like short connections and burns
+// ephemeral ports. Set it no lower than the peak number of in-flight RPCs to a single peer.
+// brpc re-reads the flag on every pooled get/return, so updating this config takes effect immediately.
+CONF_mInt32(brpc_max_connection_pool_size, "100");
 
 // If the amount of data to be sent by a single channel of brpc exceeds brpc_socket_max_unwritten_bytes
 // it will cause rpc to report an error. We add configuration to ignore rpc overload.

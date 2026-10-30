@@ -78,7 +78,7 @@ private:
     void _init_build_column(const HashTableParam& param);
     void _init_join_keys();
 
-    Status _upgrade_key_columns_if_overflow();
+    Status _check_key_columns_capacity() const;
 
     void _remove_duplicate_index_for_left_outer_join(Filter* filter);
     void _remove_duplicate_index_for_left_semi_join(Filter* filter);

@@ -14,6 +14,7 @@
 
 package com.starrocks.service.arrow.flight.sql;
 
+import com.starrocks.common.Config;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.service.arrow.flight.sql.auth2.ArrowFlightSqlAuthenticator;
 import com.starrocks.service.arrow.flight.sql.session.ArrowFlightSqlSessionManager;
@@ -65,6 +66,7 @@ public class ArrowFlightSqlService {
         // Constructs the server object of the Arrow Flight SQL.
         this.flightServer = FlightServer.builder(allocator, location, producer)
                 .headerAuthenticator(authenticator)
+                .setMaxHeaderListSize(Config.arrow_flight_max_header_size)
                 .build();
     }
 

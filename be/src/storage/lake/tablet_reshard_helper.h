@@ -22,11 +22,6 @@
 #include "gen_cpp/lake_types.pb.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/txn_log.h"
-#include "storage_primitive/range.h" // Range<rowid_t>, rowid_t
-
-namespace roaring {
-class Roaring;
-} // namespace roaring
 
 namespace starrocks::lake {
 class TabletManager;
@@ -47,12 +42,12 @@ void ensure_rowset_uid(RowsetMetadataPB* rowset_metadata);
 // per-tablet-private rewrite cannot alias the cross-published sibling it came from.
 void set_rowset_uid(RowsetMetadataPB* rowset_metadata);
 
-// True iff the rowset carries a usable uid (present and non-zero). A zero or
-// absent uid is treated as non-dedupable by MERGE rather than aliasing.
+// True iff the rowset carries a usable uid (present and non-zero). MERGE refuses
+// a source rowset without one.
 bool has_valid_uid(const RowsetMetadataPB& rowset_metadata);
 
-// True iff both rowsets carry the same valid uid, i.e. they are the same logical
-// rowset across split siblings. The single source of truth for MERGE dedup.
+// True iff both rowsets carry the same valid uid, i.e. they are pieces of the
+// same logical rowset across split siblings.
 bool same_rowset_uid(const RowsetMetadataPB& a, const RowsetMetadataPB& b);
 
 // Gives |dst| the identity of |src|: copies src's uid if it has a valid one, else mints a
@@ -98,26 +93,47 @@ void set_dcg_shared(DeltaColumnGroupVerPB* dcg, bool shared);
 // per-segment ownership propagation (private for an exclusive segment).
 void set_idg_shared(IndexDeltaGroupVerPB* idg, bool shared);
 
+// True iff |metadata| references a live data file carrying the shared flag. This computes the value
+// the BE reports as TabletStatPB / TabletStat.has_shared_files, which merge planning uses to refuse a
+// tablet whose files a split left co-owned: a merge inherits its sources' files verbatim, so a second
+// owner would make the merged tablet unsafe.
+//
+// The fields are walked in TabletMetadataPB declaration order, so this list can be diffed against
+// lake_types.proto whenever a field is added:
+//
+//   (4)  rowsets           del_files[].shared, then segment_metas[].shared   CHECKED
+//   (7)  delvec_meta       version_to_file[].shared                          skipped: a merge rewrites
+//                          the delvec pages it keeps into a new file, so a shared source delvec never
+//                          constrains it
+//   (8)  compaction_inputs                                                   skipped: garbage records
+//   (10) orphan_files                                                        skipped: garbage records
+//   (15) sstable_meta      sstables[].shared                                 CHECKED
+//   (16) dcg_meta          dcgs[].shared_files[]                             CHECKED
+//   (24) idg_meta          idgs[].entries[].shared_file                      CHECKED
+//   (25) ext               an empty message today; revisit if it gains file fields
+//
+// Every other field carries ids, versions, schemas or ranges rather than files.
+//
+// The two sidecar kinds are checked directly rather than derived from their segment's flag: an
+// OpAddIndex cross-publish can install a shared IDG entry for a segment without touching that
+// segment's own flag, so a privately owned segment can still carry a shared .idx.
+//
+// Only segment_metas[].shared is read, never RowsetMetadataPB's deprecated parallel
+// deprecated_shared_segments: the proto normalizer back-fills the former from the latter on load
+// (lake_proto_normalizer.cpp), so legacy metadata is covered without reading a deprecated field.
+//
+// Reads metadata only; performs no I/O.
+bool has_shared_files(const TabletMetadataPB& metadata);
+
 StatusOr<TabletRangePB> intersect_range(const TabletRangePB& lhs_pb, const TabletRangePB& rhs_pb);
 StatusOr<TabletRangePB> union_range(const TabletRangePB& lhs_pb, const TabletRangePB& rhs_pb);
 Status update_rowset_range(RowsetMetadataPB* rowset, const TabletRangePB& range);
 Status update_rowset_ranges(TxnLogPB* txn_log, const TabletRangePB& range);
 
-// True iff |lhs ∪ rhs| has no gap. Touching at a boundary counts as
-// contiguous iff at least one side is included at the touching point.
-// Same-direction unbounded sides always extend without forming a gap.
-// Empty input ranges return false.
-bool ranges_are_contiguous(const TabletRangePB& lhs_pb, const TabletRangePB& rhs_pb);
-
-// Sort+merge a list of ranges into a disjoint, ascending-by-lower list. Adjacent
-// (touching with compatible included flags) and overlapping intervals are
-// merged. Empty inputs are dropped.
-StatusOr<std::vector<TabletRangePB>> sort_and_merge_adjacent_ranges(std::vector<TabletRangePB> ranges);
-
 // Complement of |sorted_disjoint_children| within |bound|. The children list
-// must already be sorted ascending by lower bound and pairwise disjoint
-// (callers can use sort_and_merge_adjacent_ranges first). Children outside
-// |bound| are clipped. Returns empty list iff children fully cover |bound|.
+// must already be sorted ascending by lower bound and pairwise disjoint.
+// Children outside |bound| are clipped. Returns empty list iff children fully
+// cover |bound|.
 StatusOr<std::vector<TabletRangePB>> compute_disjoint_gaps_within(
         const TabletRangePB& bound, const std::vector<TabletRangePB>& sorted_disjoint_children);
 
@@ -128,28 +144,6 @@ StatusOr<std::vector<TabletRangePB>> compute_disjoint_gaps_within(
 // pre-split tablet that extend beyond the merged tablet range).
 StatusOr<std::vector<TabletRangePB>> compute_non_contributed_ranges(
         const std::vector<TabletRangePB>& sorted_disjoint_children);
-
-// A row window in a DCG target segment owned by one source old tablet, or a
-// synthesized gap window (is_gap=true) whose rows are masked by the merge gap
-// delvec. Moved here from tablet_merger.cpp so reconcile_windows_with_gap below
-// is unit-testable.
-struct DcgRowWindow {
-    size_t old_tablet_index = 0;
-    Range<rowid_t> range;
-    bool is_gap = false;
-};
-
-// Walk |sorted_contributors| (ascending by range.begin(), already deduped on
-// same owner+range) and fill coverage holes with synthesized gap windows IFF
-// the hole is fully covered by |gap_bits| (the same Roaring merge_delvecs masks
-// into the delvec). A hole not fully masked, an overlap between distinct
-// owners, a contributor window outside [0, num_rows], or num_rows<=0 returns an
-// error (NotSupported / InternalError). With |gap_bits|==nullptr any hole fails,
-// byte-identical to the pre-fix strict contiguous-coverage behavior. On success,
-// |out_windows| tiles [0, num_rows) exactly (contributor + gap windows).
-Status reconcile_windows_with_gap(const std::vector<DcgRowWindow>& sorted_contributors,
-                                  const roaring::Roaring* gap_bits, rowid_t num_rows,
-                                  std::vector<DcgRowWindow>* out_windows);
 
 // Mirrors Rowset::get_seek_range() fallback chain:
 //   rowset.range if has_range, else ctx_metadata.range if has_range,

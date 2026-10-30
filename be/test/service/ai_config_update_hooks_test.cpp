@@ -43,12 +43,14 @@ AIRuntimeConfig config_from_globals() {
     config.request_timeout_ms = config::ai_function_request_timeout_ms;
     config.connect_timeout_ms = config::ai_function_connect_timeout_ms;
     config.max_response_bytes = config::ai_function_max_response_bytes;
+    config.max_input_file_bytes = config::ai_function_max_input_file_bytes;
     config.worker_thread_num = config::ai_function_worker_thread_num;
     config.sub_chunk_size = config::ai_function_sub_chunk_size;
     config.max_retries = config::ai_function_max_retries;
     config.max_retries_on_throttle = config::ai_function_max_retries_on_throttle;
     config.on_error = config::ai_function_on_error.value();
     config.rate_limit_qps_chat = config::ai_function_rate_limit_qps_chat;
+    config.rate_limit_qps_embedding = config::ai_function_rate_limit_qps_embedding;
     config.max_inflight = config::ai_function_max_inflight;
     return config;
 }
@@ -57,6 +59,7 @@ void set_config_globals(const AIRuntimeConfig& config) {
     EXPECT_OK(config::set_config("ai_function_request_timeout_ms", std::to_string(config.request_timeout_ms)));
     EXPECT_OK(config::set_config("ai_function_connect_timeout_ms", std::to_string(config.connect_timeout_ms)));
     EXPECT_OK(config::set_config("ai_function_max_response_bytes", std::to_string(config.max_response_bytes)));
+    EXPECT_OK(config::set_config("ai_function_max_input_file_bytes", std::to_string(config.max_input_file_bytes)));
     EXPECT_OK(config::set_config("ai_function_worker_thread_num", std::to_string(config.worker_thread_num)));
     EXPECT_OK(config::set_config("ai_function_sub_chunk_size", std::to_string(config.sub_chunk_size)));
     EXPECT_OK(config::set_config("ai_function_max_retries", std::to_string(config.max_retries)));
@@ -64,6 +67,8 @@ void set_config_globals(const AIRuntimeConfig& config) {
             config::set_config("ai_function_max_retries_on_throttle", std::to_string(config.max_retries_on_throttle)));
     EXPECT_OK(config::set_config("ai_function_on_error", config.on_error));
     EXPECT_OK(config::set_config("ai_function_rate_limit_qps_chat", std::to_string(config.rate_limit_qps_chat)));
+    EXPECT_OK(config::set_config("ai_function_rate_limit_qps_embedding",
+                                 std::to_string(config.rate_limit_qps_embedding)));
     EXPECT_OK(config::set_config("ai_function_max_inflight", std::to_string(config.max_inflight)));
 }
 
@@ -137,41 +142,47 @@ protected:
     ExecEnv _exec_env;
 };
 
-TEST_F(AIConfigUpdateHooksTest, UpdatesAllTenRuntimeConfigs) {
+TEST_F(AIConfigUpdateHooksTest, UpdatesAllRuntimeConfigs) {
     auto* registry = ConfigUpdateRegistry::instance();
 
     ASSERT_OK(registry->update_config("ai_function_request_timeout_ms", "1234"));
     ASSERT_OK(registry->update_config("ai_function_connect_timeout_ms", "2345"));
     ASSERT_OK(registry->update_config("ai_function_max_response_bytes", "3456"));
+    ASSERT_OK(registry->update_config("ai_function_max_input_file_bytes", "4567"));
     ASSERT_OK(registry->update_config("ai_function_worker_thread_num", "2"));
     ASSERT_OK(registry->update_config("ai_function_sub_chunk_size", "8"));
     ASSERT_OK(registry->update_config("ai_function_max_retries", "4"));
     ASSERT_OK(registry->update_config("ai_function_max_retries_on_throttle", "6"));
     ASSERT_OK(registry->update_config("ai_function_on_error", "fail"));
     ASSERT_OK(registry->update_config("ai_function_rate_limit_qps_chat", "17"));
+    ASSERT_OK(registry->update_config("ai_function_rate_limit_qps_embedding", "23"));
     ASSERT_OK(registry->update_config("ai_function_max_inflight", "19"));
 
     const AIRuntimeConfig snapshot = executor()->config_snapshot();
     EXPECT_EQ(1234, snapshot.request_timeout_ms);
     EXPECT_EQ(2345, snapshot.connect_timeout_ms);
     EXPECT_EQ(3456, snapshot.max_response_bytes);
+    EXPECT_EQ(4567, snapshot.max_input_file_bytes);
     EXPECT_EQ(2, snapshot.worker_thread_num);
     EXPECT_EQ(8, snapshot.sub_chunk_size);
     EXPECT_EQ(4, snapshot.max_retries);
     EXPECT_EQ(6, snapshot.max_retries_on_throttle);
     EXPECT_EQ("fail", snapshot.on_error);
     EXPECT_EQ(17, snapshot.rate_limit_qps_chat);
+    EXPECT_EQ(23, snapshot.rate_limit_qps_embedding);
     EXPECT_EQ(19, snapshot.max_inflight);
 
     EXPECT_EQ(1234, config::ai_function_request_timeout_ms);
     EXPECT_EQ(2345, config::ai_function_connect_timeout_ms);
     EXPECT_EQ(3456, config::ai_function_max_response_bytes);
+    EXPECT_EQ(4567, config::ai_function_max_input_file_bytes);
     EXPECT_EQ(2, config::ai_function_worker_thread_num);
     EXPECT_EQ(8, config::ai_function_sub_chunk_size);
     EXPECT_EQ(4, config::ai_function_max_retries);
     EXPECT_EQ(6, config::ai_function_max_retries_on_throttle);
     EXPECT_EQ("fail", config::ai_function_on_error.value());
     EXPECT_EQ(17, config::ai_function_rate_limit_qps_chat);
+    EXPECT_EQ(23, config::ai_function_rate_limit_qps_embedding);
     EXPECT_EQ(19, config::ai_function_max_inflight);
 }
 
@@ -182,18 +193,28 @@ TEST_F(AIConfigUpdateHooksTest, InvalidUpdatesRollbackGlobalsAndRuntimeSnapshot)
     Status worker_status = registry->update_config("ai_function_worker_thread_num", "0");
     Status inflight_status = registry->update_config("ai_function_max_inflight", "0");
     Status on_error_status = registry->update_config("ai_function_on_error", "continue");
+    Status embedding_status = registry->update_config("ai_function_rate_limit_qps_embedding", "0");
+    for (const char* invalid : {"0", "-1"}) {
+        Status file_status = registry->update_config("ai_function_max_input_file_bytes", invalid);
+        EXPECT_TRUE(file_status.is_invalid_argument()) << file_status;
+        EXPECT_EQ(before.max_input_file_bytes, config::ai_function_max_input_file_bytes);
+        EXPECT_EQ(before.max_input_file_bytes, executor()->config_snapshot().max_input_file_bytes);
+    }
 
     EXPECT_TRUE(worker_status.is_invalid_argument()) << worker_status;
     EXPECT_TRUE(inflight_status.is_invalid_argument()) << inflight_status;
     EXPECT_TRUE(on_error_status.is_invalid_argument()) << on_error_status;
+    EXPECT_TRUE(embedding_status.is_invalid_argument()) << embedding_status;
     EXPECT_EQ(before.worker_thread_num, config::ai_function_worker_thread_num);
     EXPECT_EQ(before.max_inflight, config::ai_function_max_inflight);
     EXPECT_EQ(before.on_error, config::ai_function_on_error.value());
+    EXPECT_EQ(before.rate_limit_qps_embedding, config::ai_function_rate_limit_qps_embedding);
 
     const AIRuntimeConfig after = executor()->config_snapshot();
     EXPECT_EQ(before.worker_thread_num, after.worker_thread_num);
     EXPECT_EQ(before.max_inflight, after.max_inflight);
     EXPECT_EQ(before.on_error, after.on_error);
+    EXPECT_EQ(before.rate_limit_qps_embedding, after.rate_limit_qps_embedding);
 }
 
 TEST_F(AIConfigUpdateHooksTest, ShutdownRejectsUpdateAndRollsBackGlobal) {

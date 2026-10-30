@@ -14,109 +14,130 @@
 
 package com.starrocks.sql.common;
 
-import com.starrocks.common.Config;
+import com.google.common.base.Preconditions;
+import com.starrocks.builtins.VectorizedBuiltinFunctions;
+import com.starrocks.builtins.VectorizedBuiltinFunctions.AICapability;
+import com.starrocks.builtins.VectorizedBuiltinFunctions.AIFunctionDescriptor;
+import com.starrocks.catalog.Function;
+import com.starrocks.context.ai.AIProvider;
+import com.starrocks.context.ai.AIProviderProtocol;
+import com.starrocks.context.ai.AIProviderType;
+import com.starrocks.server.AIProviderMgr;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.NullLiteral;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import org.apache.commons.lang.StringUtils;
 
-import java.net.URI;
-import java.net.URISyntaxException;
-import java.util.Locale;
-
-/** Provides validated, credential-free configuration snapshots for SYSTEM AI calls. */
+/** Resolves and validates providers used by AI functions. */
 public final class AIModelConfigs {
-    public static final String SYSTEM_CHAT_CONFIG_ID = "__system_chat__";
-    public static final String OPENAI_COMPATIBLE_PROVIDER = "openai_compatible";
 
     private AIModelConfigs() {
     }
 
-    public enum DefaultModelRequirement {
-        REQUIRED,
-        OPTIONAL
+    public static AICapability getAICapability(Function function) {
+        return descriptor(function).capability();
     }
 
-    public static void validateSystemChat(DefaultModelRequirement defaultModelRequirement) {
-        systemChatSnapshot(defaultModelRequirement);
+    public static int getModelArgument(Function function) {
+        return descriptor(function).modelArgument();
     }
 
-    public static SystemChatConfig systemChatSnapshot(DefaultModelRequirement defaultModelRequirement) {
-        String endpoint = Config.ai_default_chat_endpoint;
-        String model = Config.ai_default_chat_model;
-        String provider = Config.ai_default_chat_provider;
-
-        SystemChatConfig config = new SystemChatConfig(endpoint, model, provider);
-        validateSystemChat(config, defaultModelRequirement);
-        return config;
+    public static int getProviderArgument(Function function) {
+        return descriptor(function).providerArgument();
     }
 
-    public static void validateSystemChat(SystemChatConfig config,
-                                          DefaultModelRequirement defaultModelRequirement) {
-        String endpoint = requireNonBlank(config.endpoint(), "ai_default_chat_endpoint");
-        validateEndpoint(endpoint);
-
-        String provider = requireNonBlank(config.provider(), "ai_default_chat_provider");
-        if (!OPENAI_COMPATIBLE_PROVIDER.equals(provider)) {
-            throw invalidConfig("ai_default_chat_provider",
-                    "must be '" + OPENAI_COMPATIBLE_PROVIDER + "'");
-        }
-
-        String model = config.model();
-        if (containsControlCharacter(model)) {
-            throw invalidConfig("ai_default_chat_model", "must not contain control characters");
-        }
-        if (defaultModelRequirement == DefaultModelRequirement.REQUIRED && model.trim().isEmpty()) {
-            throw invalidConfig("ai_default_chat_model", "must be set for prompt-only ai_complete calls");
-        }
+    private static AIFunctionDescriptor descriptor(Function function) {
+        AIFunctionDescriptor descriptor = VectorizedBuiltinFunctions.getAIFunctionDescriptor(function.getFunctionId());
+        Preconditions.checkState(descriptor != null, "AI function is missing generated descriptor metadata");
+        return descriptor;
     }
 
-    private static String requireNonBlank(String value, String configName) {
-        if (value == null || value.trim().isEmpty()) {
-            throw invalidConfig(configName, "must be set for SYSTEM ai_complete calls");
+    public static String providerName(Expr expression) {
+        Preconditions.checkState(expression != null, "AI function is missing its provider argument");
+        if (!expression.isConstant()) {
+            throw new SemanticException("AI function requires a constant AI provider name", expression.getPos());
         }
-        return value;
+        Expr folded = ExprUtils.analyzeAndCastFold(expression.clone());
+        if (folded instanceof NullLiteral
+                || folded instanceof StringLiteral literal && literal.getValue().isEmpty()) {
+            return "";
+        }
+        if (!(folded instanceof StringLiteral literal) || literal.getValue().isBlank()) {
+            throw new SemanticException("AI function requires a nonblank constant AI provider name", expression.getPos());
+        }
+        return literal.getValue();
     }
 
-    private static void validateEndpoint(String endpoint) {
-        if (containsControlCharacter(endpoint)) {
-            throw invalidConfig("ai_default_chat_endpoint", "must be a valid complete HTTPS URL");
-        }
-
-        final URI uri;
-        try {
-            uri = new URI(endpoint);
-        } catch (URISyntaxException e) {
-            throw invalidConfig("ai_default_chat_endpoint", "must be a valid complete HTTPS URL");
-        }
-
-        String scheme = uri.getScheme();
-        boolean httpsScheme = scheme != null && "https".equals(scheme.toLowerCase(Locale.ROOT));
-        int port = uri.getPort();
-        String rawAuthority = uri.getRawAuthority();
-        if (!httpsScheme || uri.getHost() == null || uri.getHost().isEmpty()
-                || (port != -1 && (port < 1 || port > 65535))
-                || (rawAuthority != null && rawAuthority.endsWith(":"))
-                || uri.getRawUserInfo() != null || uri.getRawFragment() != null) {
-            throw invalidConfig("ai_default_chat_endpoint",
-                    "must be a complete HTTPS URL without userinfo or a fragment");
+    public static AIProviderType parseProviderType(Function function) {
+        switch (getAICapability(function)) {
+            case CHAT -> {
+                return AIProviderType.CHAT;
+            }
+            case EMBEDDING -> {
+                return AIProviderType.EMBEDDING;
+            }
+            default -> throw new SemanticException("Unsupported AI provider type: " + function.getFunctionId());
         }
     }
 
-    private static boolean containsControlCharacter(String value) {
-        for (int i = 0; i < value.length(); i++) {
-            char ch = value.charAt(i);
-            if (ch <= 0x1f || ch == 0x7f) {
-                return true;
+    public static boolean shouldUseDefaultProvider(FunctionCallExpr call) {
+        int argument = getProviderArgument(call.getFn());
+        return argument < 0 || providerName(call.getChild(argument)).isEmpty();
+    }
+
+    /** Resolve without capturing a plan snapshot; also used before optimizer pruning for authorization. */
+    public static AIProvider resolveProvider(AIProviderMgr manager, FunctionCallExpr call) {
+        int argument = getProviderArgument(call.getFn());
+        AIProviderType requiredAIProviderType = parseProviderType(call.getFn());
+        AIProvider provider;
+        String name = argument < 0 ? "" : providerName(call.getChild(argument));
+        if (!name.isEmpty()) {
+            provider = manager.getProvider(name);
+            if (provider == null) {
+                throw new SemanticException("AI provider '" + name + "' does not exist", call.getPos());
+            }
+        } else {
+            provider = manager.getDefaultProvider(requiredAIProviderType);
+            if (provider == null) {
+                throw new SemanticException("No default " + requiredAIProviderType
+                        + " AI provider; use SET <provider_name> AS DEFAULT AI PROVIDER", call.getPos());
             }
         }
-        return false;
+        if (provider.getType() != requiredAIProviderType) {
+            throw new SemanticException("AI provider '" + provider.getName() + "' requires type " + requiredAIProviderType,
+                    call.getPos());
+        }
+        return provider;
     }
 
-    private static StarRocksPlannerException invalidConfig(String configName, String requirement) {
-        return new StarRocksPlannerException(
-                "FE config '" + configName + "' " + requirement, ErrorType.USER_ERROR);
-    }
-
-    public record SystemChatConfig(String endpoint, String model, String provider) {
-        public SystemChatConfig {
-            model = model == null ? "" : model;
+    public static void validateProvider(AIProvider provider) {
+        AIProviderType type = provider.getType();
+        if (type != AIProviderType.CHAT && type != AIProviderType.EMBEDDING) {
+            throw new SemanticException("AI functions require a CHAT or EMBEDDING provider, not " + type);
+        }
+        AIProviderProtocol protocol = provider.getProtocol();
+        if (protocol != AIProviderProtocol.OPENAI) {
+            throw new SemanticException("AI functions only support an OPENAI provider protocol now, not " + protocol);
+        }
+        String endpoint = provider.getEndpoint();
+        String model = provider.getModel();
+        if (StringUtils.isEmpty(endpoint) || StringUtils.isEmpty(model)) {
+            throw new SemanticException("AI provider requires a valid endpoint and model");
+        }
+        final Integer timeout;
+        final Integer dimensions;
+        try {
+            timeout = provider.getTimeoutMs();
+            dimensions = type == AIProviderType.EMBEDDING ? provider.getDimensions() : null;
+        } catch (NumberFormatException e) {
+            throw new SemanticException("AI provider timeout_ms and dimensions must be positive integers");
+        }
+        if ((timeout != null && timeout <= 0) || (dimensions != null && dimensions <= 0)) {
+            throw new SemanticException("AI provider timeout_ms and dimensions must be positive integers");
         }
     }
+
 }

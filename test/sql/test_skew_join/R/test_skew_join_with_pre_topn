@@ -241,6 +241,32 @@ SELECT n_nationkey, BOOL_OR(c_custkey), MIN_BY(c_name, c_acctbal), MAX_BY(c_name
 8	0	None	None	1
 9	0	None	None	1
 -- !result
+set enable_optimize_skew_join_v1=true;
+-- result:
+-- !result
+SELECT n_nationkey, COUNT(*) as cnt FROM nation JOIN [skew|nation.n_nationkey(1,2,8)] skew_customer ON c_custkey = n_nationkey GROUP BY n_nationkey ORDER BY n_nationkey;
+-- result:
+1	5
+-- !result
+SELECT n_nationkey, COUNT(*) as cnt FROM nation JOIN skew_customer ON c_custkey = n_nationkey GROUP BY n_nationkey ORDER BY n_nationkey;
+-- result:
+1	5
+-- !result
+SELECT n_nationkey, COUNT(*) as cnt FROM nation JOIN [skew|nation.n_nationkey(1)] skew_customer ON c_custkey = n_nationkey GROUP BY n_nationkey ORDER BY n_nationkey;
+-- result:
+1	5
+-- !result
+SELECT n_nationkey, COUNT(*) as cnt FROM nation LEFT JOIN [skew|nation.n_nationkey(1,2,8)] skew_customer ON c_custkey = n_nationkey GROUP BY n_nationkey ORDER BY n_nationkey LIMIT 5;
+-- result:
+0	1
+1	5
+2	1
+3	1
+4	1
+-- !result
+set enable_optimize_skew_join_v1=false;
+-- result:
+-- !result
 drop table skew_customer;
 -- result:
 -- !result

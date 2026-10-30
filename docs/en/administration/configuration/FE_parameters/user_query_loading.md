@@ -54,13 +54,22 @@ This topic introduces the following types of FE configurations:
 
 ## User, role, and privilege
 
+### `authorization_enable_query_profile_access_check`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to restrict who can read cached query profiles. When set to `true`, SHOW PROFILELIST, ANALYZE PROFILE, the `get_query_profile` function, the `/api/profile` and `/api/query/progress` HTTP endpoints, and the `/query` and `/query_profile` Web UI pages return a profile only to the user who ran the query or to a user with the SYSTEM-level OPERATE privilege. Profiles that record no user (for example, EXPORT jobs and stream loads) are readable only with OPERATE. The `/api/query_detail` and `/api/v2/query_detail` endpoints keep listing every query but omit the `profile` field, and the `explain` field when it holds a plan rendered from that profile, under the same rule. When `authorization_enable_admin_user_protection` is also enabled, profiles of queries run by `root` are readable only by `root`. When set to `false` (the default), every authenticated user can read every profile, which is the behavior of earlier versions. Each FE enforces the check for the profiles it holds, so to restrict access cluster-wide, set this item in `fe.conf` on every FE after all FEs have been upgraded to a version that supports it. Enabling it has two further consequences to plan for: `/api/query/progress` stops accepting anonymous requests, because the rule needs a caller identity, so an existing anonymous poller of that endpoint starts receiving `401`; and `get_query_profile()` requires the OPERATE privilege for a `query_id` whose profile is not cached on the FE the session is connected to, because the RPC that fetches it from the other FEs carries no caller identity to authorize there, which restricts the cross-FE lookup to OPERATE holders while the check is on.
+- Introduced in: v4.1
+
 ### `enable_task_info_mask_credential`
 
 - Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: When true, StarRocks redacts credentials from task SQL definitions before returning them in `information_schema.tasks` and `information_schema.task_runs` by applying SqlCredentialRedactor.redact to the DEFINITION column. In `information_schema.task_runs` the same redaction is applied whether the definition comes from the task run status or, when empty, from the task definition lookup. When false, raw task definitions are returned (may expose credentials). Masking is CPU/string-processing work and can be time-consuming when the number of tasks or `task_runs` is large; disable only if you need unredacted definitions and accept the security risk.
+- Description: When true, StarRocks redacts credentials from task SQL definitions before returning them in `information_schema.tasks` and `information_schema.task_runs` by applying SqlCredentialRedactor.redact to the DEFINITION column. In `information_schema.task_runs` the same redaction is applied whether the definition comes from the task run status or, when empty, from the task definition lookup. The same redaction is applied before finished task runs are archived to `_statistics_.task_run_history`, so the archived definition does not contain credentials in clear text. When false, raw task definitions are returned and archived (may expose credentials). Masking is CPU/string-processing work and can be time-consuming when the number of tasks or `task_runs` is large; disable only if you need unredacted definitions and accept the security risk.
 - Introduced in: v3.5.6
 
 ### `privilege_max_role_depth`
@@ -81,35 +90,25 @@ This topic introduces the following types of FE configurations:
 - Description: The maximum number of roles a user can have.
 - Introduced in: v3.0.0
 
+### `ranger_hive_catalog_prefix_enabled`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Default value of the External Catalog property `ranger.plugin.hive.catalog_prefix.enabled` for catalogs that use a Ranger Hive Service (`ranger.plugin.hive.service.name`). When the effective value is `true`, StarRocks sends `<catalog_name><separator><database_name>` instead of the bare database name as the `database` resource to Ranger, so catalogs that share one Ranger Hive Service do not collide on same-named databases. A catalog that sets the property explicitly overrides this item. Changes take effect immediately on all FEs that receive them.
+- Introduced in: v4.2
+
+### `ranger_hive_catalog_prefix_separator`
+
+- Default: _
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: The separator placed between the catalog name and the database name when `ranger_hive_catalog_prefix_enabled` (or the catalog property `ranger.plugin.hive.catalog_prefix.enabled`) is `true`. Every catalog that shares one Ranger Hive Service must use the same separator, so this item is global only.
+- Introduced in: v4.2
+
 ## Query engine
-
-### `ai_default_chat_endpoint`
-
-- Default: Empty string
-- Type: String
-- Unit: -
-- Is mutable: Yes
-- Description: The complete HTTPS POST URL used by SYSTEM `ai_complete` calls. The URL must include a host and cannot contain user information, a fragment, or control characters. When the port is omitted, HTTPS uses its default port. An explicitly specified port must be in the range 1 through 65535. An empty value disables SYSTEM `ai_complete` analysis until the endpoint is configured. Changes take effect dynamically without an FE restart, but only for queries analyzed and planned after the change. Already constructed plans retain the endpoint, model, and provider snapshot captured during planning. The API key is not an FE configuration item; each BE reads `AI_FUNCTION_MODEL_API_KEY` locally, and FE does not send the key in the query plan. Every BE that executes AI queries must set `AI_FUNCTION_MODEL_ENDPOINT` to exactly this URL so the BE can bind its local credential to the administrator-approved endpoint. Changing the FE endpoint therefore also requires updating this environment variable and restarting each affected BE before new AI queries run there.
-- Introduced in: -
-
-### `ai_default_chat_model`
-
-- Default: Empty string
-- Type: String
-- Unit: -
-- Is mutable: Yes
-- Description: The default model used by the prompt-only forms of SYSTEM `ai_complete`. The value cannot contain C0 control characters (`U+0000` through `U+001F`) or DEL (`U+007F`). It may remain empty when every call supplies an explicit, non-blank model. Changes take effect dynamically without an FE restart, but only for queries analyzed and planned after the change. Already constructed plans retain the endpoint, model, and provider snapshot captured during planning.
-- Introduced in: -
-
-### `ai_default_chat_provider`
-
-- Default: Empty string
-- Type: String
-- Unit: -
-- Valid values: `openai_compatible`
-- Is mutable: Yes
-- Description: The provider protocol used by SYSTEM `ai_complete`. The value must be exactly `openai_compatible`; an empty value or any additional characters, including control characters, cause analysis to fail. Changes take effect dynamically without an FE restart, but only for queries analyzed and planned after the change. Already constructed plans retain the endpoint, model, and provider snapshot captured during planning.
-- Introduced in: -
 
 ### `brpc_send_plan_fragment_timeout_ms`
 
@@ -154,6 +153,41 @@ This topic introduces the following types of FE configurations:
 - Unit: -
 - Is mutable: Yes
 - Description: The auxiliary per-scan estimated-row budget for external-table statistics collection (Iceberg). A statistics scan stops early once the estimated number of rows it has scanned reaches this budget. Because per-split row counts can only be estimated (the record count is recorded per file, not per split), this is an auxiliary soft budget rather than the primary control. The default aligns with `connector_table_query_trigger_analyze_small_table_rows`. A value of `0` or less means this dimension is unlimited. Can be overridden per statement with `ANALYZE TABLE ... PROPERTIES("scan_rows_cap" = "...")`.
+- Introduced in: v4.1
+
+### `connector_table_analyze_query_timeout`
+
+- Default: 360
+- Type: Long
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The maximum time a single external-table statistics collection query may run. Statistics collection issues one query per (partition, column group); each of them reads one partition under the scan caps above into fixed-size sketches and normally returns in well under a second. Without this ceiling every such query inherits whatever is left of `statistic_collect_query_timeout`, which is the budget for the whole collection job, so one query stuck behind an overloaded backend can consume the entire budget and leave every remaining partition uncollected. Raise this for cold or distant object storage where a capped scan can legitimately take longer. A value of `0` or less removes the separate ceiling, so a query may again use the job's whole remaining budget. The effective timeout is always the smaller of this value and the job's remaining budget.
+- Introduced in: v4.1
+
+### `connector_table_analyze_min_column_coverage_ratio`
+
+- Default: 0.5
+- Type: Double
+- Is mutable: Yes
+- Description: The least fraction of the partitions an external-table statistics collection asked for that must actually be collected before a column's statistics are recorded. A collection that is cut short - some queries tolerated away, or the job failing partway - still writes rows for the partitions it read and records how many that was, so the read path scales them correctly. Below some coverage that stops being worthwhile: row counts extrapolate from the partitions collected, but NDV does not, and NDV is what join cardinality estimates are most sensitive to. A column collected from a twentieth of its partitions would hand the optimizer an NDV roughly twenty times too small, presented as fact. A column below this ratio is left without metadata instead, so the optimizer falls back to the connector's own table metadata: an accurate row count and no NDV, which gives a default selectivity rather than a confidently wrong one. Measured against what the collection asked for, not against the table, so a sample is not treated as sparse merely for being a sample. A value of `0` or less records whatever was collected.
+- Introduced in: v4.1
+
+### `connector_table_analyze_memory_backoff_budget_second`
+
+- Default: 300
+- Type: Long
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The total time one external-table statistics collection job may spend waiting for a backend to free memory. A collection query that a backend rejects because the backend as a whole is out of memory is retried after a pause rather than counted as a failed partition, because the shortage is caused by other work and passes on its own. That is only true of a short spike: under a sustained shortage every query is rejected, and without this ceiling the job would sleep away its entire `statistic_collect_query_timeout` budget while holding one of the `connector_table_query_trigger_analyze_max_running_task_num` slots, collecting nothing and preventing any other table from being collected. Once the budget is used up the job stops waiting; its failures then count against `statistic_full_statistics_failure_tolerance_ratio` as they did before retries existed, and the job ends early enough to be triggered again after the cluster recovers. A value of `0` or less means unlimited waiting, bounded only by `statistic_collect_query_timeout`.
+- Introduced in: v4.1
+
+### `connector_table_query_trigger_analyze_failure_backoff_max_second`
+
+- Default: 1800
+- Type: Long
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The longest a table whose query-triggered analyze keeps failing is left alone before being tried again. A failed collection commits no metadata, so the statistics it was collecting are still missing and the next query asks for them again; the scheduler then runs the same job one tick later, every `connector_table_query_trigger_task_schedule_interval` seconds, for as long as the failure lasts. The interval settings above cannot prevent this, because they are measured against metadata a failed job never wrote. After each consecutive failure the table is left alone for twice as long, starting at one minute and stopping at this ceiling; one successful collection resets it. Manual `ANALYZE` is never held back. A value of `0` or less disables the backoff, restoring a retry on every schedule tick.
 - Introduced in: v4.1
 
 ### `connector_table_query_trigger_analyze_large_table_interval`
@@ -400,6 +434,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: Whether to enable the system to automatically check and re-activate the asynchronous materialized views that are set inactive because their base tables (views) had undergone Schema Change or had been dropped and re-created. Please note that this feature will not re-activate the materialized views that are manually set inactive by users.
 - Introduced in: v3.1.6
 
+### `enable_mv_automatic_inactive_by_base_table_changes`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to set the asynchronous materialized views on a base table (view) inactive when the base table (view) is dropped, undergoes a Schema Change, or the view is redefined. Renaming or swapping a base table, and renaming a base materialized view, always set the materialized views on it inactive, regardless of this item.
+- Introduced in: v3.3.10, v3.4.1, v3.5.0
+
 ### `enable_mv_automatic_repairing_for_broken_base_tables`
 
 - Default: true
@@ -532,6 +575,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Unit: -
 - Is mutable: No
 - Description: Whether to enable UDF.
+- Introduced in: -
+
+### `enable_virtual_columns`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to expose virtual columns such as `_tablet_id_` on native tables. Virtual columns are read-only metadata columns that are computed at query time and are not stored. When this parameter is set to `false`, a query that references a virtual column fails because the column cannot be resolved. For more information, see [Virtual columns](../../../table_design/virtual_columns.md).
 - Introduced in: -
 
 ### `expr_children_limit`
@@ -1137,6 +1189,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Is mutable: Yes
 - Description: The default timeout for acquiring the db and table lock during finishing transaction.
 - Introduced in: v4.0.0, v3.5.8
+
+### `history_job_keep_max_num`
+
+- Default: 10000
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of finished or cancelled alter jobs that the FE keeps in memory and shows in SHOW ALTER TABLE. Schema change and optimize jobs share one limit, and rollup jobs have their own. Once the limit is exceeded, the jobs that finished earliest are removed, even if they are still within the retention period set by `history_job_keep_max_second`. A job is kept while its old schema may still be used by a running load or, in a shared-data cluster, while a cluster snapshot still needs it, so the number of jobs can temporarily exceed this limit. `0` or a negative value disables the limit.
+- Introduced in: -
 
 ### `history_job_keep_max_second`
 

@@ -241,7 +241,7 @@ public class ScalarOperatorToIcebergExpr {
         @Override
         public Expression visitIsNullPredicate(IsNullPredicateOperator operator, IcebergContext context) {
             String columnName = getColumnName(operator.getChild(0));
-            if (columnName == null) {
+            if (columnName == null || getResultType(columnName, context) == null) {
                 return null;
             }
             if (operator.isNotNull()) {
@@ -259,6 +259,10 @@ public class ScalarOperatorToIcebergExpr {
             }
 
             Type icebergType = getResultType(columnName, context);
+            if (icebergType == null) {
+                // not a column of the table schema (e.g. the _pos / _file metadata columns): the BE filters it
+                return null;
+            }
             Type.TypeID typeID = icebergType.typeId();
             Object literalValue = getLiteralValue(operator.getChild(1), icebergType);
 
@@ -298,9 +302,12 @@ public class ScalarOperatorToIcebergExpr {
                 return null;
             }
 
+            Type icebergType = getResultType(columnName, context);
+            if (icebergType == null) {
+                return null;
+            }
             List<Object> literalValues = operator.getListChildren().stream()
                     .map(childOperator -> {
-                        Type icebergType = getResultType(columnName, context);
                         Type.TypeID typeID = icebergType.typeId();
                         Object literalValue = ScalarOperatorToIcebergExpr.getLiteralValue(childOperator, icebergType);
                         if (typeID == Type.TypeID.BOOLEAN) {
@@ -330,7 +337,7 @@ public class ScalarOperatorToIcebergExpr {
                 return null;
             }
 
-            if (operator.getLikeType() == LikePredicateOperator.LikeType.LIKE) {
+            if (operator.getLikeType() == LikePredicateOperator.LikeType.LIKE && getResultType(columnName, context) != null) {
                 if (operator.getChild(1).getType().isStringType()) {
                     String literal = (String) getLiteralValue(operator.getChild(1), getResultType(columnName, context));
                     if (literal == null) {

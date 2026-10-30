@@ -49,6 +49,7 @@
 #include "storage_primitive/aggregate_type.h"
 #include "storage_primitive/chunk_iterator.h"
 #include "storage_primitive/flat_json_config.h"
+#include "testutil/global_dict_test_helper.h"
 #include "types/json_value.h"
 #include "types/logical_type.h"
 
@@ -199,6 +200,7 @@ protected:
 protected:
     std::shared_ptr<TabletSchema> _dummy_segment_schema;
     std::shared_ptr<ColumnMetaPB> _meta;
+    MemPool _mem_pool;
 };
 
 TEST_F(FlatJsonColumnRWTest, testNormalJson) {
@@ -2618,13 +2620,9 @@ TEST_F(FlatJsonColumnRWTest, test_json_global_dict) {
     // Write data with global dictionary
     {
         // Create global dictionary for sub-columns
-        GlobalDictByNameMaps global_dicts;
-        GlobalDictMap name_dict = {{"Alice", 0}, {"Bob", 1}, {"Charlie", 2}};
-        GlobalDictMap city_dict = {{"Beijing", 0}, {"Shanghai", 1}, {"Guangzhou", 2}};
-
-        // Store dictionaries with column names
-        global_dicts["test_json.name"] = GlobalDictsWithVersion<GlobalDictMap>{name_dict, 1};
-        global_dicts["test_json.city"] = GlobalDictsWithVersion<GlobalDictMap>{city_dict, 1};
+        GlobalDictByNameMaps global_dicts = PaddedGlobalDictBuilder::build_by_name(
+                &_mem_pool, {{"test_json.name", {{"Alice", 0}, {"Bob", 1}, {"Charlie", 2}}},
+                             {"test_json.city", {{"Beijing", 0}, {"Shanghai", 1}, {"Guangzhou", 2}}}});
 
         SegmentWriterOptions opts;
         opts.global_dicts = &global_dicts;
@@ -2664,13 +2662,8 @@ TEST_F(FlatJsonColumnRWTest, test_json_global_dict) {
         ASSIGN_OR_ABORT(auto wfile2, fs->new_writable_file(file_name + "_invalid"));
 
         // Create incomplete dictionary that doesn't contain all values
-        GlobalDictByNameMaps invalid_global_dicts;
-
-        GlobalDictMap incomplete_name_dict;
-        incomplete_name_dict["Alice"] = 0;
-        incomplete_name_dict["Bob"] = 1;
-
-        invalid_global_dicts["test_json.name"] = GlobalDictsWithVersion<GlobalDictMap>{incomplete_name_dict, 1};
+        GlobalDictByNameMaps invalid_global_dicts =
+                PaddedGlobalDictBuilder::build_by_name(&_mem_pool, {{"test_json.name", {{"Alice", 0}, {"Bob", 1}}}});
 
         SegmentWriterOptions seg_opts;
         seg_opts.global_dicts = &invalid_global_dicts;
@@ -2712,14 +2705,13 @@ TEST_F(FlatJsonColumnRWTest, test_json_global_dict) {
         ASSIGN_OR_ABORT(auto wfile3, fs->new_writable_file(file_name + "_different_types"));
 
         // Create global dictionary expecting consistent data types
-        GlobalDictByNameMaps type_consistent_global_dicts;
-        GlobalDictMap name_dict = {{"Alice", 0}, {"Bob", 1}, {"Charlie", 2}, {"David", 3}, {"Eve", 4}, {"Frank", 5}};
-        GlobalDictMap age_dict = {{"30", 0}, {"25", 1}, {"28", 2}, {"35", 3}, {"29", 4}, {"33", 5}}; // All as strings
-        GlobalDictMap city_dict = {{"Beijing", 0}, {"Shanghai", 1}, {"Guangzhou", 2}, {"Shenzhen", 3}, {"Chengdu", 4}};
-
-        type_consistent_global_dicts["test_json.name"] = GlobalDictsWithVersion<GlobalDictMap>{name_dict, 1};
-        type_consistent_global_dicts["test_json.age"] = GlobalDictsWithVersion<GlobalDictMap>{age_dict, 1};
-        type_consistent_global_dicts["test_json.city"] = GlobalDictsWithVersion<GlobalDictMap>{city_dict, 1};
+        GlobalDictByNameMaps type_consistent_global_dicts = PaddedGlobalDictBuilder::build_by_name(
+                &_mem_pool,
+                {{"test_json.name", {{"Alice", 0}, {"Bob", 1}, {"Charlie", 2}, {"David", 3}, {"Eve", 4}, {"Frank", 5}}},
+                 {"test_json.age",
+                  {{"30", 0}, {"25", 1}, {"28", 2}, {"35", 3}, {"29", 4}, {"33", 5}}}, // All as strings
+                 {"test_json.city",
+                  {{"Beijing", 0}, {"Shanghai", 1}, {"Guangzhou", 2}, {"Shenzhen", 3}, {"Chengdu", 4}}}});
 
         SegmentWriterOptions seg_opts3;
         seg_opts3.global_dicts = &type_consistent_global_dicts;
@@ -2762,16 +2754,12 @@ TEST_F(FlatJsonColumnRWTest, test_json_global_dict) {
         ASSIGN_OR_ABORT(auto wfile4, fs->new_writable_file(file_name + "_complex_types"));
 
         // Create global dictionary for nested fields
-        GlobalDictByNameMaps complex_global_dicts;
-        GlobalDictMap user_id_dict = {{"1001", 0}, {"1002", 1}, {"1003", 2}, {"1004", 3}, {"1005", 4}};
-        GlobalDictMap user_name_dict = {{"Alice", 0}, {"Bob", 1}, {"Charlie", 2}, {"David", 3}, {"Eve", 4}};
-        GlobalDictMap user_active_dict = {{"true", 0}, {"false", 1}};
-        GlobalDictMap user_score_dict = {{"95.5", 0}, {"88", 1}, {"92.0", 2}, {"85.5", 3}, {"90", 4}};
-
-        complex_global_dicts["test_json.user.id"] = GlobalDictsWithVersion<GlobalDictMap>{user_id_dict, 1};
-        complex_global_dicts["test_json.user.name"] = GlobalDictsWithVersion<GlobalDictMap>{user_name_dict, 1};
-        complex_global_dicts["test_json.user.active"] = GlobalDictsWithVersion<GlobalDictMap>{user_active_dict, 1};
-        complex_global_dicts["test_json.user.score"] = GlobalDictsWithVersion<GlobalDictMap>{user_score_dict, 1};
+        GlobalDictByNameMaps complex_global_dicts = PaddedGlobalDictBuilder::build_by_name(
+                &_mem_pool,
+                {{"test_json.user.id", {{"1001", 0}, {"1002", 1}, {"1003", 2}, {"1004", 3}, {"1005", 4}}},
+                 {"test_json.user.name", {{"Alice", 0}, {"Bob", 1}, {"Charlie", 2}, {"David", 3}, {"Eve", 4}}},
+                 {"test_json.user.active", {{"true", 0}, {"false", 1}}},
+                 {"test_json.user.score", {{"95.5", 0}, {"88", 1}, {"92.0", 2}, {"85.5", 3}, {"90", 4}}}});
 
         SegmentWriterOptions seg_opts4;
         seg_opts4.global_dicts = &complex_global_dicts;
@@ -2807,6 +2795,101 @@ TEST_F(FlatJsonColumnRWTest, test_json_global_dict) {
     // Clean up additional test files
     ASSERT_OK(fs->delete_file(file_name + "_different_types"));
     ASSERT_OK(fs->delete_file(file_name + "_complex_types"));
+}
+
+// What this pins: use_zstd_compression on a JSON column reaches the flat sub-columns, so one of
+// them actually builds a compression dictionary. (It does NOT pin the child metas inheriting
+// compression_level: get_block_compression_codec falls back to a default ZSTD instance for an
+// out-of-range level rather than returning null, so that line could be removed and this test
+// would still pass.)
+TEST_F(FlatJsonColumnRWTest, testZstdCompressionOnFlatJson) {
+    auto fs = std::make_shared<MemoryFileSystem>();
+    ASSERT_TRUE(fs->create_dir(TEST_DIR).ok());
+    const std::string fname = TEST_DIR + "/test_e4_zstd_compression_dict_flat_json.data";
+    auto segment = create_dummy_segment(fs, fname);
+
+    // Rows with a stable extractable "role" and a large per-row "content" string
+    // (~2KB) so whichever sub-column (or the remain blob) holds it is a PLAIN
+    // string past the compression-dict sample gate. The row count is what makes the
+    // dictionary reachable at all: one page is sampled and the next eight are the trial,
+    // all nine written without it, so the column has to run well past ten 64KB pages --
+    // 900 x ~2KB is about 27 of them, rather than the ten a smaller corpus would land on.
+    const int N = 900;
+    auto write_col = JsonColumn::create();
+    auto* json_col = down_cast<JsonColumn*>(write_col.get());
+    for (int i = 0; i < N; i++) {
+        std::string filler;
+        for (int k = 0; k < 40; k++) {
+            filler += "shared scaffolding tokens that repeat across rows ";
+        }
+        std::string raw =
+                std::string("{\"role\":\"assistant\",\"content\":\"msg ") + std::to_string(i) + " " + filler + "\"}";
+        ASSIGN_OR_ABORT(auto jv, JsonValue::parse(raw));
+        json_col->append(&jv);
+    }
+
+    ColumnWriterOptions writer_opts;
+    writer_opts.need_flat = true;
+    writer_opts.use_zstd_compression = true; // enable compression dict
+    // Whether a dictionary pays on this corpus is not what this test is about, and the answer
+    // moves with the filler; the decision itself is covered by the
+    // zstd_compression_dict_{dropped,kept}_when_it_*pay* cases. A negative threshold keeps it
+    // regardless -- and asserts, in passing, that the parent's threshold reaches the children.
+    writer_opts.zstd_compression_dict_min_gain = -1.0;
+
+    TabletColumn json_tablet_column = create_with_default_value<TYPE_JSON>("");
+    {
+        ASSIGN_OR_ABORT(auto wfile, fs->new_writable_file(fname));
+        writer_opts.meta = _meta.get();
+        writer_opts.meta->set_column_id(0);
+        writer_opts.meta->set_unique_id(0);
+        writer_opts.meta->set_type(TYPE_JSON);
+        writer_opts.meta->set_length(0);
+        writer_opts.meta->set_encoding(DEFAULT_ENCODING);
+        writer_opts.meta->set_compression(starrocks::ZSTD); // compression dict requires ZSTD
+        // Mimic segment_writer, which stamps the table compression_level (default
+        // -1), so the flat-JSON child metas inherit a real level instead of the proto
+        // default 0 -- the propagation this test guards.
+        writer_opts.meta->set_compression_level(-1);
+        writer_opts.meta->set_is_nullable(false);
+
+        ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(writer_opts, &json_tablet_column, wfile.get()));
+        ASSERT_OK(writer->init());
+        ASSERT_TRUE(writer->append(*write_col).ok());
+        ASSERT_TRUE(writer->finish().ok());
+        ASSERT_TRUE(writer->write_data().ok());
+        ASSERT_TRUE(writer->write_ordinal_index().ok());
+        ASSERT_TRUE(wfile->close().ok());
+    }
+
+    // compression dict built a compression dictionary somewhere for this JSON column -- either on the
+    // top-level blob (non-flat fallback) or on a flat string/JSON sub-column.
+    bool has_dict = _meta->has_zstd_compression_dict_page() && _meta->zstd_compression_dict_page().size() > 0;
+    for (int i = 0; i < _meta->children_columns_size() && !has_dict; i++) {
+        const auto& child = _meta->children_columns(i);
+        if (child.has_zstd_compression_dict_page() && child.zstd_compression_dict_page().size() > 0) {
+            has_dict = true;
+        }
+    }
+    ASSERT_TRUE(has_dict)
+            << "compression dict built no compression dictionary for the JSON column (top-level or any sub-column)";
+
+    // Roundtrip: read every row back.
+    {
+        ASSIGN_OR_ABORT(auto reader, ColumnReader::create(_meta.get(), segment.get(), nullptr));
+        ASSIGN_OR_ABORT(auto iter, reader->new_iterator());
+        ASSIGN_OR_ABORT(auto read_file, fs->new_random_access_file(fname));
+        ColumnIteratorOptions iter_opts;
+        OlapReaderStatistics stats;
+        iter_opts.stats = &stats;
+        iter_opts.read_file = read_file.get();
+        ASSERT_OK(iter->init(iter_opts));
+        ASSERT_OK(iter->seek_to_first());
+        auto read_col = JsonColumn::create();
+        size_t rows_read = N;
+        ASSERT_OK(iter->next_batch(&rows_read, read_col.get()));
+        ASSERT_EQ(static_cast<size_t>(N), read_col->size());
+    }
 }
 
 } // namespace starrocks

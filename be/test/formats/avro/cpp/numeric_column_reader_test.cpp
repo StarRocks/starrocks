@@ -28,7 +28,7 @@ namespace starrocks::avrocpp {
 class NumericColumnReaderTest : public ColumnReaderTest, public ::testing::Test {};
 
 TEST_F(NumericColumnReaderTest, test_bool) {
-    auto type_desc = TypeDescriptor::from_logical_type(TYPE_BOOLEAN);
+    auto type_desc = TYPE_BOOLEAN_DESC;
     auto column = create_adaptive_nullable_column(type_desc);
     auto reader = get_column_reader(type_desc, false);
 
@@ -73,10 +73,8 @@ TEST_F(NumericColumnReaderTest, test_bool) {
 }
 
 TEST_F(NumericColumnReaderTest, test_numeric) {
-    std::vector<TypeDescriptor> type_descs{
-            TypeDescriptor::from_logical_type(TYPE_TINYINT), TypeDescriptor::from_logical_type(TYPE_SMALLINT),
-            TypeDescriptor::from_logical_type(TYPE_INT), TypeDescriptor::from_logical_type(TYPE_BIGINT),
-            TypeDescriptor::from_logical_type(TYPE_LARGEINT)};
+    std::vector<TypeDescriptor> type_descs{TYPE_TINYINT_DESC, TYPE_SMALLINT_DESC, TYPE_INT_DESC, TYPE_BIGINT_DESC,
+                                           TypeDescriptor::from_logical_type(TYPE_LARGEINT)};
 
     for (const auto& type_desc : type_descs) {
         auto column = create_adaptive_nullable_column(type_desc);
@@ -124,8 +122,7 @@ TEST_F(NumericColumnReaderTest, test_numeric) {
 }
 
 TEST_F(NumericColumnReaderTest, test_float) {
-    std::vector<TypeDescriptor> type_descs{TypeDescriptor::from_logical_type(TYPE_FLOAT),
-                                           TypeDescriptor::from_logical_type(TYPE_DOUBLE)};
+    std::vector<TypeDescriptor> type_descs{TYPE_FLOAT_DESC, TYPE_DOUBLE_DESC};
 
     for (const auto& type_desc : type_descs) {
         auto column = create_adaptive_nullable_column(type_desc);
@@ -173,7 +170,7 @@ TEST_F(NumericColumnReaderTest, test_float) {
 }
 
 TEST_F(NumericColumnReaderTest, test_int_invalid) {
-    auto type_desc = TypeDescriptor::from_logical_type(TYPE_INT);
+    auto type_desc = TYPE_INT_DESC;
     auto column = create_adaptive_nullable_column(type_desc);
     auto reader = get_column_reader(type_desc, false);
 
@@ -195,7 +192,7 @@ TEST_F(NumericColumnReaderTest, test_int_invalid) {
 }
 
 TEST_F(NumericColumnReaderTest, test_int_invalid_as_null) {
-    auto type_desc = TypeDescriptor::from_logical_type(TYPE_INT);
+    auto type_desc = TYPE_INT_DESC;
     auto column = create_adaptive_nullable_column(type_desc);
     auto reader = get_column_reader(type_desc, true);
 

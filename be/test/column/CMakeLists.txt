@@ -24,6 +24,7 @@ set(COLUMN_TEST_FILES
     column_view_test.cpp
     const_column_test.cpp
     decimalv3_column_test.cpp
+    file_column_test.cpp
     global_dict_core_test.cpp
     german_string_test.cpp
     json_column_test.cpp
@@ -31,6 +32,7 @@ set(COLUMN_TEST_FILES
     map_column_test.cpp
     mysql_row_buffer_test.cpp
     object_column_core_test.cpp
+    serialize_size_compact_batch_test.cpp
     simd_mulselector_test.cpp
     simd_selector_test.cpp
     struct_column_test.cpp
@@ -105,7 +107,6 @@ set(CHUNK_TEST_FILES
     chunk_schema_helper_test.cpp
     chunk_core_test.cpp
     chunk_test.cpp
-    segmented_chunk_core_test.cpp
     field_test.cpp
     schema_test.cpp
 )

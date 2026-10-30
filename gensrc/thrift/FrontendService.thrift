@@ -79,6 +79,10 @@ struct TAuthenticateParams {
     // Used by FE.checkAuth on the BE HTTP auth path so BE handlers can demand
     // admin/operate-level checks without round-tripping the role check themselves.
     6: optional TPrivilegeRequirement required_privilege;
+    // Credential shape: "basic" (or unset) means `passwd` is a plaintext password; "bearer" means `passwd`
+    // carries a token. Projection of the FE-side AuthCredentialKind wire names; unset defaults to basic
+    // for backward compatibility with older BEs.
+    7: optional string auth_type;
 }
 
 struct TColumnDesc {
@@ -885,6 +889,22 @@ struct TAuditStatisticsItem {
     3: optional i64 table_id
 }
 
+// Additive observed AI task statistics; token usage counts distinguish unknown from reported zero.
+struct TAIExecutionStatistics {
+    1: optional i64 task_count
+    2: optional i64 request_count
+    3: optional i64 retry_count
+    4: optional i64 timeout_count
+    5: optional i64 error_count
+    6: optional i64 http_time_ns
+    7: optional i64 prompt_tokens
+    8: optional i64 completion_tokens
+    9: optional i64 total_tokens
+    10: optional i64 prompt_usage_count
+    11: optional i64 completion_usage_count
+    12: optional i64 total_usage_count
+}
+
 struct TAuditStatistics {
     3: optional i64 scan_rows
     4: optional i64 scan_bytes
@@ -896,6 +916,7 @@ struct TAuditStatistics {
     9: optional list<TAuditStatisticsItem> stats_items
     11: optional i64 read_local_cnt
     12: optional i64 read_remote_cnt
+    13: optional TAIExecutionStatistics ai_statistics
 }
 
 struct TReportAuditStatisticsParams {
@@ -1032,6 +1053,8 @@ struct TLoadTxnBeginRequest {
     // The real value of timeout should be i32. i64 ensures the compatibility of interface.
     10: optional i64 timeout
     11: optional Types.TUniqueId request_id
+    // "basic" (or unset) => `passwd` is a plaintext password; "bearer" => `passwd` carries a token.
+    12: optional string auth_type
 
     // begin from 101, in case of conflict with other's change
     101: optional string warehouse  // deprecated, use backend_id implicitly convey information about the warehouse
@@ -1104,6 +1127,8 @@ struct TStreamLoadPutRequest {
     56: optional string payload_compression_type
     // CDC envelope format
     57: optional PlanNodes.TEnvelopeType envelope
+    // "basic" (or unset) => `passwd` is a plaintext password; "bearer" => `passwd` carries a token.
+    58: optional string auth_type
 
     // begin from 101, in case of conflict with other's change
     101: optional string warehouse  // deprecated, use backend_id implicitly convey information about the warehouse
@@ -1131,6 +1156,9 @@ struct TMergeCommitRequest {
     // (currently `_statistics_.rejected_records`); any other db/tbl
     // falls back to the normal user/passwd check regardless of token.
     9: optional string internal_token;
+    // "basic" (default when unset) or "bearer"; when "bearer", `passwd` carries the token.
+    // Unset is exactly equivalent to "basic", which is what makes a rolling FE/BE upgrade safe.
+    10: optional string auth_type;
 }
 
 struct TMergeCommitResult {
@@ -1206,6 +1234,8 @@ struct TLoadTxnCommitRequest {
     13: optional list<Types.TTabletFailInfo> failInfos
     // The timeout for prepared transaction. Only valid if this requerst is sent by rpc loadTxnPrepare
     14: optional i32 prepared_timeout_second
+    // "basic" (or unset) => `passwd` is a plaintext password; "bearer" => `passwd` carries a token.
+    15: optional string auth_type
 }
 
 struct TLoadTxnCommitResult {
@@ -1228,6 +1258,8 @@ struct TLoadTxnRollbackRequest {
     10: optional TTxnCommitAttachment txnCommitAttachment
     11: optional list<Types.TTabletFailInfo> failInfos
     12: optional list<Types.TTabletCommitInfo> commitInfos
+    // "basic" (or unset) => `passwd` is a plaintext password; "bearer" => `passwd` carries a token.
+    13: optional string auth_type
 }
 
 struct TGetLoadTxnStatusResult {
@@ -1678,6 +1710,9 @@ struct TPartitionMetaInfo {
     // Last time this partition was modified by a user write (load/DML, excluding compaction),
     // in unix seconds. 0/absent = unknown.
     36: optional i64 last_update_time
+    // The version the partition's incremental vacuum has advanced to; everything below it is reclaimed.
+    // Equals visible_version once vacuum catches up, and is smaller while a reclaim backlog remains.
+    37: optional i64 vacuum_version
 }
 
 // Ask one FE for its local in-memory partition query-access times of a table, so the querying FE

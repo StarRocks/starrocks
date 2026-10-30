@@ -283,6 +283,13 @@ struct TColumn {
     10: optional i32 col_unique_id  = -1
     11: optional bool has_bitmap_index = false
     12: optional Types.TAggStateDesc agg_state_desc
+    // column-level compression dictionary (a ZSTD dictionary) (per-column enable flag).
+    13: optional bool use_zstd_compression = false
+    // Data page size for this column, in bytes. 0 / unset keeps the BE default
+    // (config::data_page_size). The page is the unit of decompression, so the size
+    // that pays off depends on the column's row length; see the
+    // zstd_compression_columns table property.
+    14: optional i32 zstd_compression_page_size = 0
                                                                                                       
     // How many bytes used for short key index encoding.
     // For fixed-length column, this value may be ignored by BE when creating a tablet.
@@ -609,6 +616,14 @@ struct TIcebergSchemaField {
     // .......
 
     4: optional TIcebergGeoMetadata geo_metadata
+
+    // Iceberg initial-default of the field as a string BE parses with the field's type. Readers use it for a
+    // struct subfield missing from a data file; top-level columns use TColumn.default_value instead.
+    5: optional string initial_default
+
+    // Names the field may have in data files without field ids, from the table's schema.name-mapping.default
+    // (all names kept across renames). Readers resolve such files by these names instead of the current name.
+    6: optional list<string> mapped_names
 
     // Children fields for struct, map and list(array)
     100: optional list<TIcebergSchemaField> children

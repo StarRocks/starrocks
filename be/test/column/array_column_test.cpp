@@ -38,56 +38,6 @@ PARALLEL_TEST(ArrayColumnTest, test_create) {
 }
 
 // NOLINTNEXTLINE
-PARALLEL_TEST(ArrayColumnTest, test_array_column_update_if_overflow) {
-    // normal
-    auto offsets = UInt32Column::create();
-    auto elements = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
-    auto column = ArrayColumn::create(std::move(elements), std::move(offsets));
-
-    column->elements_column_raw_ptr()->append_datum("1");
-    column->elements_column_raw_ptr()->append_datum("2");
-    column->offsets_column_raw_ptr()->append(2);
-    auto ret = column->upgrade_if_overflow();
-    ASSERT_TRUE(ret.ok());
-    ASSERT_TRUE(ret.value() == nullptr);
-    ASSERT_EQ(column->size(), 1);
-    auto array = column->get(0).get_array();
-    ASSERT_EQ(array[0].get_slice(), Slice("1"));
-    ASSERT_EQ(array[1].get_slice(), Slice("2"));
-}
-
-// NOLINTNEXTLINE
-PARALLEL_TEST(ArrayColumnTest, test_array_column_downgrade) {
-    auto offsets = UInt32Column::create();
-    auto elements = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
-    elements->append_datum("1");
-    elements->append_datum("2");
-    offsets->append(2);
-    auto column = ArrayColumn::create(std::move(elements), std::move(offsets));
-    ASSERT_FALSE(column->has_large_column());
-    auto ret = column->downgrade();
-    ASSERT_TRUE(ret.ok());
-    ASSERT_TRUE(ret.value() == nullptr);
-
-    offsets = UInt32Column::create();
-    auto large_elements = NullableColumn::create(LargeBinaryColumn::create(), NullColumn::create());
-    column = ArrayColumn::create(std::move(large_elements), std::move(offsets));
-    for (size_t i = 0; i < 10; i++) {
-        column->elements_column_raw_ptr()->append_datum(Slice(std::to_string(i)));
-        column->offsets_column_raw_ptr()->append(i + 1);
-    }
-    ASSERT_TRUE(column->has_large_column());
-    ret = column->downgrade();
-    ASSERT_TRUE(ret.ok());
-    ASSERT_TRUE(ret.value() == nullptr);
-    ASSERT_FALSE(column->has_large_column());
-    ASSERT_EQ(column->size(), 10);
-    for (size_t i = 0; i < 10; i++) {
-        ASSERT_EQ(column->get(i).get_array()[0].get_slice(), Slice(std::to_string(i)));
-    }
-}
-
-// NOLINTNEXTLINE
 PARALLEL_TEST(ArrayColumnTest, test_get_elements) {
     auto offsets = UInt32Column::create();
     auto elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
@@ -1008,11 +958,7 @@ PARALLEL_TEST(ArrayColumnTest, test_update_rows) {
     std::vector<uint32_t> replace_idxes = {1, 3};
     column->update_rows(*replace_col1.get(), replace_idxes.data());
 
-    ASSERT_EQ(4, column->size());
-    ASSERT_EQ("[1,2,3]", column->debug_item(0));
-    ASSERT_EQ("[101,102]", column->debug_item(1));
-    ASSERT_EQ("[7,8,9]", column->debug_item(2));
-    ASSERT_EQ("[103,104]", column->debug_item(3));
+    ASSERT_EQ("[[1,2,3], [101,102], [7,8,9], [103,104]]", column->debug_string());
 
     auto offset_col2 = UInt32Column::create();
     auto element_col2 = NullableColumn::create(Int32Column::create(), NullColumn::create());
@@ -1029,11 +975,7 @@ PARALLEL_TEST(ArrayColumnTest, test_update_rows) {
 
     column->update_rows(*replace_col2.get(), replace_idxes.data());
 
-    ASSERT_EQ(4, column->size());
-    ASSERT_EQ("[1,2,3]", column->debug_item(0));
-    ASSERT_EQ("[201,202]", column->debug_item(1));
-    ASSERT_EQ("[7,8,9]", column->debug_item(2));
-    ASSERT_EQ("[203,204]", column->debug_item(3));
+    ASSERT_EQ("[[1,2,3], [201,202], [7,8,9], [203,204]]", column->debug_string());
 }
 
 PARALLEL_TEST(ArrayColumnTest, test_assign) {
@@ -1055,11 +997,7 @@ PARALLEL_TEST(ArrayColumnTest, test_assign) {
 
     // assign
     column->assign(4, 0);
-    ASSERT_EQ(4, column->size());
-    ASSERT_EQ("[1,2,3]", column->debug_item(0));
-    ASSERT_EQ("[1,2,3]", column->debug_item(1));
-    ASSERT_EQ("[1,2,3]", column->debug_item(2));
-    ASSERT_EQ("[1,2,3]", column->debug_item(3));
+    ASSERT_EQ("[[1,2,3], [1,2,3], [1,2,3], [1,2,3]]", column->debug_string());
 
     /// test assign [null]
     offsets = UInt32Column::create();
@@ -1111,24 +1049,18 @@ PARALLEL_TEST(ArrayColumnTest, test_empty_null_array) {
     auto res = column->empty_null_in_complex_column(null_map->immutable_data(),
                                                     column->offsets_column()->immutable_data());
     ASSERT_FALSE(res);
-    ASSERT_EQ(2, column->size());
-    ASSERT_EQ("[1,2,3]", column->debug_item(0));
-    ASSERT_EQ("[4,5,6]", column->debug_item(1));
+    ASSERT_EQ("[[1,2,3], [4,5,6]]", column->debug_string());
 
     auto mutable_null_map = NullColumn::static_pointer_cast(null_map->as_mutable_ptr());
     mutable_null_map->get_data()[0] = 1;
     res = column->empty_null_in_complex_column(null_map->immutable_data(), column->offsets_column()->immutable_data());
     ASSERT_TRUE(res);
-    ASSERT_EQ(2, column->size());
-    ASSERT_EQ("[]", column->debug_item(0));
-    ASSERT_EQ("[4,5,6]", column->debug_item(1));
+    ASSERT_EQ("[[], [4,5,6]]", column->debug_string());
 
     mutable_null_map->get_data()[1] = 1;
     res = column->empty_null_in_complex_column(null_map->immutable_data(), column->offsets_column()->immutable_data());
     ASSERT_TRUE(res);
-    ASSERT_EQ(2, column->size());
-    ASSERT_EQ("[]", column->debug_item(0));
-    ASSERT_EQ("[]", column->debug_item(1));
+    ASSERT_EQ("[[], []]", column->debug_string());
 }
 
 PARALLEL_TEST(ArrayColumnTest, test_replicate) {
@@ -1233,6 +1165,127 @@ PARALLEL_TEST(ArrayColumnTest, test_reference_memory_usage) {
         ASSERT_EQ(10, column->reference_memory_usage(2, 2));
         ASSERT_EQ(6, column->reference_memory_usage(3, 1));
     }
+}
+
+// Builds an ArrayColumn from row-major data. The nulls of the wrapping NullableColumn are supplied
+// separately, which is exactly the shape null_rows_are_empty() takes.
+static ArrayColumn::MutablePtr make_array_column(const std::vector<std::vector<int32_t>>& rows) {
+    auto column = ArrayColumn::create(NullableColumn::create(Int32Column::create(), NullColumn::create()),
+                                      UInt32Column::create());
+    uint32_t offset = 0;
+    for (const auto& row : rows) {
+        for (int32_t v : row) {
+            column->elements_column_raw_ptr()->append_datum(Datum(v));
+        }
+        offset += static_cast<uint32_t>(row.size());
+        column->offsets_column_raw_ptr()->append(offset);
+    }
+    return column;
+}
+
+// NOLINTNEXTLINE
+PARALLEL_TEST(ArrayColumnTest, test_null_rows_are_empty) {
+    // No NULL row at all: there is nothing that could disagree with the offsets.
+    {
+        auto column = make_array_column({{10, 20}, {30}, {40, 50}});
+        Filter nulls{0, 0, 0};
+        ASSERT_TRUE(column->null_rows_are_empty(nulls.data(), nulls.size()));
+    }
+    // A NULL row whose payload was cleared - what append_nulls() produces, and what the zero-copy
+    // UNNEST path relies on: the offsets already say the row expands to nothing.
+    {
+        auto column = make_array_column({{10, 20}, {}, {40, 50}});
+        Filter nulls{0, 1, 0};
+        ASSERT_TRUE(column->null_rows_are_empty(nulls.data(), nulls.size()));
+    }
+    // A NULL row that still carries elements: the offsets would claim rows that do not logically
+    // exist, so the caller has to rebuild instead of forwarding them.
+    {
+        auto column = make_array_column({{10, 20}, {30}, {40, 50}});
+        Filter nulls{0, 1, 0};
+        ASSERT_FALSE(column->null_rows_are_empty(nulls.data(), nulls.size()));
+    }
+    // Same, in the last position - the loop must not stop one row early.
+    {
+        auto column = make_array_column({{10}, {20}});
+        Filter nulls{0, 1};
+        ASSERT_FALSE(column->null_rows_are_empty(nulls.data(), nulls.size()));
+    }
+    // Same, in the first position.
+    {
+        auto column = make_array_column({{10}, {20}});
+        Filter nulls{1, 0};
+        ASSERT_FALSE(column->null_rows_are_empty(nulls.data(), nulls.size()));
+    }
+    // A row count that does not match the column is rejected rather than read out of bounds.
+    {
+        auto column = make_array_column({{10, 20}, {30}});
+        Filter nulls{1};
+        ASSERT_FALSE(column->null_rows_are_empty(nulls.data(), nulls.size()));
+    }
+    // Empty column: vacuously true, and the null buffer is never dereferenced.
+    {
+        auto column = make_array_column({});
+        ASSERT_TRUE(column->null_rows_are_empty(nullptr, 0));
+    }
+}
+
+// The predicate behind null_rows_are_empty() is hand-vectorized eight rows at a time, so the cases
+// above - all shorter than one vector step - only ever reach the scalar tail. Walk a dirty row
+// across a column long enough to cover both, including the boundaries where a vector step ends.
+// NOLINTNEXTLINE
+PARALLEL_TEST(ArrayColumnTest, test_null_rows_are_empty_across_vector_steps) {
+    constexpr size_t kRows = 40;
+    std::vector<std::vector<int32_t>> rows(kRows, std::vector<int32_t>{1});
+
+    // Every row carries an element, but none of them is marked NULL.
+    {
+        auto column = make_array_column(rows);
+        Filter nulls(kRows, 0);
+        ASSERT_TRUE(column->null_rows_are_empty(nulls.data(), nulls.size()));
+    }
+    // Every row is marked NULL and every payload was cleared.
+    {
+        auto column = make_array_column(std::vector<std::vector<int32_t>>(kRows));
+        Filter nulls(kRows, 1);
+        ASSERT_TRUE(column->null_rows_are_empty(nulls.data(), nulls.size()));
+    }
+    // One NULL row still carrying its element, at each interesting position: inside the first
+    // vector step, on both sides of a step boundary, and in the scalar tail.
+    for (size_t dirty : {size_t{0}, size_t{7}, size_t{8}, size_t{15}, size_t{16}, size_t{31}, size_t{32}, size_t{39}}) {
+        auto column = make_array_column(rows);
+        Filter nulls(kRows, 0);
+        nulls[dirty] = 1;
+        ASSERT_FALSE(column->null_rows_are_empty(nulls.data(), nulls.size())) << "dirty row " << dirty;
+
+        // The same row marked NULL after its payload was cleared is clean again.
+        auto cleared_rows = rows;
+        cleared_rows[dirty].clear();
+        auto cleared = make_array_column(cleared_rows);
+        ASSERT_TRUE(cleared->null_rows_are_empty(nulls.data(), nulls.size())) << "dirty row " << dirty;
+    }
+}
+
+// null_rows_are_empty() is the check for the invariant that fill_default() establishes, so one is the
+// inverse of the other over the same filter.
+// NOLINTNEXTLINE
+PARALLEL_TEST(ArrayColumnTest, test_fill_default_establishes_null_rows_are_empty) {
+    auto column = make_array_column({{10, 20}, {30}, {40, 50}});
+    Filter nulls{0, 1, 0};
+    ASSERT_FALSE(column->null_rows_are_empty(nulls.data(), nulls.size()));
+
+    column->fill_default(nulls);
+
+    ASSERT_TRUE(column->null_rows_are_empty(nulls.data(), nulls.size()));
+    ASSERT_EQ(3, column->size());
+    ASSERT_EQ(2, column->get_element_size(0));
+    ASSERT_EQ(0, column->get_element_size(1));
+    ASSERT_EQ(2, column->get_element_size(2));
+
+    // fill_default() on an already-clean column is a no-op.
+    column->fill_default(nulls);
+    ASSERT_TRUE(column->null_rows_are_empty(nulls.data(), nulls.size()));
+    ASSERT_EQ(0, column->get_element_size(1));
 }
 
 } // namespace starrocks

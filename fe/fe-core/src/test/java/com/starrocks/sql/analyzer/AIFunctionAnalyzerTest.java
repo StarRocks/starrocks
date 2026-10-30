@@ -15,21 +15,38 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.SqlFunction;
 import com.starrocks.common.Config;
+import com.starrocks.context.ai.AIProviderType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.expression.CastExpr;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
-import com.starrocks.type.MapType;
+import com.starrocks.sql.ast.expression.NullLiteral;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.FileType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.JsonType;
 import com.starrocks.type.Type;
 import com.starrocks.type.VarcharType;
+import com.starrocks.utframe.AIProviderTestUtil;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
+
+import java.util.Arrays;
+import java.util.Map;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
@@ -41,194 +58,274 @@ public class AIFunctionAnalyzerTest {
     }
 
     @BeforeEach
-    public void setUpSystemChat() {
-        Config.ai_default_chat_endpoint = "https://models.example.test/v1/chat/completions";
-        Config.ai_default_chat_model = "default-model";
-        Config.ai_default_chat_provider = "openai_compatible";
+    public void setUpDefaultProvider() {
+        AIProviderTestUtil.setChatProperty("endpoint", "https://models.example.test/v1/chat/completions");
+        AIProviderTestUtil.setChatProperty("model", "default-model");
+        AIProviderTestUtil.setChatProperty("protocol", "openai");
     }
 
     @AfterEach
-    public void clearSystemChat() {
-        Config.ai_default_chat_endpoint = "";
-        Config.ai_default_chat_model = "";
-        Config.ai_default_chat_provider = "";
+    public void clearDefaultProviders() {
+        AIProviderTestUtil.clearDefaults();
     }
 
     @Test
-    public void testAllOverloadsAndConcreteMapType() {
-        analyzeSuccess("select ai_complete('prompt')");
-        analyzeSuccess("select ai_complete('prompt', map{'temperature': 0.5})");
-        analyzeSuccess("select ai_complete('model', 'prompt')");
-        // A bare NULL resolves to the (model, prompt) overload, not the option MAP overload.
-        analyzeSuccess("select ai_complete('model', NULL)");
-        QueryStatement statement = (QueryStatement) analyzeSuccess(
-                "select ai_complete('model', 'prompt', map{'flag': true})");
-
-        FunctionCallExpr call = (FunctionCallExpr) ((SelectRelation) statement.getQueryRelation())
-                .getOutputExpression().get(0);
-        Assertions.assertTrue(call.getFn().isAi());
-        Assertions.assertInstanceOf(MapType.class, call.getFn().getArgs()[2]);
-        Assertions.assertEquals(VarcharType.VARCHAR, ((MapType) call.getFn().getArgs()[2]).getKeyType());
+    public void testEmbeddingSignaturesAndOptions() {
+        AIProviderTestUtil.setEmbeddingProperty("endpoint", "https://models.example.test/v1/embeddings");
+        AIProviderTestUtil.setEmbeddingProperty("model", "embedding-model");
+        AIProviderTestUtil.setEmbeddingProperty("protocol", "openai");
+        for (String args : new String[] {"'text'", "input => 'text', options => json_object('dimensions', 3)",
+                "'text', '', 'model'", "'text', '', 'model', json_object('dimensions', 3)"}) {
+            QueryStatement statement = (QueryStatement) analyzeSuccess("select ai_embed(" + args + ")");
+            Assertions.assertEquals(new ArrayType(FloatType.FLOAT),
+                    ((SelectRelation) statement.getQueryRelation()).getOutputExpression().get(0).getType());
+        }
+        analyzeSuccess("select ai_embed(ta, '', 'model') from tall");
+        analyzeSuccess("select ai_embed(input => 'text', options => cast(null as json))");
+        analyzeFail("select ai_embed(input => 'text', options => json_object('value', ta)) from tall", "constant options");
+        analyzeFail("select ai_embed(to_bitmap(1))", "No matching function");
     }
 
     @Test
-    public void testExplicitModelMayVaryAndDoesNotRequireDefaultModel() {
-        Config.ai_default_chat_model = "";
-        analyzeSuccess("select ai_complete(ta, cast(tb as varchar)) from tall");
-        analyzeSuccess("select ai_complete(ta, cast(tb as varchar), map{'temperature': 1}) from tall");
-        analyzeFail("select ai_complete(cast(tb as varchar)) from tall", "ai_default_chat_model");
-        analyzeFail("select ai_complete(cast(tb as varchar), map{'temperature': 1}) from tall",
-                "ai_default_chat_model");
+    public void testEmbeddingRequiresIndependentEndpoint() {
+        analyzeFail("select ai_embed('prompt')", "SET <provider_name> AS DEFAULT AI PROVIDER");
     }
 
     @Test
-    public void testSystemEndpointAndProviderAreRequired() {
-        Config.ai_default_chat_endpoint = "";
-        analyzeFail("select ai_complete('prompt')", "ai_default_chat_endpoint");
-
-        Config.ai_default_chat_endpoint = "https://models.example.test/v1/chat/completions";
-        Config.ai_default_chat_provider = "";
-        analyzeFail("select ai_complete('prompt')", "ai_default_chat_provider");
-
-        Config.ai_default_chat_provider = "unsupported";
-        analyzeFail("select ai_complete('prompt')", "openai_compatible");
+    public void testTypedFileOverloadsAndOptions() {
+        AIProviderTestUtil.setEmbeddingProperty("endpoint", "https://models.example.test/v1/embeddings");
+        AIProviderTestUtil.setEmbeddingProperty("model", "embedding-model");
+        AIProviderTestUtil.setEmbeddingProperty("protocol", "openai");
+        Expr prompt = new StringLiteral("describe");
+        Expr model = new StringLiteral("model");
+        Expr defaults = new StringLiteral("");
+        Expr options = ((SelectRelation) ((QueryStatement) analyzeSuccess("select json_object('temperature', 0.5)"))
+                .getQueryRelation()).getOutputExpression().get(0);
+        assertTypedFunctionId("ai_complete", 200001, prompt, fileSlot());
+        assertTypedFunctionId("ai_complete", 200001, prompt, fileSlot(), defaults, model, options);
+        assertTypedFunctionId("ai_complete", 200001, prompt, fileSlot(), defaults, model, new NullLiteral());
+        assertTypedFunctionId("ai_embed", 200003, fileSlot());
+        assertTypedFunctionId("ai_embed", 200003, fileSlot(), defaults, model, options);
     }
 
     @Test
-    public void testValidJsonCompatibleOptions() {
-        analyzeSuccess("select ai_complete('p', map{})");
-        analyzeSuccess("select ai_complete('p', cast(map{} as map<varchar,json>))");
-        analyzeSuccess("select ai_complete('p', "
-                + "cast(map{cast('key' as char(3)): 1} as map<varchar,int>))");
-        analyzeSuccess("select ai_complete('p', "
-                + "cast(map{1: 2} as map<varchar,int>))");
-        analyzeSuccess("select ai_complete('p', map{'text': '123'})");
-        analyzeSuccess("select ai_complete('p', map{'boolean': true})");
-        analyzeSuccess("select ai_complete('p', map{'number': 1.25})");
-        analyzeSuccess("select ai_complete('p', map{'array': [1, 2]})");
-        analyzeSuccess("select ai_complete('p', map{'nested': map{'key': 'value'}})");
-        analyzeSuccess("select ai_complete('p', map{'nested': map{}})");
-        analyzeSuccess("select ai_complete('p', map{'nullable': null})");
-        analyzeSuccess("select ai_complete('p', map{'empty_array': []})");
-        analyzeSuccess("select ai_complete('p', map{'array': [map{}]})");
-        analyzeSuccess("select ai_complete('p', map{'nested': "
-                + "cast(map{cast('key' as char(3)): 1} as map<varchar,int>)})");
-        analyzeSuccess("select ai_complete('p', map{'nested': "
-                + "map{'level2': map{'level3': map{'level4': [1, 2, 3]}}}})");
-        analyzeSuccess("select ai_complete('p', map{'struct': "
-                + "cast(row(map{cast('key' as char(3)): 1}) "
-                + "as struct<m map<varchar,int>>)})");
-        analyzeSuccess("select ai_complete('p', map{'named_struct': "
-                + "cast(named_struct('m', map{cast('key' as char(3)): 1}) "
-                + "as struct<m map<varchar,int>>)})");
-        analyzeSuccess("select ai_complete('p', map{'struct': "
-                + "cast(row(map{cast('key' as char(3)): 1}, "
-                + "[map{cast('nested' as char(6)): 2}]) "
-                + "as struct<m map<varchar,int>, a array<map<varchar,int>>>)})");
-        analyzeSuccess("select ai_complete('p', map{'row': row(map{})})");
-        analyzeSuccess("select ai_complete('p', map{'named_struct': named_struct('m', map{})})");
-        analyzeSuccess("select ai_complete('p', map_concat(map{}, map{}))");
-        analyzeSuccess("select ai_complete('p', map_concat(map{'x': map{}}, map{}))");
-        analyzeSuccess("select ai_complete('p', map_concat(map{'x': [map{}]}, map{}))");
-        analyzeSuccess("select ai_complete('p', map_concat(map{'a': null}, map{'b': map{}}))");
-        analyzeSuccess("select ai_complete('p', "
-                + "map{'text': cast(cast('NaN' as double) as varchar)})");
-        analyzeSuccess("select ai_complete('p', map_concat(map{'a': 1}, map{'b': 2}))");
-        analyzeSuccess("select ai_complete('p', map{md5('a'): 1})");
-        analyzeSuccess("select ai_complete('p', map{'nullable': cast(null as json)})");
-        analyzeSuccess("select ai_complete('p', cast(null as map<varchar,json>))");
+    public void testFileOptionsRequireConstantJson() {
+        AIProviderTestUtil.setEmbeddingProperty("endpoint", "https://models.example.test/v1/embeddings");
+        AIProviderTestUtil.setEmbeddingProperty("model", "embedding-model");
+        AIProviderTestUtil.setEmbeddingProperty("protocol", "openai");
+        SlotRef options = new SlotRef(null, "options", "options");
+        options.setType(JsonType.JSON);
+        Expr defaults = new StringLiteral("");
+        SemanticException completeError = Assertions.assertThrows(SemanticException.class,
+                () -> analyzeTypedFunction("ai_complete", new StringLiteral("prompt"), fileSlot(), defaults, defaults, options));
+        Assertions.assertTrue(completeError.getMessage().contains("constant options"));
+        SemanticException embeddingError = Assertions.assertThrows(SemanticException.class,
+                () -> analyzeTypedFunction("ai_embed", fileSlot(), defaults, defaults, options));
+        Assertions.assertTrue(embeddingError.getMessage().contains("constant options"));
     }
 
-    @Test
-    public void testOptionMapMustBeConstantWithStringKeys() {
-        Assertions.assertAll(
-                () -> analyzeFail("select ai_complete('p', map{'temperature': te}) from tall",
-                        "constant option MAP"),
-                () -> analyzeFail("select ai_complete('p', cast(map{1: 2} as map<int,int>))", "VARCHAR keys"),
-                () -> analyzeFail("select ai_complete('p', map{'nested': map{1: 2}})", "nested MAP keys"),
-                () -> analyzeFail("select ai_complete('p', cast(map{'key': 1} as map<char(3),int>))",
-                        "VARCHAR keys"),
-                () -> analyzeFail("select ai_complete('p', "
-                        + "map{'nested': cast(map{'key': 1} as map<char(3),int>)})", "nested MAP keys"));
-        analyzeFail("select ai_complete('p', map{'struct': "
-                + "cast(row(map{'key': 1}) as struct<m map<char(3),int>>)})", "nested MAP keys");
+    private static SlotRef fileSlot() {
+        SlotRef slot = new SlotRef(null, "file", "file");
+        slot.setType(FileType.FILE);
+        return slot;
     }
 
-    @Test
-    public void testOptionMapRejectsInvalidKeys() {
-        analyzeFail("select ai_complete('p', map{'x': 1, 'x': 2})", "duplicate option key");
-        analyzeFail("select ai_complete('p', "
-                + "cast(map{1: 'a', cast('1' as int): 'b'} as map<varchar,varchar>))",
-                "duplicate option key");
-        analyzeFail("select ai_complete('p', map{cast(null as varchar): 1})", "NULL option key");
-        analyzeFail("select ai_complete('p', "
-                + "cast(map{cast(null as char(3)): 1} as map<varchar,int>))", "NULL option key");
-        analyzeFail("select ai_complete('p', map{'': 1})", "empty option key");
-        analyzeFail("select ai_complete('p', map{'model': 1})", "reserved option key");
-        analyzeFail("select ai_complete('p', "
-                + "cast(map{cast('model' as char(5)): 1} as map<varchar,int>))",
-                "reserved option key");
-        analyzeFail("select ai_complete('p', map{'messages': 1})", "reserved option key");
-        analyzeFail("select ai_complete('p', map{'stream': 1})", "reserved option key");
+    private static FunctionCallExpr analyzeTypedFunction(String name, Expr... arguments) {
+        FunctionCallExpr call = new FunctionCallExpr(name, Arrays.asList(arguments));
+        ExpressionAnalyzer.analyzeExpressionIgnoreSlot(call, AnalyzeTestUtil.getConnectContext());
+        return call;
     }
 
-    @Test
-    public void testOptionMapRejectsUnsupportedAndNonFiniteValues() {
-        Assertions.assertAll(
-                () -> analyzeFail("select ai_complete('p', map{'opaque': bitmap_empty()})", "JSON-compatible"),
-                () -> analyzeFail("select ai_complete('p', map{'number': cast('NaN' as double)})", "finite"),
-                () -> analyzeFail("select ai_complete('p', map{'number': cast('Infinity' as double)})", "finite"),
-                () -> analyzeFail("select ai_complete('p', "
-                        + "map{'number': cast(1.0e200 as double) * cast(1.0e200 as double)})", "finite"));
+    private static void assertTypedFunctionId(String name, long expectedId, Expr... arguments) {
+        Function function = analyzeTypedFunction(name, arguments).getFn();
+        Assertions.assertEquals(expectedId, function.getFunctionId());
+        Assertions.assertTrue(function.isAI());
+        Assertions.assertTrue(Arrays.asList(function.getArgs()).contains(FileType.FILE));
     }
 
-    @Test
-    public void testTypedEmptyAndNullValuesStillEnforceJsonTypeContract() {
-        Assertions.assertAll(
-                () -> analyzeFail("select ai_complete('p', "
-                        + "map{'nested': cast(map{} as map<char(3),int>)})", "nested MAP keys"),
-                () -> analyzeFail("select ai_complete('p', cast(map{'nested': map{}} "
-                        + "as map<varchar,map<char(3),int>>))", "nested MAP keys"),
-                () -> analyzeFail("select ai_complete('p', cast(map{'nested': map{}} "
-                        + "as map<varchar,map<boolean,int>>))", "nested MAP keys"),
-                () -> analyzeFail("select ai_complete('p', map_concat("
-                        + "map{'nested': cast(map{} as map<boolean,int>)}, map{}))", "nested MAP keys"),
-                () -> analyzeFail("select ai_complete('p', map_concat("
-                        + "cast(map{} as map<boolean,int>), map{}))", "nested MAP keys"),
-                () -> analyzeFail("select ai_complete('p', map_concat("
-                        + "map{'a': cast(null as map<boolean,int>)}, map{'b': map{}}))", "nested MAP keys"),
-                () -> analyzeFail("select ai_complete('p', map{'opaque': cast(null as bitmap)})",
-                        "JSON-compatible"),
-                () -> analyzeFail("select ai_complete('p', map{'opaque': cast([] as array<bitmap>)})",
-                        "JSON-compatible"),
-                () -> analyzeFail("select ai_complete('p', map{'struct': "
-                        + "cast(row(cast(null as bitmap)) as struct<b bitmap>)})", "JSON-compatible"),
-                () -> analyzeFail("select ai_complete('p', cast(null as map<varchar,bitmap>))",
-                        "JSON-compatible"),
-                () -> analyzeFail("select ai_complete('p', cast(map{} as map<varchar,bitmap>))",
-                        "JSON-compatible"));
-    }
-
-    @Test
-    public void testFiniteOptionDefersWhenConstantFoldingIsDisabled() {
-        boolean original = AnalyzeTestUtil.getConnectContext().getSessionVariable()
-                .isDisableFunctionFoldConstants();
+    @ParameterizedTest
+    @ValueSource(strings = {"ai_complete", "ai_embed"})
+    public void testAIProviderSelectorRequiresConstant(String function) throws Exception {
+        analyzeFail("select " + function + "('prompt', ta, 'model') from tall", "constant provider");
+        for (String provider : new String[] {"'  '", "concat(' ', ' ')"}) {
+            analyzeFail("select " + function + "('prompt', " + provider + ", 'model')", "whitespace");
+        }
+        analyzeFail("select " + function + "('prompt', 'missing_provider', 'model')", "does not exist");
+        String name = "provider_for_analysis";
+        AIProviderType type = function.equals("ai_embed") ? AIProviderType.EMBEDDING : AIProviderType.CHAT;
+        GlobalStateMgr.getCurrentState().getAIProviderMgr().createProvider(name, type,
+                Map.of("endpoint", "https://models.example.test/v1/inference", "model", "provider-model"), "");
         try {
-            AnalyzeTestUtil.getConnectContext().getSessionVariable().setDisableFunctionFoldConstants(true);
-            analyzeSuccess("select ai_complete('p', map{'number': "
-                    + "cast(1.25 as double) + cast(2.5 as double)})");
+            for (String provider : new String[] {"'provider_for_analysis'", "concat('provider_', 'for_analysis')"}) {
+                analyzeSuccess("select " + function + "('prompt', " + provider + ", 'model')");
+                analyzeSuccess("select " + function + "('prompt', " + provider + ", 'model', json_object())");
+            }
         } finally {
-            AnalyzeTestUtil.getConnectContext().getSessionVariable().setDisableFunctionFoldConstants(original);
+            GlobalStateMgr.getCurrentState().getAIProviderMgr().dropProvider(name, true);
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"[]", "['a', NULL]", "['  ']", "cast([] as array<varchar>)",
+            "cast(['a', NULL] as array<varchar>)", "cast(['  '] as array<varchar>)"})
+    public void testHelperArraysRejectInvalidConstantContents(String array) {
+        for (String function : new String[] {"ai_classify", "ai_extract", "ai_redact"}) {
+            Assertions.assertAll(
+                    () -> analyzeFail("select " + function + "('p', " + array + ")", "nonempty ARRAY"),
+                    () -> analyzeFail("select " + function + "('p', " + array + ", '', 'model')", "nonempty ARRAY"));
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"ai_classify", "ai_extract", "ai_redact"})
+    public void testHelperArrayLiteralsRejectJavaWhitespace(String function) {
+        // Keep this set aligned with BE helper-array validation, including Java's control-character whitespace.
+        int[] whitespace = {0x0009, 0x000A, 0x000B, 0x000C, 0x000D, 0x0020, 0x001C, 0x001D, 0x001E, 0x001F,
+                0x1680, 0x2000, 0x2001, 0x2002, 0x2003, 0x2004, 0x2005, 0x2006, 0x2008, 0x2009, 0x200A,
+                0x2028, 0x2029, 0x205F, 0x3000};
+        for (int codePoint : whitespace) {
+            String array = "['" + Character.toString(codePoint) + "']";
+            Assertions.assertAll(String.format("%s U+%04X", function, codePoint),
+                    () -> analyzeFail("select " + function + "('p', " + array + ")", "nonblank elements"),
+                    () -> analyzeFail("select " + function + "('p', " + array + ", '', 'model')", "nonblank elements"));
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"ai_classify", "ai_extract", "ai_redact"})
+    public void testHelperArrayLiteralsAcceptNonblankUnicode(String function) {
+        // Nonbreaking spaces and zero-width characters are not blank according to String.isBlank().
+        for (String value : new String[] {"\u00A0", "\u2007", "\u202F", "\u200B", "\uFEFF", "\u2003label\u3000"}) {
+            String array = "['" + value + "']";
+            Assertions.assertAll(
+                    () -> analyzeSuccess("select " + function + "('p', " + array + ")"),
+                    () -> analyzeSuccess("select " + function + "('p', " + array + ", '', 'model')"));
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"\u2003", "\u3000"})
+    public void testHelperArrayStringCastsDeferBlankValidationToBackend(String whitespace) {
+        String value = "[\"" + whitespace + "\"]";
+        for (String function : new String[] {"ai_classify", "ai_extract", "ai_redact"}) {
+            for (String suffix : new String[] {"", ", '', 'model'"}) {
+                QueryStatement statement = (QueryStatement) analyzeSuccess(
+                        "select " + function + "('p', cast('" + value + "' as array<varchar>)" + suffix + ")");
+                FunctionCallExpr call = (FunctionCallExpr) ((SelectRelation) statement.getQueryRelation())
+                        .getOutputExpression().get(0);
+                CastExpr cast = Assertions.assertInstanceOf(CastExpr.class, call.getChild(1));
+                Assertions.assertEquals(new ArrayType(VarcharType.VARCHAR), cast.getType());
+                Assertions.assertEquals(value, Assertions.assertInstanceOf(StringLiteral.class, cast.getChild(0)).getValue());
+                analyzeSuccess("select " + function + "('p', parse_json('" + value + "')" + suffix + ")");
+            }
         }
     }
 
     @Test
-    public void testEmptyExplicitModelIsRejectedButEmptyPromptIsValid() {
+    public void testHelperArraysMustBeConstant() {
+        analyzeFail("select ai_classify('p', [ta]) from tall", "constant ARRAY");
+        analyzeFail("select ai_extract('p', [ta]) from tall", "constant ARRAY");
+        analyzeFail("select ai_redact('p', [ta]) from tall", "constant ARRAY");
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            "ai_classify, ta, tall",
+            "ai_classify, v_json, tjson",
+            "ai_extract, ta, tall",
+            "ai_extract, v_json, tjson",
+            "ai_redact, ta, tall",
+            "ai_redact, v_json, tjson"
+    })
+    public void testHelperArrayArgumentsRequireConstantsBeforeImplicitCasts(
+            String function, String column, String table) {
         Assertions.assertAll(
-                () -> analyzeFail("select ai_complete('', 'prompt')", "model must not be empty"),
-                () -> analyzeFail("select ai_complete('   ', 'prompt')", "model must not be empty"));
-        analyzeSuccess("select ai_complete(cast(null as varchar), 'p')");
-        analyzeSuccess("select ai_complete('model', '')");
+                () -> analyzeFail("select " + function + "('p', " + column + ") from " + table, "constant ARRAY"),
+                () -> analyzeFail("select " + function + "('p', " + column + ", '', 'model') from " + table,
+                        "constant ARRAY"));
+    }
+
+    @Test
+    public void testHelperArrayArgumentsAcceptConstantCastsAndExpressions() {
+        for (String function : new String[] {"ai_classify", "ai_extract", "ai_redact"}) {
+            for (String argument : new String[] {"['a']", "cast(['a'] as array<varchar>)",
+                    "'[\"a\"]'", "parse_json('[\"a\"]')",
+                    "array_concat(['a'], ['b'])"}) {
+                analyzeSuccess("select " + function + "('p', " + argument + ")");
+                analyzeSuccess("select " + function + "('p', " + argument + ", '', 'model')");
+            }
+        }
+    }
+
+    @Test
+    public void testTextHelperSignatures() {
+        String[] names = {"ai_sentiment", "ai_classify", "ai_extract", "ai_fix_grammar", "ai_redact",
+                "ai_translate", "ai_similarity", "ai_summarize", "ai_filter"};
+        String[] args = {"'p'", "'p', ['a']", "'p', ['a']", "'p'", "'p', ['a']",
+                "'p', 'en', 'zh'", "'p', 'q'", "'p'", "'p', 'condition'"};
+        for (int i = 0; i < names.length; i++) {
+            assertFunctionId("select " + names[i] + "(" + args[i] + ")", 200004 + i);
+            assertFunctionId("select " + names[i] + "(" + args[i] + ", '', 'model')", 200004 + i);
+        }
+        for (int i = 0; i < names.length; i++) {
+            assertFunctionId("select " + names[i] + "(" + args[i] + ", 'test_default_chat', 'model')", 200004 + i);
+        }
+
+    }
+
+    private static void assertFunctionId(String sql, long id) {
+        QueryStatement statement = (QueryStatement) analyzeSuccess(sql);
+        FunctionCallExpr call = (FunctionCallExpr) ((SelectRelation) statement.getQueryRelation()).getOutputExpression().get(0);
+        Assertions.assertEquals(id, call.getFn().getFunctionId());
+        Assertions.assertTrue(call.getFn().isAI());
+    }
+
+    @Test
+    public void testConcreteJsonOptionsType() {
+        QueryStatement statement = (QueryStatement) analyzeSuccess(
+                "select ai_complete('prompt', '', 'model', json_object('guardrails', true))");
+        FunctionCallExpr call = (FunctionCallExpr) ((SelectRelation) statement.getQueryRelation())
+                .getOutputExpression().get(0);
+        Assertions.assertTrue(call.getFn().isAI());
+        Assertions.assertEquals(JsonType.JSON, call.getFn().getArgs()[3]);
+        Assertions.assertEquals(JsonType.JSON, call.getChild(3).getType());
+    }
+
+    @Test
+    public void testExplicitModelMustBeConstant() {
+        analyzeFail("select ai_complete(prompt => ta, model => cast(tb as varchar)) from tall", "constant model");
+    }
+
+    @Test
+    public void testJsonOptions() {
+        for (String options : new String[] {"json_object()", "NULL", "cast(NULL as json)",
+                "json_object('guardrails', true, 'temperature', 0.7)",
+                "json_object('payload', json_object('nested', parse_json('[1,true,null]')))",
+                "parse_json('{\"dimensions\":512}')", "to_json(map{'dimensions':512})"}) {
+            analyzeSuccess("select ai_complete(prompt => 'p', options => " + options + ")");
+        }
+        analyzeFail("select ai_complete(prompt => 'p', options => json_object('temperature', te)) from tall",
+                "constant options");
+        for (String options : new String[] {"map{}", "map{'guardrails':true}", "'{}'", "cast(NULL as varchar)"}) {
+            analyzeFail("select ai_complete(prompt => 'p', options => " + options + ")");
+        }
+    }
+
+    @Test
+    public void testJsonContentValidationIsDeferredToExecution() {
+        for (String options : new String[] {"json_object('model', 'override')", "parse_json('null')",
+                "parse_json('[1,2]')", "parse_json('invalid json')"}) {
+            analyzeSuccess("select ai_complete(prompt => 'p', options => " + options + ")");
+        }
+    }
+
+    @Test
+    public void testEmptyModelUsesDefaultAndBlankModelIsRejected() {
+        analyzeFail("select ai_complete(prompt => 'p', model => '   ')", "whitespace");
+        analyzeSuccess("select ai_complete(prompt => 'p', model => '')");
+        analyzeSuccess("select ai_complete(prompt => 'p', model => NULL)");
+        analyzeSuccess("select ai_complete(prompt => cast(null as varchar), model => 'model')");
+        analyzeSuccess("select ai_complete(prompt => '', model => 'model')");
     }
 
     @Test
@@ -479,5 +576,70 @@ public class AIFunctionAnalyzerTest {
                 () -> analyzeFail("select * from t0 where exists (select 1 from t1 where exists "
                                 + "(select ai_complete(cast(t1.v4 as varchar)) from t2))",
                         "SELECT list cannot contain correlated AI function ai_complete"));
+    }
+
+    @ParameterizedTest
+    @CsvSource(value = {"ai_complete('p', NULL)|200000", "ai_complete('p', NULL, NULL)|200000",
+            "ai_embed(NULL)|200002"}, delimiter = '|')
+    public void testUntypedNullUsesBuiltinOverloadResolution(String expression, long expectedId) {
+        AIProviderTestUtil.setEmbeddingProperty("endpoint", "https://models.example.test/v1/embeddings");
+        AIProviderTestUtil.setEmbeddingProperty("model", "embedding-model");
+        AIProviderTestUtil.setEmbeddingProperty("protocol", "openai");
+        assertFunctionId("select " + expression, expectedId);
+    }
+
+    @Test
+    public void testTypedNullDisambiguatesTextFileAndOptions() {
+        AIProviderTestUtil.setEmbeddingProperty("endpoint", "https://models.example.test/v1/embeddings");
+        AIProviderTestUtil.setEmbeddingProperty("model", "embedding-model");
+        AIProviderTestUtil.setEmbeddingProperty("protocol", "openai");
+        assertFunctionId("select ai_complete('p', '', 'm', cast(NULL as json))", 200000);
+        assertTypedFunctionId("ai_complete", 200001, new StringLiteral("p"), NullLiteral.create(FileType.FILE));
+        assertFunctionId("select ai_embed(cast(NULL as varchar))", 200002);
+        assertFunctionId("select ai_embed('p', '', 'm', cast(NULL as json))", 200002);
+        assertTypedFunctionId("ai_embed", 200003, NullLiteral.create(FileType.FILE));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"NULL", "cast(NULL as varchar)", "nullif('x', 'x')", "if(true, NULL, 'x')"})
+    public void testHelperNullInputsKeepTheirOriginalSemantics(String value) {
+        String[] names = {"ai_sentiment", "ai_classify", "ai_extract", "ai_fix_grammar", "ai_redact",
+                "ai_translate", "ai_similarity", "ai_summarize", "ai_filter"};
+        String[] suffixes = {"", ", ['a']", ", ['a']", "", ", ['a']", ", 'en', 'zh'", ", 'q'", "", ", 'q'"};
+        for (int i = 0; i < names.length; i++) {
+            analyzeSuccess("select " + names[i] + "(" + value + suffixes[i] + ")");
+            analyzeSuccess("select " + names[i] + "(" + value + suffixes[i] + ", '', 'model')");
+            analyzeSuccess("select " + names[i] + "(" + value + suffixes[i] + ", 'test_default_chat', 'model')");
+        }
+        analyzeSuccess("select ai_translate('hello', " + value + ", 'zh')");
+        analyzeSuccess("select ai_translate('hello', 'en', " + value + ")");
+        analyzeFail("select ai_classify('text', cast(NULL as array<varchar>))", "nonempty ARRAY");
+        analyzeSuccess("select ai_complete(cast(NULL as varchar), '', 'model')");
+    }
+
+    @Test
+    public void testTranslationAndNestedNullOptions() {
+        analyzeSuccess("select ai_translate('hello', '', 'zh')");
+        analyzeSuccess("select ai_translate(ta, '', 'zh') from tall");
+        analyzeSuccess("select ai_translate('hello', ta, 'zh') from tall");
+        analyzeSuccess("select ai_complete(prompt => 'p', options => json_object('nested', json_object('value', NULL)))");
+    }
+    @Test
+    public void testRemovedCustomFunctionsHaveNoOverloads() {
+        analyzeFail("select ai_custom_query('provider', 'prompt')", "No matching function");
+        analyzeFail("select ai_custom_embedding('provider', 'text')", "No matching function");
+    }
+    @Test
+    public void testNullResolutionDoesNotDependOnConstantFolding() {
+        var session = AnalyzeTestUtil.getConnectContext().getSessionVariable();
+        boolean previous = session.isDisableFunctionFoldConstants();
+        session.setDisableFunctionFoldConstants(true);
+        try {
+            analyzeSuccess("select ai_complete(nullif('x', 'x'))");
+            assertFunctionId("select ai_complete('a', NULL)", 200000);
+            Assertions.assertTrue(session.isDisableFunctionFoldConstants());
+        } finally {
+            session.setDisableFunctionFoldConstants(previous);
+        }
     }
 }

@@ -25,7 +25,12 @@
 
 #include <filesystem>
 #include <memory>
+#include <mutex>
+#include <numeric>
+#include <string_view>
+#include <thread>
 #include <utility>
+#include <vector>
 
 #include "base/testutil/assert.h"
 #include "base/utility/defer_op.h"
@@ -39,6 +44,7 @@
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
 #include "testutil/desc_tbl_helper.h"
+#include "testutil/type_test_helper.h"
 #include "types/type_descriptor.h"
 
 namespace starrocks {
@@ -121,6 +127,166 @@ TEST(ParquetGeoReaderTest, AnnotatedColumnsKeepExistingReads) {
             EXPECT_EQ(1, rejected.get_batch()->num_rows());
         }
     }
+}
+
+namespace {
+
+// In-memory file that records the thread of every positional read.
+class ThreadRecordingStream final : public io::StringInputStream {
+public:
+    using io::StringInputStream::StringInputStream;
+
+    Status read_at_fully(int64_t offset, void* out, int64_t count) override {
+        {
+            std::lock_guard<std::mutex> l(_mutex);
+            _read_threads.push_back(std::this_thread::get_id());
+        }
+        return io::StringInputStream::read_at_fully(offset, out, count);
+    }
+
+    std::vector<std::thread::id> read_threads() {
+        std::lock_guard<std::mutex> l(_mutex);
+        return _read_threads;
+    }
+
+private:
+    std::mutex _mutex;
+    std::vector<std::thread::id> _read_threads;
+};
+
+// In-memory file that cancels the query right after its first read, which is the footer read.
+class CancelAfterFirstReadStream final : public io::StringInputStream {
+public:
+    CancelAfterFirstReadStream(std::string contents, RuntimeState* state)
+            : io::StringInputStream(std::move(contents)), _state(state) {}
+
+    Status read_at_fully(int64_t offset, void* out, int64_t count) override {
+        RETURN_IF_ERROR(io::StringInputStream::read_at_fully(offset, out, count));
+        _state->set_is_cancelled(true);
+        return Status::OK();
+    }
+
+private:
+    RuntimeState* _state;
+};
+
+// A single INT32 column "id" holding 0, 1, 2, ... in `num_row_groups` row groups of `num_rows` rows each.
+std::string make_int32_parquet(int32_t num_rows, int32_t num_row_groups = 1) {
+    auto id = ::parquet::schema::PrimitiveNode::Make("id", ::parquet::Repetition::REQUIRED, ::parquet::Type::INT32);
+    auto schema = std::static_pointer_cast<::parquet::schema::GroupNode>(
+            ::parquet::schema::GroupNode::Make("root", ::parquet::Repetition::REQUIRED, {id}));
+    auto sink = arrow::io::BufferOutputStream::Create().ValueOrDie();
+    auto writer = ::parquet::ParquetFileWriter::Open(sink, schema);
+    std::vector<int32_t> values(num_rows);
+    for (int32_t i = 0; i < num_row_groups; ++i) {
+        std::iota(values.begin(), values.end(), i * num_rows);
+        auto* group = writer->AppendRowGroup();
+        static_cast<::parquet::Int32Writer*>(group->NextColumn())
+                ->WriteBatch(num_rows, nullptr, nullptr, values.data());
+    }
+    writer->Close();
+    return sink->Finish().ValueOrDie()->ToString();
+}
+
+} // namespace
+
+TEST(ParquetChunkFileTest, ReadAsyncReadsInline) {
+    const std::string contents = "0123456789";
+    auto file = std::make_shared<RandomAccessFile>(std::make_shared<io::StringInputStream>(contents), "inline.bin");
+    ScannerCounter counter;
+    auto chunk_file = std::make_shared<ParquetChunkFile>(file, 0, &counter);
+    auto future = chunk_file->ReadAsync(arrow::io::default_io_context(), 2, 5);
+    // The read is done before ReadAsync() returns, so nothing is queued on Arrow's IO thread pool.
+    ASSERT_TRUE(future.is_finished());
+    const auto& result = future.result();
+    ASSERT_TRUE(result.ok()) << result.status().ToString();
+    EXPECT_EQ("23456", (*result)->ToString());
+    EXPECT_EQ(1, counter.file_read_count);
+}
+
+TEST(ParquetChunkFileTest, PreBufferedReadsRunOnCallerThread) {
+    const int32_t num_rows = 100;
+    const std::string contents = make_int32_parquet(num_rows);
+    auto stream = std::make_shared<ThreadRecordingStream>(contents);
+    auto file = std::make_shared<RandomAccessFile>(stream, "caller-thread.parquet");
+    ScannerCounter counter;
+    ParquetReaderWrap reader(std::make_shared<ParquetChunkFile>(file, 0, &counter), 1, 0, contents.size());
+    SlotDescriptor slot(0, "id", TypeDescriptor(TYPE_INT));
+    ASSERT_OK(reader.init_parquet_reader({&slot}));
+    auto batch = reader.get_batch();
+    ASSERT_NE(nullptr, batch);
+    ASSERT_EQ(num_rows, batch->num_rows());
+    EXPECT_EQ(num_rows - 1, std::static_pointer_cast<arrow::Int32Array>(batch->column(0))->Value(num_rows - 1));
+    // The footer read and the pre-buffered column chunk read both run on this thread.
+    const auto threads = stream->read_threads();
+    ASSERT_GE(threads.size(), 2u);
+    for (const auto& tid : threads) {
+        EXPECT_EQ(std::this_thread::get_id(), tid);
+    }
+}
+
+TEST(ParquetChunkFileTest, CancelledQuerySkipsReads) {
+    const std::string contents = make_int32_parquet(10);
+    auto file =
+            std::make_shared<RandomAccessFile>(std::make_shared<io::StringInputStream>(contents), "cancelled.parquet");
+    RuntimeState state{TQueryGlobals()};
+    state.set_is_cancelled(true);
+    ScannerCounter counter;
+    auto chunk_file = std::make_shared<ParquetChunkFile>(file, 0, &counter, &state);
+
+    char buf[4];
+    auto read = chunk_file->ReadAt(0, sizeof(buf), buf);
+    EXPECT_TRUE(read.status().IsCancelled()) << read.status().ToString();
+    auto future = chunk_file->ReadAsync(arrow::io::default_io_context(), 0, sizeof(buf));
+    ASSERT_TRUE(future.is_finished());
+    EXPECT_TRUE(future.result().status().IsCancelled()) << future.result().status().ToString();
+
+    // The scan stops with the cancellation instead of reading the file or reporting a read error.
+    ParquetReaderWrap reader(std::move(chunk_file), 1, 0, contents.size());
+    SlotDescriptor slot(0, "id", TypeDescriptor(TYPE_INT));
+    auto st = reader.init_parquet_reader({&slot});
+    EXPECT_TRUE(st.is_cancelled()) << st;
+    EXPECT_NE(std::string_view::npos, st.message().find("query cancelled")) << st;
+    EXPECT_EQ(0, counter.file_read_count);
+}
+
+TEST(ParquetChunkFileTest, CancelAfterFooterStopsColumnRead) {
+    const std::string contents = make_int32_parquet(10);
+    RuntimeState state{TQueryGlobals()};
+    auto stream = std::make_shared<CancelAfterFirstReadStream>(contents, &state);
+    auto file = std::make_shared<RandomAccessFile>(stream, "cancel-after-footer.parquet");
+    ScannerCounter counter;
+    ParquetReaderWrap reader(std::make_shared<ParquetChunkFile>(file, 0, &counter, &state), 1, 0, contents.size());
+    SlotDescriptor slot(0, "id", TypeDescriptor(TYPE_INT));
+    auto st = reader.init_parquet_reader({&slot});
+    // The footer was parsed, then the column chunk read stopped at the cancellation.
+    EXPECT_EQ(10, reader.num_rows());
+    EXPECT_TRUE(st.is_cancelled()) << st;
+    EXPECT_NE(std::string_view::npos, st.message().find("query cancelled")) << st;
+    EXPECT_EQ(1, counter.file_read_count);
+}
+
+TEST(ParquetChunkFileTest, CancelAfterInitStopsNextRowGroup) {
+    const int32_t rows_per_group = 10;
+    const std::string contents = make_int32_parquet(rows_per_group, 2);
+    auto file = std::make_shared<RandomAccessFile>(std::make_shared<io::StringInputStream>(contents),
+                                                   "cancel-after-init.parquet");
+    RuntimeState state{TQueryGlobals()};
+    ScannerCounter counter;
+    ParquetReaderWrap reader(std::make_shared<ParquetChunkFile>(file, 0, &counter, &state), 1, 0, contents.size());
+    SlotDescriptor slot(0, "id", TypeDescriptor(TYPE_INT));
+    ASSERT_OK(reader.init_parquet_reader({&slot}));
+    ASSERT_EQ(rows_per_group, reader.get_batch()->num_rows());
+    const int64_t reads_before_cancel = counter.file_read_count;
+
+    // The second row group needs another range read, which a cancelled query must not start.
+    state.set_is_cancelled(true);
+    bool eof = false;
+    auto st = reader.read_record_batch({&slot}, &eof);
+    EXPECT_TRUE(st.is_cancelled()) << st;
+    EXPECT_FALSE(eof);
+    EXPECT_NE(std::string_view::npos, st.message().find("query cancelled")) << st;
+    EXPECT_EQ(reads_before_cancel, counter.file_read_count);
 }
 
 class ParquetScannerTest : public ::testing::Test {
@@ -303,21 +469,21 @@ private:
 
     SlotTypeDescInfoArray select_columns(const std::vector<std::string>& column_names, bool is_nullable) {
         auto slot_map = std::unordered_map<std::string, TypeDescriptor>{
-                {"col_date", TypeDescriptor::from_logical_type(TYPE_DATE)},
-                {"col_datetime", TypeDescriptor::from_logical_type(TYPE_DATETIME)},
-                {"col_char", TypeDescriptor::from_logical_type(TYPE_CHAR)},
-                {"col_varchar", TypeDescriptor::from_logical_type(TYPE_VARCHAR)},
-                {"col_boolean", TypeDescriptor::from_logical_type(TYPE_BOOLEAN)},
-                {"col_tinyint", TypeDescriptor::from_logical_type(TYPE_TINYINT)},
-                {"col_smallint", TypeDescriptor::from_logical_type(TYPE_SMALLINT)},
-                {"col_int", TypeDescriptor::from_logical_type(TYPE_INT)},
-                {"col_bigint", TypeDescriptor::from_logical_type(TYPE_BIGINT)},
-                {"col_decimal_p6s2", TypeDescriptor::from_logical_type(TYPE_DECIMAL32, -1, 6, 2)},
-                {"col_decimal_p14s5", TypeDescriptor::from_logical_type(TYPE_DECIMAL64, -1, 14, 5)},
-                {"col_decimal_p27s9", TypeDescriptor::from_logical_type(TYPE_DECIMALV2, -1, 27, 9)},
+                {"col_date", TYPE_DATE_DESC},
+                {"col_datetime", TYPE_DATETIME_DESC},
+                {"col_char", TYPE_CHAR_DESC},
+                {"col_varchar", TYPE_VARCHAR_DESC},
+                {"col_boolean", TYPE_BOOLEAN_DESC},
+                {"col_tinyint", TYPE_TINYINT_DESC},
+                {"col_smallint", TYPE_SMALLINT_DESC},
+                {"col_int", TYPE_INT_DESC},
+                {"col_bigint", TYPE_BIGINT_DESC},
+                {"col_decimal_p6s2", TypeDescriptor::from_logical_type(TYPE_DECIMAL32, 6, 2)},
+                {"col_decimal_p14s5", TypeDescriptor::from_logical_type(TYPE_DECIMAL64, 14, 5)},
+                {"col_decimal_p27s9", TypeDescriptor::from_logical_type(TYPE_DECIMALV2, 27, 9)},
 
-                {"col_int_null", TypeDescriptor::from_logical_type(TYPE_INT)},
-                {"col_string_null", TypeDescriptor::from_logical_type(TYPE_VARCHAR)},
+                {"col_int_null", TYPE_INT_DESC},
+                {"col_string_null", TYPE_VARCHAR_DESC},
 
                 {"col_json_int8", TypeDescriptor::create_json_type()},
                 {"col_json_int16", TypeDescriptor::create_json_type()},
@@ -346,14 +512,13 @@ private:
                 {"col_json_struct_struct", TypeDescriptor::create_json_type()},
 
                 // Convert struct->JSON->string
-                {"col_json_struct_string", TypeDescriptor::from_logical_type(TYPE_VARCHAR)},
+                {"col_json_struct_string", TYPE_VARCHAR_DESC},
                 {"col_json_json_string", TypeDescriptor::create_json_type()},
-                {"issue_17693_c0", TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_VARCHAR))},
-                {"issue_17822_c0", TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_VARCHAR))},
-                {"nested_array_c0", TypeDescriptor::create_array_type(TypeDescriptor::create_array_type(
-                                            TypeDescriptor::from_logical_type(TYPE_VARCHAR)))},
-                {"col_map", TypeDescriptor::create_map_type(TypeDescriptor::create_varchar_type(1048576),
-                                                            TypeDescriptor::create_varchar_type(1048576))}};
+                {"issue_17693_c0", TypeDescriptor::create_array_type(TYPE_VARCHAR_DESC)},
+                {"issue_17822_c0", TypeDescriptor::create_array_type(TYPE_VARCHAR_DESC)},
+                {"nested_array_c0",
+                 TypeDescriptor::create_array_type(TypeDescriptor::create_array_type(TYPE_VARCHAR_DESC))},
+                {"col_map", TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TYPE_VARCHAR_DESC)}};
         SlotTypeDescInfoArray slot_infos;
         slot_infos.reserve(column_names.size());
         for (auto& name : column_names) {
@@ -381,7 +546,7 @@ private:
 
         auto src_slot_infos = select_columns(columns_from_file, is_nullable);
         for (const auto& i : columns_from_path) {
-            src_slot_infos.emplace_back(i, TypeDescriptor::from_logical_type(TYPE_VARCHAR), is_nullable);
+            src_slot_infos.emplace_back(i, TYPE_VARCHAR_DESC, is_nullable);
         }
 
         auto dst_slot_infos = select_columns(column_names, is_nullable);
@@ -862,8 +1027,8 @@ TEST_F(ParquetScannerTest, test_parquet_data_with_1_column_from_path) {
     std::vector<std::string> columns_from_file = {
             "col_datetime", "col_char",   "col_varchar",      "col_boolean",       "col_tinyint",      "col_smallint",
             "col_int",      "col_bigint", "col_decimal_p6s2", "col_decimal_p14s5", "col_decimal_p27s9"};
-    auto varchar_type = TypeDescriptor::from_logical_type(TYPE_VARCHAR);
-    auto date_type = TypeDescriptor::from_logical_type(TYPE_DATE);
+    auto varchar_type = TYPE_VARCHAR_DESC;
+    auto date_type = TYPE_DATE_DESC;
     std::vector<std::string> columns_from_path = {"col_date"};
     std::vector<std::string> column_values = {"2021-03-22"};
     auto column_ref_expr = create_column_ref(11, varchar_type, true);
@@ -881,9 +1046,9 @@ TEST_F(ParquetScannerTest, test_parquet_data_with_2_column_from_path) {
     std::vector<std::string> columns_from_path = {"col_date", "col_datetime"};
     std::vector<std::string> column_values = {"2021-02-22", "2020-12-20 22:56:04"};
 
-    auto varchar_type = TypeDescriptor::from_logical_type(TYPE_VARCHAR);
-    auto date_type = TypeDescriptor::from_logical_type(TYPE_DATE);
-    auto datetime_type = TypeDescriptor::from_logical_type(TYPE_DATETIME);
+    auto varchar_type = TYPE_VARCHAR_DESC;
+    auto date_type = TYPE_DATE_DESC;
+    auto datetime_type = TYPE_DATETIME_DESC;
 
     auto column_ref_expr10 = create_column_ref(10, varchar_type, true);
     auto column_ref_expr11 = create_column_ref(11, varchar_type, true);
@@ -906,9 +1071,9 @@ TEST_F(ParquetScannerTest, test_parquet_data_with_3_column_from_path) {
                                                   "col_decimal_p6s2", "col_decimal_p14s5", "col_decimal_p27s9"};
     std::vector<std::string> columns_from_path = {"col_date", "col_datetime", "col_char"};
 
-    auto varchar_type = TypeDescriptor::from_logical_type(TYPE_VARCHAR);
-    auto date_type = TypeDescriptor::from_logical_type(TYPE_DATE);
-    auto datetime_type = TypeDescriptor::from_logical_type(TYPE_DATETIME);
+    auto varchar_type = TYPE_VARCHAR_DESC;
+    auto date_type = TYPE_DATE_DESC;
+    auto datetime_type = TYPE_DATETIME_DESC;
 
     auto column_ref_expr9 = create_column_ref(9, varchar_type, true);
     auto column_ref_expr10 = create_column_ref(10, varchar_type, true);
@@ -1085,7 +1250,7 @@ TEST_F(ParquetScannerTest, test_dictionary_string_parquet_data) {
                                      &parquet_file_name);
     DeferOp defer([&]() { std::filesystem::remove(parquet_file_name); });
 
-    SlotTypeDescInfoArray slot_infos = {{"zone", TypeDescriptor::create_varchar_type(1048576), true}};
+    SlotTypeDescInfoArray slot_infos = {{"zone", TYPE_VARCHAR_DESC, true}};
     auto ranges = generate_ranges({parquet_file_name}, slot_infos.size(), {});
     auto* desc_tbl = DescTblHelper::generate_desc_tbl(_runtime_state, _obj_pool, {slot_infos, {}});
     auto scanner = create_parquet_scanner("UTC", desc_tbl, {}, ranges);
@@ -1107,7 +1272,7 @@ TEST_F(ParquetScannerTest, test_dictionary_string_parquet_data_with_small_chunk_
                                      {"Center", "Edge", "Middle", "Center", "North"}, &parquet_file_name);
     DeferOp defer([&]() { std::filesystem::remove(parquet_file_name); });
 
-    SlotTypeDescInfoArray slot_infos = {{"zone", TypeDescriptor::create_varchar_type(1048576), true}};
+    SlotTypeDescInfoArray slot_infos = {{"zone", TYPE_VARCHAR_DESC, true}};
     auto ranges = generate_ranges({parquet_file_name}, slot_infos.size(), {});
     auto* desc_tbl = DescTblHelper::generate_desc_tbl(_runtime_state, _obj_pool, {slot_infos, {}});
     auto scanner = create_parquet_scanner("UTC", desc_tbl, {}, ranges, 2);
@@ -1133,11 +1298,7 @@ TEST_F(ParquetScannerTest, test_nested_dictionary_string_parquet) {
     create_nested_dictionary_parquet("nested_dictionary.parquet", {{"a", "b"}, {"c"}}, &parquet_file_name);
     DeferOp defer([&]() { std::filesystem::remove(parquet_file_name); });
 
-    TypeDescriptor type_list(TYPE_ARRAY);
-    type_list.children.emplace_back(TYPE_VARCHAR);
-    type_list.children.back().len = 1048576;
-
-    SlotTypeDescInfoArray slot_infos = {{"nested_dict", type_list, true}};
+    SlotTypeDescInfoArray slot_infos = {{"nested_dict", TYPE_ARRAY_VARCHAR_DESC, true}};
     auto ranges = generate_ranges({parquet_file_name}, slot_infos.size(), {});
     auto* desc_tbl = DescTblHelper::generate_desc_tbl(_runtime_state, _obj_pool, {slot_infos, {}});
     auto scanner = create_parquet_scanner("UTC", desc_tbl, {}, ranges);
@@ -1157,7 +1318,7 @@ TEST_F(ParquetScannerTest, test_struct_dictionary_string_parquet) {
     create_struct_dictionary_parquet("struct_dictionary.parquet", {"a", "b"}, &parquet_file_name);
     DeferOp defer([&]() { std::filesystem::remove(parquet_file_name); });
 
-    auto type_struct = TypeDescriptor::create_struct_type({"name"}, {TypeDescriptor::create_varchar_type(1048576)});
+    auto type_struct = TypeDescriptor::create_struct_type({"name"}, {TYPE_VARCHAR_DESC});
     SlotTypeDescInfoArray slot_infos = {{"struct_dict", type_struct, true}};
     auto ranges = generate_ranges({parquet_file_name}, slot_infos.size(), {});
     auto* desc_tbl = DescTblHelper::generate_desc_tbl(_runtime_state, _obj_pool, {slot_infos, {}});
@@ -1179,8 +1340,7 @@ TEST_F(ParquetScannerTest, test_map_dictionary_string_parquet) {
                                   &parquet_file_name);
     DeferOp defer([&]() { std::filesystem::remove(parquet_file_name); });
 
-    auto type_map = TypeDescriptor::create_map_type(TypeDescriptor::create_varchar_type(1048576),
-                                                    TypeDescriptor::create_varchar_type(1048576));
+    auto type_map = TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TYPE_VARCHAR_DESC);
     SlotTypeDescInfoArray slot_infos = {{"map_dict", type_map, true}};
     auto ranges = generate_ranges({parquet_file_name}, slot_infos.size(), {});
     auto* desc_tbl = DescTblHelper::generate_desc_tbl(_runtime_state, _obj_pool, {slot_infos, {}});
@@ -1309,11 +1469,9 @@ TEST_F(ParquetScannerTest, int96_timestamp_nested_session_timezone_shift) {
     create_nested_int96_parquet("int96_nested.parquet", kMicros, &parquet_file_name);
 
     const SlotTypeDescInfoArray slot_infos{
-            {"col_dt_top", TypeDescriptor::from_logical_type(TYPE_DATETIME), true},
-            {"col_arr_dt", TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_DATETIME)), true},
-            {"col_arr_arr_dt",
-             TypeDescriptor::create_array_type(
-                     TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_DATETIME))),
+            {"col_dt_top", TYPE_DATETIME_DESC, true},
+            {"col_arr_dt", TypeDescriptor::create_array_type(TYPE_DATETIME_DESC), true},
+            {"col_arr_arr_dt", TypeDescriptor::create_array_type(TypeDescriptor::create_array_type(TYPE_DATETIME_DESC)),
              true}};
 
     auto read_first_row = [&](const std::string& timezone) -> ChunkPtr {
@@ -1365,9 +1523,7 @@ TEST_F(ParquetScannerTest, int96_timestamp_mixed_nested_no_over_tagging) {
     create_mixed_int96_int64_struct_parquet("int96_mixed_struct.parquet", kMicros, &parquet_file_name);
     DeferOp defer([&]() { std::filesystem::remove(parquet_file_name); });
 
-    auto type_struct = TypeDescriptor::create_struct_type(
-            {"a", "b"},
-            {TypeDescriptor::from_logical_type(TYPE_DATETIME), TypeDescriptor::from_logical_type(TYPE_DATETIME)});
+    auto type_struct = TypeDescriptor::create_struct_type({"a", "b"}, {TYPE_DATETIME_DESC, TYPE_DATETIME_DESC});
     const SlotTypeDescInfoArray slot_infos{{"s", type_struct, true}};
 
     auto read_first_row = [&](const std::string& timezone) -> std::string {
@@ -1412,8 +1568,7 @@ TEST_F(ParquetScannerTest, int96_timestamp_map_value_session_timezone_shift) {
     create_map_int96_parquet("int96_map.parquet", kMicros, &parquet_file_name);
     DeferOp defer([&]() { std::filesystem::remove(parquet_file_name); });
 
-    auto type_map = TypeDescriptor::create_map_type(TypeDescriptor::create_varchar_type(1048576),
-                                                    TypeDescriptor::from_logical_type(TYPE_DATETIME));
+    auto type_map = TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TYPE_DATETIME_DESC);
     const SlotTypeDescInfoArray slot_infos{{"col_map", type_map, true}};
 
     auto read_first_row = [&](const std::string& timezone) -> std::string {
@@ -1444,74 +1599,56 @@ TEST_F(ParquetScannerTest, int96_timestamp_map_value_session_timezone_shift) {
 
 TEST_F(ParquetScannerTest, get_file_schema) {
     const std::vector<std::pair<std::string, std::vector<std::pair<std::string, TypeDescriptor>>>> test_cases = {
-            {test_exec_dir + "/test_data/parquet_data/int96_timestamp.parquet",
-             {{"col_datetime", TypeDescriptor::from_logical_type(TYPE_DATETIME)}}},
+            {test_exec_dir + "/test_data/parquet_data/int96_timestamp.parquet", {{"col_datetime", TYPE_DATETIME_DESC}}},
             {test_exec_dir + "/test_data/parquet_data/data_json.parquet",
-             {{"col_json_int8", TypeDescriptor::from_logical_type(TYPE_INT)},
-              {"col_json_int16", TypeDescriptor::from_logical_type(TYPE_INT)},
-              {"col_json_int32", TypeDescriptor::from_logical_type(TYPE_INT)},
-              {"col_json_int64", TypeDescriptor::from_logical_type(TYPE_BIGINT)},
-              {"col_json_uint8", TypeDescriptor::from_logical_type(TYPE_SMALLINT)},
-              {"col_json_uint16", TypeDescriptor::from_logical_type(TYPE_INT)},
-              {"col_json_uint32", TypeDescriptor::from_logical_type(TYPE_BIGINT)},
-              {"col_json_uint64", TypeDescriptor::from_logical_type(TYPE_BIGINT)},
-              {"col_json_timestamp", TypeDescriptor::from_logical_type(TYPE_DATETIME)},
-              {"col_json_timestamp_not_normalized", TypeDescriptor::from_logical_type(TYPE_DATETIME)},
-              {"col_json_float32", TypeDescriptor::from_logical_type(TYPE_FLOAT)},
-              {"col_json_float64", TypeDescriptor::from_logical_type(TYPE_DOUBLE)},
-              {"col_json_bool", TypeDescriptor::from_logical_type(TYPE_BOOLEAN)},
-              {"col_json_string", TypeDescriptor::create_varchar_type(1048576)},
-              {"col_json_list", TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_INT))},
-              {"col_json_map", TypeDescriptor::create_map_type(TypeDescriptor::from_logical_type(TYPE_VARCHAR),
-                                                               TypeDescriptor::from_logical_type(TYPE_INT))},
-              {"col_json_map_timestamp",
-               TypeDescriptor::create_map_type(TypeDescriptor::from_logical_type(TYPE_DATETIME),
-                                               TypeDescriptor::from_logical_type(TYPE_INT))},
-              {"col_json_struct",
-               TypeDescriptor::create_struct_type({"s0", "s1"}, {TypeDescriptor::from_logical_type(TYPE_INT),
-                                                                 TypeDescriptor::create_varchar_type(1048576)})},
-              {"col_json_list_list", TypeDescriptor::create_array_type(TypeDescriptor::create_array_type(
-                                             TypeDescriptor::from_logical_type(TYPE_INT)))},
+             {{"col_json_int8", TYPE_INT_DESC},
+              {"col_json_int16", TYPE_INT_DESC},
+              {"col_json_int32", TYPE_INT_DESC},
+              {"col_json_int64", TYPE_BIGINT_DESC},
+              {"col_json_uint8", TYPE_SMALLINT_DESC},
+              {"col_json_uint16", TYPE_INT_DESC},
+              {"col_json_uint32", TYPE_BIGINT_DESC},
+              {"col_json_uint64", TYPE_BIGINT_DESC},
+              {"col_json_timestamp", TYPE_DATETIME_DESC},
+              {"col_json_timestamp_not_normalized", TYPE_DATETIME_DESC},
+              {"col_json_float32", TYPE_FLOAT_DESC},
+              {"col_json_float64", TYPE_DOUBLE_DESC},
+              {"col_json_bool", TYPE_BOOLEAN_DESC},
+              {"col_json_string", TYPE_VARCHAR_DESC},
+              {"col_json_list", TypeDescriptor::create_array_type(TYPE_INT_DESC)},
+              {"col_json_map", TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TYPE_INT_DESC)},
+              {"col_json_map_timestamp", TypeDescriptor::create_map_type(TYPE_DATETIME_DESC, TYPE_INT_DESC)},
+              {"col_json_struct", TypeDescriptor::create_struct_type({"s0", "s1"}, {TYPE_INT_DESC, TYPE_VARCHAR_DESC})},
+              {"col_json_list_list",
+               TypeDescriptor::create_array_type(TypeDescriptor::create_array_type(TYPE_INT_DESC))},
               {"col_json_map_list",
-               TypeDescriptor::create_map_type(
-                       TypeDescriptor::create_varchar_type(1048576),
-                       TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_INT)))},
+               TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TypeDescriptor::create_array_type(TYPE_INT_DESC))},
               {"col_json_list_struct", TypeDescriptor::create_array_type(TypeDescriptor::create_struct_type(
-                                               {"s0", "s1"}, {TypeDescriptor::from_logical_type(TYPE_INT),
-                                                              TypeDescriptor::create_varchar_type(1048576)}))},
+                                               {"s0", "s1"}, {TYPE_INT_DESC, TYPE_VARCHAR_DESC}))},
               {"col_json_struct_struct",
                TypeDescriptor::create_struct_type(
-                       {"s0", "s1"},
-                       {TypeDescriptor::from_logical_type(TYPE_INT),
-                        TypeDescriptor::create_struct_type({"s2"}, {TypeDescriptor::from_logical_type(TYPE_INT)})})},
+                       {"s0", "s1"}, {TYPE_INT_DESC, TypeDescriptor::create_struct_type({"s2"}, {TYPE_INT_DESC})})},
               {"col_json_struct_string",
-               TypeDescriptor::create_struct_type({"s0", "s1"}, {TypeDescriptor::from_logical_type(TYPE_INT),
-                                                                 TypeDescriptor::create_varchar_type(1048576)})},
-              {"col_json_json_string", TypeDescriptor::create_varchar_type(1048576)}}},
+               TypeDescriptor::create_struct_type({"s0", "s1"}, {TYPE_INT_DESC, TYPE_VARCHAR_DESC})},
+              {"col_json_json_string", TYPE_VARCHAR_DESC}}},
             {test_exec_dir + "/test_data/parquet_data/decimal.parquet",
              {{"col_decimal32", TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 9, 2)},
               {"col_decimal64", TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL64, 18, 2)},
               {"col_decimal128_byte_array", TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 38, 2)},
               {"col_decimal128_fixed_len_byte_array", TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 38, 2)}}},
             {test_exec_dir + "/test_data/parquet_data/nested.parquet",
-             {{"col_int", TypeDescriptor::from_logical_type(TYPE_BIGINT)},
-              {"col_list_int", TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_INT))},
-              {"col_list_list_int", TypeDescriptor::create_array_type(TypeDescriptor::create_array_type(
-                                            TypeDescriptor::from_logical_type(TYPE_INT)))},
-              {"col_map_string_int", TypeDescriptor::create_map_type(TypeDescriptor::create_varchar_type(1048576),
-                                                                     TypeDescriptor::from_logical_type(TYPE_INT))},
+             {{"col_int", TYPE_BIGINT_DESC},
+              {"col_list_int", TypeDescriptor::create_array_type(TYPE_INT_DESC)},
+              {"col_list_list_int",
+               TypeDescriptor::create_array_type(TypeDescriptor::create_array_type(TYPE_INT_DESC))},
+              {"col_map_string_int", TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TYPE_INT_DESC)},
               {"col_map_map_string_int",
-               TypeDescriptor::create_map_type(
-                       TypeDescriptor::create_varchar_type(1048576),
-                       TypeDescriptor::create_map_type(TypeDescriptor::create_varchar_type(1048576),
-                                                       TypeDescriptor::from_logical_type(TYPE_INT)))},
+               TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC,
+                                               TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TYPE_INT_DESC))},
               {"col_list_map_string_int",
-               TypeDescriptor::create_array_type(TypeDescriptor::create_map_type(
-                       TypeDescriptor::create_varchar_type(1048576), TypeDescriptor::from_logical_type(TYPE_INT)))},
+               TypeDescriptor::create_array_type(TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TYPE_INT_DESC))},
               {"col_map_string_list_int",
-               TypeDescriptor::create_map_type(
-                       TypeDescriptor::create_varchar_type(1048576),
-                       TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_INT)))}}}};
+               TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TypeDescriptor::create_array_type(TYPE_INT_DESC))}}}};
 
     for (const auto& test_case : test_cases) {
         check_schema(test_case.first, test_case.second);
@@ -1607,8 +1744,7 @@ TEST_F(ParquetScannerTest, test_missing_column_with_small_chunk_size) {
                                      {"Center", "Edge", "Middle", "Center", "North"}, &parquet_file_name);
     DeferOp defer([&]() { std::filesystem::remove(parquet_file_name); });
 
-    SlotTypeDescInfoArray slot_infos = {{"zone", TypeDescriptor::create_varchar_type(1048576), true},
-                                        {"missing_col", TypeDescriptor::from_logical_type(TYPE_INT), true}};
+    SlotTypeDescInfoArray slot_infos = {{"zone", TYPE_VARCHAR_DESC, true}, {"missing_col", TYPE_INT_DESC, true}};
     auto ranges = generate_ranges({parquet_file_name}, slot_infos.size(), {});
     auto* desc_tbl = DescTblHelper::generate_desc_tbl(_runtime_state, _obj_pool, {slot_infos, {}});
     auto scanner = create_parquet_scanner("UTC", desc_tbl, {}, ranges, 2, /*flexible_column_mapping=*/true);

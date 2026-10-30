@@ -33,6 +33,7 @@
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
+#include "testutil/column_test_helper.h"
 
 namespace starrocks::pipeline {
 
@@ -223,9 +224,7 @@ TEST_F(EnforceUniqueRowLocatorOperatorTest, KeysResolvedBySlotIdNotPosition) {
     data_col->append(100);
     data_col->append(200);
     chunk->append_column(std::move(data_col), /*slot_id=*/3);
-    auto file_col = BinaryColumn::create();
-    file_col->append("file1.parquet");
-    file_col->append("file1.parquet");
+    auto file_col = ColumnTestHelper::build_column<Slice>({"file1.parquet", "file1.parquet"});
     chunk->append_column(std::move(file_col), /*slot_id=*/7);
     auto pos_col = FixedLengthColumn<int64_t>::create();
     pos_col->append(0);
@@ -293,11 +292,9 @@ TEST_F(EnforceUniqueRowLocatorOperatorTest, RowPosColumnTypeMismatchRejected) {
 
     // slot 1 (_pos) is wrongly a binary column instead of int64.
     auto chunk = std::make_shared<Chunk>();
-    auto file_col = BinaryColumn::create();
-    file_col->append("file1.parquet");
+    auto file_col = ColumnTestHelper::build_column<Slice>({"file1.parquet"});
     chunk->append_column(std::move(file_col), /*slot_id=*/0);
-    auto wrong_pos = BinaryColumn::create();
-    wrong_pos->append("not-an-int");
+    auto wrong_pos = ColumnTestHelper::build_column<Slice>({"not-an-int"});
     chunk->append_column(std::move(wrong_pos), /*slot_id=*/1);
 
     auto st = op->push_chunk(&_state, chunk);

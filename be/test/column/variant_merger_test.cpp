@@ -26,6 +26,7 @@
 #include "column/variant_converter.h"
 #include "column/variant_encoder.h"
 #include "gutil/casts.h"
+#include "testutil/type_test_helper.h"
 #include "types/decimalv2_value.h"
 #include "types/timestamp_value.h"
 
@@ -243,8 +244,7 @@ PARALLEL_TEST(VariantColumnMergerTest, choose_common_type_numeric_and_decimal_ca
     ASSERT_TRUE(decimal.ok());
     ASSERT_EQ(TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL64, 18, 2), decimal.value());
 
-    auto array_conflict = VariantColumnMerger::choose_common_type(
-            TypeDescriptor::create_array_type(TypeDescriptor(TYPE_BIGINT)), TypeDescriptor(TYPE_BIGINT));
+    auto array_conflict = VariantColumnMerger::choose_common_type(TYPE_ARRAY_BIGINT_DESC, TypeDescriptor(TYPE_BIGINT));
     ASSERT_TRUE(array_conflict.ok());
     ASSERT_EQ(TypeDescriptor(TYPE_VARIANT), array_conflict.value());
 }
@@ -256,11 +256,7 @@ PARALLEL_TEST(VariantColumnMergerTest, cast_variant_typed_column_to_bigint_prese
     ASSERT_TRUE(casted.ok()) << casted.status().to_string();
 
     const auto* nullable = down_cast<const NullableColumn*>(casted.value().get());
-    ASSERT_EQ(4, nullable->size());
-    EXPECT_EQ(1, nullable->get(0).get_int64());
-    EXPECT_TRUE(nullable->get(1).is_null());
-    EXPECT_EQ(3, nullable->get(2).get_int64());
-    EXPECT_TRUE(nullable->get(3).is_null());
+    ASSERT_EQ("[1, NULL, 3, NULL]", nullable->debug_string());
 }
 
 PARALLEL_TEST(VariantColumnMergerTest, cast_const_variant_typed_column_uses_outer_constness) {
@@ -271,10 +267,7 @@ PARALLEL_TEST(VariantColumnMergerTest, cast_const_variant_typed_column_uses_oute
     ASSERT_TRUE(casted.ok()) << casted.status().to_string();
 
     const Column* result = casted.value().get();
-    ASSERT_EQ(3, result->size());
-    EXPECT_EQ(1, result->get(0).get_int64());
-    EXPECT_EQ(1, result->get(1).get_int64());
-    EXPECT_EQ(1, result->get(2).get_int64());
+    ASSERT_EQ("[1, 1, 1]", result->debug_string());
 }
 
 PARALLEL_TEST(VariantColumnMergerTest, cast_variant_typed_column_to_varchar_formats_rows) {
@@ -284,10 +277,7 @@ PARALLEL_TEST(VariantColumnMergerTest, cast_variant_typed_column_to_varchar_form
     ASSERT_TRUE(casted.ok()) << casted.status().to_string();
 
     const auto* nullable = down_cast<const NullableColumn*>(casted.value().get());
-    ASSERT_EQ(3, nullable->size());
-    EXPECT_EQ("dept_0", nullable->get(0).get_slice().to_string());
-    EXPECT_EQ("100", nullable->get(1).get_slice().to_string());
-    EXPECT_TRUE(nullable->get(2).is_null());
+    ASSERT_EQ("['dept_0', '100', NULL]", nullable->debug_string());
 }
 
 PARALLEL_TEST(VariantColumnMergerTest, cast_variant_typed_column_to_datetime_requires_explicit_timezone_context) {
@@ -444,22 +434,18 @@ PARALLEL_TEST(VariantColumnMergerTest, merge_shredded_array_conflict_hoist_varia
     auto src0_metadata = BinaryColumn::create();
     auto src0_remain = BinaryColumn::create();
     append_primitive_int8_row(src0_metadata.get(), src0_remain.get(), 1);
-    TypeDescriptor src0_array_type(TYPE_ARRAY);
-    src0_array_type.children.emplace_back(TypeDescriptor(TYPE_BIGINT));
     MutableColumns src0_typed;
     src0_typed.emplace_back(build_nullable_array_int64_column({{10, 20}}, {0}));
-    src0->set_shredded_columns({"a"}, {src0_array_type}, std::move(src0_typed), std::move(src0_metadata),
+    src0->set_shredded_columns({"a"}, {TYPE_ARRAY_BIGINT_DESC}, std::move(src0_typed), std::move(src0_metadata),
                                std::move(src0_remain));
 
     auto src1 = VariantColumn::create();
     auto src1_metadata = BinaryColumn::create();
     auto src1_remain = BinaryColumn::create();
     append_primitive_int8_row(src1_metadata.get(), src1_remain.get(), 2);
-    TypeDescriptor src1_array_type(TYPE_ARRAY);
-    src1_array_type.children.emplace_back(TypeDescriptor(TYPE_DOUBLE));
     MutableColumns src1_typed;
     src1_typed.emplace_back(build_nullable_array_double_column({{30.5}}, {0}));
-    src1->set_shredded_columns({"a"}, {src1_array_type}, std::move(src1_typed), std::move(src1_metadata),
+    src1->set_shredded_columns({"a"}, {TYPE_ARRAY_DOUBLE_DESC}, std::move(src1_typed), std::move(src1_metadata),
                                std::move(src1_remain));
 
     Columns inputs{src0, src1};
@@ -478,11 +464,9 @@ PARALLEL_TEST(VariantColumnMergerTest, merge_shredded_array_nonarray_conflict_ho
     auto src0_metadata = BinaryColumn::create();
     auto src0_remain = BinaryColumn::create();
     append_primitive_int8_row(src0_metadata.get(), src0_remain.get(), 1);
-    TypeDescriptor src0_array_type(TYPE_ARRAY);
-    src0_array_type.children.emplace_back(TypeDescriptor(TYPE_BIGINT));
     MutableColumns src0_typed;
     src0_typed.emplace_back(build_nullable_array_int64_column({{10, 20}}, {0}));
-    src0->set_shredded_columns({"a"}, {src0_array_type}, std::move(src0_typed), std::move(src0_metadata),
+    src0->set_shredded_columns({"a"}, {TYPE_ARRAY_BIGINT_DESC}, std::move(src0_typed), std::move(src0_metadata),
                                std::move(src0_remain));
 
     auto src1 = VariantColumn::create();
@@ -865,6 +849,58 @@ PARALLEL_TEST(VariantColumnMergerTest, cast_typed_column_string_like_is_noop_clo
             VariantColumnMerger::cast_typed_column(*src, TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_CHAR));
     ASSERT_TRUE(to_char.ok()) << to_char.status().to_string();
     ASSERT_EQ(3, to_char.value()->size());
+}
+
+// One base row whose remain is the JSON object `json`, with the given typed path.
+static MutableColumnPtr build_one_row_variant_with_typed_path(const std::string& json, const std::string& path,
+                                                              const TypeDescriptor& type, MutableColumnPtr typed) {
+    auto encoded = VariantEncoder::encode_json_text_to_variant(json);
+    DCHECK(encoded.ok()) << encoded.status().to_string();
+    auto metadata = BinaryColumn::create();
+    auto remain = BinaryColumn::create();
+    auto metadata_raw = encoded->get_metadata().raw();
+    auto value_raw = encoded->get_value().raw();
+    metadata->append(Slice(metadata_raw.data(), metadata_raw.size()));
+    remain->append(Slice(value_raw.data(), value_raw.size()));
+    MutableColumns typed_columns;
+    typed_columns.emplace_back(std::move(typed));
+    auto col = VariantColumn::create();
+    col->set_shredded_columns({path}, {type}, std::move(typed_columns), std::move(metadata), std::move(remain));
+    return col;
+}
+
+// A path read as ARRAY<VARIANT> (shredded array) in one chunk and as VARIANT in another merges into VARIANT
+// without losing the array elements, which are a VariantColumn.
+PARALLEL_TEST(VariantColumnMergerTest, merge_array_of_variant_path_with_variant_path) {
+    const TypeDescriptor array_of_variant = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_VARIANT));
+    auto elements = NullableColumn::create(VariantColumn::create(), NullColumn::create());
+    for (const char* element_json : {R"({"k":1})", R"({"k":2})"}) {
+        auto element = VariantEncoder::encode_json_text_to_variant(element_json);
+        ASSERT_TRUE(element.ok());
+        elements->append_datum(Datum(&element.value()));
+    }
+    auto offsets = UInt32Column::create();
+    offsets->append(0);
+    offsets->append(2);
+    auto array_typed = NullableColumn::create(ArrayColumn::create(std::move(elements), std::move(offsets)),
+                                              NullColumn::create(1, 0));
+    auto src0 = build_one_row_variant_with_typed_path(R"({"x":1})", "a", array_of_variant, std::move(array_typed));
+
+    auto variant_typed = NullableColumn::create(VariantColumn::create(), NullColumn::create());
+    auto value = VariantEncoder::encode_json_text_to_variant("[3]");
+    ASSERT_TRUE(value.ok());
+    variant_typed->append_datum(Datum(&value.value()));
+    auto src1 = build_one_row_variant_with_typed_path(R"({"x":2})", "a", TypeDescriptor(TYPE_VARIANT),
+                                                      std::move(variant_typed));
+
+    Columns inputs{std::move(src0), std::move(src1)};
+    auto merged_status = VariantColumnMerger::merge(inputs);
+    ASSERT_TRUE(merged_status.ok()) << merged_status.status().to_string();
+    auto* merged = down_cast<VariantColumn*>(merged_status.value().get());
+    ASSERT_EQ(2, merged->size());
+    EXPECT_EQ(TYPE_VARIANT, merged->shredded_types()[merged->find_shredded_path("a")].type);
+    assert_variant_row_json(merged, 0, R"({"a":[{"k":1},{"k":2}],"x":1})");
+    assert_variant_row_json(merged, 1, R"({"a":[3],"x":2})");
 }
 
 } // namespace starrocks

@@ -16,10 +16,13 @@ package com.starrocks.sql.plan;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Maps;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.common.util.ProfilingExecPlan;
+import com.starrocks.context.ai.AIProvider;
 import com.starrocks.planner.DescriptorTable;
 import com.starrocks.planner.ExecGroup;
 import com.starrocks.planner.HashJoinNode;
@@ -28,13 +31,15 @@ import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.ScanNode;
+import com.starrocks.planner.SlotId;
 import com.starrocks.plugin.AuditEvent;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.Explain;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.common.AIModelConfigs;
-import com.starrocks.sql.common.AIModelConfigs.SystemChatConfig;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
@@ -89,8 +94,13 @@ public class ExecPlan {
     private long useBaseline = -1;
 
     private Set<Long> duplicatedLakeScanTableIds;
-    // Captured lazily only for plans containing an AIProject.
-    private SystemChatConfig systemChatConfig;
+
+    // A column-subset INSERT into a primary key table that this plan runs as a plain insert (missing
+    // columns filled with defaults, no partial update) because no transaction had ever committed to
+    // its target partitions when it was planned. The commit re-checks that assumption; see
+    // InsertTxnCommitAttachment. Lives on the plan, not the statement: the planner may re-analyze and
+    // re-plan the same InsertStmt, and the flag must describe this plan only.
+    private boolean plainInsertOnEmptyPartitions = false;
 
     @VisibleForTesting
     public ExecPlan() {
@@ -121,6 +131,14 @@ public class ExecPlan {
         this.isShortCircuit = false;
     }
 
+    public void setPlainInsertOnEmptyPartitions(boolean plainInsertOnEmptyPartitions) {
+        this.plainInsertOnEmptyPartitions = plainInsertOnEmptyPartitions;
+    }
+
+    public boolean isPlainInsertOnEmptyPartitions() {
+        return plainInsertOnEmptyPartitions;
+    }
+
     public ConnectContext getConnectContext() {
         return connectContext;
     }
@@ -129,12 +147,28 @@ public class ExecPlan {
         return scanNodes;
     }
 
-    SystemChatConfig getOrCreateSystemChatConfig() {
-        if (systemChatConfig == null) {
-            systemChatConfig = AIModelConfigs.systemChatSnapshot(
-                    AIModelConfigs.DefaultModelRequirement.OPTIONAL);
+    // Bind only physical AIProject calls. Rebuilt plans independently capture current metadata.
+    Map<String, AIProvider> bindAIProviders(Map<SlotId, Expr> projectMap) {
+        Map<String, AIProvider> usedConfigs = new HashMap<>();
+        for (Map.Entry<SlotId, Expr> entry : projectMap.entrySet()) {
+            if (!(entry.getValue() instanceof FunctionCallExpr call)
+                    || call.getFn() == null || !call.getFn().isAI()) {
+                // ignore none AI functions
+                continue;
+            }
+            AIProvider provider = AIModelConfigs.resolveProvider(connectContext.getGlobalStateMgr().getAIProviderMgr(), call);
+
+            try {
+                Authorizer.checkAIProviderAction(connectContext, provider, PrivilegeType.USAGE);
+            } catch (AccessDeniedException e) {
+                AccessDeniedException.reportAccessDenied(null, connectContext.getCurrentUserIdentity(),
+                        connectContext.getCurrentRoleIds(), PrivilegeType.USAGE.name(), "AI PROVIDER", provider.getName());
+            }
+            AIModelConfigs.validateProvider(provider);
+            usedConfigs.put(provider.getId(), new AIProvider(provider));
+            entry.setValue(call.withAIProviderId(provider.getId()));
         }
-        return systemChatConfig;
+        return Map.copyOf(usedConfigs);
     }
 
     // Lake (cloud-native) table ids scanned by >=2 scan operators in this plan (self-join / multi-scan of one

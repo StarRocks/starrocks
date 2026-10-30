@@ -140,7 +140,7 @@ StarRocks 依赖于向量化、pipeline 友好的哈希 Join 核心，该核心�
 
 **过大的 Shuffle 或 Broadcast** – 如果 `NetworkTime` 超过 30%，且 `BytesSent` 很大，则说明查询传输的数据过多。重新评估 JOIN 策略并减少 Shuffle/Broadcast 的数据量（例如，强制执行 Shuffle 而不是 Broadcast，或者预先过滤上游数据）。
 
-**接收端积压** – 如果接收端的 `WaitTime` 很高，并且发送端队列始终处于满负荷状态，则表明接收端无法跟上。增加接收端线程池 (`brpc_num_threads`)，并确认网卡带宽和 QoS 设置。
+**接收端积压** – 如果发送端的 `BufferFullTime` 很高，并且发送端队列始终处于满负荷状态，则表明接收端无法跟上。增加接收端线程池 (`brpc_num_threads`)，并确认网卡带宽和 QoS 设置。
 
 **启用 Exchange 压缩** – 当网络带宽成为瓶颈时，可以压缩 Exchange 的负载。设置 `SET transmission_compression_type = 'zstd';`，并可以选择增加 `SET transmission_encode_level = 7;` 以启用自适应列编码。预计 CPU 使用率会更高，以换取网络传输字节数的减少。
 

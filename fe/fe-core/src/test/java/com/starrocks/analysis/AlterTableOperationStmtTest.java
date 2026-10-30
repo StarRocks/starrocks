@@ -322,6 +322,15 @@ public class AlterTableOperationStmtTest {
     }
 
     @Test
+    public void testAddEqualityDeleteFilesRejectsWhere() {
+        String sql = "ALTER TABLE iceberg_catalog.iceberg_db.test_table EXECUTE add_equality_delete_files(" +
+                "location = 's3://bucket/deletes', file_format = 'parquet', equality_columns = 'k1')";
+        AnalyzeTestUtil.analyzeSuccess(sql);
+        AnalyzeTestUtil.analyzeFail(sql + " WHERE partition_date > '2024-01-01'",
+                "WHERE is not supported for add_equality_delete_files");
+    }
+
+    @Test
     public void testInvalidProcedureName() {
         String sql = "ALTER TABLE iceberg_catalog.iceberg_db.test_table EXECUTE invalid_procedure()";
         AnalyzeTestUtil.analyzeFail(sql);

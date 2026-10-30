@@ -39,6 +39,17 @@ public:
 
     static int deserialize(ObjectPool* pool, RuntimeFilter** rf, const uint8_t* data, size_t size);
 
+    // Size of the header of a serialized filter: | version | rf_type | logical_type |.
+    static constexpr size_t HEADER_SIZE =
+            sizeof(uint8_t) + sizeof(RuntimeFilterSerializeType) + sizeof(TPrimitiveType::type);
+    // Serialize into `pass_all_data` a filter that passes every row, of the same type as `data`, a serialized
+    // membership filter of which only the header is read. Return false if there is no such filter.
+    static bool to_pass_all(const std::string& data, std::string* pass_all_data);
+    // Replace `data`, a serialized membership filter, with a filter of the same type that passes every row and is not
+    // bigger, e.g. one that already passes every row. Only the header of `data` is read. Return false, and leave
+    // `data` as is, if there is no such filter.
+    static bool shrink_to_pass_all(std::string* data);
+
     static size_t skew_max_size(const ColumnPtr& column);
     static StatusOr<size_t> skew_serialize(const ColumnPtr& column, bool eq_null, uint8_t* data);
     static StatusOr<int> skew_deserialize(ObjectPool* pool, RuntimeFilterSkewMaterial** material, const uint8_t* data,

@@ -95,6 +95,7 @@ public class TabletPreSplitCoordinatorTest {
         connectContext.setThreadLocalInfo();
 
         database = mock(Database.class);
+        when(database.getId()).thenReturn(100L);
         baseIndex = mock(MaterializedIndex.class);
         when(baseIndex.getMetaId()).thenReturn(BASE_INDEX_META_ID);
         when(baseIndex.getTablets()).thenReturn(List.of(mock(Tablet.class)));
@@ -108,6 +109,7 @@ public class TabletPreSplitCoordinatorTest {
                 .thenReturn(List.of(baseIndex));
 
         table = mock(OlapTable.class);
+        when(table.getId()).thenReturn(101L);
         when(table.isRangeDistribution()).thenReturn(true);
         when(table.getState()).thenReturn(OlapTable.OlapTableState.NORMAL);
         when(table.getVisibleIndexMetas()).thenReturn(List.of(mock(MaterializedIndexMeta.class)));
@@ -382,6 +384,15 @@ public class TabletPreSplitCoordinatorTest {
     @Test
     public void testPartitionNotEmptySkipped() {
         when(baseIndex.getRowCount()).thenReturn(42L);
+
+        assertSkipped(invokeMaybeAct(), SkipReason.PARTITION_NOT_EMPTY);
+    }
+
+    @Test
+    public void testPartitionWithCommittedLoadButStaleRowCountSkipped() {
+        // The row count still reads 0 until the next TabletStatMgr sweep, but the visible version
+        // shows a load already committed rows to this partition.
+        when(partition.getVisibleVersion()).thenReturn(PhysicalPartition.PARTITION_INIT_VERSION + 1);
 
         assertSkipped(invokeMaybeAct(), SkipReason.PARTITION_NOT_EMPTY);
     }

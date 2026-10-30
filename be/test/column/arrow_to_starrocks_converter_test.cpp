@@ -24,6 +24,7 @@
 #include <base/utility/guard.h>
 #include <gtest/gtest.h>
 
+#include <random>
 #include <type_traits>
 #include <utility>
 
@@ -31,9 +32,12 @@
 #include "arrow/type.h"
 #include "arrow/type_fwd.h"
 #include "arrow/type_traits.h"
+#include "base/time/timezone_utils.h"
 #include "column/column_helper.h"
+#include "column/map_column.h"
 #include "column/variant_column.h"
 #include "column/vectorized_fwd.h"
+#include "testutil/type_test_helper.h"
 #include "types/datetime_value.h"
 #include "types/type_descriptor.h"
 #include "types/variant_value.h"
@@ -267,14 +271,12 @@ TEST_F(ArrowConverterTest, BuildArrowColumnConvertPlanUnwrapsDictionary) {
 
 TEST_F(ArrowConverterTest, BuildArrowColumnConvertPlanArray) {
     auto arrow_type = arrow::list(arrow::int32());
-    TypeDescriptor type_desc(TYPE_ARRAY);
-    type_desc.children.emplace_back(TYPE_INT);
     TypeDescriptor raw_type_desc;
     ConvertFuncTree conv_func;
     bool need_cast = false;
 
-    ASSERT_STATUS_OK(build_arrow_column_convert_plan(arrow_type.get(), &type_desc, true, &raw_type_desc, &conv_func,
-                                                     need_cast, false));
+    ASSERT_STATUS_OK(build_arrow_column_convert_plan(arrow_type.get(), &TYPE_ARRAY_INT_DESC, true, &raw_type_desc,
+                                                     &conv_func, need_cast, false));
     ASSERT_FALSE(need_cast);
     ASSERT_EQ(TYPE_ARRAY, raw_type_desc.type);
     ASSERT_EQ(1, raw_type_desc.children.size());
@@ -286,7 +288,7 @@ TEST_F(ArrowConverterTest, BuildArrowColumnConvertPlanMap) {
     auto arrow_type = arrow::map(arrow::int32(), arrow::utf8());
     TypeDescriptor type_desc(TYPE_MAP);
     type_desc.children.emplace_back(TYPE_INT);
-    type_desc.children.emplace_back(TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH));
+    type_desc.children.emplace_back(TYPE_VARCHAR_DESC);
     TypeDescriptor raw_type_desc;
     ConvertFuncTree conv_func;
     bool need_cast = false;
@@ -305,7 +307,7 @@ TEST_F(ArrowConverterTest, BuildArrowColumnConvertPlanStruct) {
     auto arrow_type = arrow::struct_({arrow::field("c0", arrow::int32()), arrow::field("c1", arrow::utf8())});
     TypeDescriptor type_desc(TYPE_STRUCT);
     type_desc.children.emplace_back(TYPE_INT);
-    type_desc.children.emplace_back(TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH));
+    type_desc.children.emplace_back(TYPE_VARCHAR_DESC);
     type_desc.field_names = {"c0", "c1"};
     TypeDescriptor raw_type_desc;
     ConvertFuncTree conv_func;
@@ -323,16 +325,67 @@ TEST_F(ArrowConverterTest, BuildArrowColumnConvertPlanStruct) {
     ASSERT_EQ(2, conv_func.children.size());
 }
 
+TEST_F(ArrowConverterTest, BuildArrowColumnConvertPlanPrunedStruct) {
+    auto arrow_type = arrow::struct_({arrow::field("unused", arrow::utf8()), arrow::field("score", arrow::int32())});
+    auto array = arrow::ArrayFromJSON(arrow_type, R"([{"unused":"abc","score":7},null,{"score":null}])");
+    TypeDescriptor type(TYPE_STRUCT);
+    type.field_names = {"score"};
+    type.children.emplace_back(TYPE_INT);
+    TypeDescriptor raw_type;
+    ConvertFuncTree plan;
+    bool need_cast = false;
+    ASSERT_STATUS_OK(build_arrow_column_convert_plan(arrow_type.get(), &type, true, &raw_type, &plan, need_cast, true));
+    ASSERT_FALSE(need_cast);
+    auto column = create_arrow_column_convert_dest(type, raw_type, need_cast, true);
+    Filter filter(3, 1);
+    ASSERT_STATUS_OK(convert_arrow_array_to_column(&plan, 3, array.get(), column.get(), 0, 0, &filter, nullptr));
+    ASSERT_EQ("{score:7}", column->debug_item(0));
+    ASSERT_TRUE(column->is_null(1));
+    ASSERT_EQ("{score:NULL}", column->debug_item(2));
+}
+
+TEST_F(ArrowConverterTest, BuildArrowColumnConvertPlanMissingComplexStructChildren) {
+    TypeDescriptor map_type(TYPE_MAP);
+    map_type.children = {TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_INT)};
+    TypeDescriptor struct_type(TYPE_STRUCT);
+    struct_type.field_names = {"value"};
+    struct_type.children.emplace_back(TYPE_INT);
+    std::vector<std::shared_ptr<arrow::DataType>> arrow_children = {
+            arrow::list(arrow::int32()), arrow::map(arrow::utf8(), arrow::int32()),
+            arrow::struct_({arrow::field("value", arrow::int32())})};
+    std::vector<TypeDescriptor> children = {TYPE_ARRAY_INT_DESC, map_type, struct_type};
+    for (size_t i = 0; i < children.size(); ++i) {
+        SCOPED_TRACE(children[i].debug_string());
+        auto arrow_type =
+                arrow::struct_({arrow::field("legacy", arrow_children[i]), arrow::field("keep", arrow::int32())});
+        auto array = arrow::ArrayFromJSON(arrow_type, R"([{"keep":7},null,{"keep":9}])");
+        TypeDescriptor type(TYPE_STRUCT);
+        type.field_names = {"new", "keep"};
+        type.children = {children[i], TypeDescriptor(TYPE_INT)};
+        TypeDescriptor raw_type;
+        ConvertFuncTree plan;
+        bool need_cast = false;
+        ASSERT_STATUS_OK(
+                build_arrow_column_convert_plan(arrow_type.get(), &type, true, &raw_type, &plan, need_cast, true));
+        ASSERT_FALSE(need_cast);
+        ASSERT_EQ(type.children[0], raw_type.children[0]);
+        auto column = create_arrow_column_convert_dest(type, raw_type, need_cast, true);
+        Filter filter(3, 1);
+        ASSERT_STATUS_OK(convert_arrow_array_to_column(&plan, 3, array.get(), column.get(), 0, 0, &filter, nullptr));
+        ASSERT_EQ("{new:NULL,keep:7}", column->debug_item(0));
+        ASSERT_TRUE(column->is_null(1));
+        ASSERT_EQ("{new:NULL,keep:9}", column->debug_item(2));
+    }
+}
+
 TEST_F(ArrowConverterTest, BuildArrowColumnConvertPlanRejectsInvalidNestedType) {
     auto arrow_type = arrow::int32();
-    TypeDescriptor type_desc(TYPE_ARRAY);
-    type_desc.children.emplace_back(TYPE_INT);
     TypeDescriptor raw_type_desc;
     ConvertFuncTree conv_func;
     bool need_cast = false;
 
-    auto st = build_arrow_column_convert_plan(arrow_type.get(), &type_desc, true, &raw_type_desc, &conv_func, need_cast,
-                                              false);
+    auto st = build_arrow_column_convert_plan(arrow_type.get(), &TYPE_ARRAY_INT_DESC, true, &raw_type_desc, &conv_func,
+                                              need_cast, false);
     ASSERT_FALSE(st.ok());
     ASSERT_NE(std::string::npos, st.message().find("does not match"));
 }
@@ -1350,6 +1403,81 @@ PARALLEL_TEST(ArrowConverterTest, test_timestamp_to_datetime) {
     }
 }
 
+// Timestamps with a time zone convert to DATETIME / DATE with the zone's offset at each instant, matching the cctz
+// conversion row by row, for every unit, nullable or not, across DST changes and in any order.
+PARALLEL_TEST(ArrowConverterTest, test_timestamp_dst_zone_matches_cctz) {
+    std::mt19937_64 rng(17);
+    std::vector<int64_t> seconds = {0, -1, 1711846800 - 1, 1711846800, 1729990800 - 1, 1729990800};
+    for (int i = 0; i < 2000; i++) {
+        seconds.push_back(static_cast<int64_t>(rng() % 4000000000ULL) - 1000000000LL);
+    }
+    struct Unit {
+        arrow::TimeUnit::type unit;
+        int64_t per_second;
+    };
+    for (const std::string zone : {"America/Los_Angeles", "Europe/London", "Asia/Shanghai"}) {
+        cctz::time_zone ctz;
+        ASSERT_TRUE(TimezoneUtils::find_cctz_time_zone(zone, ctz));
+        for (Unit u : {Unit{arrow::TimeUnit::SECOND, 1}, Unit{arrow::TimeUnit::MILLI, 1000},
+                       Unit{arrow::TimeUnit::MICRO, 1000000}, Unit{arrow::TimeUnit::NANO, 1000000000}}) {
+            auto type = std::make_shared<arrow::TimestampType>(u.unit, zone);
+            for (bool nullable : {false, true}) {
+                SCOPED_TRACE(fmt::format("zone={} unit={} nullable={}", zone, u.per_second, nullable));
+                arrow::TimestampBuilder builder(type, arrow::default_memory_pool());
+                std::vector<int64_t> values;
+                for (size_t i = 0; i < seconds.size(); i++) {
+                    const int64_t sub = u.per_second > 1 ? static_cast<int64_t>(rng() % u.per_second) : 0;
+                    values.push_back(seconds[i] * u.per_second + (seconds[i] < 0 ? -sub : sub));
+                    if (nullable && i % 3 == 1) {
+                        ASSERT_TRUE(builder.AppendNull().ok());
+                    } else {
+                        ASSERT_TRUE(builder.Append(values.back()).ok());
+                    }
+                }
+                std::shared_ptr<arrow::Array> array;
+                ASSERT_TRUE(builder.Finish(&array).ok());
+
+                auto check = [&]<LogicalType LT>() {
+                    using ColumnType = RunTimeColumnType<LT>;
+                    auto conv_func = get_arrow_converter(ArrowTypeId::TIMESTAMP, LT, nullable, false);
+                    ASSERT_TRUE(conv_func != nullptr);
+                    auto column = ColumnType::create();
+                    NullColumn::MutablePtr null_column = NullColumn::create();
+                    uint8_t* null_data = nullptr;
+                    if (nullable) {
+                        fill_null_column(array.get(), 0, array->length(), null_column.get(), 0);
+                        null_data = null_column->get_data().data();
+                    }
+                    Filter filter(array->length(), 1);
+                    ASSERT_STATUS_OK(conv_func(array.get(), 0, array->length(), column.get(), 0, null_data, &filter,
+                                               nullptr, nullptr));
+                    ASSERT_EQ(array->length(), column->size());
+                    for (size_t i = 0; i < values.size(); i++) {
+                        if (nullable && i % 3 == 1) {
+                            ASSERT_EQ(DATUM_NULL, null_data[i]);
+                            continue;
+                        }
+                        DateTimeValue dtv;
+                        ASSERT_TRUE(dtv.from_unixtime(values[i] / u.per_second,
+                                                      values[i] % u.per_second * 1000000 / u.per_second, ctz));
+                        if constexpr (lt_is_date<LT>) {
+                            ASSERT_EQ(DateValue::create(dtv.year(), dtv.month(), dtv.day()), column->get_data()[i])
+                                    << "value " << values[i];
+                        } else {
+                            TimestampValue want;
+                            want.from_timestamp(dtv.year(), dtv.month(), dtv.day(), dtv.hour(), dtv.minute(),
+                                                dtv.second(), dtv.microsecond());
+                            ASSERT_EQ(want, column->get_data()[i]) << "value " << values[i];
+                        }
+                    }
+                };
+                check.template operator()<TYPE_DATETIME>();
+                check.template operator()<TYPE_DATE>();
+            }
+        }
+    }
+}
+
 PARALLEL_TEST(ArrowConverterTest, test_timestamp_convert_uses_context_timezone) {
     auto type = std::make_shared<arrow::TimestampType>(arrow::TimeUnit::SECOND, "UTC");
     size_t counter = 0;
@@ -1816,15 +1944,12 @@ static std::shared_ptr<arrow::Array> create_list_array(int64_t num_elements, ssi
 }
 
 PARALLEL_TEST(ArrowConverterTest, test_convert_list_array) {
-    TypeDescriptor array_type(TYPE_ARRAY);
-    array_type.children.emplace_back(LogicalType::TYPE_INT);
-
     ConvertFuncTree cf;
-    auto [need_cast, st] = get_conv_func(array_type, array_type, cf);
+    auto [need_cast, st] = get_conv_func(TYPE_ARRAY_INT_DESC, TYPE_ARRAY_INT_DESC, cf);
     ASSERT_STATUS_OK(st);
     ASSERT_FALSE(need_cast);
 
-    auto column = ColumnHelper::create_column(array_type, false);
+    auto column = ColumnHelper::create_column(TYPE_ARRAY_INT_DESC, false);
     column->reserve(4096);
     ssize_t counter = 0;
     int num = 100;
@@ -1859,10 +1984,8 @@ static std::shared_ptr<arrow::Array> create_nest_list_array(int64_t num_parents,
 }
 
 PARALLEL_TEST(ArrowConverterTest, test_convert_nest_list_array) {
-    TypeDescriptor array_type0(TYPE_ARRAY);
-    array_type0.children.emplace_back(LogicalType::TYPE_BIGINT);
     TypeDescriptor array_type(TYPE_ARRAY);
-    array_type.children.emplace_back(array_type0);
+    array_type.children.emplace_back(TYPE_ARRAY_BIGINT_DESC);
 
     ConvertFuncTree cf;
     auto [need_cast, st] = get_conv_func(array_type, array_type, cf);
@@ -1882,15 +2005,12 @@ PARALLEL_TEST(ArrowConverterTest, test_convert_nest_list_array) {
 }
 
 PARALLEL_TEST(ArrowConverterTest, test_convert_nullable_list_array) {
-    TypeDescriptor array_type(TYPE_ARRAY);
-    array_type.children.emplace_back(LogicalType::TYPE_INT);
-
     ConvertFuncTree cf;
-    auto [need_cast, st] = get_conv_func(array_type, array_type, cf, true);
+    auto [need_cast, st] = get_conv_func(TYPE_ARRAY_INT_DESC, TYPE_ARRAY_INT_DESC, cf, true);
     ASSERT_STATUS_OK(st);
     ASSERT_FALSE(need_cast);
 
-    auto column = ColumnHelper::create_column(array_type, true);
+    auto column = ColumnHelper::create_column(TYPE_ARRAY_INT_DESC, true);
     column->reserve(4096);
     ssize_t counter = 0;
     int num = 100;
@@ -1933,6 +2053,62 @@ PARALLEL_TEST(ArrowConverterTest, test_convert_map) {
     };
     for (int i = 1; i < 10; i++) {
         convert_arrow_map_to_map_column(map_column.get(), i, map_value, counter, map_type);
+    }
+}
+
+// Pruning must preserve offsets and NULLs even when converting slices into the same column.
+PARALLEL_TEST(ArrowConverterTest, test_convert_pruned_map) {
+    auto keys = std::make_shared<arrow::StringBuilder>();
+    auto values = std::make_shared<arrow::Int32Builder>();
+    arrow::MapBuilder builder(arrow::default_memory_pool(), keys, values);
+    ASSERT_TRUE(builder.Append().ok());
+    ASSERT_TRUE(keys->Append("a").ok());
+    ASSERT_TRUE(values->Append(10).ok());
+    ASSERT_TRUE(keys->Append("b").ok());
+    ASSERT_TRUE(values->AppendNull().ok());
+    ASSERT_TRUE(builder.Append().ok()); // Empty map.
+    ASSERT_TRUE(builder.AppendNull().ok());
+    ASSERT_TRUE(builder.Append().ok());
+    ASSERT_TRUE(keys->Append("c").ok());
+    ASSERT_TRUE(values->Append(30).ok());
+    auto array = builder.Finish().ValueOrDie();
+
+    for (int pruned_child : {0, 1}) {
+        TypeDescriptor type(TYPE_MAP);
+        type.children = {TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_INT)};
+        type.children[pruned_child] = TypeDescriptor(TYPE_UNKNOWN);
+        TypeDescriptor raw_type;
+        ConvertFuncTree plan;
+        bool need_cast = false;
+        ASSERT_STATUS_OK(
+                build_arrow_column_convert_plan(array->type().get(), &type, true, &raw_type, &plan, need_cast, true));
+        ASSERT_FALSE(need_cast);
+        auto column = create_arrow_column_convert_dest(type, raw_type, need_cast, true);
+        Filter filter(4, 1);
+        ASSERT_STATUS_OK(convert_arrow_array_to_column(&plan, 3, array.get(), column.get(), 0, 0, &filter, nullptr));
+        ASSERT_STATUS_OK(convert_arrow_array_to_column(&plan, 1, array.get(), column.get(), 3, 3, &filter, nullptr));
+        auto* nullable = down_cast<NullableColumn*>(column.get());
+        auto* map = down_cast<const MapColumn*>(nullable->data_column().get());
+        ASSERT_EQ(4, column->size());
+        ASSERT_EQ(1, nullable->null_count());
+        ASSERT_TRUE(column->is_null(2));
+        ASSERT_EQ(3, map->keys_column()->size());
+        ASSERT_EQ(3, map->values_column()->size());
+        const auto& offsets = map->offsets().get_data();
+        ASSERT_EQ(5, offsets.size());
+        for (int i = 0; i < 5; ++i) {
+            ASSERT_EQ((std::vector<uint32_t>{0, 2, 2, 2, 3})[i], offsets[i]);
+        }
+        auto pruned = pruned_child == 0 ? map->keys_column() : map->values_column();
+        for (int i = 0; i < 3; ++i) ASSERT_TRUE(pruned->is_null(i));
+        if (pruned_child == 0) {
+            ASSERT_EQ("10", map->values_column()->debug_item(0));
+            ASSERT_TRUE(map->values_column()->is_null(1));
+            ASSERT_EQ("30", map->values_column()->debug_item(2));
+        } else {
+            ASSERT_EQ("'a'", map->keys_column()->debug_item(0));
+            ASSERT_EQ("'c'", map->keys_column()->debug_item(2));
+        }
     }
 }
 

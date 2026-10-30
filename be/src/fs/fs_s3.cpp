@@ -545,7 +545,7 @@ StatusOr<std::unique_ptr<WritableFile>> S3FileSystem::new_writable_file(const Wr
     } else {
         output_stream = std::make_unique<io::S3OutputStream>(
                 std::move(client), uri.bucket(), uri.key(), config::experimental_s3_max_single_part_size,
-                config::experimental_s3_min_upload_part_size, content_type);
+                config::experimental_s3_min_upload_part_size, content_type, config::s3_multipart_equal_part_size);
     }
 
     return wrap_encrypted(std::make_unique<OutputStreamAdapter>(std::move(output_stream), fname), opts.encryption_info);

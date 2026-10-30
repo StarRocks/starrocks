@@ -38,9 +38,18 @@ public record GeoTypeDescriptor(LogicalType logicalType, CoordinateSystem coordi
         Objects.requireNonNull(crs);
     }
 
+    public static GeoTypeDescriptor geometry(String crs) {
+        return new GeoTypeDescriptor(LogicalType.GEOMETRY, CoordinateSystem.CARTESIAN,
+                EdgeAlgorithm.PLANAR, crs, deriveSrid(crs));
+    }
+
     public void validate(PrimitiveType primitive) {
         if (crs.isEmpty()) {
             throw new IllegalArgumentException("Native geo types require a non-empty CRS");
+        }
+        Integer derivedSrid = deriveSrid(crs);
+        if (srid != null && derivedSrid != null && !srid.equals(derivedSrid)) {
+            throw new IllegalArgumentException("Native geo SRID conflicts with its CRS");
         }
         boolean geography = primitive == PrimitiveType.GEOGRAPHY;
         boolean sphericalEdge = edgeAlgorithm != EdgeAlgorithm.UNKNOWN && edgeAlgorithm != EdgeAlgorithm.PLANAR;
@@ -49,6 +58,38 @@ public record GeoTypeDescriptor(LogicalType logicalType, CoordinateSystem coordi
                 || coordinateSystem != (geography ? CoordinateSystem.SPHERICAL : CoordinateSystem.CARTESIAN)
                 || (geography ? !sphericalEdge : edgeAlgorithm != EdgeAlgorithm.PLANAR)) {
             throw new IllegalArgumentException("Native geo primitive conflicts with its semantic descriptor");
+        }
+    }
+
+    public boolean isSemanticallyCompatible(GeoTypeDescriptor other) {
+        return other != null && !crs.isEmpty() && logicalType == other.logicalType
+                && coordinateSystem == other.coordinateSystem && edgeAlgorithm == other.edgeAlgorithm
+                && crs.equals(other.crs);
+    }
+
+    private static Integer deriveSrid(String crs) {
+        if (crs.equals("OGC:CRS84")) {
+            return 4326;
+        }
+        if (!crs.startsWith("EPSG:")) {
+            return null;
+        }
+        // Match BE std::from_chars: an optional minus followed by ASCII digits.
+        // Other non-empty CRS identifiers remain opaque, with no derived numeric SRID.
+        String suffix = crs.substring("EPSG:".length());
+        int start = suffix.startsWith("-") ? 1 : 0;
+        if (start == suffix.length()) {
+            return null;
+        }
+        for (int i = start; i < suffix.length(); ++i) {
+            if (suffix.charAt(i) < '0' || suffix.charAt(i) > '9') {
+                return null;
+            }
+        }
+        try {
+            return Integer.valueOf(suffix);
+        } catch (NumberFormatException e) {
+            return null;
         }
     }
 }

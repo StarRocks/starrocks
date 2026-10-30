@@ -111,6 +111,25 @@ TEST_F(ResultQueueMgrTest, fetch_result_end) {
     ASSERT_TRUE(result == nullptr);
 }
 
+TEST_F(ResultQueueMgrTest, fetch_result_after_status_updated) {
+    ResultQueueMgr queue_mgr;
+    TUniqueId query_id;
+    query_id.lo = 10;
+    query_id.hi = 100;
+
+    BlockQueueSharedPtr block_queue_t;
+    queue_mgr.create_queue(query_id, &block_queue_t);
+    ASSERT_TRUE(block_queue_t != nullptr);
+    block_queue_t->update_status(Status::Cancelled("cancelled"));
+
+    std::shared_ptr<arrow::RecordBatch> result;
+    bool eos = false;
+    Status st = queue_mgr.fetch_result(query_id, &result, &eos);
+    ASSERT_TRUE(st.is_cancelled()) << st;
+    ASSERT_TRUE(eos);
+    ASSERT_TRUE(result == nullptr);
+}
+
 TEST_F(ResultQueueMgrTest, normal_cancel) {
     TUniqueId query_id;
     query_id.lo = 10;

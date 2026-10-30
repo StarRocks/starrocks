@@ -48,6 +48,27 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 - 単位: カウント
 - 説明: タブレットデルタライタースレッドプール内のキューに入れられたタスク数。
 
+## `authentication_failure_reason_total`
+
+- 単位: 個
+- タイプ: Counter
+- 説明: 認証失敗の総数。失敗理由（`reason`）でラベル付けされ、値は `malformed`、`no_matching_si`、`signature_fail`、`expired`、`claim_mismatch`、`bad_credential`、`disabled`、`internal` のいずれかです。HTTP レスポンスはクライアントに対して一律 `invalid_token` としか返さないため、実際の理由はこのメトリクスでのみ確認できます。
+- 導入時期: v4.2
+
+## `authentication_failure_total`
+
+- 単位: 個
+- タイプ: Counter
+- 説明: 認証失敗の総数。独立した 2 つのラベルを持ちます。`channel` は資格情報がどの経路で届いたかを表し、値は `mysql`、`http`、`arrow_flight`、`thrift_load`、`thrift_gateway` のいずれかです。`kind` は資格情報の読み取り方を表し、値は `mysql_native_scramble`、`mysql_oauth2_client`、`gssapi_token`、`plain_password`、`bearer_token` のいずれかです。`channel` で集計すればどのチャネルで失敗しているか（HTTP、Arrow Flight、BE から FE へのロード RPC）を切り分けられ、`kind` で集計すれば Bearer 認証全体の健全性が分かります。
+- 導入時期: v4.2
+
+## `authentication_success_total`
+
+- 単位: 個
+- タイプ: Counter
+- 説明: 認証成功の総数。`channel` と `kind` でラベル付けされ、ラベル値は `authentication_failure_total` と同じです。
+- 導入時期: v4.2
+
 ## `base_compaction_task_byte_per_second`
 
 - 単位: バイト/秒
@@ -464,6 +485,21 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 
 - 単位: バイト
 - 説明: コンパクションが使用するメモリ。
+
+## `zstd_compression_dict_build_fallback`
+
+- 単位: カウント
+- 説明: 圧縮ディクショナリの対象となる列が最終的にディクショナリを得られず、通常の ZSTD として書き込まれた累計回数。試験対象のページがディクショナリありでも十分に小さくならなかった場合 (`zstd_compression_dict_min_gain` を参照)、またはディクショナリの構築が失敗した場合に計上されます。列 writer ごと Segment ごとに 1 回カウントされます。`zstd_compression_dict_pages_written` と同様に、フラット化された JSON 列はフラット化サブ列ごとに writer を持ちます。計上されるのはディクショナリを試した writer だけです。サンプルにするには小さすぎたページは計上されません (次のページで改めて試されます)。試験に到達しない列 (ディクショナリエンコードされた列、試験を終える前に列が終わる場合) も計上されないため、この値と `zstd_compression_dict_pages_written` の合計は指定された列の数になりません。`zstd_compression_dict_pages_written` に対してこの値が大きい場合、テーブルプロパティ `zstd_compression_columns` で指定した列に対して圧縮ディクショナリがほとんど効いていないことを意味します。
+
+## `zstd_compression_dict_bytes`
+
+- 単位: バイト
+- 説明: Segment ファイルに書き込まれた圧縮ディクショナリページのディスク上の累計サイズ。`zstd_compression_dict_pages_written` で割ると平均ディクショナリサイズが得られます。この値は `zstd_compression_dict_sample_bytes` によって制限されます。
+
+## `zstd_compression_dict_pages_written`
+
+- 単位: カウント
+- 説明: Segment ファイルに書き込まれた圧縮ディクショナリページの累計数。ディクショナリページは Segment ごと、列 writer ごとに 1 つ書き込まれます。フラット化された JSON 列はフラット化サブ列ごとに writer を持ち、それぞれが独自のディクショナリページを書き出すことがあります。したがってこのメトリクスは実際に圧縮ディクショナリを使用した writer の数であり、スキーマ列の数でも、ディクショナリで圧縮されたデータページの数でもありません。
 
 ## `consistency_mem_bytes`
 

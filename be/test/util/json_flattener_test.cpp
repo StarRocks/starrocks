@@ -19,10 +19,13 @@
 #include <gtest/gtest.h>
 #include <velocypack/vpack.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <memory>
 #include <ostream>
+#include <random>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -30,8 +33,11 @@
 #include "base/compression/block_compression.h"
 #include "base/string/slice.h"
 #include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
 #include "column/column.h"
+#include "column/column_helper.h"
 #include "column/const_column.h"
+#include "column/flat_json/json_merger.h"
 #include "column/json_column.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
@@ -41,7 +47,9 @@
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "common/statusor.h"
+#include "exprs/hyper_json_transformer.h"
 #include "exprs/mock_vectorized_expr.h"
+#include "fmt/format.h"
 #include "gtest/gtest-param-test.h"
 #include "gutil/casts.h"
 #include "gutil/integral_types.h"
@@ -504,6 +512,638 @@ TEST_F(JsonFlattenerTest, testClean) {
         EXPECT_EQ(std::vector<std::string>{"fixkey"}, jf.flat_paths());
         EXPECT_EQ(std::vector<LogicalType>{TYPE_VARCHAR}, jf.flat_types());
         EXPECT_EQ(nullptr, jf.remain_fitler());
+    }
+}
+
+// Key names that are data (ids, timestamps) give every row new paths, none of which can ever reach
+// the sparsity threshold. The derivation trie must stay bounded regardless, the common key must still
+// be extracted, and everything else must survive flattening in the remain column.
+TEST_F(JsonFlattenerTest, testPathTreeBoundedForDataNamedKeys) {
+    config::json_flat_sparsity_factor = 0.3;
+    constexpr int kRows = 20000;
+    constexpr int kUniqueKeysPerRow = 8;
+    auto json_column = JsonColumn::create();
+    for (int r = 0; r < kRows; r++) {
+        vpack::Builder builder;
+        builder.openObject(true);
+        builder.add("fix", vpack::Value(r));
+        for (int j = 0; j < kUniqueKeysPerRow; j++) {
+            builder.add("u" + std::to_string(r) + "_" + std::to_string(j), vpack::Value(j));
+        }
+        builder.close();
+        JsonValue jv;
+        jv.assign(builder);
+        json_column->append(&jv);
+    }
+
+    std::vector<const Column*> columns{json_column.get()};
+    JsonPathDeriver jf;
+    jf.set_generate_filter(true);
+    jf.derived(columns);
+
+    EXPECT_LE(jf._num_nodes, jf._max_nodes);
+    EXPECT_LT(jf._max_nodes, static_cast<size_t>(kRows) * kUniqueKeysPerRow);
+    EXPECT_TRUE(jf.has_remain_json());
+    EXPECT_EQ(std::vector<std::string>{"fix"}, jf.flat_paths());
+    EXPECT_EQ(std::vector<LogicalType>{TYPE_BIGINT}, jf.flat_types());
+    // Far more remain keys than a filter may hold: no filter, so readers always read the remain.
+    EXPECT_EQ(nullptr, jf.remain_fitler());
+
+    JsonFlattener flattener(jf.flat_paths(), jf.flat_types(), jf.has_remain_json());
+    flattener.flatten(json_column.get());
+    auto flat = flattener.mutable_result();
+    ASSERT_EQ(2, flat.size());
+    JsonMerger merger(jf.flat_paths(), jf.flat_types(), jf.has_remain_json());
+    Columns flat_columns;
+    for (auto& c : flat) {
+        flat_columns.emplace_back(std::move(c));
+    }
+    auto merged = merger.merge(flat_columns);
+    ASSERT_EQ(kRows, merged->size());
+    for (int r : {0, 1, kRows / 2, kRows - 1}) {
+        EXPECT_EQ(json_column->debug_item(r), merged->debug_item(r)) << "row " << r;
+    }
+}
+
+// The bound holds within a row too: a single document can carry more paths than the whole trie may
+// hold, and with only that row there is no later row at which a between-rows check would kick in.
+TEST_F(JsonFlattenerTest, testPathTreeBoundedWithinASingleWideRow) {
+    config::json_flat_sparsity_factor = 0.3;
+    constexpr int kKeys = 10000;
+    auto json_column = JsonColumn::create();
+    {
+        vpack::Builder builder;
+        builder.openObject(true);
+        builder.add("fix", vpack::Value(1));
+        for (int j = 0; j < kKeys; j++) {
+            builder.add("k" + std::to_string(j), vpack::Value(j));
+        }
+        builder.close();
+        JsonValue jv;
+        jv.assign(builder);
+        json_column->append(&jv);
+    }
+
+    std::vector<const Column*> columns{json_column.get()};
+    JsonPathDeriver jf;
+    jf.set_generate_filter(true);
+    jf.derived(columns);
+
+    ASSERT_LT(jf._max_nodes, static_cast<size_t>(kKeys));
+    EXPECT_LE(jf._num_nodes, jf._max_nodes);
+    EXPECT_TRUE(jf.has_remain_json());
+    EXPECT_EQ(nullptr, jf.remain_fitler());
+
+    // Whatever was left out of the trie survives flattening in the remain column.
+    JsonFlattener flattener(jf.flat_paths(), jf.flat_types(), jf.has_remain_json());
+    flattener.flatten(json_column.get());
+    Columns flat_columns;
+    for (auto& c : flattener.mutable_result()) {
+        flat_columns.emplace_back(std::move(c));
+    }
+    JsonMerger merger(jf.flat_paths(), jf.flat_types(), jf.has_remain_json());
+    auto merged = merger.merge(flat_columns);
+    ASSERT_EQ(1, merged->size());
+    ASSIGN_OR_ABORT(auto original, json_column->get_object(0)->to_string());
+    const auto* merged_json =
+            merged->is_nullable() ? down_cast<const NullableColumn*>(merged.get())->data_column().get() : merged.get();
+    ASSIGN_OR_ABORT(auto roundtrip, down_cast<const JsonColumn*>(merged_json)->get_object(0)->to_string());
+    // Key order may differ after the merge; compare as parsed documents.
+    ASSIGN_OR_ABORT(auto a, JsonValue::parse(original));
+    ASSIGN_OR_ABORT(auto b, JsonValue::parse(roundtrip));
+    EXPECT_EQ(0, a.compare(b));
+}
+
+// Flattens json_column with the layout jf derived for it and expects every row back exactly.
+static void expect_flatten_round_trip(const JsonColumn& json_column, const JsonPathDeriver& jf) {
+    JsonFlattener flattener(jf.flat_paths(), jf.flat_types(), jf.has_remain_json());
+    flattener.flatten(&json_column);
+    Columns flat_columns;
+    for (auto& col : flattener.mutable_result()) {
+        flat_columns.emplace_back(std::move(col));
+    }
+    JsonMerger merger(jf.flat_paths(), jf.flat_types(), jf.has_remain_json());
+    auto merged = merger.merge(flat_columns);
+    const auto* merged_json = down_cast<const JsonColumn*>(ColumnHelper::get_data_column(merged.get()));
+    ASSERT_EQ(json_column.size(), merged_json->size());
+    for (size_t row = 0; row < json_column.size(); row++) {
+        const auto* expected = json_column.get_object(row);
+        const auto* got = merged_json->get_object(row);
+        EXPECT_EQ(0, expected->compare(*got)) << "row " << row << ": expected " << expected->to_string_uncheck()
+                                              << ", got " << got->to_string_uncheck();
+    }
+}
+
+// A path dropped to keep the trie within its budget can show up again and reach the sparsity threshold. Its
+// stats then start afresh: typed from the later values alone, the column cannot hold the earlier ones, and
+// JsonFlattener writes those as NULL without keeping them in the remain.
+TEST_F(JsonFlattenerTest, testDroppedPathComingBackKeepsEarlierValues) {
+    config::json_flat_sparsity_factor = 0.3;
+    // Half of the default 6400-node budget per wide row: the trie fills up at the end of the second row, and
+    // shrinking it drops every path the first row alone had.
+    constexpr int kNodesPerWideRow = 3200;
+    auto wide_row = [](const std::string& head, int head_nodes, const std::string& prefix) {
+        std::string json = "{" + head;
+        for (int j = 0; j < kNodesPerWideRow - head_nodes; j++) {
+            json += fmt::format(R"({}"{}{}": {})", head.empty() && j == 0 ? "" : ", ", prefix, j, j);
+        }
+        return json + "}";
+    };
+    struct Case {
+        std::string first_row;
+        std::string second_row;
+        std::string later_rows;
+        std::string path;
+    };
+    // clang-format off
+    std::vector<Case> cases = {
+        {wide_row(R"("t": "abc")", 1, "a"), wide_row("", 0, "b"), R"({"t": 1})", "t"},
+        // The whole object is dropped: the path under it comes back with its parent.
+        {wide_row(R"("o": {"t": "abc"})", 2, "a"), wide_row("", 0, "b"), R"({"o": {"t": 1}})", "o.t"},
+        // Only the path under the object is dropped; the object itself stays.
+        {wide_row(R"("o": {"t": "abc"})", 2, "a"), wide_row(R"("o": {})", 0, "b"), R"({"o": {"t": 1}})", "o.t"},
+    };
+    // clang-format on
+    for (const auto& c : cases) {
+        SCOPED_TRACE(c.path + " " + c.later_rows);
+        auto json_column = JsonColumn::create();
+        for (const auto& json : {c.first_row, c.second_row}) {
+            ASSIGN_OR_ABORT(auto jv, JsonValue::parse(json));
+            json_column->append(&jv);
+        }
+        for (int r = 2; r < 10; r++) {
+            ASSIGN_OR_ABORT(auto jv, JsonValue::parse(c.later_rows));
+            json_column->append(&jv);
+        }
+
+        std::vector<const Column*> columns{json_column.get()};
+        JsonPathDeriver jf;
+        jf.derived(columns);
+        ASSERT_EQ(std::vector<std::string>{c.path}, jf.flat_paths());
+        // Any value fits JSON.
+        EXPECT_EQ(std::vector<LogicalType>{TYPE_JSON}, jf.flat_types());
+        EXPECT_TRUE(jf.has_remain_json());
+        expect_flatten_round_trip(*json_column, jf);
+    }
+}
+
+// Whatever the trie budget drops and brings back, every value must survive flattening. Rows carry enough keys
+// named by data to fill the trie every few dozen rows; each shared key shows up once, stays away across at least
+// one shrink, then keeps coming back with values of one type, while its first value may be of any type.
+TEST_F(JsonFlattenerTest, testFlattenKeepsEveryValueUnderTheTrieBound) {
+    config::json_flat_sparsity_factor = 0.3;
+    constexpr int kRows = 400;
+    constexpr int kDataKeysPerRow = 200;
+    constexpr int kSharedKeys = 8;
+    auto add_value = [](vpack::Builder* b, const std::string& key, int kind, std::mt19937* rng) {
+        switch (kind) {
+        case 0:
+            b->add(key, vpack::Value(static_cast<int64_t>((*rng)() % 1000)));
+            break;
+        case 1:
+            b->add(key, vpack::Value(static_cast<int64_t>((*rng)() % 1000000) << 40));
+            break;
+        case 2:
+            b->add(key, vpack::Value(static_cast<double>((*rng)() % 1000) / 8));
+            break;
+        case 3:
+            b->add(key, vpack::Value("s" + std::to_string((*rng)() % 100)));
+            break;
+        case 4:
+            b->add(key, vpack::Value((*rng)() % 2 == 0));
+            break;
+        case 5:
+            b->add(key, vpack::Value(vpack::ValueType::Null));
+            break;
+        case 6:
+            b->add(key, vpack::Value(vpack::ValueType::Array));
+            b->add(vpack::Value(static_cast<int64_t>((*rng)() % 10)));
+            b->close();
+            break;
+        default:
+            b->add(key, vpack::Value(vpack::ValueType::Object));
+            b->add("x", vpack::Value(static_cast<int64_t>((*rng)() % 10)));
+            b->close();
+            break;
+        }
+    };
+    constexpr int kKinds = 8;
+    for (uint32_t seed = 1; seed <= 10; seed++) {
+        SCOPED_TRACE("seed " + std::to_string(seed));
+        std::mt19937 rng(seed);
+        std::vector<int> first_row(kSharedKeys);
+        std::vector<int> back_from(kSharedKeys);
+        std::vector<int> first_kind(kSharedKeys);
+        std::vector<int> later_kind(kSharedKeys);
+        for (int k = 0; k < kSharedKeys; k++) {
+            first_row[k] = static_cast<int>(rng() % 100);
+            back_from[k] = first_row[k] + 40 + static_cast<int>(rng() % 60);
+            first_kind[k] = static_cast<int>(rng() % kKinds);
+            later_kind[k] = static_cast<int>(rng() % 5); // a scalar type the path may be flattened as
+        }
+        auto json_column = JsonColumn::create();
+        for (int r = 0; r < kRows; r++) {
+            vpack::Builder builder;
+            builder.openObject(true);
+            for (int k = 0; k < kSharedKeys; k++) {
+                const std::string key = "k" + std::to_string(k);
+                if (r == first_row[k]) {
+                    add_value(&builder, key, first_kind[k], &rng);
+                } else if (r >= back_from[k] && rng() % 10 != 0) {
+                    add_value(&builder, key, later_kind[k], &rng);
+                }
+            }
+            for (int j = 0; j < kDataKeysPerRow; j++) {
+                builder.add("u" + std::to_string(r) + "_" + std::to_string(j), vpack::Value(j));
+            }
+            builder.close();
+            JsonValue jv;
+            jv.assign(builder);
+            json_column->append(&jv);
+        }
+
+        std::vector<const Column*> columns{json_column.get()};
+        JsonPathDeriver jf;
+        jf.derived(columns);
+        EXPECT_LE(jf._num_nodes, jf._max_nodes);
+        EXPECT_FALSE(jf.flat_paths().empty());
+        expect_flatten_round_trip(*json_column, jf);
+    }
+}
+
+// The keys below an object the deriver prunes from the path tree go to the remain, so the remain filter must report
+// them too: a reader probes it with the last component of the path it extracts and skips the remain on a miss. Both
+// prunes are covered: a path too sparse to be flattened (checked every vector_chunk_size rows) and a singleton dropped
+// when the tree reaches its node budget.
+TEST_F(JsonFlattenerTest, testRemainFilterReportsKeysBelowAPrunedObject) {
+    config::json_flat_sparsity_factor = 0.3;
+    const int32_t saved_chunk_size = config::vector_chunk_size;
+    DeferOp restore([&]() { config::vector_chunk_size = saved_chunk_size; });
+
+    auto derive = [](const std::vector<std::string>& docs) {
+        auto json_column = JsonColumn::create();
+        for (const auto& doc : docs) {
+            ASSIGN_OR_ABORT(auto jv, JsonValue::parse(doc));
+            json_column->append(&jv);
+        }
+        auto jf = std::make_unique<JsonPathDeriver>();
+        jf->set_generate_filter(true);
+        std::vector<const Column*> columns{json_column.get()};
+        jf->derived(columns);
+        return jf;
+    };
+
+    {
+        // Sparse: "s" is in 1 of 200 rows, and is pruned at the first check past the rows that could still reach 30%;
+        // it never comes back, so only the prune can have reported its keys.
+        config::vector_chunk_size = 16;
+        std::vector<std::string> docs;
+        for (int row = 0; row < 200; row++) {
+            docs.emplace_back(row == 0 ? fmt::format(R"({{"id": {}, "s": {{"leaf1": 1, "leaf2": 2}}}})", row)
+                                       : fmt::format(R"({{"id": {}}})", row));
+        }
+        auto jf = derive(docs);
+        ASSERT_TRUE(jf->has_remain_json());
+        ASSERT_NE(nullptr, jf->remain_fitler());
+        for (const char* key : {"s", "leaf1", "leaf2"}) {
+            EXPECT_TRUE(jf->remain_fitler()->test_bytes(key, strlen(key))) << key;
+        }
+    }
+    {
+        // Singleton: "single" is seen once, then two rows fill the node budget and the shrink drops it.
+        config::vector_chunk_size = saved_chunk_size;
+        std::string wide = R"({"0id": 0)";
+        for (int i = 0; i < 80; i++) {
+            wide += ", \"a" + std::to_string(i) + "\": {";
+            for (int j = 0; j < 80; j++) {
+                wide += (j ? ", " : "") + std::string("\"b") + std::to_string(j) + "\": " + std::to_string(j);
+            }
+            wide += "}";
+        }
+        wide += "}";
+        auto jf = derive({R"({"0id": 0, "single": {"leafA": 1, "leafB": 2}})", wide, wide});
+        ASSERT_TRUE(jf->has_remain_json());
+        ASSERT_NE(nullptr, jf->remain_fitler());
+        for (const char* key : {"single", "leafA", "leafB"}) {
+            EXPECT_TRUE(jf->remain_fitler()->test_bytes(key, strlen(key))) << key;
+        }
+    }
+}
+
+TEST_F(JsonFlattenerTest, testRemainFilterReportsKeysNestedUnderASkippedKey) {
+    config::json_flat_sparsity_factor = 0.3;
+    // Two rows fill the trie with paths seen twice (so shrinking cannot free them) using few distinct names,
+    // which keeps the remain filter under its key cap. Every later row then carries "x", which no longer
+    // fits in the trie and goes to the remain column whole.
+    std::string wide = R"({"0id": 0)";
+    for (int i = 0; i < 80; i++) {
+        wide += ", \"a" + std::to_string(i) + "\": {";
+        for (int j = 0; j < 80; j++) {
+            wide += (j ? ", " : "") + std::string("\"b") + std::to_string(j) + "\": " + std::to_string(j);
+        }
+        wide += "}";
+    }
+    wide += "}";
+    auto json_column = JsonColumn::create();
+    for (int row = 0; row < 200; row++) {
+        std::string json;
+        if (row < 2) {
+            json = wide;
+        } else {
+            json = R"({"0id": )" + std::to_string(row) + R"(, "x": {)";
+            for (int k = 0; k < 20; k++) {
+                json += (k ? ", " : "") + std::string("\"leaf") + std::to_string(k) + "\": " + std::to_string(row);
+            }
+            json += "}}";
+        }
+        ASSIGN_OR_ABORT(auto jv, JsonValue::parse(json));
+        json_column->append(&jv);
+    }
+
+    std::vector<const Column*> columns{json_column.get()};
+    JsonPathDeriver jf;
+    jf.set_generate_filter(true);
+    jf.derived(columns);
+
+    ASSERT_TRUE(jf._path_tree_full);
+    ASSERT_TRUE(jf.has_remain_json());
+    ASSERT_NE(jf.flat_paths().end(), std::find(jf.flat_paths().begin(), jf.flat_paths().end(), "0id"));
+    ASSERT_TRUE(nullptr != jf.remain_fitler());
+    // A reader probes the filter with the last component of the path it extracts (x.leafN -> "leafN") and
+    // returns NULL without reading the remain column on a miss. A bloom filter has no false negatives, so
+    // every key under "x" must test positive.
+    EXPECT_TRUE(jf.remain_fitler()->test_bytes("x", 1));
+    for (int k = 0; k < 20; k++) {
+        std::string leaf = "leaf" + std::to_string(k);
+        EXPECT_TRUE(jf.remain_fitler()->test_bytes(leaf.data(), leaf.size())) << leaf;
+    }
+
+    JsonFlattener flattener(jf.flat_paths(), jf.flat_types(), jf.has_remain_json());
+    flattener.flatten(json_column.get());
+    Columns flat_columns;
+    for (auto& c : flattener.mutable_result()) {
+        flat_columns.emplace_back(std::move(c));
+    }
+    JsonMerger merger(jf.flat_paths(), jf.flat_types(), jf.has_remain_json());
+    auto merged = merger.merge(flat_columns);
+    const auto* merged_json =
+            merged->is_nullable() ? down_cast<const NullableColumn*>(merged.get())->data_column().get() : merged.get();
+    ASSERT_EQ(json_column->size(), merged_json->size());
+    for (size_t row = 0; row < json_column->size(); row++) {
+        EXPECT_EQ(0, json_column->get_object(row)->compare(*down_cast<const JsonColumn*>(merged_json)->get_object(row)))
+                << row;
+    }
+}
+
+// A path is flattened to a numeric type only if that type holds every value exactly; otherwise it is flattened
+// as JSON. Integers past 2^53 next to doubles, and negative integers next to integers past INT64_MAX, would
+// otherwise read back as different numbers.
+TEST_F(JsonFlattenerTest, testNumericPathTypeKeepsValuesExact) {
+    config::json_flat_sparsity_factor = 0.3;
+    struct Case {
+        std::vector<std::string> jsons;
+        LogicalType expected_type;
+    };
+    // clang-format off
+    std::vector<Case> cases = {
+        {{R"({"a": 1234567890123456789})", R"({"a": 1.5})"}, TYPE_JSON},
+        {{R"({"a": -1234567890123456789})", R"({"a": 1.5})"}, TYPE_JSON},
+        {{R"({"a": -3})", R"({"a": 18446744073709551615})"}, TYPE_JSON},
+        {{R"({"a": -1234567890123})", R"({"a": 18446744073709551615})"}, TYPE_JSON},
+        // Exact as before.
+        {{R"({"a": 9007199254740992})", R"({"a": 1.5})"}, TYPE_DOUBLE},
+        {{R"({"a": 1})", R"({"a": 1.5})"}, TYPE_DOUBLE},
+        {{R"({"a": -3})", R"({"a": 9223372036854775807})"}, TYPE_BIGINT},
+        {{R"({"a": 5})", R"({"a": 18446744073709551615})"}, TYPE_LARGEINT},
+        {{R"({"a": 1.5})", R"({"a": 1e300})"}, TYPE_DOUBLE},
+    };
+    // clang-format on
+    for (const auto& c : cases) {
+        SCOPED_TRACE(c.jsons[0] + " " + c.jsons[1]);
+        auto json_column = JsonColumn::create();
+        for (const auto& json : c.jsons) {
+            ASSIGN_OR_ABORT(auto jv, JsonValue::parse(json));
+            json_column->append(&jv);
+        }
+        std::vector<const Column*> columns{json_column.get()};
+        JsonPathDeriver jf;
+        jf.derived(columns);
+        ASSERT_EQ(std::vector<std::string>{"a"}, jf.flat_paths());
+        EXPECT_EQ(c.expected_type, jf.flat_types()[0]);
+
+        JsonFlattener flattener(jf.flat_paths(), jf.flat_types(), jf.has_remain_json());
+        flattener.flatten(json_column.get());
+        Columns flat_columns;
+        for (auto& col : flattener.mutable_result()) {
+            flat_columns.emplace_back(std::move(col));
+        }
+        JsonMerger merger(jf.flat_paths(), jf.flat_types(), jf.has_remain_json());
+        auto merged = merger.merge(flat_columns);
+        const auto* merged_json = merged->is_nullable()
+                                          ? down_cast<const NullableColumn*>(merged.get())->data_column().get()
+                                          : merged.get();
+        ASSERT_EQ(json_column->size(), merged_json->size());
+        for (size_t row = 0; row < json_column->size(); row++) {
+            const auto* got = down_cast<const JsonColumn*>(merged_json)->get_object(row);
+            EXPECT_EQ(0, json_column->get_object(row)->compare(*got))
+                    << "row " << row << ": " << got->to_string_uncheck();
+        }
+    }
+}
+
+// Stored JSON keeps repeated keys. Each row must still add one value to every column: the value a read of the
+// whole JSON finds, with or without a remain, and with a remain the rebuilt JSON is the stored one.
+TEST_F(JsonFlattenerTest, testRepeatedKeysFlattenOneValuePerRow) {
+    std::vector<std::string> inputs = {
+            R"({"a": 1, "b": 10, "c": 100, "x": {"y": 1, "z": 2}})",
+            R"({"a": 2, "a": 22, "b": 20, "c": 200})",
+            R"({"a": 3, "a": 33})",
+            R"({"x": {"y": 5}, "x": {"z": 6}, "a": 4})",
+            R"({"x": {"y": 7, "y": 8, "z": 9}})",
+            R"({"a": 5, "b": 50, "c": 500})",
+    };
+    std::vector<std::string> paths = {"a", "b", "c", "x.y", "x.z"};
+    std::vector<LogicalType> types(paths.size(), TYPE_BIGINT);
+
+    for (bool has_remain : {false, true}) {
+        auto result = test_json(inputs, paths, types, has_remain);
+        for (size_t row = 0; row < inputs.size(); row++) {
+            ASSIGN_OR_ABORT(auto json, JsonValue::parse(inputs[row]));
+            auto doc = json.to_vslice();
+            for (size_t k = 0; k < paths.size(); k++) {
+                auto v = doc;
+                for (auto key : {paths[k].substr(0, 1), paths[k].size() > 2 ? paths[k].substr(2) : std::string()}) {
+                    if (key.empty()) {
+                        break;
+                    }
+                    v = v.isObject() ? v.get(key) : vpack::Slice::noneSlice();
+                }
+                std::string expected = v.isNone() ? "NULL" : std::to_string(v.getNumber<int64_t>());
+                EXPECT_EQ(expected, result[k]->debug_item(row))
+                        << "remain=" << has_remain << " row=" << row << " path=" << paths[k];
+            }
+        }
+        if (has_remain) {
+            JsonMerger merger(paths, types, true);
+            auto merged = merger.merge(result);
+            ASSERT_EQ(inputs.size(), merged->size());
+            // Row 3 repeats an object whose copies hold different keys: rebuilding it may add a looked-up value
+            // to the other copy, so it is not compared here.
+            for (size_t row : {1, 2, 4}) {
+                ASSIGN_OR_ABORT(auto json, JsonValue::parse(inputs[row]));
+                EXPECT_EQ(json.to_string_uncheck(), merged->debug_item(row)) << "row " << row;
+            }
+        }
+    }
+}
+
+// Before numeric paths were kept exact, the deriver met negative integers with integers past INT64_MAX at
+// LARGEINT, so existing segments may hold negative LARGEINT values. Rebuilding them as JSON -- whole-JSON reads
+// (JsonMerger) and the conversion to a JSON sub-column (HyperJsonTransformer) -- must keep them negative.
+TEST_F(JsonFlattenerTest, testLegacyNegativeLargeintSubColumnKeepsSign) {
+    const std::vector<int128_t> values = {-2, std::numeric_limits<int64_t>::min(), 5,
+                                          static_cast<int128_t>(std::numeric_limits<uint64_t>::max())};
+    const std::vector<std::string> expected = {"-2", "-9223372036854775808", "5", "18446744073709551615"};
+    auto data = Int128Column::create();
+    for (auto v : values) {
+        data->append(v);
+    }
+    ColumnPtr largeint = NullableColumn::create(std::move(data), NullColumn::create(values.size(), 0));
+
+    JsonMerger merger({"a"}, {TYPE_LARGEINT}, false);
+    auto merged = merger.merge({largeint});
+    const auto* merged_json =
+            merged->is_nullable() ? down_cast<const NullableColumn*>(merged.get())->data_column().get() : merged.get();
+    ASSERT_EQ(values.size(), merged_json->size());
+    for (size_t row = 0; row < values.size(); row++) {
+        EXPECT_EQ(R"({"a": )" + expected[row] + "}",
+                  down_cast<const JsonColumn*>(merged_json)->get_object(row)->to_string_uncheck())
+                << "row " << row;
+    }
+
+    HyperJsonTransformer transformer({"a"}, {TYPE_JSON}, false);
+    transformer.init_compaction_task({"a"}, {TYPE_LARGEINT}, false);
+    ASSERT_OK(transformer.trans({largeint}));
+    auto result = transformer.mutable_result();
+    ASSERT_EQ(1, result.size());
+    const auto* json_values =
+            down_cast<const JsonColumn*>(down_cast<NullableColumn*>(result[0].get())->data_column().get());
+    ASSERT_EQ(values.size(), json_values->size());
+    for (size_t row = 0; row < values.size(); row++) {
+        // Compare the text: JsonValue::compare also tells apart the integer encodings (SmallInt, Int, UInt).
+        EXPECT_EQ(expected[row], json_values->get_object(row)->to_string_uncheck()) << "row " << row;
+    }
+}
+
+// A key repeated within one row cannot be flattened, an object no more than a leaf: its copies would share one set
+// of sub-columns, and without a remain the copy a row did not pick was lost. The deriver keeps the subtree in the
+// remain, which stores the document as it is.
+TEST_F(JsonFlattenerTest, testDeriverKeepsRepeatedObjectInRemain) {
+    config::json_flat_sparsity_factor = 0.3;
+    std::vector<std::string> inputs;
+    for (int i = 0; i < 20; i++) {
+        inputs.emplace_back(fmt::format(R"({{"id": {}, "x": {{"y": {}, "z": {}}}}})", i, i, i * 2));
+    }
+    inputs.emplace_back(R"({"id": 20, "x": {"y": 5}, "x": {"z": 6}})");
+    auto json_column = JsonColumn::create();
+    for (const auto& json : inputs) {
+        ASSIGN_OR_ABORT(auto jv, JsonValue::parse(json));
+        json_column->append(&jv);
+    }
+    std::vector<const Column*> columns{json_column.get()};
+    JsonPathDeriver jf;
+    jf.derived(columns);
+    EXPECT_EQ(std::vector<std::string>{"id"}, jf.flat_paths());
+    EXPECT_TRUE(jf.has_remain_json());
+
+    JsonFlattener flattener(jf.flat_paths(), jf.flat_types(), jf.has_remain_json());
+    flattener.flatten(json_column.get());
+    Columns flat_columns;
+    for (auto& c : flattener.mutable_result()) {
+        flat_columns.emplace_back(std::move(c));
+    }
+    JsonMerger merger(jf.flat_paths(), jf.flat_types(), jf.has_remain_json());
+    auto merged = merger.merge(flat_columns);
+    const auto* merged_json =
+            merged->is_nullable() ? down_cast<const NullableColumn*>(merged.get())->data_column().get() : merged.get();
+    ASSERT_EQ(inputs.size(), merged_json->size());
+    for (size_t row = 0; row + 1 < inputs.size(); row++) {
+        ASSIGN_OR_ABORT(auto want, JsonValue::parse(inputs[row]));
+        const auto* got = down_cast<const JsonColumn*>(merged_json)->get_object(row);
+        EXPECT_EQ(0, want.compare(*got)) << "row " << row << ": " << got->to_string_uncheck();
+    }
+    // The repeated object keeps both copies. JsonValue::compare does not handle repeated keys, so compare the text and
+    // count the copies.
+    const auto* repeated = down_cast<const JsonColumn*>(merged_json)->get_object(inputs.size() - 1);
+    ASSIGN_OR_ABORT(auto want_repeated, JsonValue::parse(inputs.back()));
+    EXPECT_EQ(want_repeated.to_string_uncheck(), repeated->to_string_uncheck());
+    size_t copies = 0;
+    for (vpack::ObjectIterator it(repeated->to_vslice(), true); it.valid(); it.next()) {
+        copies += it.key().stringView() == "x";
+    }
+    EXPECT_EQ(2, copies) << repeated->to_string_uncheck();
+}
+
+// A compaction that moves a path out of the remain into a sub-column keeps every copy of a repeated key in the
+// remain: the sub-column holds one value, and the rebuilt JSON must still be the stored one.
+TEST_F(JsonFlattenerTest, testCompactionMovingRepeatedKeyOutOfRemainKeepsEveryCopy) {
+    std::vector<std::string> inputs = {
+            R"({"a": 1, "x": {"y": 5}, "x": {"z": "r"}})",
+            R"({"a": 2, "x": {"y": 6}})",
+            R"({"a": 3, "x": 7, "x": 8})",
+            R"({"a": 4})",
+            R"({"a": 5, "x": 9, "y": 1, "y": 2, "z": 3})",
+            R"({"a": 6, "o": {"p": 1, "q": 3}, "o": {"p": 2}})",
+            R"({"a": 7, "o": {"p": 4}})",
+    };
+    // Segment layout: "a" flattened, the other keys in the remain.
+    auto src = test_json(inputs, {"a"}, {TYPE_BIGINT}, true);
+
+    // Output layout: "x", "y", "z" and "o.p" flattened too.
+    std::vector<std::string> paths = {"a", "o.p", "x", "y", "z"};
+    std::vector<LogicalType> types = {TYPE_BIGINT, TYPE_JSON, TYPE_JSON, TYPE_JSON, TYPE_JSON};
+    HyperJsonTransformer transformer(paths, types, true);
+    transformer.init_compaction_task({"a"}, {TYPE_BIGINT}, true);
+    ASSERT_OK(transformer.trans(src));
+    auto dst = ColumnHelper::to_columns(transformer.mutable_result());
+    ASSERT_EQ(6, dst.size());
+
+    for (size_t row = 0; row < inputs.size(); row++) {
+        ASSIGN_OR_ABORT(auto json, JsonValue::parse(inputs[row]));
+        for (size_t k = 1; k < paths.size(); k++) {
+            auto v = json.to_vslice();
+            for (std::string_view rest = paths[k]; !rest.empty();) {
+                auto [key, next] = JsonFlatPath::split_path(rest);
+                v = v.isObject() ? v.get(vpack::StringRef(key.data(), key.size())) : vpack::Slice::noneSlice();
+                rest = next;
+            }
+            EXPECT_EQ(v.isNone() ? "NULL" : JsonValue(v).to_string_uncheck(), dst[k]->debug_item(row))
+                    << "row " << row << " path " << paths[k];
+        }
+    }
+
+    JsonMerger merger(paths, types, true);
+    auto merged = merger.merge(dst);
+    ASSERT_EQ(inputs.size(), merged->size());
+    const auto* merged_json =
+            merged->is_nullable() ? down_cast<const NullableColumn*>(merged.get())->data_column().get() : merged.get();
+    for (size_t row = 0; row < inputs.size(); row++) {
+        ASSIGN_OR_ABORT(auto want, JsonValue::parse(inputs[row]));
+        const auto* got = down_cast<const JsonColumn*>(merged_json)->get_object(row);
+        // Key order may differ after the merge, and JsonValue::compare does not tell repeated keys apart: compare
+        // the keys and values in order of key.
+        auto keys = [](const vpack::Slice& obj) {
+            std::vector<std::string> kv;
+            for (vpack::ObjectIterator it(obj, true); it.valid(); it.next()) {
+                kv.emplace_back(it.key().copyString() + "=" + JsonValue(it.value()).to_string_uncheck());
+            }
+            std::stable_sort(kv.begin(), kv.end(), [](const auto& l, const auto& r) {
+                return l.substr(0, l.find('=')) < r.substr(0, r.find('='));
+            });
+            return kv;
+        };
+        EXPECT_EQ(keys(want.to_vslice()), keys(got->to_vslice()))
+                << "row " << row << ": want " << inputs[row] << ", got " << got->to_string_uncheck();
     }
 }
 

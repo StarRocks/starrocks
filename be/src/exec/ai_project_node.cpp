@@ -14,8 +14,6 @@
 
 #include "exec/ai_project_node.h"
 
-#include <algorithm>
-#include <cctype>
 #include <cstdint>
 #include <limits>
 #include <memory>
@@ -25,6 +23,7 @@
 #include <utility>
 
 #include "exec/pipeline/ai/ai_project_operator.h"
+#include "exec/pipeline/ai/ai_provider_config_parser.h"
 #include "exec/pipeline/exec_node_pipeline_adapter.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
@@ -33,6 +32,7 @@
 #include "exprs/column_ref.h"
 #include "exprs/expr_context.h"
 #include "exprs/expr_factory.h"
+#include "platform/llm/ai_provider.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
 
@@ -40,20 +40,10 @@ namespace starrocks {
 
 namespace {
 
-constexpr std::string_view kSystemChatConfigId = "__system_chat__";
-constexpr std::string_view kOpenAICompatibleProvider = "openai_compatible";
 constexpr std::string_view kInvalidAIProjectPlan = "Invalid AI project plan";
 
 Status invalid_ai_project_plan() {
     return Status::InvalidArgument(kInvalidAIProjectPlan);
-}
-
-bool contains_control_character(std::string_view value) {
-    return std::any_of(value.begin(), value.end(), [](unsigned char c) { return c <= 0x1f || c == 0x7f; });
-}
-
-bool is_non_blank(std::string_view value) {
-    return std::any_of(value.begin(), value.end(), [](unsigned char c) { return std::isspace(c) == 0; });
 }
 
 size_t count_ai_expressions(const Expr* expr) {
@@ -71,10 +61,6 @@ bool references_any_slot(const Expr* expr, const std::unordered_set<SlotId>& slo
     bool found = false;
     expr->for_each_slot_id([&](SlotId slot_id) { found = found || slots.contains(slot_id); });
     return found;
-}
-
-bool requires_default_model(AIFunctionSignature signature) {
-    return signature == AIFunctionSignature::PROMPT || signature == AIFunctionSignature::PROMPT_OPTIONS;
 }
 
 Status create_ai_project_expr(ObjectPool* pool, const TExpr& thrift_expr, RuntimeState* state, ExprContext** expr_ctx) {
@@ -106,8 +92,8 @@ Status AIProjectNode::init(const TPlanNode& tnode, RuntimeState* state) {
     }
 
     const TAIProjectNode& thrift_project = tnode.ai_project_node;
-    if (!thrift_project.__isset.slot_map || !thrift_project.__isset.ai_model_configs ||
-        thrift_project.slot_map.empty() || thrift_project.ai_model_configs.size() != 1) {
+    if (!thrift_project.__isset.slot_map || !thrift_project.__isset.ai_provider_mapping ||
+        thrift_project.slot_map.empty() || thrift_project.ai_provider_mapping.empty()) {
         return invalid_ai_project_plan();
     }
 
@@ -119,26 +105,18 @@ Status AIProjectNode::init(const TPlanNode& tnode, RuntimeState* state) {
         }
     }
 
-    const auto config_it = thrift_project.ai_model_configs.find(std::string(kSystemChatConfigId));
-    if (config_it == thrift_project.ai_model_configs.end()) {
-        return invalid_ai_project_plan();
-    }
-    const TAIModelConfiguration& model_config = config_it->second;
-    if (!model_config.__isset.chat || !model_config.chat.__isset.endpoint || !model_config.chat.__isset.model ||
-        !model_config.chat.__isset.provider || !is_non_blank(model_config.chat.endpoint) ||
-        contains_control_character(model_config.chat.endpoint) ||
-        model_config.chat.provider != kOpenAICompatibleProvider ||
-        contains_control_character(model_config.chat.model)) {
-        return invalid_ai_project_plan();
+    pipeline::AIProjectModelConfigs configs;
+    for (const auto& [id, provider] : thrift_project.ai_provider_mapping) {
+        ASSIGN_OR_RETURN(auto config, pipeline::AIProviderConfigParser::parse(id, provider));
+        configs.emplace(id, std::move(config));
     }
 
-    _endpoint = model_config.chat.endpoint;
-    pipeline::AIProjectProjectionSpec projection_spec(state, {}, {}, model_config.chat.model);
+    pipeline::AIProjectProjectionSpec projection_spec(state, {}, {}, std::move(configs));
 
     std::unordered_set<SlotId> output_slots;
     std::unordered_set<SlotId> ai_output_slots;
+    std::unordered_set<std::string> used_configs;
     bool has_ai_output = false;
-    bool needs_default_model = false;
 
     for (const auto& [slot_id, thrift_expr] : thrift_project.slot_map) {
         const auto slot = record_slots.find(slot_id);
@@ -166,17 +144,20 @@ Status AIProjectNode::init(const TPlanNode& tnode, RuntimeState* state) {
         }
 
         auto* ai_expr = dynamic_cast<AIFunctionCallExpr*>(root);
-        if (ai_expr == nullptr || count_ai_expressions(root) != 1 ||
-            ai_expr->model_config_id() != kSystemChatConfigId) {
+        if (ai_expr == nullptr || count_ai_expressions(root) != 1 || ai_expr->type() != slot_desc->type()) {
+            return invalid_ai_project_plan();
+        }
+        const auto route = projection_spec.model_configs().find(ai_expr->provider_id());
+        if (route == projection_spec.model_configs().end() || route->second.capability != ai_expr->capability()) {
             return invalid_ai_project_plan();
         }
         output.kind = pipeline::AIProjectOutputKind::AI;
         ai_output_slots.emplace(slot_id);
         has_ai_output = true;
-        needs_default_model = needs_default_model || requires_default_model(ai_expr->signature());
+        used_configs.emplace(ai_expr->provider_id());
     }
 
-    if (!has_ai_output || (needs_default_model && !is_non_blank(projection_spec.default_model()))) {
+    if (!has_ai_output || used_configs.size() != projection_spec.model_configs().size()) {
         return invalid_ai_project_plan();
     }
     for (const pipeline::AIProjectOutputSpec& output : projection_spec.outputs()) {
@@ -243,13 +224,12 @@ StatusOr<pipeline::OpFactories> AIProjectNode::decompose_to_pipeline(pipeline::P
     const size_t upstream_dop = upstream_source->degree_of_parallelism();
 
     ASSIGN_OR_RETURN(auto ai_factories,
-                     AIProjectFactory::create(context, id(), upstream_dop, _endpoint, std::move(_projection_spec)));
+                     AIProjectFactory::create(context, id(), upstream_dop, std::move(_projection_spec)));
     auto sink = std::move(ai_factories.sink);
     auto source = std::move(ai_factories.source);
 
     context->inherit_upstream_source_properties(source.get(), upstream_source);
     source->set_skewed(upstream_source->is_skewed());
-    source->set_bucket_properties(upstream_source->get_bucket_properties());
 
     upstream_operators.emplace_back(std::move(sink));
     context->add_pipeline(upstream_operators);

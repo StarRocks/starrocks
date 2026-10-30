@@ -40,8 +40,10 @@ public:
     Status do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) override;
     void do_close(RuntimeState* runtime_state) noexcept override;
     void do_update_counter(HdfsScannerProfile* profile) override;
+    int64_t estimated_mem_usage() const override;
 
 private:
+    Status _init_read_chunk();
     Status _next_arrow_record_batch();
     Status _append_arrow_record_batch_to_chunk(ChunkPtr& chunk);
     Status _fill_dst_chunk(ChunkPtr& chunk);

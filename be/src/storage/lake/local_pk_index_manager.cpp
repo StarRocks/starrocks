@@ -22,8 +22,8 @@
 #include "common/config_starlet_fwd.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/join.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/tablet_manager.h"
-#include "storage/lake/update_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/storage_env.h"
 #include "storage/tablet_meta_manager.h"
@@ -62,7 +62,8 @@ Status LocalPkIndexManager::clear_persistent_index(int64_t tablet_id, DataDir* d
     return status;
 }
 
-void LocalPkIndexManager::gc(UpdateManager* update_manager, DataDir* data_dir, std::set<std::string>& tablet_ids) {
+void LocalPkIndexManager::gc(PrimaryKeyManager* primary_key_manager, DataDir* data_dir,
+                             std::set<std::string>& tablet_ids) {
     auto tablet_manager = StorageEnv::GetInstance()->lake_tablet_manager();
     int64_t t_start = MonotonicMillis();
 
@@ -90,7 +91,7 @@ void LocalPkIndexManager::gc(UpdateManager* update_manager, DataDir* data_dir, s
         TEST_SYNC_POINT_CALLBACK("LocalPkIndexManager:index_dir_changed:1", &dir_changed);
         if (dir_changed) {
             // try lock first, because the shard may be scheduled back to old dir again
-            auto try_lock = update_manager->try_lock_pk_index_shard(id);
+            auto try_lock = primary_key_manager->try_lock_pk_index_shard(id);
             TEST_SYNC_POINT_CALLBACK("LocalPkIndexManager:index_dir_changed:3", &try_lock);
             if (!try_lock) {
                 LOG(WARNING) << "Fail to lock pk index, tablet id: " << id;
@@ -103,7 +104,7 @@ void LocalPkIndexManager::gc(UpdateManager* update_manager, DataDir* data_dir, s
             if (dir_changed) {
                 dir_changed_tablet_ids.push_back(id);
                 // try to remove pk index cache to avoid continuing to use the index in the cache after deletion.
-                if (update_manager->try_remove_primary_index_cache(id)) {
+                if (primary_key_manager->try_remove_primary_index_cache(id)) {
                     // clear index from old dir
                     if (clear_persistent_index(id, data_dir).ok()) {
                         removed_dir_tablet_ids.push_back(id);
@@ -114,10 +115,10 @@ void LocalPkIndexManager::gc(UpdateManager* update_manager, DataDir* data_dir, s
                     gc_fail_because_ref++;
                 }
             }
-            update_manager->unlock_pk_index_shard(id);
+            primary_key_manager->unlock_pk_index_shard(id);
         } else if (!tablet_manager->is_tablet_in_worker(id)) {
             // the shard may be scheduled to other nodes
-            if (!update_manager->try_lock_pk_index_shard(id)) {
+            if (!primary_key_manager->try_lock_pk_index_shard(id)) {
                 LOG(WARNING) << "Fail to lock pk index, tablet id: " << id;
                 gc_fail_because_lock_fail++;
                 continue;
@@ -127,7 +128,7 @@ void LocalPkIndexManager::gc(UpdateManager* update_manager, DataDir* data_dir, s
             // and pk_index_shard write_lock has been hold, so no process will build the persistent index.
             if (!tablet_manager->is_tablet_in_worker(id)) {
                 // try to remove pk index cache to avoid continuing to use the index in the cache after deletion.
-                if (update_manager->try_remove_primary_index_cache(id)) {
+                if (primary_key_manager->try_remove_primary_index_cache(id)) {
                     if (clear_persistent_index(id).ok()) {
                         removed_dir_tablet_ids.push_back(id);
                     } else {
@@ -137,7 +138,7 @@ void LocalPkIndexManager::gc(UpdateManager* update_manager, DataDir* data_dir, s
                     gc_fail_because_ref++;
                 }
             }
-            update_manager->unlock_pk_index_shard(id);
+            primary_key_manager->unlock_pk_index_shard(id);
         }
     }
     int64_t t_end = MonotonicMillis();
@@ -180,7 +181,8 @@ bool LocalPkIndexManager::need_evict_tablet(const std::string& tablet_pk_path) {
     return ret;
 }
 
-void LocalPkIndexManager::evict(UpdateManager* update_manager, DataDir* data_dir, std::set<std::string>& tablet_ids) {
+void LocalPkIndexManager::evict(PrimaryKeyManager* primary_key_manager, DataDir* data_dir,
+                                std::set<std::string>& tablet_ids) {
     bool need_evict = false;
     auto space_info_or = FileSystem::Default()->space(data_dir->path());
     if (space_info_or.ok()) {
@@ -216,12 +218,12 @@ void LocalPkIndexManager::evict(UpdateManager* update_manager, DataDir* data_dir
         }
 
         tablet_ids_to_be_evicted.emplace_back(id);
-        if (!update_manager->try_lock_pk_index_shard(id)) {
+        if (!primary_key_manager->try_lock_pk_index_shard(id)) {
             LOG(WARNING) << "Fail to lock pk index, tablet id: " << id;
             evict_fail_because_lock_fail++;
             continue;
         }
-        if (update_manager->try_remove_primary_index_cache(id)) {
+        if (primary_key_manager->try_remove_primary_index_cache(id)) {
             if (clear_persistent_index(id).ok()) {
                 removed_dir_tablet_ids.push_back(id);
             } else {
@@ -230,7 +232,7 @@ void LocalPkIndexManager::evict(UpdateManager* update_manager, DataDir* data_dir
         } else {
             evict_fail_because_ref++;
         }
-        update_manager->unlock_pk_index_shard(id);
+        primary_key_manager->unlock_pk_index_shard(id);
     }
 
     int64_t t_end = MonotonicMillis();

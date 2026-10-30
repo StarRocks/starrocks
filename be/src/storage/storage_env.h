@@ -32,8 +32,8 @@ class LakePersistentIndexParallelCompactMgr;
 class LocationProvider;
 class ReplicationTxnManager;
 class TabletManager;
-class UpdateManager;
 class CompactionResultManager;
+class PrimaryKeyManager;
 } // namespace lake
 
 namespace spill {
@@ -79,7 +79,7 @@ public:
     VectorIndexCache* vector_index_cache() const { return _vector_index_cache.get(); }
     std::shared_ptr<lake::LocationProvider> lake_location_provider() const { return _lake_location_provider; }
     lake::TabletManager* lake_tablet_manager() const { return _lake_tablet_manager.get(); }
-    lake::UpdateManager* lake_update_manager() const { return _lake_update_manager.get(); }
+    lake::PrimaryKeyManager* lake_primary_key_manager() const { return _lake_primary_key_manager.get(); }
     lake::ReplicationTxnManager* lake_replication_txn_manager() const { return _lake_replication_txn_manager.get(); }
     lake::CompactionResultManager* lake_compaction_result_manager() const {
         return _lake_compaction_result_manager.get();
@@ -94,7 +94,7 @@ public:
 
 private:
     std::shared_ptr<lake::LocationProvider> _lake_location_provider;
-    std::unique_ptr<lake::UpdateManager> _lake_update_manager;
+    std::unique_ptr<lake::PrimaryKeyManager> _lake_primary_key_manager;
     std::unique_ptr<lake::TabletManager> _lake_tablet_manager;
     std::unique_ptr<lake::ReplicationTxnManager> _lake_replication_txn_manager;
     // Local store of autonomous-compaction results, drained by COLLECT_AND_PUBLISH.

@@ -19,6 +19,7 @@ import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.mysql.MysqlCodec;
+import com.starrocks.mysql.MysqlProto;
 import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.persist.NoOpEditLog;
 import com.starrocks.qe.ConnectContext;
@@ -87,6 +88,36 @@ public class SecurityIntegrationTest {
     }
 
     /**
+     * ALTER SECURITY INTEGRATION does not go through {@link SecurityIntegration#checkProperty()}, so an
+     * invalid `authentication_ldap_simple_group_source` has to be rejected by the analyzer. If it were
+     * not, the bad value would sit in the metadata until the next login, where the runtime parse falls
+     * back to `group_provider` and only logs - the admin would see the ALTER succeed and the setting
+     * silently not take effect.
+     */
+    @Test
+    public void testAlterRejectsInvalidGroupSource() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("type", "authentication_ldap_simple");
+        properties.put("authentication_ldap_simple_group_source", "memberof");
+        authenticationMgr.replayCreateSecurityIntegration("ldap_si", properties);
+
+        SemanticException e = Assertions.assertThrows(SemanticException.class,
+                () -> Analyzer.analyze(parseAlter("\"authentication_ldap_simple_group_source\" = \"member_of\""), ctx));
+        Assertions.assertTrue(e.getMessage().contains("member_of"), e.getMessage());
+
+        // A legal value passes, in any case ...
+        Analyzer.analyze(parseAlter("\"authentication_ldap_simple_group_source\" = \"BOTH\""), ctx);
+        // ... and an ALTER that does not mention the property is not affected by the check.
+        Analyzer.analyze(parseAlter("\"authentication_ldap_simple_server_host\" = \"ldap.example.com\""), ctx);
+    }
+
+    private AlterSecurityIntegrationStatement parseAlter(String setClause) {
+        return (AlterSecurityIntegrationStatement) SqlParser.parseSingleStatement(
+                "ALTER SECURITY INTEGRATION ldap_si SET (" + setClause + ")",
+                ctx.getSessionVariable().getSqlMode());
+    }
+
+    /**
      * Test case: JWT Security Integration property validation
      * Test point: Validate JWT-specific properties and their processing
      */
@@ -146,8 +177,9 @@ public class SecurityIntegrationTest {
 
         ConnectContext connectContext = new ConnectContext();
         connectContext.setAuthPlugin(AuthPlugin.Client.AUTHENTICATION_OPENID_CONNECT_CLIENT.toString());
-        AuthenticationHandler.authenticate(
-                connectContext, "harbor", "127.0.0.1", outputStream.toByteArray());
+        AuthenticationHandler.authenticate(connectContext,
+                MysqlProto.handshakeCredentials("harbor", outputStream.toByteArray(),
+                        AuthPlugin.Client.AUTHENTICATION_OPENID_CONNECT_CLIENT.toString(), "127.0.0.1"));
     }
 
     private String getOpenIdConnect(String fileName) throws IOException {
@@ -201,8 +233,9 @@ public class SecurityIntegrationTest {
         try {
             ConnectContext connectContext = new ConnectContext();
             connectContext.setAuthPlugin(AuthPlugin.Client.AUTHENTICATION_OPENID_CONNECT_CLIENT.toString());
-            AuthenticationHandler.authenticate(
-                    connectContext, "harbor", "127.0.0.1", outputStream.toByteArray());
+            AuthenticationHandler.authenticate(connectContext,
+                    MysqlProto.handshakeCredentials("harbor", outputStream.toByteArray(),
+                            AuthPlugin.Client.AUTHENTICATION_OPENID_CONNECT_CLIENT.toString(), "127.0.0.1"));
             StatementBase statementBase = SqlParser.parse("select current_group()", connectContext.getSessionVariable()).get(0);
             Analyzer.analyze(statementBase, connectContext);
 
@@ -217,8 +250,9 @@ public class SecurityIntegrationTest {
         Map<String, String> alterProperties = new HashMap<>();
         alterProperties.put(SecurityIntegration.SECURITY_INTEGRATION_GROUP_ALLOWED_LOGIN, "group_5");
         authenticationMgr.replayAlterSecurityIntegration("oidc", alterProperties);
-        Assertions.assertThrows(AuthenticationException.class, () -> AuthenticationHandler.authenticate(
-                new ConnectContext(), "harbor", "127.0.0.1", outputStream.toByteArray()));
+        Assertions.assertThrows(AuthenticationException.class, () -> AuthenticationHandler.authenticate(new ConnectContext(),
+                MysqlProto.handshakeCredentials("harbor", outputStream.toByteArray(),
+                        AuthPlugin.Client.AUTHENTICATION_OPENID_CONNECT_CLIENT.toString(), "127.0.0.1")));
     }
 
     @Test
@@ -251,7 +285,7 @@ public class SecurityIntegrationTest {
                 ldapAuthProviderForNative.authenticate(
                         context.getAccessControlContext(),
                         new UserIdentity("admin", "%"),
-                        "x".getBytes(StandardCharsets.UTF_8)));
+                        AuthCredentials.ofNativeScramble("admin", "x".getBytes(StandardCharsets.UTF_8), null)));
     }
 
     @Test
@@ -812,5 +846,29 @@ public class SecurityIntegrationTest {
 
         // Clean up
         authenticationMgr.replayDropSecurityIntegration("ldap_pattern");
+    }
+
+    /**
+     * Test case: group_provider / permitted_groups written with stray whitespace or empty items.
+     * Test point: every item is trimmed and empty items are dropped, so a value such as "a , b" no
+     *             longer yields "a " which would compare unequal to everything.
+     */
+    @Test
+    public void testCommaSeparatedPropertiesAreTrimmed() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_GROUP_PROVIDER, " a , b ,c ");
+        properties.put(SecurityIntegration.SECURITY_INTEGRATION_GROUP_ALLOWED_LOGIN, "g1 , g2 ,g3");
+        SecurityIntegration si = new JWTSecurityIntegration("si", properties);
+
+        Assertions.assertEquals(List.of("a", "b", "c"), si.getGroupProviderName());
+        Assertions.assertEquals(List.of("g1", "g2", "g3"), si.getGroupAllowedLoginList());
+
+        // Empty items are dropped; a value made only of separators means "not configured".
+        properties.put(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_GROUP_PROVIDER, "a,,b,");
+        properties.put(SecurityIntegration.SECURITY_INTEGRATION_GROUP_ALLOWED_LOGIN, ", ,,");
+        si = new JWTSecurityIntegration("si", properties);
+
+        Assertions.assertEquals(List.of("a", "b"), si.getGroupProviderName());
+        Assertions.assertTrue(si.getGroupAllowedLoginList().isEmpty());
     }
 }

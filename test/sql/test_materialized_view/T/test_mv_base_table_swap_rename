@@ -1,0 +1,76 @@
+-- name: test_mv_base_table_swapped_with_automatic_inactive_off @sequential
+-- A view tracks its base table by id but reads it by name. Swapping the base inactivates the view even with
+-- enable_mv_automatic_inactive_by_base_table_changes off, and its next refresh recomputes it from the table that now
+-- has the name instead of mixing the rows of both tables.
+create database db_${uuid0};
+use db_${uuid0};
+[UC]ADMIN SET FRONTEND CONFIG ("enable_mv_automatic_inactive_by_base_table_changes" = "false");
+set enable_materialized_view_rewrite = false;
+CREATE TABLE sw_base (dt date, k int, v bigint)
+DUPLICATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+CREATE TABLE sw_other (dt date, k int, v bigint)
+DUPLICATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO sw_base VALUES ('2026-08-01',1,10),('2026-08-02',1,20);
+INSERT INTO sw_other VALUES ('2026-08-01',9,90),('2026-08-02',9,92);
+CREATE MATERIALIZED VIEW sw_mv
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1')
+AS SELECT dt, k, SUM(v) AS s, COUNT(*) AS c FROM sw_base GROUP BY dt, k;
+[UC]REFRESH MATERIALIZED VIEW sw_mv WITH SYNC MODE;
+ALTER TABLE sw_base SWAP WITH sw_other;
+SELECT INACTIVE_REASON, IS_ACTIVE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'db_${uuid0}' AND TABLE_NAME = 'sw_mv';
+INSERT INTO sw_base VALUES ('2026-08-01',9,1);
+[UC]REFRESH MATERIALIZED VIEW sw_mv WITH SYNC MODE;
+function: assert_equal_result("SELECT dt, k, s, c FROM sw_mv ORDER BY dt, k", "SELECT dt, k, SUM(v), COUNT(*) FROM sw_base GROUP BY dt, k ORDER BY dt, k")
+INSERT INTO sw_other VALUES ('2026-08-02',1,21);
+[UC]REFRESH MATERIALIZED VIEW sw_mv WITH SYNC MODE;
+function: assert_equal_result("SELECT dt, k, s, c FROM sw_mv ORDER BY dt, k", "SELECT dt, k, SUM(v), COUNT(*) FROM sw_base GROUP BY dt, k ORDER BY dt, k")
+drop database db_${uuid0} force;
+CLEANUP {
+ADMIN SET FRONTEND CONFIG ("enable_mv_automatic_inactive_by_base_table_changes" = "true");
+} END CLEANUP
+
+-- name: test_mv_base_mv_renamed_and_recreated
+-- Renaming a base view inactivates the views on it, so a view created later under the old name is read in full.
+create database db_${uuid0};
+use db_${uuid0};
+set enable_materialized_view_rewrite = false;
+CREATE TABLE bm_base (dt date, k int, v bigint)
+DUPLICATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO bm_base VALUES ('2026-08-01',1,10),('2026-08-02',1,20),('2026-08-02',9,92);
+CREATE MATERIALIZED VIEW bm_mid
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1')
+AS SELECT dt, k, v FROM bm_base WHERE k < 5;
+CREATE MATERIALIZED VIEW bm_top
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1')
+AS SELECT dt, k, SUM(v) AS s, COUNT(*) AS c FROM bm_mid GROUP BY dt, k;
+[UC]REFRESH MATERIALIZED VIEW bm_mid WITH SYNC MODE;
+[UC]REFRESH MATERIALIZED VIEW bm_top WITH SYNC MODE;
+ALTER MATERIALIZED VIEW bm_mid RENAME bm_mid_old;
+SELECT INACTIVE_REASON, IS_ACTIVE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'db_${uuid0}' AND TABLE_NAME = 'bm_top';
+CREATE MATERIALIZED VIEW bm_mid
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1')
+AS SELECT dt, k, v FROM bm_base WHERE k > 5;
+[UC]REFRESH MATERIALIZED VIEW bm_mid WITH SYNC MODE;
+INSERT INTO bm_base VALUES ('2026-08-02',2,30);
+[UC]REFRESH MATERIALIZED VIEW bm_mid_old WITH SYNC MODE;
+[UC]REFRESH MATERIALIZED VIEW bm_top WITH SYNC MODE;
+function: assert_equal_result("SELECT dt, k, s, c FROM bm_top ORDER BY dt, k", "SELECT dt, k, SUM(v), COUNT(*) FROM bm_mid GROUP BY dt, k ORDER BY dt, k")
+drop database db_${uuid0} force;
