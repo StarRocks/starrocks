@@ -16,6 +16,7 @@ package com.starrocks.planner.expression;
 
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
+import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.thrift.TExprOpcode;
@@ -72,7 +73,7 @@ public class ExecCast extends ExecExpr {
     public void toThrift(TExprNode node) {
         node.setOpcode(TExprOpcode.CAST);
         Type childType = children.get(0).getType();
-        if (ExprToThrift.castChecksDecimalPrecision(childType, type, isImplicit)) {
+        if (CastOperator.checksDecimalPrecision(childType, type, isImplicit)) {
             node.setCast_decimal_check_precision(true);
         }
         if (childType.isComplexType() || childType.isDecimalOfAnyVersion()
