@@ -1614,6 +1614,58 @@ TEST_F(MetaFileTest, test_unpersistent_del_files_when_compact) {
     }
 }
 
+// A compaction moves the delete files of its inputs above the index rebuild point into its output rowset, so a cold
+// index rebuild can still replay them. When the publish has persisted the index first, it moves none: the delete
+// files stay, with their shared flag, on the archived input rowsets.
+TEST_F(MetaFileTest, test_apply_opcompaction_does_not_carry_dels_when_index_persisted) {
+    for (const bool index_persisted : {false, true}) {
+        SCOPED_TRACE(index_persisted);
+        const int64_t tablet_id = next_id();
+        Tablet tablet(_tablet_manager.get(), tablet_id);
+        auto metadata = std::make_shared<TabletMetadata>();
+        metadata->set_id(tablet_id);
+        metadata->set_version(3);
+        metadata->set_next_rowset_id(3);
+        metadata->set_enable_persistent_index(true);
+        metadata->set_persistent_index_type(PersistentIndexTypePB::CLOUD_NATIVE);
+        auto* older = metadata->add_rowsets();
+        older->set_id(1);
+        older->add_segment_metas()->set_filename("older.dat");
+        auto* newer = metadata->add_rowsets();
+        newer->set_id(2);
+        newer->add_segment_metas()->set_filename("newer.dat");
+        auto* del = newer->add_del_files();
+        del->set_name("newer.del");
+        del->set_origin_rowset_id(2);
+        del->set_shared(true);
+        // The index file stops inside rowset 2, so the delete file of rowset 2 is above the rebuild point.
+        metadata->mutable_sstable_meta()->add_sstables()->set_max_rss_rowid(static_cast<uint64_t>(2) << 32);
+
+        MetaFileBuilder builder(tablet, metadata);
+        TxnLogPB_OpCompaction op_compaction;
+        op_compaction.add_input_rowsets(1);
+        op_compaction.add_input_rowsets(2);
+        op_compaction.mutable_output_rowset()->add_segment_metas()->set_filename("output.dat");
+        ASSERT_OK(builder.apply_opcompaction(op_compaction, 2, 0, index_persisted));
+
+        ASSERT_EQ(1, metadata->rowsets_size());
+        const auto& output = metadata->rowsets(0);
+        ASSERT_EQ(2, metadata->compaction_inputs_size());
+        const auto& archived = metadata->compaction_inputs(1);
+        ASSERT_EQ(2, archived.id());
+        if (index_persisted) {
+            EXPECT_EQ(0, output.del_files_size());
+            ASSERT_EQ(1, archived.del_files_size());
+            EXPECT_EQ("newer.del", archived.del_files(0).name());
+            EXPECT_TRUE(archived.del_files(0).shared());
+        } else {
+            ASSERT_EQ(1, output.del_files_size());
+            EXPECT_EQ("newer.del", output.del_files(0).name());
+            EXPECT_EQ(0, archived.del_files_size());
+        }
+    }
+}
+
 TEST_F(MetaFileTest, test_clear_delete_predicate_when_compact) {
     // Regression for the metadata-reclaim change: when compaction archives its input
     // rowsets into compaction_inputs, the (potentially large) delete_predicate must be

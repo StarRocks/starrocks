@@ -707,10 +707,10 @@ public class CompactionSchedulerTest {
         Mockito.when(mockTable.getTableProperty()).thenReturn(tableProperty);
 
         Method method = CompactionScheduler.class.getDeclaredMethod("createAggregateCompactionTask",
-                long.class, Map.class, long.class, PartitionStatistics.CompactionPriority.class, ComputeResource.class,
-                long.class, OlapTable.class);
+                long.class, Map.class, long.class, PartitionStatistics.CompactionPriority.class, boolean.class,
+                ComputeResource.class, long.class, OlapTable.class);
         method.setAccessible(true);
-        CompactionTask task = (CompactionTask) method.invoke(scheduler, currentVersion, beToTablets, txnId, priority,
+        CompactionTask task = (CompactionTask) method.invoke(scheduler, currentVersion, beToTablets, txnId, priority, false,
                 WarehouseManager.DEFAULT_RESOURCE, 99L, mockTable);
 
         Assertions.assertNotNull(task);
@@ -820,11 +820,11 @@ public class CompactionSchedulerTest {
         table.setTableProperty(new TableProperty(new HashMap<>()));
 
         Method method = CompactionScheduler.class.getDeclaredMethod("createAggregateCompactionTask",
-                long.class, Map.class, long.class, PartitionStatistics.CompactionPriority.class, ComputeResource.class,
-                long.class, OlapTable.class);
+                long.class, Map.class, long.class, PartitionStatistics.CompactionPriority.class, boolean.class,
+                ComputeResource.class, long.class, OlapTable.class);
         method.setAccessible(true);
         CompactionTask task = (CompactionTask) method.invoke(scheduler, 1000L, beToTablets, 2000L,
-                PartitionStatistics.CompactionPriority.DEFAULT, WarehouseManager.DEFAULT_RESOURCE, 99L, table);
+                PartitionStatistics.CompactionPriority.DEFAULT, false, WarehouseManager.DEFAULT_RESOURCE, 99L, table);
 
         Field requestField = AggregateCompactionTask.class.getDeclaredField("request");
         requestField.setAccessible(true);
@@ -946,12 +946,12 @@ public class CompactionSchedulerTest {
         Mockito.when(mockTable.getTableProperty()).thenReturn(tableProperty);
 
         Method method = CompactionScheduler.class.getDeclaredMethod("createAggregateCompactionTask",
-                long.class, Map.class, long.class, PartitionStatistics.CompactionPriority.class,
+                long.class, Map.class, long.class, PartitionStatistics.CompactionPriority.class, boolean.class,
                 ComputeResource.class, long.class, OlapTable.class);
         method.setAccessible(true);
         ExceptionChecker.expectThrows(InvocationTargetException.class,
                 () -> {
-                    method.invoke(scheduler, currentVersion, beToTablets, txnId, priority,
+                    method.invoke(scheduler, currentVersion, beToTablets, txnId, priority, false,
                             WarehouseManager.DEFAULT_RESOURCE, 99L, mockTable);
                 });
     }
@@ -1000,11 +1000,11 @@ public class CompactionSchedulerTest {
         Mockito.when(mockTable.getBaseCompactionForbiddenTimeRanges()).thenReturn("* * * * *");
 
         Method method = CompactionScheduler.class.getDeclaredMethod("createCompactionTasks",
-                long.class, Map.class, long.class, boolean.class, PartitionStatistics.CompactionPriority.class,
+                long.class, Map.class, long.class, boolean.class, PartitionStatistics.CompactionPriority.class, boolean.class,
                 OlapTable.class);
         method.setAccessible(true);
         List<CompactionTask> tasks = (List<CompactionTask>) method.invoke(scheduler, currentVersion, beToTablets, 
-                txnId, false, priority, mockTable);
+                txnId, false, priority, false, mockTable);
 
         Assertions.assertNotNull(tasks);
         Assertions.assertEquals(1, tasks.size());
@@ -1022,7 +1022,7 @@ public class CompactionSchedulerTest {
         Assertions.assertFalse(request.allowBaseCompaction);
 
         List<CompactionTask> manualTasks = (List<CompactionTask>) method.invoke(scheduler, currentVersion, beToTablets,
-                txnId, false, PartitionStatistics.CompactionPriority.MANUAL_COMPACT, mockTable);
+                txnId, false, PartitionStatistics.CompactionPriority.MANUAL_COMPACT, true, mockTable);
         CompactRequest manualRequest = (CompactRequest) requestField.get(manualTasks.get(0));
         Assertions.assertTrue(manualRequest.allowBaseCompaction);
     }
@@ -1070,7 +1070,7 @@ public class CompactionSchedulerTest {
             {
                 BrpcProxy.getLakeService("192.168.0.3", 9050);
                 result = lakeService;
-                times = 2;
+                times = 3;
             }
         };
 
@@ -1088,11 +1088,11 @@ public class CompactionSchedulerTest {
         Mockito.when(mockTable.getBaseCompactionForbiddenTimeRanges()).thenReturn("* * * * *");
 
         Method method = CompactionScheduler.class.getDeclaredMethod("createAggregateCompactionTask",
-                long.class, Map.class, long.class, PartitionStatistics.CompactionPriority.class, 
+                long.class, Map.class, long.class, PartitionStatistics.CompactionPriority.class, boolean.class, 
                 ComputeResource.class, long.class, OlapTable.class);
         method.setAccessible(true);
         CompactionTask task = (CompactionTask) method.invoke(scheduler, currentVersion, beToTablets, txnId, 
-                priority, WarehouseManager.DEFAULT_RESOURCE, 99L, mockTable);
+                priority, false, WarehouseManager.DEFAULT_RESOURCE, 99L, mockTable);
 
         Assertions.assertNotNull(task);
         Assertions.assertTrue(task instanceof AggregateCompactionTask);
@@ -1115,7 +1115,7 @@ public class CompactionSchedulerTest {
         }
 
         CompactionTask unshareTask = (CompactionTask) method.invoke(scheduler, currentVersion, beToTablets, txnId,
-                PartitionStatistics.CompactionPriority.UNSHARE,
+                PartitionStatistics.CompactionPriority.UNSHARE, false,
                 WarehouseManager.DEFAULT_RESOURCE, 99L, mockTable);
         AggregateCompactRequest unshareRequest = (AggregateCompactRequest) requestField.get(unshareTask);
         for (CompactRequest req : unshareRequest.requests) {
@@ -1124,6 +1124,22 @@ public class CompactionSchedulerTest {
             Assertions.assertTrue(req.parallelConfig.enableParallel);
             Assertions.assertEquals(8, (int) req.parallelConfig.maxParallelPerTablet);
             Assertions.assertFalse(req.allowPartialSuccess);
+            // A split's own UNSHARE does not force a base compaction on a tablet with nothing to unshare.
+            Assertions.assertFalse(req.forceBaseCompaction);
+            Assertions.assertFalse(req.allowBaseCompaction);
+        }
+
+        // The UNSHARE that ALTER TABLE COMPACT asks for is a manual compaction: a tablet with nothing to unshare runs
+        // the forced base compaction instead, even inside a time range that forbids automatic base compaction.
+        CompactionTask compactUnshareTask = (CompactionTask) method.invoke(scheduler, currentVersion, beToTablets, txnId,
+                PartitionStatistics.CompactionPriority.UNSHARE, true,
+                WarehouseManager.DEFAULT_RESOURCE, 99L, mockTable);
+        AggregateCompactRequest compactUnshareRequest =
+                (AggregateCompactRequest) requestField.get(compactUnshareTask);
+        for (CompactRequest req : compactUnshareRequest.requests) {
+            Assertions.assertTrue(req.unshareSegments);
+            Assertions.assertTrue(req.forceBaseCompaction);
+            Assertions.assertTrue(req.allowBaseCompaction);
         }
     }
 
@@ -1322,8 +1338,8 @@ public class CompactionSchedulerTest {
         long tableId = 200L;
         long otherTableId = 999L;
         long endTransactionId = 2000L;
-        // Partitions 1, 2, 5 and 7 are being resharded; 3 and 4 are not.
-        Set<Long> includePartitionIds = Sets.newHashSet(1L, 2L, 5L, 7L);
+        // Partitions 1, 2, 5, 7 and 8 are being resharded; 3 and 4 are not.
+        Set<Long> includePartitionIds = Sets.newHashSet(1L, 2L, 5L, 7L, 8L);
 
         // Included partition, uncommitted, <= watermark -> abort the task (the scheduler thread aborts the
         // transaction later).
@@ -1345,12 +1361,27 @@ public class CompactionSchedulerTest {
 
         // The current reshard's UNSHARE transaction can equal the watermark because the job records
         // peekNextTransactionId() before triggering UNSHARE. It must be allowed to finish and publish.
+        // That UNSHARE runs on a partition the split left unsharing.
+        PhysicalPartition unsharingPartition = Mockito.mock(PhysicalPartition.class);
+        Mockito.when(unsharingPartition.isUnsharing()).thenReturn(true);
         CompactionJob unshareAtWatermark = Mockito.mock(CompactionJob.class);
         Mockito.when(unshareAtWatermark.getTxnId()).thenReturn(endTransactionId);
         Mockito.when(unshareAtWatermark.isUnshare()).thenReturn(true);
+        Mockito.when(unshareAtWatermark.getPartition()).thenReturn(unsharingPartition);
         Mockito.when(unshareAtWatermark.transactionHasCommitted()).thenReturn(false);
         compactionScheduler.getRunningCompactions().put(
                 new PartitionIdentifier(dbId, tableId, 7), unshareAtWatermark);
+
+        // An UNSHARE that ALTER TABLE COMPACT started on a partition that is not unsharing is not the
+        // reshard's own: its rewrite is dropped by the reshard anyway, so it is aborted like any other.
+        PhysicalPartition notUnsharingPartition = Mockito.mock(PhysicalPartition.class);
+        Mockito.when(notUnsharingPartition.isUnsharing()).thenReturn(false);
+        CompactionJob compactUnshare = Mockito.mock(CompactionJob.class);
+        Mockito.when(compactUnshare.getTxnId()).thenReturn(106L);
+        Mockito.when(compactUnshare.isUnshare()).thenReturn(true);
+        Mockito.when(compactUnshare.getPartition()).thenReturn(notUnsharingPartition);
+        Mockito.when(compactUnshare.transactionHasCommitted()).thenReturn(false);
+        compactionScheduler.getRunningCompactions().put(new PartitionIdentifier(dbId, tableId, 8), compactUnshare);
 
         // Not-included partition, uncommitted, <= watermark -> not cancelled, txn id returned.
         CompactionJob otherPartitionPrepared = Mockito.mock(CompactionJob.class);
@@ -1370,8 +1401,10 @@ public class CompactionSchedulerTest {
         Set<Long> ignoredTxnIds =
                 compactionScheduler.cancelPreviousCompactions(endTransactionId, dbId, tableId, includePartitionIds);
 
-        // Only the uncommitted compaction on an included, pre-watermark partition is aborted.
+        // Only the uncommitted compactions on included, pre-watermark partitions are aborted, except the
+        // reshard's own UNSHARE.
         Mockito.verify(prepared).abort();
+        Mockito.verify(compactUnshare).abort();
         Mockito.verify(committed, Mockito.never()).abort();
         Mockito.verify(late, Mockito.never()).abort();
         Mockito.verify(unshareAtWatermark, Mockito.never()).abort();
@@ -1554,5 +1587,118 @@ public class CompactionSchedulerTest {
         statistics.setPriority(PartitionStatistics.CompactionPriority.UNSHARE);
         compactionScheduler.startCompaction(new PartitionStatisticsSnapshot(statistics), info);
         Assertions.assertTrue(reachedTabletCollection[0], "the occupied partition must retain its valid UNSHARE path");
+    }
+
+    /**
+     * Drives startCompaction for an UNSHARE request on a table in {@code state} whose partition is not
+     * unsharing, and returns whether the scheduler went on to collect tablets (served) rather than
+     * dropping the request as stale. A served request keeps its UNSHARE priority, and a dropped one has
+     * it reset.
+     */
+    private boolean startUnshare(OlapTable.OlapTableState state, boolean compactUnshares) {
+        new MockUp<TabletReshardUtils>() {
+            @Mock
+            public boolean compactUnsharesSharedFiles(OlapTable table) {
+                return compactUnshares;
+            }
+        };
+        final boolean[] reachedTabletCollection = {false};
+        new MockUp<CompactionScheduler>() {
+            @Mock
+            public Map<Long, List<Long>> collectPartitionTablets(PhysicalPartition partition,
+                                                                 ComputeResource computeResource) {
+                reachedTabletCollection[0] = true;
+                return Map.of();
+            }
+        };
+
+        OlapTable table = new LakeTable();
+        CompactionMgr compactionManager = new CompactionMgr();
+        PartitionIdentifier partition = new PartitionIdentifier(1, 2, 3);
+        compactionManager.handleLoadingFinished(partition, 1, System.currentTimeMillis(), new Quantiles(1, 2, 3));
+        compactionManager.triggerUnshareCompaction(partition);
+        PartitionStatisticsSnapshot snapshot = new PartitionStatisticsSnapshot(compactionManager.getStatistics(partition));
+        CompactionScheduler compactionScheduler = new CompactionScheduler(compactionManager, null, globalTransactionMgr,
+                globalStateMgr, "");
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public LocalMetastore getLocalMetastore() {
+                return new LocalMetastore(globalStateMgr, null, null);
+            }
+        };
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(long dbId) {
+                return new Database(100, "aaa");
+            }
+            @Mock
+            public Table getTable(Long dbId, Long tableId) {
+                return table;
+            }
+        };
+        new MockUp<OlapTable>() {
+            @Mock
+            public PhysicalPartition getPhysicalPartition(long physicalPartitionId) {
+                return new PhysicalPartition(123, 123, new MaterializedIndex());
+            }
+        };
+        CompactionWarehouseInfo info = new CompactionWarehouseInfo("aaa", WarehouseManager.DEFAULT_RESOURCE, 0, 0);
+        table.setState(state);
+
+        Assertions.assertNull(compactionScheduler.startCompaction(snapshot, info));
+        Assertions.assertEquals(reachedTabletCollection[0],
+                compactionManager.getStatistics(partition).getPriority() == PartitionStatistics.CompactionPriority.UNSHARE,
+                "a served UNSHARE keeps its priority, and dropping the request resets it");
+        return reachedTabletCollection[0];
+    }
+
+    @Test
+    public void testUnshareServedOnNormalRangePrimaryKeyTable() {
+        Assertions.assertTrue(startUnshare(OlapTable.OlapTableState.NORMAL, true),
+                "UNSHARE for a table whose COMPACT unshares must be served");
+    }
+
+    @Test
+    public void testUnshareDroppedOnNormalSeparateSortKeyTable() {
+        Assertions.assertFalse(startUnshare(OlapTable.OlapTableState.NORMAL, false),
+                "a stale UNSHARE on a NORMAL table must be dropped");
+    }
+
+    /**
+     * ALTER TABLE COMPACT on a table whose COMPACT unshares asks for UNSHARE, and the table stays
+     * TABLET_RESHARD for the whole of a reshard, including the split's CLEANING phase. The request
+     * runs through the reshard like any compaction rather than being dropped as stale.
+     */
+    @Test
+    public void testUnshareServedOnReshardingRangePrimaryKeyTable() {
+        Assertions.assertTrue(startUnshare(OlapTable.OlapTableState.TABLET_RESHARD, true),
+                "UNSHARE for a table whose COMPACT unshares must be served while resharding");
+    }
+
+    /**
+     * ALTER TABLE COMPACT asks for a manual compaction, whether as MANUAL_COMPACT or as the UNSHARE of a table whose
+     * COMPACT unshares, so a tablet with nothing to unshare runs the forced base compaction. A split's own UNSHARE is
+     * not a manual compaction.
+     */
+    @Test
+    public void testOnlyTheUnshareOfCompactIsManual() {
+        Assertions.assertTrue(CompactionScheduler.isManualCompaction(
+                PartitionStatistics.CompactionPriority.MANUAL_COMPACT, false));
+        Assertions.assertTrue(CompactionScheduler.isManualCompaction(
+                PartitionStatistics.CompactionPriority.UNSHARE, false));
+        Assertions.assertFalse(CompactionScheduler.isManualCompaction(
+                PartitionStatistics.CompactionPriority.UNSHARE, true));
+        Assertions.assertFalse(CompactionScheduler.isManualCompaction(
+                PartitionStatistics.CompactionPriority.DEFAULT, false));
+    }
+
+    /**
+     * ALTER TABLE COMPACT runs in every table state an ordinary compaction runs in, such as OPTIMIZE. On a
+     * table whose COMPACT unshares it asks for UNSHARE, which must not be dropped there as stale.
+     */
+    @Test
+    public void testUnshareServedOnOptimizingRangePrimaryKeyTable() {
+        Assertions.assertTrue(startUnshare(OlapTable.OlapTableState.OPTIMIZE, true),
+                "UNSHARE for a table whose COMPACT unshares must be served in any state compaction runs in");
     }
 }

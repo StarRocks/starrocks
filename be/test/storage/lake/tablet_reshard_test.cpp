@@ -14,6 +14,14 @@
 
 #include "storage/lake/tablet_reshard.h"
 
+#include <atomic>
+#include <chrono>
+#include <future>
+
+#include "common/thread/threadpool.h"
+#include "storage/lake/compaction_scheduler.h"
+#include "storage/lake/tablet_merge_admission.h"
+#include "storage/lake/tablet_parallel_compaction_manager.h"
 #include "storage/lake/tablet_reshard_test_base.h"
 
 namespace starrocks {
@@ -156,6 +164,84 @@ TEST_F(LakeTabletReshardTest, test_range_reshard_compaction_partial_merge_reject
     }
 }
 
+// A range primary-key tablet is split, each child is rewritten by an UNSHARE compaction, and the children merge back
+// into one tablet that keeps serving reads, DML and compaction.
+TEST_F(LakeTabletReshardTest, test_range_reshard_pk_split_unshare_merge_lifecycle) {
+    ScopedPkIndexFlush pk_index_flush;
+    const int32_t old_min_segments = config::lake_pk_compaction_min_input_segments;
+    config::lake_pk_compaction_min_input_segments = 1;
+    DeferOp restore_config([&] { config::lake_pk_compaction_min_input_segments = old_min_segments; });
+
+    struct Variant {
+        std::vector<int> boundaries;
+        bool dcg_idg_source;
+    };
+    const std::vector<Variant> variants = {
+            {{0, 50, 100}, false}, {{0, 33, 66, 100}, false}, {{0, 5, 100}, false}, {{0, 50, 100}, true}};
+    for (const auto& variant : variants) {
+        SCOPED_TRACE(fmt::format("boundaries {} dcg_idg_source {}", fmt::join(variant.boundaries, ","),
+                                 variant.dcg_idg_source));
+        TabletMetadataPtr source;
+        std::vector<std::pair<int32_t, int32_t>> expected_rows;
+        std::vector<int32_t> deleted_keys;
+        if (variant.dcg_idg_source) {
+            source = fixed_point_source(true);
+            ASSIGN_OR_ABORT(expected_rows, read_two_column_rows(source));
+        } else {
+            const int64_t tablet_id = next_id();
+            ASSIGN_OR_ABORT(source, create_lifecycle_source(tablet_id, 0, 100, /*key=*/20, /*value=*/200));
+            ASSIGN_OR_ABORT(source, publish_followup_upsert_delete(tablet_id, source->version(), 30, 300, 20));
+            ASSIGN_OR_ABORT(source, publish_followup_upsert_delete(tablet_id, source->version(), 60, 600, 98));
+            ASSIGN_OR_ABORT(source, publish_followup_upsert_delete(tablet_id, source->version(), 70, 700, 97));
+            ASSIGN_OR_ABORT(source, publish_followup_delete(tablet_id, source->version(), 40));
+            expected_rows = {{30, 300}, {60, 600}, {70, 700}};
+            deleted_keys = {20, 40, 98, 97, 99};
+            expect_lifecycle_oracle(source, expected_rows, deleted_keys);
+        }
+
+        auto children = split_fixed_point_source(source, variant.boundaries);
+        std::vector<TabletMetadataPtr> unshared;
+        for (const auto& child : children) {
+            ASSERT_TRUE(lake::tablet_reshard_helper::has_shared_files(*child)) << child->id();
+            ASSIGN_OR_ABORT(auto rewritten, unshare_tablet(child));
+            ASSERT_FALSE(lake::tablet_reshard_helper::has_shared_files(*rewritten)) << child->id();
+            unshared.push_back(rewritten);
+        }
+
+        std::unordered_map<int64_t, TabletMetadataPtr> published;
+        const int64_t target = next_id();
+        const int64_t base_version = unshared[0]->version();
+        ASSERT_OK(publish_resharding_merge(unshared, target, base_version, base_version + 1, next_id(), published));
+        auto merged = published.at(target);
+        if (variant.dcg_idg_source) {
+            ASSIGN_OR_ABORT(auto rows, read_two_column_rows(merged));
+            EXPECT_EQ(expected_rows, rows);
+            continue;
+        }
+        EXPECT_GT(merged->sstable_meta().sstables_size(), 0);
+        std::set<std::string> source_ssts;
+        for (const auto& child : unshared) {
+            for (const auto& sst : child->sstable_meta().sstables()) source_ssts.insert(sst.filename());
+        }
+        for (const auto& orphan : merged->orphan_files()) {
+            EXPECT_EQ(0, source_ssts.count(orphan.name())) << orphan.name();
+        }
+
+        MetadataOnlyMergeResult result;
+        result.target_tablet_id = target;
+        result.target_version = merged->version();
+        result.published[target] = *merged;
+        auto rows_after_dml = expected_rows;
+        rows_after_dml.erase(std::remove_if(rows_after_dml.begin(), rows_after_dml.end(),
+                                            [](const auto& row) { return row.first == 60; }),
+                             rows_after_dml.end());
+        rows_after_dml.insert(rows_after_dml.begin(), {10, 1010});
+        auto deleted_after_dml = deleted_keys;
+        deleted_after_dml.push_back(60);
+        expect_metadata_merge_lifecycle(result, expected_rows, rows_after_dml, deleted_after_dml);
+    }
+}
+
 TEST_F(LakeTabletReshardTest, test_range_reshard_signature_normalizes_recovery_equivalence_and_order) {
     auto source = std::make_shared<TabletMetadataPB>(*fixed_point_source(false));
     // The ordinary rowset's recovery key precedes the predicate's key (9).
@@ -213,6 +299,126 @@ TEST_F(LakeTabletReshardTest, test_range_reshard_sidecar_and_sst_cold_read_smoke
 
     auto children = split_fixed_point_source(cold, 3);
     expect_merge_rejected_without_writes(children, next_id(), children[0]->version() + 1);
+}
+
+// The split children of a primary-key tablet whose ORDER BY is its primary key share the parent's DCG and IDG files.
+// UNSHARE rewrites the rowset they belong to: the column update is folded into the new segment, the shared DCG and
+// IDG files leave the child's metadata as shared orphans, and the children together still read the parent's rows.
+TEST_F(LakeTabletReshardTest, test_range_reshard_unshare_rewrites_dcg_and_idg) {
+    ScopedPkIndexFlush pk_index_flush;
+    auto source = fixed_point_source(true);
+    ASSIGN_OR_ABORT(auto expected, read_two_column_rows(source));
+    const std::string stem = fmt::format("fixed_{}", source->id());
+    auto children = split_fixed_point_source(source, 2);
+
+    std::vector<std::pair<int32_t, int32_t>> rows;
+    for (const auto& child : children) {
+        SCOPED_TRACE(child->id());
+        ASSIGN_OR_ABORT(auto unshared, unshare_tablet(child));
+        EXPECT_TRUE(unshared->dcg_meta().dcgs().empty());
+        EXPECT_TRUE(unshared->idg_meta().idgs().empty());
+        for (const auto& name : {stem + ".cols", stem + ".idx"}) {
+            auto orphan = std::find_if(unshared->orphan_files().begin(), unshared->orphan_files().end(),
+                                       [&](const FileMetaPB& file) { return file.name() == name; });
+            ASSERT_NE(unshared->orphan_files().end(), orphan) << name;
+            EXPECT_TRUE(orphan->shared()) << name;
+        }
+        for (const auto& rowset : unshared->rowsets()) {
+            for (const auto& segment : rowset.segment_metas()) {
+                EXPECT_FALSE(segment.shared()) << segment.filename();
+            }
+        }
+        ASSIGN_OR_ABORT(auto child_rows, read_two_column_rows(unshared));
+        rows.insert(rows.end(), child_rows.begin(), child_rows.end());
+    }
+    EXPECT_EQ(expected, rows);
+}
+
+// A column-mode update that lands on an input segment between UNSHARE's pick and its publish makes the publish drop
+// the rewrite: the shared segment and the newer DCG stay, the rewritten segment becomes an orphan, and reads see the
+// newer values. Running UNSHARE again rewrites the segment with those newer values.
+TEST_F(LakeTabletReshardTest, test_range_reshard_unshare_dropped_by_a_newer_column_update) {
+    ScopedPkIndexFlush pk_index_flush;
+    auto source = fixed_point_source(true);
+    const std::string stem = fmt::format("fixed_{}", source->id());
+    // The child [0, 50) keeps the source's first segment (rssid 1), which carries the DCG and the IDG.
+    auto child = split_fixed_point_source(source, 2)[0];
+    const int64_t version = child->version();
+    auto expect_shared_input_segment = [&](const TabletMetadataPtr& metadata) {
+        bool found = false;
+        for (const auto& rowset : metadata->rowsets()) {
+            for (const auto& segment : rowset.segment_metas()) {
+                if (segment.filename() == stem + "_0.dat") found = segment.shared();
+            }
+        }
+        EXPECT_TRUE(found) << metadata->ShortDebugString();
+    };
+    ASSERT_NO_FATAL_FAILURE(expect_shared_input_segment(child));
+
+    // Execute UNSHARE against `version` without publishing it.
+    ASSERT_OK(put_tablet_metadata(child));
+    _primary_key_manager->unload_and_remove_primary_index(child->id());
+    const int64_t txn_id = next_id();
+    auto context = std::make_unique<lake::CompactionTaskContext>(txn_id, child->id(), version, /*force_base=*/false,
+                                                                 /*skip_write_txnlog=*/false, nullptr, 0, 0,
+                                                                 /*is_unshare=*/true);
+    ASSIGN_OR_ABORT(auto task, _tablet_manager->compact(context.get()));
+    ASSERT_OK(task->execute(lake::CompactionTask::kNoCancelFn));
+    ASSIGN_OR_ABORT(auto txn_log, _tablet_manager->get_txn_log(child->id(), txn_id));
+    ASSERT_TRUE(txn_log->has_op_compaction());
+    const auto& op_compaction = txn_log->op_compaction();
+    ASSERT_EQ(version, op_compaction.compact_version());
+    ASSERT_GT(op_compaction.output_rowset().segment_metas_size(), 0);
+
+    // A column-mode update of c1 on rssid 1 publishes version + 1. Like a real one, it replaces the DCG entry with a
+    // new private .cols file and leaves the old file as an orphan.
+    auto updated = std::make_shared<TabletMetadataPB>(*child);
+    updated->set_version(version + 1);
+    const std::string newer_cols = fmt::format("newer_{}.cols", child->id());
+    const auto size = write_c1_only_cols_file(child->id(), newer_cols, 50, [](int row) { return row * 10 + 5000; });
+    auto* replaced = updated->add_orphan_files();
+    replaced->set_name(stem + ".cols");
+    replaced->set_shared(true);
+    replaced->set_version(1);
+    updated->mutable_dcg_meta()->mutable_dcgs()->erase(1);
+    add_dcg_with_columns(updated.get(), 1, newer_cols, {1002}, version + 1, /*shared_file=*/false);
+    updated->mutable_dcg_meta()->mutable_dcgs()->at(1).add_column_file_sizes(size);
+    ASSERT_OK(put_tablet_metadata(updated));
+    // Row 1 of rssid 1 (key 1) is deleted by the source's delete vector.
+    std::vector<std::pair<int32_t, int32_t>> expected;
+    for (int32_t key = 0; key < 50; ++key) {
+        if (key != 1) expected.emplace_back(key, key * 10 + 5000);
+    }
+
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(txn_id);
+    txn_info.set_txn_type(TXN_NORMAL);
+    txn_info.set_commit_time(1);
+    ASSIGN_OR_ABORT(auto published,
+                    lake::publish_version(_tablet_manager.get(), lake::PublishTabletInfo(child->id()), version + 1,
+                                          version + 2, std::span<const TxnInfoPB>(&txn_info, 1), false, std::nullopt));
+    ASSERT_NO_FATAL_FAILURE(expect_shared_input_segment(published));
+    ASSERT_TRUE(published->dcg_meta().dcgs().contains(1));
+    EXPECT_EQ(newer_cols, published->dcg_meta().dcgs().at(1).column_files(0));
+    for (const auto& segment : op_compaction.output_rowset().segment_metas()) {
+        EXPECT_TRUE(std::any_of(published->orphan_files().begin(), published->orphan_files().end(),
+                                [&](const FileMetaPB& file) { return file.name() == segment.filename(); }))
+                << segment.filename();
+    }
+    ASSIGN_OR_ABORT(auto rows, read_two_column_rows(published));
+    EXPECT_EQ(expected, rows);
+
+    ASSIGN_OR_ABORT(auto rerun, unshare_tablet(published));
+    for (const auto& rowset : rerun->rowsets()) {
+        for (const auto& segment : rowset.segment_metas()) {
+            EXPECT_FALSE(segment.shared()) << segment.filename();
+        }
+    }
+    EXPECT_TRUE(rerun->dcg_meta().dcgs().empty());
+    EXPECT_TRUE(rerun->idg_meta().idgs().empty());
+    EXPECT_FALSE(lake::tablet_reshard_helper::has_shared_files(*rerun));
+    ASSIGN_OR_ABORT(rows, read_two_column_rows(rerun));
+    EXPECT_EQ(expected, rows);
 }
 
 // A merge attempt that fails right after writing its delete vectors leaves an unreferenced delvec file behind. Of two
@@ -5089,6 +5295,819 @@ TEST_F(LakeTabletReshardTest, test_parent_alias_of_a_primary_key_range_split_uni
     EXPECT_TRUE(loaded.roaring()->contains(3));
     EXPECT_TRUE(loaded.roaring()->contains(5));
     EXPECT_TRUE(loaded.roaring()->contains(9));
+}
+
+// A split child that cold-loads its primary-key index replays the whole shared history, including delete keys that
+// belong to its sibling's range. Those keys must not reach the child's next flushed index file, or the file's key
+// range would extend outside the child's range.
+TEST_F(LakeTabletReshardTest, test_range_reshard_cold_index_load_drops_sibling_deletes) {
+    ScopedPkIndexFlush pk_index_flush;
+
+    for (const bool clear_lower_bound : {false, true}) {
+        SCOPED_TRACE(clear_lower_bound);
+        const int64_t tablet_id = next_id();
+        ASSIGN_OR_ABORT(auto seeded, create_lifecycle_source(tablet_id, /*lower=*/0, /*upper=*/100, /*key=*/10,
+                                                             /*value=*/100, /*include_delete=*/true));
+        // The newest rowset deletes key 71, which belongs to the second child.
+        ASSIGN_OR_ABORT(auto written, publish_followup_upsert_delete(tablet_id, seeded->version(), /*upsert_key=*/60,
+                                                                     /*upsert_value=*/600, /*delete_key=*/71));
+        auto children = split_fixed_point_source(written, 2);
+        auto child = std::make_shared<TabletMetadataPB>(*children[0]);
+        if (clear_lower_bound) {
+            child->mutable_range()->clear_lower_bound();
+            child->mutable_range()->clear_lower_bound_included();
+        }
+        ASSERT_OK(put_tablet_metadata(child));
+        _primary_key_manager->unload_and_remove_primary_index(child->id());
+        _tablet_manager->prune_metacache();
+
+        std::set<std::string> inherited;
+        for (const auto& sst : child->sstable_meta().sstables()) inherited.insert(sst.filename());
+
+        // Cold-loads the index, then keeps the next flush non-empty.
+        ASSIGN_OR_ABORT(auto result, publish_followup_upsert_delete(child->id(), child->version(), /*upsert_key=*/5,
+                                                                    /*upsert_value=*/55, /*delete_key=*/0,
+                                                                    /*include_delete=*/false));
+        ASSIGN_OR_ABORT(auto flushed, _primary_key_manager->flush_pk_memtable(result, result->version(), std::nullopt));
+        int new_ssts = 0;
+        for (const auto& sst : flushed->sstable_meta().sstables()) {
+            if (inherited.count(sst.filename()) > 0) continue;
+            ++new_ssts;
+            ASSERT_OK(lake::check_sstable_range(*flushed, sst));
+        }
+        ASSERT_GT(new_ssts, 0);
+        expect_lifecycle_oracle(flushed, {{5, 55}, {10, 100}}, {});
+    }
+}
+
+// A newly flushed index file never joins a fileset that holds a file the tablet must rewrite (shared with a split
+// sibling, or reaching outside the tablet range), for two reasons: an UNSHARE may pick that fileset even when it is
+// the newest one, and its publish replaces whole filesets by fileset id, which would drop the newer file; and the
+// size-tiered picker never compacts the newest fileset, so a fileset that kept growing would keep its shared or
+// out-of-range file. A fileset of files the tablet fully owns still takes new files.
+TEST_F(LakeTabletReshardTest, test_new_sstable_does_not_join_a_fileset_holding_a_shared_sstable) {
+    ScopedPkIndexFlush pk_index_flush;
+
+    enum class FirstFile { kShared, kReachesOutside, kOwned };
+    for (const auto first_file : {FirstFile::kShared, FirstFile::kReachesOutside, FirstFile::kOwned}) {
+        SCOPED_TRACE(static_cast<int>(first_file));
+        const int64_t tablet_id = next_id();
+        const int lower = first_file == FirstFile::kReachesOutside ? 3 : 0;
+        ASSIGN_OR_ABORT(auto seeded, create_lifecycle_source(tablet_id, lower, /*upper=*/100, /*key=*/5,
+                                                             /*value=*/50, /*include_delete=*/false));
+        ASSIGN_OR_ABORT(auto flushed, _primary_key_manager->flush_pk_memtable(seeded, seeded->version(), std::nullopt));
+        ASSERT_EQ(1, flushed->sstable_meta().sstables_size());
+        ASSERT_TRUE(flushed->sstable_meta().sstables(0).has_fileset_id());
+
+        auto with_first = std::make_shared<TabletMetadataPB>(*flushed);
+        auto* first = with_first->mutable_sstable_meta()->mutable_sstables(0);
+        if (first_file == FirstFile::kShared) {
+            first->set_shared(true);
+        } else if (first_file == FirstFile::kReachesOutside) {
+            first->mutable_range()->set_start_key(encode_int_primary_key(1));
+        }
+        ASSERT_OK(put_tablet_metadata(with_first));
+        _primary_key_manager->unload_and_remove_primary_index(tablet_id);
+
+        // Cold-loads the index with the first file, then flushes a second one for key 60.
+        ASSIGN_OR_ABORT(auto written,
+                        publish_followup_upsert_delete(tablet_id, with_first->version(), /*upsert_key=*/60,
+                                                       /*upsert_value=*/600, /*delete_key=*/0,
+                                                       /*include_delete=*/false));
+        ASSIGN_OR_ABORT(auto reflushed,
+                        _primary_key_manager->flush_pk_memtable(written, written->version(), std::nullopt));
+        ASSERT_EQ(2, reflushed->sstable_meta().sstables_size());
+        const auto& s1 = reflushed->sstable_meta().sstables(0);
+        const auto& s2 = reflushed->sstable_meta().sstables(1);
+        ASSERT_EQ(first->filename(), s1.filename());
+        ASSERT_EQ(encode_int_primary_key(60), s2.range().start_key());
+        if (first_file == FirstFile::kOwned) {
+            EXPECT_EQ(UniqueId(s1.fileset_id()), UniqueId(s2.fileset_id()));
+        } else {
+            EXPECT_NE(UniqueId(s1.fileset_id()), UniqueId(s2.fileset_id()));
+        }
+    }
+}
+
+// A split child may hold a private index file with a key from its sibling's range, written before a cold index
+// rebuild dropped such keys. UNSHARE rewrites it together with the shared files, so every index file left lies inside
+// the child's range and the sibling key is gone from the child's index.
+TEST_F(LakeTabletReshardTest, test_range_reshard_unshare_rewrites_a_private_sstable_outside_the_range) {
+    ScopedPkIndexFlush pk_index_flush;
+    const int64_t tablet_id = next_id();
+    ASSIGN_OR_ABORT(auto source, create_lifecycle_source(tablet_id, /*lower=*/0, /*upper=*/100, /*key=*/20,
+                                                         /*value=*/200, /*include_delete=*/false));
+    for (int32_t key : {20, 30, 60, 70}) {
+        ASSIGN_OR_ABORT(source, publish_followup_upsert_delete(tablet_id, source->version(), key, key * 10, key + 1));
+    }
+
+    // The child [0, 50) inherits the source's index files as shared, and gets a private file holding key 71.
+    auto child = std::make_shared<TabletMetadataPB>(*split_fixed_point_source(source, 2)[0]);
+    ASSERT_GT(child->sstable_meta().sstables_size(), 0);
+    for (const auto& sst : child->sstable_meta().sstables()) ASSERT_TRUE(sst.shared()) << sst.filename();
+    append_tombstone_sstable(child.get(), 71, "sibling_tombstone.sst", /*shared=*/false);
+
+    ASSIGN_OR_ABORT(auto after, unshare_tablet(child));
+    ASSERT_GT(after->sstable_meta().sstables_size(), 0);
+    for (const auto& sst : after->sstable_meta().sstables()) {
+        EXPECT_NE("sibling_tombstone.sst", sst.filename());
+        EXPECT_FALSE(sst.shared()) << sst.filename();
+        EXPECT_OK(lake::check_sstable_range(*after, sst));
+    }
+}
+
+// ALTER TABLE ... COMPACT asks every tablet of a range primary-key partition for an UNSHARE with a forced base
+// compaction. A tablet that holds nothing an UNSHARE would rewrite runs the manual compaction instead, while a split's
+// own UNSHARE, which never forces a base compaction, leaves its rowsets as they are.
+TEST_F(LakeTabletReshardTest, test_compact_runs_a_manual_compaction_where_unshare_has_nothing_to_do) {
+    const int64_t tablet_id = next_id();
+    ASSIGN_OR_ABORT(auto tablet, create_lifecycle_source(tablet_id, /*lower=*/0, /*upper=*/100, /*key=*/20,
+                                                         /*value=*/200, /*include_delete=*/false));
+    // Enough rowsets for an ordinary primary-key compaction to pick them (lake_pk_compaction_min_input_segments).
+    for (int32_t key : {30, 40, 50, 60, 70, 80}) {
+        ASSIGN_OR_ABORT(tablet, publish_followup_upsert_delete(tablet_id, tablet->version(), key, key * 10, 0,
+                                                               /*include_delete=*/false));
+    }
+    ASSERT_GE(tablet->rowsets_size(), 7);
+    ASSERT_FALSE(lake::tablet_reshard_helper::has_shared_files(*tablet));
+
+    ASSIGN_OR_ABORT(auto after_split_unshare,
+                    compact_tablet(tablet_id, tablet->version(), /*force_base=*/false, /*is_unshare=*/true));
+    EXPECT_EQ(tablet->rowsets_size(), after_split_unshare->rowsets_size());
+
+    ASSIGN_OR_ABORT(auto after_compact, compact_tablet(tablet_id, after_split_unshare->version(), /*force_base=*/true,
+                                                       /*is_unshare=*/true));
+    EXPECT_LT(after_compact->rowsets_size(), after_split_unshare->rowsets_size());
+    _primary_key_manager->unload_and_remove_primary_index(tablet_id);
+    expect_lifecycle_oracle(after_compact,
+                            {{20, 200}, {30, 300}, {40, 400}, {50, 500}, {60, 600}, {70, 700}, {80, 800}}, {});
+}
+
+// The manual compaction a tablet with nothing to unshare runs is the forced base compaction COMPACT asks for: it
+// reclaims a deleted row from a tablet with too few rowsets for an ordinary compaction to pick any.
+TEST_F(LakeTabletReshardTest, test_compact_runs_a_forced_base_compaction_where_unshare_has_nothing_to_do) {
+    const int64_t tablet_id = next_id();
+    ASSIGN_OR_ABORT(auto tablet, create_lifecycle_source(tablet_id, /*lower=*/0, /*upper=*/100, /*key=*/20,
+                                                         /*value=*/200, /*include_delete=*/false));
+    ASSIGN_OR_ABORT(tablet, publish_followup_upsert_delete(tablet_id, tablet->version(), 30, 300, 0,
+                                                           /*include_delete=*/false));
+    ASSIGN_OR_ABORT(tablet, publish_followup_upsert_delete(tablet_id, tablet->version(), 40, 400, /*delete_key=*/20));
+    ASSERT_FALSE(lake::tablet_reshard_helper::has_shared_files(*tablet));
+    auto total_rows = [](const TabletMetadataPB& metadata) {
+        int64_t rows = 0;
+        for (const auto& rowset : metadata.rowsets()) rows += rowset.num_rows();
+        return rows;
+    };
+
+    ASSIGN_OR_ABORT(auto after_ordinary, compact_tablet(tablet_id, tablet->version(), /*force_base=*/false));
+    EXPECT_EQ(total_rows(*tablet), total_rows(*after_ordinary));
+
+    ASSIGN_OR_ABORT(auto after_compact, compact_tablet(tablet_id, after_ordinary->version(), /*force_base=*/true,
+                                                       /*is_unshare=*/true));
+    EXPECT_LT(total_rows(*after_compact), total_rows(*after_ordinary));
+    _primary_key_manager->unload_and_remove_primary_index(tablet_id);
+    expect_lifecycle_oracle(after_compact, {{30, 300}, {40, 400}}, {20});
+}
+
+// A tablet that no longer shares any file can still keep a private index file reaching outside its range, as a cold
+// index rebuild of an older version wrote one, and that file keeps the tablet from being merged. The UNSHARE that
+// ALTER TABLE ... COMPACT asks for clears the shared files of a split child and, once none is left, still rewrites
+// such a file, even when it is the newest one.
+TEST_F(LakeTabletReshardTest, test_compact_rewrites_a_private_sstable_outside_the_range_of_an_unshared_tablet) {
+    ScopedPkIndexFlush pk_index_flush;
+    const int64_t tablet_id = next_id();
+    ASSIGN_OR_ABORT(auto source, create_lifecycle_source(tablet_id, /*lower=*/0, /*upper=*/100, /*key=*/20,
+                                                         /*value=*/200, /*include_delete=*/false));
+    for (int32_t key : {20, 30, 60, 70}) {
+        ASSIGN_OR_ABORT(source, publish_followup_upsert_delete(tablet_id, source->version(), key, key * 10, key + 1));
+    }
+    auto child = split_fixed_point_source(source, 2)[0];
+    ASSERT_TRUE(lake::tablet_reshard_helper::has_shared_files(*child));
+    ASSERT_OK(put_tablet_metadata(child));
+    _primary_key_manager->unload_and_remove_primary_index(child->id());
+    ASSIGN_OR_ABORT(auto unshared,
+                    compact_tablet(child->id(), child->version(), /*force_base=*/true, /*is_unshare=*/true));
+    ASSERT_FALSE(lake::tablet_reshard_helper::has_shared_files(*unshared));
+
+    auto stale = std::make_shared<TabletMetadataPB>(*unshared);
+    append_tombstone_sstable(stale.get(), 71, "sibling_tombstone.sst", /*shared=*/false);
+    ASSERT_FALSE(lake::tablet_reshard_helper::has_shared_files(*stale));
+    ASSERT_FALSE(lake::check_sstable_range(*stale, *stale->sstable_meta().sstables().rbegin()).ok());
+    ASSERT_OK(put_tablet_metadata(stale));
+    _primary_key_manager->unload_and_remove_primary_index(stale->id());
+
+    ASSIGN_OR_ABORT(auto after,
+                    compact_tablet(stale->id(), stale->version(), /*force_base=*/true, /*is_unshare=*/true));
+    ASSERT_GT(after->sstable_meta().sstables_size(), 0);
+    for (const auto& sst : after->sstable_meta().sstables()) {
+        EXPECT_NE("sibling_tombstone.sst", sst.filename());
+        EXPECT_FALSE(sst.shared()) << sst.filename();
+        EXPECT_OK(lake::check_sstable_range(*after, sst));
+    }
+    _primary_key_manager->unload_and_remove_primary_index(after->id());
+    expect_lifecycle_oracle(after, {{20, 200}, {30, 300}}, {21, 31});
+}
+
+// UNSHARE rewrites the index files a split child inherits: afterwards each child holds only private index files that
+// lie inside its range, and its index still finds every row it owns and none of the keys it deleted.
+TEST_F(LakeTabletReshardTest, test_range_reshard_unshare_rewrites_inherited_sstables) {
+    ScopedPkIndexFlush pk_index_flush;
+    const int64_t tablet_id = next_id();
+    ASSIGN_OR_ABORT(auto source, create_lifecycle_source(tablet_id, /*lower=*/0, /*upper=*/100, /*key=*/20,
+                                                         /*value=*/200, /*include_delete=*/false));
+    for (int32_t key : {20, 30, 60, 70}) {
+        ASSIGN_OR_ABORT(source, publish_followup_upsert_delete(tablet_id, source->version(), key, key * 10, key + 1));
+    }
+
+    const std::vector<std::vector<std::pair<int32_t, int32_t>>> child_rows = {{{20, 200}, {30, 300}},
+                                                                              {{60, 600}, {70, 700}}};
+    const std::vector<std::vector<int32_t>> deleted_keys = {{21, 31}, {61, 71}};
+    auto children = split_fixed_point_source(source, 2);
+    ASSERT_EQ(2, children.size());
+    for (size_t i = 0; i < children.size(); ++i) {
+        SCOPED_TRACE(i);
+        ASSERT_GT(children[i]->sstable_meta().sstables_size(), 0);
+        for (const auto& sst : children[i]->sstable_meta().sstables()) ASSERT_TRUE(sst.shared()) << sst.filename();
+
+        ASSIGN_OR_ABORT(auto after, unshare_tablet(children[i]));
+        ASSERT_GT(after->sstable_meta().sstables_size(), 0);
+        for (const auto& sst : after->sstable_meta().sstables()) {
+            EXPECT_FALSE(sst.shared()) << sst.filename();
+            EXPECT_TRUE(lake::sstable_has_usable_range(sst)) << sst.filename();
+            EXPECT_OK(lake::check_sstable_range(*after, sst));
+        }
+        _primary_key_manager->unload_and_remove_primary_index(after->id());
+        expect_lifecycle_oracle(after, child_rows[i], deleted_keys[i]);
+    }
+}
+
+// UNSHARE starts its index rewrite at the first fileset the tablet cannot keep, so a private base file inside the
+// child's range stays as it is. The rewrite leaves the base level out and keeps the tombstones of the newer, shared
+// fileset: a key the base file still maps stays deleted.
+TEST_F(LakeTabletReshardTest, test_range_reshard_unshare_keeps_a_private_base_sstable) {
+    ScopedPkIndexFlush pk_index_flush;
+    const int64_t tablet_id = next_id();
+    ASSIGN_OR_ABORT(auto source, create_lifecycle_source(tablet_id, /*lower=*/0, /*upper=*/100, /*key=*/20,
+                                                         /*value=*/200, /*include_delete=*/false));
+    ASSIGN_OR_ABORT(source, publish_followup_upsert_delete(tablet_id, source->version(), 30, 300, 0,
+                                                           /*include_delete=*/false));
+    // The base index file maps keys 20 and 30, both inside the child [0, 50).
+    ASSIGN_OR_ABORT(source, _primary_key_manager->flush_pk_memtable(source, source->version(), std::nullopt));
+    ASSERT_OK(put_tablet_metadata(source));
+    ASSERT_EQ(1, source->sstable_meta().sstables_size());
+    const std::string base_file = source->sstable_meta().sstables(0).filename();
+    // Key 25 is written and key 20 deleted; the split flushes both into a newer index file.
+    ASSIGN_OR_ABORT(source, publish_followup_upsert_delete(tablet_id, source->version(), 25, 250, 20));
+    ASSIGN_OR_ABORT(source, publish_followup_upsert_delete(tablet_id, source->version(), 60, 600, 0,
+                                                           /*include_delete=*/false));
+
+    auto child = std::make_shared<TabletMetadataPB>(*split_fixed_point_source(source, 2)[0]);
+    ASSERT_EQ(2, child->sstable_meta().sstables_size());
+    // The child owns the base file privately; the newer file, in a fileset of its own, is shared with the sibling.
+    auto* base = child->mutable_sstable_meta()->mutable_sstables(0);
+    const auto& newer = child->sstable_meta().sstables(1);
+    ASSERT_EQ(base_file, base->filename());
+    base->set_shared(false);
+    ASSERT_OK(lake::check_sstable_range(*child, *base));
+    ASSERT_TRUE(newer.shared());
+    ASSERT_NE(UniqueId(base->fileset_id()), UniqueId(newer.fileset_id()));
+
+    ASSIGN_OR_ABORT(auto after, unshare_tablet(child));
+    ASSERT_GT(after->sstable_meta().sstables_size(), 1);
+    EXPECT_EQ(base_file, after->sstable_meta().sstables(0).filename());
+    for (const auto& sst : after->sstable_meta().sstables()) {
+        EXPECT_FALSE(sst.shared()) << sst.filename();
+        EXPECT_OK(lake::check_sstable_range(*after, sst));
+    }
+    _primary_key_manager->unload_and_remove_primary_index(after->id());
+    expect_lifecycle_oracle(after, {{25, 250}, {30, 300}}, {20});
+}
+
+// UNSHARE rewrites whole index filesets, and its publish replaces them by fileset id. A file flushed between the pick
+// and the publish starts a fileset of its own, so the publish keeps it and the key it holds, both when the newest
+// picked fileset is the inherited shared one and when it is a private one reaching below the child's range.
+TEST_F(LakeTabletReshardTest, test_range_reshard_unshare_keeps_sstables_flushed_after_the_pick) {
+    ScopedPkIndexFlush pk_index_flush;
+
+    for (const bool newest_reaches_below_range : {false, true}) {
+        SCOPED_TRACE(newest_reaches_below_range);
+        // The newest rowset carries no delete, so a cold index load of the child [50, 100) replays nothing and the
+        // next flush holds only the keys written after the pick.
+        const int64_t tablet_id = next_id();
+        ASSIGN_OR_ABORT(auto source, create_lifecycle_source(tablet_id, /*lower=*/0, /*upper=*/100, /*key=*/20,
+                                                             /*value=*/200, /*include_delete=*/false));
+        for (int32_t key : {20, 30, 60}) {
+            ASSIGN_OR_ABORT(source,
+                            publish_followup_upsert_delete(tablet_id, source->version(), key, key * 10, key + 1));
+        }
+        ASSIGN_OR_ABORT(source, publish_followup_upsert_delete(tablet_id, source->version(), 70, 700, 0,
+                                                               /*include_delete=*/false));
+
+        auto child = std::make_shared<TabletMetadataPB>(*split_fixed_point_source(source, 2)[1]);
+        if (newest_reaches_below_range) {
+            // Its watermark claims the next rowset id, which no flushed file can: key 90's write below takes that
+            // rowset, so a cold index load skips the write and the final lookup finds key 90 only in the late file.
+            append_tombstone_sstable(child.get(), 31, fmt::format("below_{}.sst", child->id()), /*shared=*/false);
+        }
+        ASSERT_OK(put_tablet_metadata(child));
+        _primary_key_manager->unload_and_remove_primary_index(child->id());
+        const int64_t version = child->version();
+        std::set<std::string> picked;
+        for (const auto& sst : child->sstable_meta().sstables()) picked.insert(sst.filename());
+        ASSERT_FALSE(picked.empty());
+        const std::string newest_end_key = child->sstable_meta().sstables().rbegin()->range().end_key();
+
+        // Execute UNSHARE against `version` without publishing it.
+        const int64_t txn_id = next_id();
+        auto context = std::make_unique<lake::CompactionTaskContext>(txn_id, child->id(), version,
+                                                                     /*force_base=*/false,
+                                                                     /*skip_write_txnlog=*/false, nullptr, 0, 0,
+                                                                     /*is_unshare=*/true);
+        ASSIGN_OR_ABORT(auto task, _tablet_manager->compact(context.get()));
+        ASSERT_OK(task->execute(lake::CompactionTask::kNoCancelFn));
+        ASSIGN_OR_ABORT(auto txn_log, _tablet_manager->get_txn_log(child->id(), txn_id));
+        ASSERT_TRUE(txn_log->has_op_compaction());
+        ASSERT_EQ(static_cast<int>(picked.size()), txn_log->op_compaction().input_sstables_size());
+
+        // Key 90 reaches the index after the pick and is flushed into a new index file.
+        ASSIGN_OR_ABORT(auto written, publish_followup_upsert_delete(child->id(), version, /*upsert_key=*/90,
+                                                                     /*upsert_value=*/900, /*delete_key=*/0,
+                                                                     /*include_delete=*/false));
+        ASSIGN_OR_ABORT(auto flushed,
+                        _primary_key_manager->flush_pk_memtable(written, written->version(), std::nullopt));
+        ASSERT_OK(put_tablet_metadata(flushed));
+        std::string late_file;
+        for (const auto& sst : flushed->sstable_meta().sstables()) {
+            if (picked.count(sst.filename()) > 0) continue;
+            ASSERT_TRUE(late_file.empty()) << sst.filename();
+            late_file = sst.filename();
+            // Its keys all follow the newest picked file's, so appending it to that file's fileset would have kept
+            // the fileset ordered.
+            ASSERT_GT(sst.range().start_key(), newest_end_key);
+        }
+        ASSERT_FALSE(late_file.empty());
+
+        TxnInfoPB txn_info;
+        txn_info.set_txn_id(txn_id);
+        txn_info.set_txn_type(TXN_NORMAL);
+        txn_info.set_commit_time(1);
+        ASSIGN_OR_ABORT(auto published,
+                        lake::publish_version(_tablet_manager.get(), lake::PublishTabletInfo(child->id()),
+                                              flushed->version(), flushed->version() + 1,
+                                              std::span<const TxnInfoPB>(&txn_info, 1), false, std::nullopt));
+        const auto& sstables = published->sstable_meta().sstables();
+        EXPECT_TRUE(std::any_of(sstables.begin(), sstables.end(),
+                                [&](const PersistentIndexSstablePB& sst) { return sst.filename() == late_file; }));
+        for (const auto& sst : sstables) EXPECT_EQ(0, picked.count(sst.filename())) << sst.filename();
+
+        _primary_key_manager->unload_and_remove_primary_index(child->id());
+        ASSIGN_OR_ABORT(auto value, load_index_value(published, child->id(), encode_int_primary_key(90)));
+        EXPECT_NE(IndexValue(NullIndexValue), value);
+    }
+}
+
+// Once UNSHARE has left a child holding only private files inside its range, running it again picks no rowset and no
+// index file and leaves the child's files as they are.
+TEST_F(LakeTabletReshardTest, test_unshare_on_a_clean_tablet_is_a_no_op) {
+    ScopedPkIndexFlush pk_index_flush;
+    // The newest rowset carries no delete, so the first UNSHARE carries no shared delete file into its output.
+    const int64_t tablet_id = next_id();
+    ASSIGN_OR_ABORT(auto source, create_lifecycle_source(tablet_id, /*lower=*/0, /*upper=*/100, /*key=*/20,
+                                                         /*value=*/200, /*include_delete=*/false));
+    for (int32_t key : {20, 30, 60}) {
+        ASSIGN_OR_ABORT(source, publish_followup_upsert_delete(tablet_id, source->version(), key, key * 10, key + 1));
+    }
+    ASSIGN_OR_ABORT(source, publish_followup_upsert_delete(tablet_id, source->version(), 70, 700, 0,
+                                                           /*include_delete=*/false));
+
+    ASSIGN_OR_ABORT(auto first, unshare_tablet(split_fixed_point_source(source, 2)[1]));
+    ASSERT_GT(first->sstable_meta().sstables_size(), 0);
+    for (const auto& sst : first->sstable_meta().sstables()) {
+        ASSERT_FALSE(sst.shared()) << sst.filename();
+        ASSERT_OK(lake::check_sstable_range(*first, sst));
+    }
+
+    _primary_key_manager->unload_and_remove_primary_index(first->id());
+    const int64_t txn_id = next_id();
+    auto context = std::make_unique<lake::CompactionTaskContext>(txn_id, first->id(), first->version(),
+                                                                 /*force_base=*/false,
+                                                                 /*skip_write_txnlog=*/false, nullptr, 0, 0,
+                                                                 /*is_unshare=*/true);
+    ASSIGN_OR_ABORT(auto task, _tablet_manager->compact(context.get()));
+    ASSERT_OK(task->execute(lake::CompactionTask::kNoCancelFn));
+    ASSIGN_OR_ABORT(auto txn_log, _tablet_manager->get_txn_log(first->id(), txn_id));
+    ASSERT_TRUE(txn_log->has_op_compaction());
+    EXPECT_EQ(0, txn_log->op_compaction().input_rowsets_size());
+    EXPECT_EQ(0, txn_log->op_compaction().input_sstables_size());
+
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(txn_id);
+    txn_info.set_txn_type(TXN_NORMAL);
+    txn_info.set_commit_time(1);
+    ASSIGN_OR_ABORT(auto second, lake::publish_version(_tablet_manager.get(), lake::PublishTabletInfo(first->id()),
+                                                       first->version(), first->version() + 1,
+                                                       std::span<const TxnInfoPB>(&txn_info, 1), false, std::nullopt));
+    EXPECT_EQ(first->version() + 1, second->version());
+    auto files_of = [](const TabletMetadataPB& metadata) {
+        std::vector<std::string> files;
+        for (const auto& rowset : metadata.rowsets()) files.push_back(rowset.SerializeAsString());
+        files.push_back(metadata.sstable_meta().SerializeAsString());
+        return files;
+    };
+    EXPECT_EQ(files_of(*first), files_of(*second));
+}
+
+// A primary-key tablet whose sort key is not its primary key keeps today's UNSHARE: its index files are not
+// rewritten, even when shared, and the shared delete file of its newest rowset is carried into the output rowset.
+TEST_F(LakeTabletReshardTest, test_unshare_with_separate_sort_key_keeps_sstables_and_dels) {
+    ScopedPkIndexFlush pk_index_flush;
+    ASSIGN_OR_ABORT(auto shared, create_shared_separate_sort_key_tablet());
+    ASSERT_TRUE(TabletSchema::create(shared->schema())->has_separate_sort_key());
+    ASSERT_GT(shared->sstable_meta().sstables_size(), 0);
+    std::set<uint32_t> input_rowsets;
+    for (const auto& rowset : shared->rowsets()) input_rowsets.insert(rowset.id());
+    std::vector<std::pair<std::string, bool>> sstables_before;
+    for (const auto& sst : shared->sstable_meta().sstables())
+        sstables_before.emplace_back(sst.filename(), sst.shared());
+
+    ASSIGN_OR_ABORT(auto after, unshare_tablet(shared));
+    std::vector<std::pair<std::string, bool>> sstables_after;
+    for (const auto& sst : after->sstable_meta().sstables()) sstables_after.emplace_back(sst.filename(), sst.shared());
+    EXPECT_EQ(sstables_before, sstables_after);
+
+    bool output_carries_shared_del = false;
+    for (const auto& rowset : after->rowsets()) {
+        EXPECT_EQ(0, input_rowsets.count(rowset.id())) << rowset.id();
+        for (const auto& del : rowset.del_files()) output_carries_shared_del |= del.shared();
+    }
+    EXPECT_TRUE(output_carries_shared_del);
+}
+
+static bool holds_a_shared_del(const TabletMetadataPB& metadata) {
+    for (const auto& rowset : metadata.rowsets()) {
+        for (const auto& del : rowset.del_files()) {
+            if (del.shared()) return true;
+        }
+    }
+    return false;
+}
+
+static bool has_lcrm_orphan(const TabletMetadataPB& metadata) {
+    return std::any_of(metadata.orphan_files().begin(), metadata.orphan_files().end(),
+                       [](const FileMetaPB& file) { return file.name().ends_with(".lcrm"); });
+}
+
+// Runs `body` once on each compaction publish path: with enable_light_pk_compaction_publish false, then true. The
+// config is restored afterwards.
+template <typename Body>
+static void for_each_compaction_publish_path(Body&& body) {
+    const bool old_light_publish = config::enable_light_pk_compaction_publish;
+    DeferOp restore_light_publish([&] { config::enable_light_pk_compaction_publish = old_light_publish; });
+    for (const bool light_publish : {false, true}) {
+        SCOPED_TRACE(light_publish);
+        config::enable_light_pk_compaction_publish = light_publish;
+        body(light_publish);
+        if (::testing::Test::HasFatalFailure()) {
+            return;
+        }
+    }
+}
+
+// A compaction moves the delete files of its inputs that its index may not have persisted into its output rowset, so
+// on a split child that output would still hold delete files shared with the sibling. UNSHARE persists the index in
+// its publish instead and moves none. Here only a shared delete file removes key 40 from the child [0, 50), while an
+// inherited index file still maps key 40 to its row. After UNSHARE no delete file is shared, every index file lies
+// inside the child's range, and a cold index load finds every row and none of the deleted keys, with either
+// compaction publish path.
+TEST_F(LakeTabletReshardTest, test_range_reshard_unshare_drops_shared_dels) {
+    const std::vector<std::vector<std::pair<int32_t, int32_t>>> child_rows = {{{20, 200}, {30, 300}},
+                                                                              {{60, 600}, {70, 700}}};
+    const std::vector<std::vector<int32_t>> deleted_keys = {{21, 31, 40}, {61, 71}};
+    for_each_compaction_publish_path([&](bool light_publish) {
+        ASSIGN_OR_ABORT(auto source, create_source_with_an_unflushed_delete(next_id()));
+        auto children = split_fixed_point_source(source, 2);
+        ASSERT_EQ(2, children.size());
+        for (size_t i = 0; i < children.size(); ++i) {
+            SCOPED_TRACE(i);
+            ASSERT_TRUE(holds_a_shared_del(*children[i]));
+            ASSERT_GT(children[i]->sstable_meta().sstables_size(), 0);
+
+            ASSIGN_OR_ABORT(auto after, unshare_tablet(children[i]));
+            EXPECT_FALSE(holds_a_shared_del(*after));
+            EXPECT_FALSE(lake::tablet_reshard_helper::has_shared_files(*after));
+            // Only the light publish path reads the compaction's rows mapper, which it then leaves as an orphan.
+            EXPECT_EQ(light_publish, has_lcrm_orphan(*after));
+            for (const auto& sst : after->sstable_meta().sstables()) {
+                EXPECT_OK(lake::check_sstable_range(*after, sst));
+            }
+            _primary_key_manager->unload_and_remove_primary_index(after->id());
+            expect_lifecycle_oracle(after, child_rows[i], deleted_keys[i]);
+        }
+    });
+}
+
+// An ordinary compaction of a split child whose inputs hold a shared delete file persists the index in its publish too,
+// instead of moving that delete file into its output rowset. Here only a shared delete file removes key 40 from the
+// child [0, 50), while an inherited index file still maps key 40 to its row. A base compaction picks every rowset of
+// the child; afterwards no delete file is shared, and a cold index load finds every row and none of the deleted keys,
+// with either compaction publish path.
+TEST_F(LakeTabletReshardTest, test_range_reshard_ordinary_compaction_drops_shared_dels) {
+    for_each_compaction_publish_path([&](bool light_publish) {
+        ASSIGN_OR_ABORT(auto source, create_source_with_an_unflushed_delete(next_id()));
+        auto child = split_fixed_point_source(source, 2)[0];
+        ASSERT_TRUE(holds_a_shared_del(*child));
+        ASSERT_GT(child->sstable_meta().sstables_size(), 0);
+        ASSERT_OK(put_tablet_metadata(child));
+        _primary_key_manager->unload_and_remove_primary_index(child->id());
+
+        ASSIGN_OR_ABORT(auto after, compact_tablet(child->id(), child->version(), /*force_base=*/true));
+        int output_rowsets = 0;
+        for (const auto& rowset : after->rowsets()) {
+            if (rowset.id() < child->next_rowset_id()) continue;
+            ++output_rowsets;
+            for (const auto& del : rowset.del_files()) EXPECT_FALSE(del.shared()) << rowset.id();
+        }
+        EXPECT_EQ(1, output_rowsets);
+        EXPECT_FALSE(holds_a_shared_del(*after));
+        // Only the light publish path reads the compaction's rows mapper, which it then leaves as an orphan.
+        EXPECT_EQ(light_publish, has_lcrm_orphan(*after));
+        _primary_key_manager->unload_and_remove_primary_index(after->id());
+        expect_lifecycle_oracle(after, {{20, 200}, {30, 300}}, {21, 31, 40});
+    });
+}
+
+// A split child whose rowsets hold no shared file any more, but whose index files are still shared, gets an UNSHARE
+// that picks no rowset and rewrites the index files only. Its publish leaves every index file private and inside the
+// child's range, and a cold index load still finds every row and none of the deleted keys.
+TEST_F(LakeTabletReshardTest, test_range_reshard_unshare_rewrites_sstables_when_no_rowset_is_shared) {
+    ScopedPkIndexFlush pk_index_flush;
+    const int64_t tablet_id = next_id();
+    ASSIGN_OR_ABORT(auto source, create_lifecycle_source(tablet_id, /*lower=*/0, /*upper=*/100, /*key=*/20,
+                                                         /*value=*/200, /*include_delete=*/false));
+    for (int32_t key : {20, 30, 60, 70}) {
+        ASSIGN_OR_ABORT(source, publish_followup_upsert_delete(tablet_id, source->version(), key, key * 10, key + 1));
+    }
+
+    auto child = std::make_shared<TabletMetadataPB>(*split_fixed_point_source(source, 2)[0]);
+    for (auto& rowset : *child->mutable_rowsets()) {
+        for (auto& segment : *rowset.mutable_segment_metas()) segment.set_shared(false);
+        for (auto& del : *rowset.mutable_del_files()) del.set_shared(false);
+    }
+    ASSERT_GT(child->sstable_meta().sstables_size(), 0);
+    for (const auto& sst : child->sstable_meta().sstables()) ASSERT_TRUE(sst.shared()) << sst.filename();
+    ASSERT_OK(put_tablet_metadata(child));
+    _primary_key_manager->unload_and_remove_primary_index(child->id());
+
+    // Execute UNSHARE against the child's version without publishing it.
+    const int64_t txn_id = next_id();
+    auto context = std::make_unique<lake::CompactionTaskContext>(txn_id, child->id(), child->version(),
+                                                                 /*force_base=*/false,
+                                                                 /*skip_write_txnlog=*/false, nullptr, 0, 0,
+                                                                 /*is_unshare=*/true);
+    ASSIGN_OR_ABORT(auto task, _tablet_manager->compact(context.get()));
+    ASSERT_OK(task->execute(lake::CompactionTask::kNoCancelFn));
+    ASSIGN_OR_ABORT(auto txn_log, _tablet_manager->get_txn_log(child->id(), txn_id));
+    ASSERT_TRUE(txn_log->has_op_compaction());
+    EXPECT_EQ(0, txn_log->op_compaction().input_rowsets_size());
+    EXPECT_GT(txn_log->op_compaction().input_sstables_size(), 0);
+
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(txn_id);
+    txn_info.set_txn_type(TXN_NORMAL);
+    txn_info.set_commit_time(1);
+    ASSIGN_OR_ABORT(
+            auto published,
+            lake::publish_version(_tablet_manager.get(), lake::PublishTabletInfo(child->id()), child->version(),
+                                  child->version() + 1, std::span<const TxnInfoPB>(&txn_info, 1), false, std::nullopt));
+    ASSERT_GT(published->sstable_meta().sstables_size(), 0);
+    for (const auto& sst : published->sstable_meta().sstables()) {
+        EXPECT_FALSE(sst.shared()) << sst.filename();
+        EXPECT_OK(lake::check_sstable_range(*published, sst));
+    }
+    EXPECT_FALSE(lake::tablet_reshard_helper::has_shared_files(*published));
+    _primary_key_manager->unload_and_remove_primary_index(child->id());
+    expect_lifecycle_oracle(published, {{20, 200}, {30, 300}}, {21, 31});
+}
+
+// Runs a parallel UNSHARE of `tablet` at its version, in up to two subtasks. The merged txn log comes back in
+// `response` instead of being written.
+static void run_parallel_unshare(lake::TabletManager* tablet_mgr, const TabletMetadataPB& tablet, int64_t txn_id,
+                                 CompactResponse* response, bool force_base_compaction = false,
+                                 int64_t max_bytes_per_subtask = 1) {
+    class Done final : public google::protobuf::Closure {
+    public:
+        void Run() override { _promise.set_value(); }
+        std::future<void> future() { return _promise.get_future(); }
+
+    private:
+        std::promise<void> _promise;
+    };
+
+    CompactRequest request;
+    request.add_tablet_ids(tablet.id());
+    request.set_txn_id(txn_id);
+    request.set_version(tablet.version());
+    request.set_skip_write_txnlog(true);
+    Done done;
+    auto finished = done.future();
+    auto callback = std::make_shared<lake::CompactionTaskCallback>(nullptr, &request, response, &done);
+    TabletParallelConfig parallel_config;
+    parallel_config.set_max_parallel_per_tablet(2);
+    // By default every rowset is larger than one byte, so an UNSHARE asks for both subtasks.
+    parallel_config.set_max_bytes_per_subtask(max_bytes_per_subtask);
+    lake::TabletParallelCompactionManager manager(tablet_mgr);
+    std::unique_ptr<ThreadPool> pool;
+    ASSERT_OK(ThreadPoolBuilder("parallel_unshare").set_max_threads(2).build(&pool));
+    auto subtasks = manager.create_parallel_tasks(
+            tablet.id(), txn_id, tablet.version(), parallel_config, callback, force_base_compaction, pool.get(),
+            [] { return true; }, [](bool) {}, /*is_unshare=*/true);
+    ASSERT_OK(subtasks.status());
+    ASSERT_GT(*subtasks, 0);
+    ASSERT_EQ(std::future_status::ready, finished.wait_for(std::chrono::minutes(2)));
+    pool->wait();
+    manager.cleanup_tablet(tablet.id(), txn_id);
+}
+
+// A parallel UNSHARE of a split child rewrites its rowsets in several subtasks and its index files once for the whole
+// tablet. Its publish applies each subtask, each persisting the index instead of moving a shared delete file, and then
+// the one index file rewrite. Afterwards the child holds no shared file, its index files are in watermark order and
+// lie inside its range, and a cold index load finds every row and none of the deleted keys, with either compaction
+// publish path.
+TEST_F(LakeTabletReshardTest, test_range_reshard_parallel_unshare_publishes_one_sstable_rewrite) {
+    for_each_compaction_publish_path([&](bool light_publish) {
+        ASSIGN_OR_ABORT(auto source, create_source_with_an_unflushed_delete(next_id()));
+        auto child = split_fixed_point_source(source, 2)[0];
+        ASSERT_GE(child->rowsets_size(), 2);
+        ASSERT_TRUE(holds_a_shared_del(*child));
+        ASSERT_GT(child->sstable_meta().sstables_size(), 0);
+        ASSERT_OK(put_tablet_metadata(child));
+        _primary_key_manager->unload_and_remove_primary_index(child->id());
+
+        const int64_t txn_id = next_id();
+        CompactResponse response;
+        ASSERT_NO_FATAL_FAILURE(run_parallel_unshare(_tablet_manager.get(), *child, txn_id, &response));
+        ASSERT_EQ(0, response.failed_tablets_size()) << response.ShortDebugString();
+        ASSERT_EQ(1, response.txn_logs_size());
+
+        const auto& txn_log = response.txn_logs(0);
+        ASSERT_TRUE(txn_log.has_op_parallel_compaction());
+        const auto& op_parallel = txn_log.op_parallel_compaction();
+        ASSERT_GE(op_parallel.subtask_compactions_size(), 2);
+        for (const auto& subtask : op_parallel.subtask_compactions()) {
+            EXPECT_EQ(0, subtask.input_sstables_size());
+        }
+        EXPECT_GT(op_parallel.input_sstables_size(), 0);
+        // With light publish, a subtask that writes rows records the rows mapper its publish reads; one that writes
+        // no row records none.
+        EXPECT_EQ(light_publish,
+                  std::any_of(op_parallel.subtask_compactions().begin(), op_parallel.subtask_compactions().end(),
+                              [](const TxnLogPB_OpCompaction& op) { return op.has_lcrm_file(); }));
+
+        ASSERT_OK(_tablet_manager->put_txn_log(txn_log));
+        TxnInfoPB txn_info;
+        txn_info.set_txn_id(txn_id);
+        txn_info.set_txn_type(TXN_NORMAL);
+        txn_info.set_commit_time(1);
+        ASSIGN_OR_ABORT(auto published,
+                        lake::publish_version(_tablet_manager.get(), lake::PublishTabletInfo(child->id()),
+                                              child->version(), child->version() + 1,
+                                              std::span<const TxnInfoPB>(&txn_info, 1), false, std::nullopt));
+        EXPECT_FALSE(lake::tablet_reshard_helper::has_shared_files(*published));
+        ASSERT_GT(published->sstable_meta().sstables_size(), 0);
+        uint64_t last_max_rss_rowid = 0;
+        for (const auto& sst : published->sstable_meta().sstables()) {
+            EXPECT_LE(last_max_rss_rowid, sst.max_rss_rowid()) << sst.filename();
+            last_max_rss_rowid = sst.max_rss_rowid();
+            EXPECT_OK(lake::check_sstable_range(*published, sst));
+        }
+        _primary_key_manager->unload_and_remove_primary_index(child->id());
+        expect_lifecycle_oracle(published, {{20, 200}, {30, 300}}, {21, 31, 40});
+    });
+}
+
+// Fails the first tablet metadata read made after a parallel compaction starts building its merged result. Its
+// subtasks have all finished by then, so that read is the one of the index file step.
+class FailMetadataReadWhenMerging {
+public:
+    FailMetadataReadWhenMerging() {
+        auto* sync = SyncPoint::GetInstance();
+        sync->SetCallBack("TabletParallelCompactionManager::finalize_tablet_completion:after_context",
+                          [this](void*) { _merging = true; });
+        sync->SetCallBack("TabletManager::get_tablet_metadata", [this](void* arg) {
+            if (_merging && !_injected.exchange(true)) {
+                *static_cast<Status*>(arg) = Status::IOError("injected tablet metadata read failure");
+            }
+        });
+        sync->EnableProcessing();
+    }
+    ~FailMetadataReadWhenMerging() {
+        auto* sync = SyncPoint::GetInstance();
+        sync->DisableProcessing();
+        sync->ClearAllCallBacks();
+    }
+    FailMetadataReadWhenMerging(const FailMetadataReadWhenMerging&) = delete;
+    FailMetadataReadWhenMerging& operator=(const FailMetadataReadWhenMerging&) = delete;
+
+    bool injected() const { return _injected; }
+
+private:
+    std::atomic<bool> _merging{false};
+    std::atomic<bool> _injected{false};
+};
+
+// A parallel UNSHARE that cannot read the tablet metadata when it comes to rewrite the index files fails, so the next
+// COMPACT retries it, rather than succeeding while the shared index files stay.
+TEST_F(LakeTabletReshardTest, test_range_reshard_parallel_unshare_fails_when_its_metadata_cannot_be_read) {
+    ASSIGN_OR_ABORT(auto source, create_source_with_an_unflushed_delete(next_id()));
+    auto child = split_fixed_point_source(source, 2)[0];
+    ASSERT_GT(child->sstable_meta().sstables_size(), 0);
+    ASSERT_OK(put_tablet_metadata(child));
+    _primary_key_manager->unload_and_remove_primary_index(child->id());
+
+    FailMetadataReadWhenMerging fail_read;
+    CompactResponse response;
+    ASSERT_NO_FATAL_FAILURE(run_parallel_unshare(_tablet_manager.get(), *child, next_id(), &response));
+    EXPECT_TRUE(fail_read.injected());
+    ASSERT_EQ(1, response.failed_tablets_size()) << response.ShortDebugString();
+    EXPECT_EQ(child->id(), response.failed_tablets(0));
+    EXPECT_EQ(0, response.txn_logs_size());
+    EXPECT_NE(std::string::npos, response.status().ShortDebugString().find("injected tablet metadata read failure"))
+            << response.ShortDebugString();
+}
+
+// The parallel compaction of a tablet that holds nothing an UNSHARE would rewrite runs, when ALTER TABLE ... COMPACT
+// asks for UNSHARE with a forced base compaction, the manual compaction of its rowsets in subtasks.
+TEST_F(LakeTabletReshardTest, test_compact_runs_a_parallel_manual_compaction_where_unshare_has_nothing_to_do) {
+    const int64_t tablet_id = next_id();
+    ASSIGN_OR_ABORT(auto tablet, create_lifecycle_source(tablet_id, /*lower=*/0, /*upper=*/100, /*key=*/20,
+                                                         /*value=*/200, /*include_delete=*/false));
+    // Enough rowsets for an ordinary primary-key compaction to pick them (lake_pk_compaction_min_input_segments).
+    for (int32_t key : {30, 40, 50, 60, 70, 80}) {
+        ASSIGN_OR_ABORT(tablet, publish_followup_upsert_delete(tablet_id, tablet->version(), key, key * 10, 0,
+                                                               /*include_delete=*/false));
+    }
+    ASSERT_GE(tablet->rowsets_size(), 7);
+    ASSERT_FALSE(lake::tablet_reshard_helper::has_shared_files(*tablet));
+
+    // The ordinary planner groups whole small rowsets up to this size: two groups that cover every rowset.
+    int64_t total_bytes = 0;
+    int64_t largest = 0;
+    for (const auto& rowset : tablet->rowsets()) {
+        total_bytes += rowset.data_size();
+        largest = std::max<int64_t>(largest, rowset.data_size());
+    }
+    const int64_t txn_id = next_id();
+    CompactResponse response;
+    ASSERT_NO_FATAL_FAILURE(run_parallel_unshare(_tablet_manager.get(), *tablet, txn_id, &response,
+                                                 /*force_base_compaction=*/true, total_bytes / 2 + largest));
+    ASSERT_EQ(0, response.failed_tablets_size()) << response.ShortDebugString();
+    ASSERT_EQ(1, response.txn_logs_size());
+    const auto& txn_log = response.txn_logs(0);
+    ASSERT_TRUE(txn_log.has_op_parallel_compaction());
+    int input_rowsets = 0;
+    for (const auto& subtask : txn_log.op_parallel_compaction().subtask_compactions()) {
+        input_rowsets += subtask.input_rowsets_size();
+    }
+    EXPECT_EQ(tablet->rowsets_size(), input_rowsets);
+
+    ASSERT_OK(_tablet_manager->put_txn_log(txn_log));
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(txn_id);
+    txn_info.set_txn_type(TXN_NORMAL);
+    txn_info.set_commit_time(1);
+    ASSIGN_OR_ABORT(auto published,
+                    lake::publish_version(_tablet_manager.get(), lake::PublishTabletInfo(tablet_id), tablet->version(),
+                                          tablet->version() + 1, std::span<const TxnInfoPB>(&txn_info, 1), false,
+                                          std::nullopt));
+    EXPECT_LT(published->rowsets_size(), tablet->rowsets_size());
+    _primary_key_manager->unload_and_remove_primary_index(tablet_id);
+    expect_lifecycle_oracle(published, {{20, 200}, {30, 300}, {40, 400}, {50, 500}, {60, 600}, {70, 700}, {80, 800}},
+                            {});
+}
+
+// A parallel UNSHARE of a tablet whose sort key is not its primary key rewrites shared data files only. It never runs
+// the index file step, so it reads no tablet metadata once its subtasks finish, and succeeds even when that read would
+// fail.
+TEST_F(LakeTabletReshardTest, test_separate_sort_key_parallel_unshare_skips_the_index_step) {
+    ScopedPkIndexFlush pk_index_flush;
+    ASSIGN_OR_ABORT(auto shared, create_shared_separate_sort_key_tablet());
+    ASSERT_TRUE(TabletSchema::create(shared->schema())->has_separate_sort_key());
+    ASSERT_GE(shared->rowsets_size(), 2);
+    ASSERT_GT(shared->sstable_meta().sstables_size(), 0);
+    ASSERT_OK(put_tablet_metadata(shared));
+    _primary_key_manager->unload_and_remove_primary_index(shared->id());
+
+    FailMetadataReadWhenMerging fail_read;
+    CompactResponse response;
+    ASSERT_NO_FATAL_FAILURE(run_parallel_unshare(_tablet_manager.get(), *shared, next_id(), &response));
+    EXPECT_FALSE(fail_read.injected());
+    ASSERT_EQ(0, response.failed_tablets_size()) << response.ShortDebugString();
+    ASSERT_EQ(1, response.txn_logs_size());
+    const auto& op_parallel = response.txn_logs(0).op_parallel_compaction();
+    EXPECT_GT(op_parallel.subtask_compactions_size(), 0);
+    EXPECT_EQ(0, op_parallel.input_sstables_size());
+    EXPECT_EQ(0, op_parallel.output_sstables_size());
+    EXPECT_FALSE(op_parallel.has_output_sstable());
 }
 
 } // namespace starrocks

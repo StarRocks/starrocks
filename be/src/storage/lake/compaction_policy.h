@@ -46,6 +46,13 @@ public:
                                                 bool force_base_compaction, bool is_unshare = false,
                                                 bool allow_base_compaction = true);
 
+    // Whether a compaction asked for with `is_unshare` runs as UNSHARE on this tablet. ALTER TABLE ... COMPACT asks
+    // every tablet of a range primary-key partition for UNSHARE together with a forced base compaction, and a tablet
+    // that holds nothing an UNSHARE would rewrite runs that manual compaction instead. A split's own UNSHARE does not
+    // force a base compaction and always runs as UNSHARE.
+    static StatusOr<bool> runs_as_unshare(const TabletMetadataPB& metadata, bool is_unshare,
+                                          bool force_base_compaction);
+
     bool picked_base_compaction() const { return _picked_base_compaction; }
 
     static bool is_real_time_compaction_strategy(const std::shared_ptr<const TabletMetadataPB>& metadata);
