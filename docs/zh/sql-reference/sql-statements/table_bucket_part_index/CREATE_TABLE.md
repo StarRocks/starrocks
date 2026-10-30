@@ -921,10 +921,12 @@ SHOW ALTER TABLE COLUMN FROM test_db WHERE TableName = "test_tbl";
 
 ### 禁止 Base Compaction
 
-`base_compaction_forbidden_time_ranges`：禁止对表进行 Base Compaction 的时间范围。设置此属性后，系统仅在指定时间范围之外对符合条件的 Tablet 执行 Base Compaction。此属性从 v3.2.13 开始支持。
+`base_compaction_forbidden_time_ranges`：限制表执行 Base Compaction 的时间范围。具体效果取决于表架构和 Compaction 策略，如下所述。此属性从 v3.2.13 开始支持。
+
+对于存算分离主键表和使用 Base and Cumulative 策略的非主键表，系统在发起自动 Compaction 时检查该时段；禁止时段内仍可执行 Cumulative Compaction。对于使用 Size Tiered 策略的非主键表，此时段仅禁用删除版本数达到阈值后强制触发 Base Compaction 的条件；正常的层级选择仍可能在禁止时段选中最旧的层级。BE/CN 参数 `base_compaction_interval_seconds_since_last_operation` 在最小间隔未到期时施加相同限制。手动 `ALTER TABLE ... COMPACT` 可覆盖这些限制。
 
 :::note
-请确保在禁止 Base Compaction 期间，向表中加载的数据量不超过 500。
+对于存算一体表，请确保在禁止 Base Compaction 期间，向表中加载的数据量不超过 500。
 :::
 
 `base_compaction_forbidden_time_ranges` 的值遵循 [Quartz cron 语法](https://productresources.collibra.com/docs/collibra/latest/Content/Cron/co_quartz-cron-syntax.htm)，并且只支持这些字段：`<minute> <hour> <day-of-the-month> <month> <day-of-the-week>`，其中 `<minute>` 必须是 `*`。
@@ -1002,6 +1004,24 @@ PROPERTIES (
 - `flat_json.null.factor`（可选）：列中 NULL 值的比例阈值。如果列中 NULL 值的比例高于此阈值，则 Flat JSON 不会提取该列。此参数仅在 `flat_json.enable` 设置为 `true` 时生效。默认值：`0.3`。
 - `flat_json.sparsity.factor`（可选）：同名列的比例阈值。如果同名列的比例低于此值，则 Flat JSON 不会提取该列。此参数仅在 `flat_json.enable` 设置为 `true` 时生效。默认值：`0.3`。
 - `flat_json.column.max`（可选）：Flat JSON 可提取的最大子字段数。此参数仅在 `flat_json.enable` 设置为 `true` 时生效。默认值：`100`。
+
+### 在自动采集统计信息时跳过某张表
+
+将 `enable_statistic_auto_collect` 设置为 `false` 后，自动采集统计信息时会跳过该表。默认值：`true`。
+
+```SQL
+PROPERTIES (
+    "enable_statistic_auto_collect" = "false"
+)
+```
+
+该属性为 `false` 时：
+
+- StarRocks 提供的自动采集任务，以及通过 `CREATE ANALYZE ALL` 或 `CREATE ANALYZE DATABASE` 创建的自动采集任务，都会跳过该表。
+- 明确指定该表的采集任务（通过 `CREATE ANALYZE TABLE` 创建，或通过 `ANALYZE TABLE` 执行）仍会采集该表的统计信息。
+- 导入数据时触发的统计信息采集不受影响，它由 `enable_statistic_collect_on_first_load` 单独控制。
+
+可以通过 [ALTER TABLE](ALTER_TABLE.md) 修改该属性。物化视图不支持该属性。
 
 ## 示例
 

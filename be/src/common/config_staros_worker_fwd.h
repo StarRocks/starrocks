@@ -51,6 +51,20 @@ CONF_mInt64(object_storage_request_timeout_ms, "10000");
 
 CONF_mBool(s3_use_list_objects_v1, "false");
 
+// Some S3-compatible stores (e.g. Cloudflare R2) reject a multipart upload whose non-trailing parts
+// differ in length. When enabled, every part of an S3 multipart upload except the last one is
+// exactly the configured part size, and only the last part may be shorter. The default, false,
+// keeps the current behavior, which cuts a part whenever the buffer reaches the part size.
+//
+// One switch for both S3 writers: starlet in a shared-data cluster, forwarded to the starlet gflag
+// `fslib_s3_multipart_equal_part_size` and cutting parts of `starlet_fslib_s3_min_upload_part_size`,
+// and the BE S3 filesystem, cutting parts of `experimental_s3_min_upload_part_size`.
+//
+// Mutable. The value is snapshotted once per output stream, so a change applies to the uploads
+// started afterwards. S3 allows at most 10,000 parts per upload, so an object is limited to
+// 10,000 times the part size; raise the part size for larger objects.
+CONF_mBool(s3_multipart_equal_part_size, "false");
+
 // use poco client to replace default curl client
 CONF_Bool(enable_poco_client_for_aws_sdk, "false");
 
@@ -161,5 +175,13 @@ CONF_mInt32(starlet_filesystem_instance_cache_ttl_sec, "86400");
 CONF_mString_enum_or_default(starlet_starmgr_client_compression_type, "none", "none,zstd");
 
 #endif
+// Shared-data only. Seconds a node keeps the shard info of a tablet it does not own, so that touching
+// the tablet again within this time does not ask starmgr for it (GetShard RPC). It keeps what it had
+// to ask starmgr for, and what the tablet's owners hand over to the load coordinator along with the
+// txn logs, which then writes each partition's combined txn log without asking. An owner gets storage
+// updates pushed by starmgr; a kept copy only picks them up when it expires, so this also bounds how
+// long such a node may use outdated storage settings. 0 disables both: nothing is handed over or kept,
+// and every such touch asks starmgr.
+CONF_mInt64(lake_shard_info_cache_ttl_sec, "60");
 
 } // namespace starrocks::config

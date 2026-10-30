@@ -148,11 +148,10 @@ public class JDBCTable extends Table {
         return uri != null && (uri.startsWith("jdbc:mysql") || uri.startsWith("jdbc:mariadb"));
     }
 
+    // Does not fill the field in: a resource table is shared by every query and planned without the meta lock
+    // (see isMetaLockTarget), so a getter reached from planning must not write to it.
     public Map<String, Integer> getOriginalJdbcColumnTypes() {
-        if (originalJdbcColumnTypes == null) {
-            originalJdbcColumnTypes = new HashMap<>();
-        }
-        return originalJdbcColumnTypes;
+        return originalJdbcColumnTypes == null ? Map.of() : originalJdbcColumnTypes;
     }
 
     public void setOriginalJdbcColumnTypes(Map<String, Integer> originalJdbcColumnTypes) {
@@ -370,6 +369,18 @@ public class JDBCTable extends Table {
                 fullSchema.size(), 0, getName(), "");
         tTableDescriptor.setJdbcTable(tJDBCTable);
         return tTableDescriptor;
+    }
+
+    /**
+     * Not a lock target, also when it lives in an internal database (ENGINE=JDBC from a resource; a JDBC catalog
+     * table is not one anyway). Nothing writes to a published JDBCTable: its fields are only set while it is
+     * constructed, ALTER TABLE rejects it, the resource is read afresh by name rather than cached, and the
+     * pushdown rules that rewrite a table do so on their own copy ({@link #JDBCTable(JDBCTable)}). Planning does
+     * not open a JDBC connection either. So the reference a query resolves is already a consistent snapshot.
+     */
+    @Override
+    public boolean isMetaLockTarget() {
+        return false;
     }
 
     @Override

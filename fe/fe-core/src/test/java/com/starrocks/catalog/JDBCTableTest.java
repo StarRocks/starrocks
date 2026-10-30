@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TJDBCTable;
 import com.starrocks.thrift.TTableDescriptor;
@@ -219,6 +220,32 @@ public class JDBCTableTest {
         table.setOriginalJdbcColumnTypes(originalTypes);
 
         Assertions.assertEquals(java.sql.Types.BIGINT, table.getOriginalJdbcColumnTypes().get("col1"));
+    }
+
+    /**
+     * A resource table is shared by every query and planned without the meta lock, and planning an ORACLE scan
+     * reads the original column types. The getter used to fill the field in on the shared table; it is read-only.
+     */
+    @Test
+    public void testOriginalJdbcColumnTypesGetterDoesNotWriteTheTable(@Mocked GlobalStateMgr globalStateMgr,
+                                                                     @Mocked ResourceMgr resourceMgr)
+            throws Exception {
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+
+                globalStateMgr.getResourceMgr();
+                result = resourceMgr;
+
+                resourceMgr.getResource("jdbc0");
+                result = getMockedJDBCResource(resourceName);
+            }
+        };
+        JDBCTable table = new JDBCTable(1000, "jdbc_table", columns, properties);
+        Assertions.assertFalse(table.isMetaLockTarget());
+        Assertions.assertTrue(table.getOriginalJdbcColumnTypes().isEmpty());
+        Assertions.assertNull(Deencapsulation.getField(table, "originalJdbcColumnTypes"));
     }
 
     @Test

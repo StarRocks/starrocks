@@ -15,11 +15,13 @@
 package com.starrocks.server;
 
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -28,6 +30,8 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+
+import java.util.Set;
 
 public class LocalMetaStoreSharedDataTest {
     private static ConnectContext connectContext;
@@ -57,6 +61,26 @@ public class LocalMetaStoreSharedDataTest {
     @AfterEach
     public void teardown() {
         UtFrameUtils.tearDownForPersisTest();
+    }
+
+    @Test
+    public void testBaseCompactionForbiddenTimeRangesForLakeTables() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE test.base_window_dup(k int) DUPLICATE KEY(k) "
+                + "DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES("
+                + "'base_compaction_forbidden_time_ranges' = '* 8-20 * * *')");
+        starRocksAssert.withTable("CREATE TABLE test.base_window_pk(k int NOT NULL, v int) PRIMARY KEY(k) "
+                + "DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES("
+                + "'base_compaction_forbidden_time_ranges' = '* 8-20 * * *')");
+
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        OlapTable dup = (OlapTable) metastore.getTable("test", "base_window_dup");
+        OlapTable pk = (OlapTable) metastore.getTable("test", "base_window_pk");
+        Assertions.assertEquals("* 8-20 * * *", dup.getBaseCompactionForbiddenTimeRanges());
+        Assertions.assertEquals("* 8-20 * * *", pk.getBaseCompactionForbiddenTimeRanges());
+
+        starRocksAssert.ddl("ALTER TABLE test.base_window_pk SET ("
+                + "'base_compaction_forbidden_time_ranges' = '* 0-5 * * *')");
+        Assertions.assertEquals("* 0-5 * * *", pk.getBaseCompactionForbiddenTimeRanges());
     }
 
     @Test
@@ -123,5 +147,19 @@ public class LocalMetaStoreSharedDataTest {
         });
         String dbSvId2 = svMgr.getStorageVolumeIdOfDb(db.getId());
         Assertions.assertEquals(hdfsSv.getId(), dbSvId2);
+    }
+
+    @Test
+    public void testInvalidStatisticAutoCollectLeavesNoStorageVolumeBinding() throws Exception {
+        StorageVolumeMgr svMgr = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
+        int boundTables = svMgr.storageVolumeToTables.values().stream().mapToInt(Set::size).sum();
+
+        CreateTableStmt stmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(
+                "CREATE TABLE test.t_invalid_auto_collect(k1 int) DUPLICATE KEY(k1) DISTRIBUTED BY HASH(k1) BUCKETS 1 " +
+                        "PROPERTIES ('enable_statistic_auto_collect' = 'off')", connectContext);
+        DdlException exception = Assertions.assertThrows(DdlException.class,
+                () -> GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(stmt));
+        Assertions.assertTrue(exception.getMessage().contains("enable_statistic_auto_collect"), exception.getMessage());
+        Assertions.assertEquals(boundTables, svMgr.storageVolumeToTables.values().stream().mapToInt(Set::size).sum());
     }
 }

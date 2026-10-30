@@ -15,6 +15,7 @@
 package com.starrocks.scheduler.mv;
 
 import com.google.common.base.Strings;
+import com.starrocks.alter.AlterMVJobExecutor;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
@@ -68,7 +69,7 @@ public final class MVRefreshSchemaChecker {
             boolean isExternalCatalog = !CatalogMgr.isInternalCatalog(bti.getCatalogName());
 
             if (!baseTableOpt.isPresent() && isExternalCatalog) {
-                mv.setInactiveAndReason(
+                AlterMVJobExecutor.inactiveMvFromRefresh(mv,
                         MaterializedViewExceptions.inactiveReasonForBaseTableNotExists(bti.getTableName()));
                 return;
             }
@@ -101,7 +102,7 @@ public final class MVRefreshSchemaChecker {
             // known drift signatures so a transient catalog blip doesn't brick the MV.
             if (isLikelyDriftException(e)) {
                 if (mv.isActive()) {
-                    mv.setInactiveAndReason(MaterializedViewExceptions.inactiveReasonForSchemaCheckFailed(
+                    AlterMVJobExecutor.inactiveMvFromRefresh(mv, MaterializedViewExceptions.inactiveReasonForSchemaCheckFailed(
                             mv.getName(), e.getMessage()));
                 }
                 LOG.warn("[MVRefreshSchemaChecker] schema drift detected for MV {}: {}", mv.getName(), e.getMessage());
@@ -122,8 +123,8 @@ public final class MVRefreshSchemaChecker {
         // "No matching function with signature" covers FunctionAnalyzer rejections after a
         // base column type changes (e.g. bitand(int,int) → bitand(bigint,int) no longer resolves).
         return msg.contains("cannot be resolved")
-                || msg.contains("column schema not compatible")
-                || msg.contains("base table schema changed for columns")
+                || msg.contains(MaterializedViewExceptions.MV_SCHEMA_COLUMN_NOT_COMPATIBLE_MARKER)
+                || msg.contains(MaterializedViewExceptions.MV_SCHEMA_COLUMN_CHANGED_MARKER)
                 || msg.contains("No matching function with signature")
                 // IVM re-derive incompatibility (row-id strategy flip / no longer IVM-rewritable) is a
                 // drop-and-recreate condition -- inactivate with the reason, don't retry forever.

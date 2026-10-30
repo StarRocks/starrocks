@@ -18,6 +18,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.alter.AlterJobV2;
+import com.starrocks.common.lock.LockTestUtils;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowExecutor;
@@ -202,7 +203,7 @@ public class ZstdCompressionColumnsTest {
 
         OlapTable table = getTable("t_cdict_copy");
         OlapTable copied = new OlapTable();
-        table.copyOnlyForQuery(copied);
+        LockTestUtils.copyUnderReadLock(table, copied);
 
         Set<ColumnId> original = table.getZstdCompressionColumnIds();
         Set<ColumnId> copy = copied.getZstdCompressionColumnIds();
@@ -239,7 +240,7 @@ public class ZstdCompressionColumnsTest {
 
         // work on a query copy so the catalog table itself is not corrupted
         OlapTable copied = new OlapTable();
-        getTable("t_cdict_dropped").copyOnlyForQuery(copied);
+        LockTestUtils.copyUnderReadLock(getTable("t_cdict_dropped"), copied);
 
         Set<ColumnId> columnIds = new TreeSet<>(ColumnId.CASE_INSENSITIVE_ORDER);
         columnIds.add(ColumnId.create("v1"));

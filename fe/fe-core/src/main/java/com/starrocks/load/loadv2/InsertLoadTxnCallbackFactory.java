@@ -16,11 +16,24 @@ package com.starrocks.load.loadv2;
 
 import com.starrocks.catalog.Table;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.transaction.TransactionState;
 
 public class InsertLoadTxnCallbackFactory {
     public static IVMInsertLoadTxnCallback of(ConnectContext context, long dbId, Table targetTable) {
         if (context.getSessionVariable().isEnableIVMRefresh() && targetTable.isMaterializedView()) {
             return new IVMInsertLoadTxnCallback(dbId, targetTable.getId());
+        } else {
+            return null;
+        }
+    }
+
+    /**
+     * Replay has no session variable and no target table to consult, so the committed record itself
+     * says whether this insert was an IVM refresh. Every other insert gets no callback.
+     */
+    public static IVMInsertLoadTxnCallback ofReplay(long dbId, long tableId, TransactionState txnState) {
+        if (IVMInsertLoadTxnCallback.carriesCommittedTvr(txnState)) {
+            return new IVMInsertLoadTxnCallback(dbId, tableId);
         } else {
             return null;
         }

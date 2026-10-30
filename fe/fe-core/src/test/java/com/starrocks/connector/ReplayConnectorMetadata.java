@@ -60,6 +60,15 @@ public abstract class ReplayConnectorMetadata implements ConnectorMetadata {
                 .put(tableName, new ReplayTableInfo(table, rowCount, columnStats, partitionNames));
     }
 
+    // Per-column ANALYZE row counts the dump captured (external_column_row_count): the cluster planned this table
+    // from ANALYZE statistics, so getTableStatistics recomputes each scan's row count the way the cluster did.
+    public void setAnalyzedColumnRowCounts(String dbName, String tableName, Map<String, Long> columnRowCounts) {
+        ReplayTableInfo info = lookup(dbName, tableName);
+        if (info != null && columnRowCounts != null) {
+            info.analyzedColumnRowCounts.putAll(columnRowCounts);
+        }
+    }
+
     protected ReplayTableInfo lookup(Table table) {
         return lookup(table.getCatalogDBName(), table.getCatalogTableName());
     }
@@ -95,9 +104,19 @@ public abstract class ReplayConnectorMetadata implements ConnectorMetadata {
         ReplayTableInfo info = lookup(table);
         Statistics.Builder builder = Statistics.builder();
         builder.setOutputRowCount(info == null ? 1 : info.rowCount);
+        // Mirror MetadataMgr.getTableStatisticsFromInternalStatistics: with ANALYZE statistics the row count is
+        // the max over the scanned columns that have one, and the predicate is not applied here.
+        double analyzedRowCount = Double.NaN;
         for (ColumnRefOperator col : columns.keySet()) {
             ColumnStatistic cs = info == null ? null : info.columnStats.get(col.getName());
             builder.addColumnStatistic(col, cs == null ? ColumnStatistic.unknown() : cs);
+            Long rowCount = info == null ? null : info.analyzedColumnRowCounts.get(col.getName());
+            if (rowCount != null && cs != null && !cs.isUnknown()) {
+                analyzedRowCount = Double.isNaN(analyzedRowCount) ? rowCount : Math.max(analyzedRowCount, rowCount);
+            }
+        }
+        if (!Double.isNaN(analyzedRowCount)) {
+            builder.setOutputRowCount(analyzedRowCount).setStatsSource(Statistics.StatsSource.ANALYZE);
         }
         return builder.build();
     }
@@ -111,6 +130,8 @@ public abstract class ReplayConnectorMetadata implements ConnectorMetadata {
         // partition names captured in the dump (metastore form "col=val/col2=val2"); null/empty when the
         // table is unpartitioned or the dump did not capture them.
         private final List<String> partitionNames;
+        // column name (case-insensitive) -> row count of its ANALYZE statistics; empty unless the dump captured them.
+        private final Map<String, Long> analyzedColumnRowCounts = new CaseInsensitiveMap<>();
 
         private ReplayTableInfo(Table table, long rowCount, Map<String, ColumnStatistic> columnStats,
                                   List<String> partitionNames) {

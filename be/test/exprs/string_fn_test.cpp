@@ -29,6 +29,7 @@
 #include "exprs/mock_vectorized_expr.h"
 #include "exprs/string_functions.h"
 #include "runtime/runtime_state.h"
+#include "testutil/column_test_helper.h"
 #include "types/type_descriptor.h"
 
 namespace starrocks {
@@ -131,9 +132,7 @@ PARALLEL_TEST(VecStringFunctionsTest, substringleftTest) {
 }
 
 PARALLEL_TEST(VecStringFunctionsTest, substrConstASCIITest) {
-    auto str = BinaryColumn::create();
-    str->append("123456789");
-    str->append("");
+    auto str = ColumnTestHelper::build_column<Slice>({"123456789", ""});
     std::vector<std::tuple<int, int, std::string>> cases = {
             {1, 2, "12"},          {1, 0, ""},   {2, 100, "23456789"}, {9, 1, "9"},
             {9, 100, "9"},         {10, 1, ""},  {-9, 1, "1"},         {-9, 9, "123456789"},
@@ -185,9 +184,7 @@ PARALLEL_TEST(VecStringFunctionsTest, substrTruncatedUtf8TailTest) {
 }
 
 PARALLEL_TEST(VecStringFunctionsTest, substrConstZhTest) {
-    auto str = BinaryColumn::create();
-    str->append("壹贰叁肆伍陆柒捌玖");
-    str->append("");
+    auto str = ColumnTestHelper::build_column<Slice>({"壹贰叁肆伍陆柒捌玖", ""});
 
     std::vector<std::tuple<int, int, std::string>> cases = {
             {1, 2, "壹贰"},
@@ -347,10 +344,8 @@ PARALLEL_TEST(VecStringFunctionsTest, substringConstTest) {
     Columns columns;
 
     auto str = BinaryColumn::create();
-    auto pos = Int32Column::create();
-    auto len = Int32Column::create();
-    pos->append(5);
-    len->append(2);
+    auto pos = ColumnTestHelper::build_column<int32_t>({5});
+    auto len = ColumnTestHelper::build_column<int32_t>({2});
 
     for (int j = 0; j < 20; ++j) {
         str->append("test" + std::to_string(j));
@@ -375,10 +370,8 @@ PARALLEL_TEST(VecStringFunctionsTest, substringNullTest) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     Columns columns;
 
-    auto pos = Int32Column::create();
-    auto len = Int32Column::create();
-    pos->append(5);
-    len->append(2);
+    auto pos = ColumnTestHelper::build_column<int32_t>({5});
+    auto len = ColumnTestHelper::build_column<int32_t>({2});
 
     ColumnBuilder<TYPE_VARCHAR> b(config::vector_chunk_size);
 
@@ -535,13 +528,7 @@ PARALLEL_TEST(VecStringFunctionsTest, nullOrEmpty) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     Columns columns;
 
-    auto str = BinaryColumn::create();
-    str->append("");
-    str->append(" ");
-    str->append("hello");
-    str->append("starrocks");
-    str->append("111");
-    str->append(".");
+    auto str = ColumnTestHelper::build_column<Slice>({"", " ", "hello", "starrocks", "111", "."});
     str->append_default();
 
     columns.emplace_back(str);
@@ -637,12 +624,7 @@ PARALLEL_TEST(VecStringFunctionsTest, splitConst2) {
     Columns columns;
 
     auto delim_const = ConstColumn::create(BinaryColumn::create());
-    auto str_binary_column = BinaryColumn::create();
-
-    str_binary_column->append("a,b,c");
-    str_binary_column->append("aa,bb,cc");
-    str_binary_column->append("eeeeeeeeee");
-    str_binary_column->append(",");
+    auto str_binary_column = ColumnTestHelper::build_column<Slice>({"a,b,c", "aa,bb,cc", "eeeeeeeeee", ","});
 
     delim_const->append_datum(",");
     columns.clear();
@@ -696,12 +678,7 @@ PARALLEL_TEST(VecStringFunctionsTest, splitChinese) {
         Columns columns;
 
         auto delim_const = ConstColumn::create(BinaryColumn::create());
-        auto str_binary_column = BinaryColumn::create();
-
-        str_binary_column->append("a地 区b");
-        str_binary_column->append("");
-        str_binary_column->append("地sh北j 京 g");
-        str_binary_column->append(",");
+        auto str_binary_column = ColumnTestHelper::build_column<Slice>({"a地 区b", "", "地sh北j 京 g", ","});
 
         delim_const->append_datum("");
         columns.clear();
@@ -757,13 +734,10 @@ PARALLEL_TEST(VecStringFunctionsTest, splitChinese) {
     }
 }
 
-TypeDescriptor array_type(const LogicalType& child_type);
-
 PARALLEL_TEST(VecStringFunctionsTest, str_to_map_v1) {
     // input array<string>
     int chunk_size = 7;
-    TypeDescriptor TYPE_ARRAY_VARCHAR = array_type(TYPE_VARCHAR);
-    auto array_str_null = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
+    auto array_str_null = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR_DESC, true);
     // []
     // NULL
     // ['NULL']
@@ -776,20 +750,18 @@ PARALLEL_TEST(VecStringFunctionsTest, str_to_map_v1) {
     array_str_null->append_datum(Datum(DatumArray{Datum("ab:b"), Datum("ab:b"), Datum("")}));
 
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
-    TypeDescriptor string_type_desc = TypeDescriptor::create_varchar_type(10);
-    auto string_column = ColumnHelper::create_column(string_type_desc, true);
+    auto string_column = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
     string_column->append_datum("a:b,c:d");
     string_column->append_datum("a:1,b:2");
 
-    auto array_str_notnull = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
-    array_str_notnull->append_datum(Datum(DatumArray{}));
-    array_str_notnull->append_datum(Datum(DatumArray{Datum("中国:shang海")}));
-    array_str_notnull->append_datum(Datum(DatumArray{Datum()}));
-    array_str_notnull->append_datum(Datum(DatumArray{Datum("ab:b"), Datum("ab:b"), Datum("")}));
-    array_str_notnull->append_datum(
-            Datum(DatumArray{Datum("a:b"), Datum("a:b中囸"), Datum("道c:d过’"), Datum("道c:d过")}));
-    array_str_notnull->append_datum(Datum(DatumArray{Datum("a:c:b:d"), Datum(""), Datum("")}));
-    array_str_notnull->append_datum(Datum(DatumArray{Datum("ab:b"), Datum("ab:b"), Datum("")}));
+    auto array_str_notnull = ColumnTestHelper::build_array_column<Slice>(TYPE_ARRAY_VARCHAR_DESC, false,
+                                                                         {{},
+                                                                          {"中国:shang海"},
+                                                                          {std::nullopt},
+                                                                          {"ab:b", "ab:b", ""},
+                                                                          {"a:b", "a:b中囸", "道c:d过’", "道c:d过"},
+                                                                          {"a:c:b:d", "", ""},
+                                                                          {"ab:b", "ab:b", ""}});
 
     ColumnPtr only_null = ColumnHelper::create_const_null_column(chunk_size);
 
@@ -804,7 +776,7 @@ PARALLEL_TEST(VecStringFunctionsTest, str_to_map_v1) {
     map_delimiter_builder_nullable.append("");
     map_delimiter_builder_nullable.append_null();
     ColumnPtr map_delimiter_nullable = map_delimiter_builder_nullable.build_nullable_column();
-    auto delimiter_column = ColumnHelper::create_column(string_type_desc, true);
+    auto delimiter_column = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
     delimiter_column->append_datum(",");
     delimiter_column->append_datum(",");
 
@@ -818,16 +790,13 @@ PARALLEL_TEST(VecStringFunctionsTest, str_to_map_v1) {
     map_delimiter_builder_notnull.append("");
     ColumnPtr map_delimiter_notnull = map_delimiter_builder_notnull.build(false);
 
-    auto empty_col = BinaryColumn::create();
-    empty_col->append_datum("");
+    auto empty_col = ColumnTestHelper::build_column<Slice>({""});
     auto delim_const_empty = ConstColumn::create(empty_col, chunk_size);
 
-    auto ch_col = BinaryColumn::create();
-    ch_col->append_datum("中");
+    auto ch_col = ColumnTestHelper::build_column<Slice>({"中"});
     auto delim_const_ch = ConstColumn::create(ch_col, chunk_size);
 
-    auto const_col = BinaryColumn::create();
-    const_col->append_datum(":");
+    auto const_col = ColumnTestHelper::build_column<Slice>({":"});
     auto delim_const = ConstColumn::create(const_col, chunk_size);
 
     {
@@ -1263,17 +1232,8 @@ PARALLEL_TEST(VecStringFunctionsTest, endsWithNullTest) {
 PARALLEL_TEST(VecStringFunctionsTest, appendTrailingCharIfAbsentTest) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     Columns columns;
-    auto str = BinaryColumn::create();
-    auto pad = BinaryColumn::create();
-
-    str->append("qwer");
-    pad->append("r");
-
-    str->append("qwe");
-    pad->append("r");
-
-    str->append("");
-    pad->append("r");
+    auto str = ColumnTestHelper::build_column<Slice>({"qwer", "qwe", ""});
+    auto pad = ColumnTestHelper::build_column<Slice>({"r", "r", "r"});
 
     columns.emplace_back(str);
     columns.emplace_back(pad);
@@ -1290,14 +1250,8 @@ PARALLEL_TEST(VecStringFunctionsTest, appendTrailingCharIfAbsentTest) {
 PARALLEL_TEST(VecStringFunctionsTest, appendTrailingCharIfAbsentNullTest) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     Columns columns;
-    auto str = BinaryColumn::create();
-    auto pad = BinaryColumn::create();
-
-    str->append("qwer");
-    pad->append("rw");
-
-    str->append("qwe");
-    pad->append("er");
+    auto str = ColumnTestHelper::build_column<Slice>({"qwer", "qwe"});
+    auto pad = ColumnTestHelper::build_column<Slice>({"rw", "er"});
 
     columns.emplace_back(str);
     columns.emplace_back(pad);
@@ -1313,14 +1267,8 @@ PARALLEL_TEST(VecStringFunctionsTest, appendTrailingCharIfAbsentNullTest) {
 PARALLEL_TEST(VecStringFunctionsTest, appendTrailingCharIfAbsentUTF8Test) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     Columns columns;
-    auto str = BinaryColumn::create();
-    auto pad = BinaryColumn::create();
-
-    str->append("中国");
-    pad->append("a");
-
-    str->append("北京");
-    pad->append("b");
+    auto str = ColumnTestHelper::build_column<Slice>({"中国", "北京"});
+    auto pad = ColumnTestHelper::build_column<Slice>({"a", "b"});
 
     columns.emplace_back(str);
     columns.emplace_back(pad);
@@ -1337,14 +1285,8 @@ PARALLEL_TEST(VecStringFunctionsTest, appendTrailingCharIfAbsentUTF8Test) {
 PARALLEL_TEST(VecStringFunctionsTest, appendTrailingCharIfAbsentUTF8NullTest) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     Columns columns;
-    auto str = BinaryColumn::create();
-    auto pad = BinaryColumn::create();
-
-    str->append("中国");
-    pad->append("国");
-
-    str->append("北京");
-    pad->append("京");
+    auto str = ColumnTestHelper::build_column<Slice>({"中国", "北京"});
+    auto pad = ColumnTestHelper::build_column<Slice>({"国", "京"});
 
     columns.emplace_back(str);
     columns.emplace_back(pad);
@@ -1531,11 +1473,7 @@ PARALLEL_TEST(VecStringFunctionsTest, caseToggleTest) {
 PARALLEL_TEST(VecStringFunctionsTest, asciiTest) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     Columns columns;
-    auto str = BinaryColumn::create();
-
-    str->append("qwer");
-    str->append("qwe");
-    str->append("");
+    auto str = ColumnTestHelper::build_column<Slice>({"qwer", "qwe", ""});
 
     columns.emplace_back(str);
 
@@ -1552,14 +1490,7 @@ PARALLEL_TEST(VecStringFunctionsTest, asciiTest) {
 PARALLEL_TEST(VecStringFunctionsTest, charTest) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     Columns columns;
-    auto str = Int32Column::create();
-
-    str->append(65);
-    str->append(66);
-    str->append(97);
-    str->append(98);
-    str->append(33);
-    str->append(126);
+    auto str = ColumnTestHelper::build_column<int32_t>({65, 66, 97, 98, 33, 126});
 
     columns.emplace_back(str);
 
@@ -1574,12 +1505,8 @@ PARALLEL_TEST(VecStringFunctionsTest, inetAtonInvalidIPv4Test) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
 
     Columns columns;
-    auto input_column = BinaryColumn::create();
-    input_column->append("999.999.999.999");
-    input_column->append("abc.def.ghi.jkl");
-    input_column->append("192.168.1.1.1");
-    input_column->append("192.168.1");
-    input_column->append("");
+    auto input_column = ColumnTestHelper::build_column<Slice>(
+            {"999.999.999.999", "abc.def.ghi.jkl", "192.168.1.1.1", "192.168.1", ""});
     columns.emplace_back(input_column);
 
     auto result = StringFunctions::inet_aton(ctx.get(), columns).value();
@@ -1595,10 +1522,7 @@ PARALLEL_TEST(VecStringFunctionsTest, inetAtonValidIPv4Test) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
 
     Columns columns;
-    auto input_column = BinaryColumn::create();
-    input_column->append("192.168.1.1");
-    input_column->append("0.0.0.0");
-    input_column->append("255.255.255.255");
+    auto input_column = ColumnTestHelper::build_column<Slice>({"192.168.1.1", "0.0.0.0", "255.255.255.255"});
     columns.emplace_back(input_column);
 
     auto result = StringFunctions::inet_aton(ctx.get(), columns).value();
@@ -1831,35 +1755,9 @@ PARALLEL_TEST(VecStringFunctionsTest, concatWs1Test) {
 PARALLEL_TEST(VecStringFunctionsTest, findInSetTest) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     Columns columns;
-    auto str = BinaryColumn::create();
-    auto strlist = BinaryColumn::create();
-
-    str->append("b");
-    strlist->append("a,b,c");
-
-    str->append("bc");
-    strlist->append("ab,cd,bc");
-
-    str->append("bc");
-    strlist->append("abc,bcd,efg");
-
-    str->append("abc,");
-    strlist->append("abc,bcd,efg");
-
-    str->append("");
-    strlist->append("abc");
-
-    str->append("");
-    strlist->append(",abc");
-
-    str->append("abc");
-    strlist->append("abc");
-
-    str->append("bc");
-    strlist->append("abc");
-
-    str->append("bc");
-    strlist->append("abc");
+    auto str = ColumnTestHelper::build_column<Slice>({"b", "bc", "bc", "abc,", "", "", "abc", "bc", "bc"});
+    auto strlist = ColumnTestHelper::build_column<Slice>(
+            {"a,b,c", "ab,cd,bc", "abc,bcd,efg", "abc,bcd,efg", "abc", ",abc", "abc", "abc", "abc"});
 
     columns.emplace_back(str);
     columns.emplace_back(strlist);
@@ -3108,8 +3006,7 @@ static void test_left_and_right_const(
     for (auto& c : cases) {
         auto [len, left_expect, right_expect] = c;
         Columns columns;
-        auto len_col = Int32Column::create();
-        len_col->append(len);
+        auto len_col = ColumnTestHelper::build_column<int32_t>({len});
         columns.emplace_back(str_col);
         columns.emplace_back(ConstColumn::create(len_col, 1));
         auto substr_state = std::make_unique<SubstrState>();
@@ -3135,10 +3032,7 @@ static void test_left_and_right_const(
 }
 
 PARALLEL_TEST(VecStringFunctionsTest, leftAndRightConstASCIITest) {
-    auto str_col = BinaryColumn::create();
-    str_col->append("");
-    str_col->append("a");
-    str_col->append("ABCDEFG_HIJKLMN");
+    auto str_col = ColumnTestHelper::build_column<Slice>({"", "a", "ABCDEFG_HIJKLMN"});
 
     std::vector<std::tuple<int, std::vector<std::string>, std::vector<std::string>>> cases = {
             {0, {"", "", ""}, {"", "", ""}},
@@ -3156,11 +3050,8 @@ PARALLEL_TEST(VecStringFunctionsTest, leftAndRightConstASCIITest) {
 }
 
 PARALLEL_TEST(VecStringFunctionsTest, leftAndRightConstUtf8Test) {
-    auto str_col = BinaryColumn::create();
-    str_col->append("");
-    str_col->append("a");
-    str_col->append("三十年众生牛马，六十年诸佛龙象");
-    str_col->append("a三b十c年d众e生f牛g马");
+    auto str_col =
+            ColumnTestHelper::build_column<Slice>({"", "a", "三十年众生牛马，六十年诸佛龙象", "a三b十c年d众e生f牛g马"});
 
     std::vector<std::tuple<int, std::vector<std::string>, std::vector<std::string>>> cases = {
             {0, {"", "", "", ""}, {"", "", "", ""}},
@@ -3368,26 +3259,8 @@ PARALLEL_TEST(VecStringFunctionsTest, substrNotConstUtf8Test) {
 PARALLEL_TEST(VecStringFunctionsTest, strcmpTest) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     Columns columns;
-    auto lhs = BinaryColumn::create();
-    auto rhs = BinaryColumn::create();
-
-    lhs->append("");
-    rhs->append("");
-
-    lhs->append("");
-    rhs->append("text1");
-
-    lhs->append("text2");
-    rhs->append("");
-
-    lhs->append("text1");
-    rhs->append("text1");
-
-    lhs->append("text1");
-    rhs->append("text2");
-
-    lhs->append("text2");
-    rhs->append("text1");
+    auto lhs = ColumnTestHelper::build_column<Slice>({"", "", "text2", "text1", "text1", "text2"});
+    auto rhs = ColumnTestHelper::build_column<Slice>({"", "text1", "", "text1", "text2", "text1"});
 
     columns.emplace_back(lhs);
     columns.emplace_back(rhs);
@@ -3980,9 +3853,7 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpExtractAllConst) {
 PARALLEL_TEST(VecStringFunctionsTest, crc32Test) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     Columns columns;
-    auto str = BinaryColumn::create();
-    str->append("starrocks");
-    str->append("STARROCKS");
+    auto str = ColumnTestHelper::build_column<Slice>({"starrocks", "STARROCKS"});
     columns.emplace_back(str);
 
     ASSERT_TRUE(StringFunctions::crc32(ctx.get(), columns).ok());
@@ -4452,20 +4323,10 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpPositionInvalidRegex) {
     auto context = ctx.get();
 
     Columns columns;
-    auto str = BinaryColumn::create();
-    auto pattern = BinaryColumn::create();
-    auto pos = Int32Column::create();
-    auto occurrence = Int32Column::create();
-
-    str->append("hello");
-    pattern->append("[");
-    pos->append(1);
-    occurrence->append(1);
-
-    str->append("world");
-    pattern->append("(");
-    pos->append(1);
-    occurrence->append(1);
+    auto str = ColumnTestHelper::build_column<Slice>({"hello", "world"});
+    auto pattern = ColumnTestHelper::build_column<Slice>({"[", "("});
+    auto pos = ColumnTestHelper::build_column<int32_t>({1, 1});
+    auto occurrence = ColumnTestHelper::build_column<int32_t>({1, 1});
 
     columns.push_back(str);
     columns.push_back(pattern);
@@ -4493,12 +4354,8 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpCountTest) {
     auto context = ctx.get();
 
     {
-        auto str_col = BinaryColumn::create();
-        str_col->append("abc123def456");
-        str_col->append("test.com test.net test.org");
-        str_col->append("a b  c   d");
-        str_col->append("ababababab");
-        str_col->append("");
+        auto str_col = ColumnTestHelper::build_column<Slice>(
+                {"abc123def456", "test.com test.net test.org", "a b  c   d", "ababababab", ""});
 
         // Create nullable column for testing NULL input
         auto null_col = NullColumn::create();
@@ -4516,21 +4373,12 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpCountTest) {
 
         auto result = StringFunctions::regexp_count(context, columns).value();
 
-        ASSERT_EQ(result->size(), 5);
-        ASSERT_EQ(result->get(0).get_int64(), 6);
-        ASSERT_EQ(result->get(1).get_int64(), 0);
-        ASSERT_EQ(result->get(2).get_int64(), 0);
-        ASSERT_EQ(result->get(3).get_int64(), 0);
-        ASSERT_TRUE(result->is_null(4));
+        ASSERT_EQ("[6, 0, 0, 0, NULL]", result->debug_string());
     }
 
     // Dynamic regex pattern test
     {
-        auto str_col = BinaryColumn::create();
-        str_col->append("abc123def456");
-        str_col->append("abc");
-        str_col->append("ABC");
-
+        auto str_col = ColumnTestHelper::build_column<Slice>({"abc123def456", "abc", "ABC"});
         auto pattern_col = BinaryColumn::create();
         pattern_col->append("[a-z]"); // checks lowercase
         pattern_col->append("[A-Z]"); // checks uppercase
@@ -4540,18 +4388,12 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpCountTest) {
 
         auto result = StringFunctions::regexp_count(context, columns).value();
 
-        ASSERT_EQ(result->size(), 3);
-        ASSERT_EQ(result->get(0).get_int64(), 6);
-        ASSERT_EQ(result->get(1).get_int64(), 0);
-        ASSERT_EQ(result->get(2).get_int64(), 0);
+        ASSERT_EQ("[6, 0, 0]", result->debug_string());
     }
 
     // Special characters test
     {
-        auto str_col = BinaryColumn::create();
-        str_col->append("a,b,c,d,e");
-        str_col->append("a.b.c.d.e");
-
+        auto str_col = ColumnTestHelper::build_column<Slice>({"a,b,c,d,e", "a.b.c.d.e"});
         auto pattern_col = BinaryColumn::create();
         pattern_col->append(",");   // checks comma
         pattern_col->append("\\."); // checks dot
@@ -4560,22 +4402,13 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpCountTest) {
 
         auto result = StringFunctions::regexp_count(context, columns).value();
 
-        ASSERT_EQ(result->size(), 2);
-        ASSERT_EQ(result->get(0).get_int64(), 4);
-        ASSERT_EQ(result->get(1).get_int64(), 4);
+        ASSERT_EQ("[4, 4]", result->debug_string());
     }
 
     // Empty and invalid pattern test
     {
-        auto str_col = BinaryColumn::create();
-        str_col->append("abc");
-        str_col->append("abc");
-        str_col->append("abc");
-
-        auto pattern_col = BinaryColumn::create();
-        pattern_col->append("");
-        pattern_col->append("(a");
-        pattern_col->append("a");
+        auto str_col = ColumnTestHelper::build_column<Slice>({"abc", "abc", "abc"});
+        auto pattern_col = ColumnTestHelper::build_column<Slice>({"", "(a", "a"});
 
         auto null_col = NullColumn::create();
         null_col->append(0);
@@ -4586,50 +4419,30 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpCountTest) {
         Columns columns = {str_col, nullable_pattern};
 
         auto result = StringFunctions::regexp_count(context, columns).value();
-        ASSERT_EQ(result->size(), 3);
-        ASSERT_TRUE(result->is_null(0));
-        ASSERT_TRUE(result->is_null(1));
-        ASSERT_TRUE(result->is_null(2));
+        ASSERT_EQ("[NULL, NULL, NULL]", result->debug_string());
     }
 
     {
-        auto str_col = BinaryColumn::create();
-        str_col->append("ababababab");
-        str_col->append("aaaaaaaaaa");
-        str_col->append("abababa");
-
-        auto pattern_col = BinaryColumn::create();
-        pattern_col->append("ab");
-        pattern_col->append("a");
-        pattern_col->append("aba");
+        auto str_col = ColumnTestHelper::build_column<Slice>({"ababababab", "aaaaaaaaaa", "abababa"});
+        auto pattern_col = ColumnTestHelper::build_column<Slice>({"ab", "a", "aba"});
 
         Columns columns = {str_col, pattern_col};
 
         auto result = StringFunctions::regexp_count(context, columns).value();
 
-        ASSERT_EQ(result->size(), 3);
-        ASSERT_EQ(result->get(0).get_int64(), 5);
-        ASSERT_EQ(result->get(1).get_int64(), 10);
-        ASSERT_EQ(result->get(2).get_int64(), 2);
+        ASSERT_EQ("[5, 10, 2]", result->debug_string());
     }
 
     // Unicode characters test
     {
-        auto str_col = BinaryColumn::create();
-        str_col->append("AbCdExCeF");
-        str_col->append("1a 2b 14m");
-
-        auto pattern_col = BinaryColumn::create();
-        pattern_col->append("C");
-        pattern_col->append("\\d+");
+        auto str_col = ColumnTestHelper::build_column<Slice>({"AbCdExCeF", "1a 2b 14m"});
+        auto pattern_col = ColumnTestHelper::build_column<Slice>({"C", "\\d+"});
 
         Columns columns = {str_col, pattern_col};
 
         auto result = StringFunctions::regexp_count(context, columns).value();
 
-        ASSERT_EQ(result->size(), 2);
-        ASSERT_EQ(result->get(0).get_int64(), 2);
-        ASSERT_EQ(result->get(1).get_int64(), 3);
+        ASSERT_EQ("[2, 3]", result->debug_string());
     }
 }
 

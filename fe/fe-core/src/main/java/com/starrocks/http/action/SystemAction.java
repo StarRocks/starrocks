@@ -34,6 +34,7 @@
 
 package com.starrocks.http.action;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.starrocks.common.AnalysisException;
@@ -56,6 +57,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.owasp.encoder.Encode;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -78,24 +80,26 @@ public class SystemAction extends WebBaseAction {
         if (Strings.isNullOrEmpty(currentPath)) {
             currentPath = "/";
         }
-        // HTML encode the path to prevent XSS
-        String encodePath = Encode.forHtml(currentPath);
-        appendSystemInfo(response.getContent(), encodePath, encodePath);
+        appendSystemInfo(response.getContent(), currentPath);
 
         getPageFooter(response.getContent());
         writeResponse(request, response);
     }
 
-    private void appendSystemInfo(StringBuilder buffer, String procPath, String path) {
+    // The proc path is looked up as given and encoded only where it is written into the page, so that names
+    // containing characters such as '&' or '\'' can be browsed.
+    private void appendSystemInfo(StringBuilder buffer, String procPath) {
+        String encodedPath = Encode.forHtml(procPath);
         buffer.append("<h2>System Info</h2>");
         buffer.append("<p>This page lists the system info, like /proc in Linux.</p>");
-        buffer.append("<p class=\"text-info\"> Current path: " + path + "<a href=\"?path=" + getParentPath(path)
+        buffer.append("<p class=\"text-info\"> Current path: " + encodedPath + "<a href=\"?path="
+                + encodeProcPathForUrl(getParentPath(procPath))
                 + "\" class=\"btn btn-primary\" style=\"float: right;\">"
                 + "Parent Dir</a></p><br/>");
 
         ProcNodeInterface procNode = getProcNode(procPath);
         if (procNode == null) {
-            buffer.append("<p class=\"text-error\"> No such proc path[" + path + "]</p>");
+            buffer.append("<p class=\"text-error\"> No such proc path[" + encodedPath + "]</p>");
             return;
         }
         boolean isDir = (procNode instanceof ProcDirInterface);
@@ -104,8 +108,7 @@ public class SystemAction extends WebBaseAction {
         List<List<String>> rows = null;
         if (!GlobalStateMgr.getCurrentState().isLeader()) {
             // forward to master
-            String showProcStmt = "SHOW PROC \"" + procPath + "\"";
-            LeaderOpExecutor leaderOpExecutor = new LeaderOpExecutor(new OriginStatement(showProcStmt, 0),
+            LeaderOpExecutor leaderOpExecutor = new LeaderOpExecutor(new OriginStatement(buildShowProcStmt(procPath), 0),
                     ConnectContext.get(), RedirectStatus.FORWARD_NO_SYNC);
             try {
                 leaderOpExecutor.execute();
@@ -130,7 +133,8 @@ public class SystemAction extends WebBaseAction {
                 result = procNode.fetchResult();
             } catch (AnalysisException e) {
                 buffer.append("<p class=\"text-error\"> The result is null, "
-                        + "maybe haven't be implemented completely[" + e.getMessage() + "], please check.</p>");
+                        + "maybe haven't be implemented completely[" + Encode.forHtml(e.getMessage())
+                        + "], please check.</p>");
                 buffer.append("<p class=\"text-info\"> "
                         + "INFO: ProcNode type is [" + procNode.getClass().getName()
                         + "]</p>");
@@ -145,11 +149,13 @@ public class SystemAction extends WebBaseAction {
         Preconditions.checkNotNull(rows);
 
         appendTableHeader(buffer, columnNames);
-        appendSystemTableBody(buffer, rows, isDir, path);
+        appendSystemTableBody(buffer, rows, isDir, procPath);
         appendTableFooter(buffer);
     }
 
-    private void appendSystemTableBody(StringBuilder buffer, List<List<String>> rows, boolean isDir, String path) {
+    // Cells are HTML-encoded because proc results carry user-controlled text, such as table names and SQL statements.
+    @VisibleForTesting
+    void appendSystemTableBody(StringBuilder buffer, List<List<String>> rows, boolean isDir, String path) {
         UrlValidator validator = new UrlValidator();
         for (List<String> strList : rows) {
             buffer.append("<tr>");
@@ -157,22 +163,35 @@ public class SystemAction extends WebBaseAction {
             for (String str : strList) {
                 buffer.append("<td>");
                 if (isDir && columnIndex == 1) {
-                    String escapeStr = str.replace("%", "%25");
-                    buffer.append("<a href=\"?path=" + path + "/" + escapeStr + "\">");
-                    buffer.append(str);
+                    buffer.append("<a href=\"?path=" + encodeProcPathForUrl(path) + "/" + Encode.forUriComponent(str)
+                            + "\">");
+                    buffer.append(Encode.forHtml(str));
                     buffer.append("</a>");
                 } else if (validator.isValid(str)) {
-                    buffer.append("<a href=\"" + str + "\">");
+                    buffer.append("<a href=\"" + Encode.forHtmlAttribute(str) + "\">");
                     buffer.append("URL");
                     buffer.append("</a>");
                 } else {
-                    buffer.append(str != null ? str.replaceAll("\\n", "<br/>") : "");
+                    buffer.append(str != null ? Encode.forHtml(str).replace("\n", "<br/>") : "");
                 }
                 buffer.append("</td>");
                 ++columnIndex;
             }
             buffer.append("</tr>");
         }
+    }
+
+    // Builds the statement forwarded to the leader. The path is a raw request parameter, so escape it to keep it
+    // a single string literal.
+    @VisibleForTesting
+    static String buildShowProcStmt(String procPath) {
+        return "SHOW PROC \"" + procPath.replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
+    }
+
+    // Percent-encodes each segment of a proc path for a "?path=" link, keeping '/' readable.
+    @VisibleForTesting
+    static String encodeProcPathForUrl(String path) {
+        return Arrays.stream(path.split("/", -1)).map(Encode::forUriComponent).collect(Collectors.joining("/"));
     }
 
     // some expamle:

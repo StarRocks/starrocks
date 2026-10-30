@@ -217,7 +217,6 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
 
     @Override
     protected void runPendingJob() throws AlterCancelException {
-        boolean enableTabletCreationOptimization = Config.lake_enable_tablet_creation_optimization;
         long numTablets = 0;
         AgentBatchTask batchTask = new AgentBatchTask();
         MarkedCountDownLatch<Long, Long> countDownLatch;
@@ -228,16 +227,8 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
             Preconditions.checkState(table.getState() == OlapTable.OlapTableState.ROLLUP);
             lightWeight = table.isLightWeightTabletCreation();
 
-            // disable tablet creation optimaization to avoid overwriting files with the same name.
-            if (table.isFileBundling()) {
-                enableTabletCreationOptimization = false;
-            }
-            if (enableTabletCreationOptimization) {
-                numTablets = physicalPartitionIdToRollupIndex.size();
-            } else {
-                numTablets = physicalPartitionIdToRollupIndex.values().stream().map(MaterializedIndex::getTablets)
-                        .mapToLong(List::size).sum();
-            }
+            numTablets = physicalPartitionIdToRollupIndex.values().stream().map(MaterializedIndex::getTablets)
+                    .mapToLong(List::size).sum();
             countDownLatch = new MarkedCountDownLatch<>((int) numTablets);
 
             long gtid = getNextGtid();
@@ -306,7 +297,9 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                             .setCompressionType(table.getCompressionType())
                             .setCreateSchemaFile(createSchemaFile)
                             .setTabletSchema(tabletSchema)
-                            .setEnableTabletCreationOptimization(enableTabletCreationOptimization)
+                            // Never the partition-shared version-1 object: it is named after tablet id 0, so the
+                            // rollup index would overwrite the base index's one in the same partition path.
+                            .setEnableTabletCreationOptimization(false)
                             .setGtid(gtid)
                             .setCompactionStrategy(table.getCompactionStrategy())
                             .setRange(table.isRangeDistribution() ? rollupTablet.getRange() : null)
@@ -315,10 +308,6 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                     // For each partition, the schema file is created only when the first Tablet is created
                     createSchemaFile = false;
                     batchTask.addTask(task);
-
-                    if (enableTabletCreationOptimization) {
-                        break;
-                    }
                 } // end for rollupTablets
             }
         }
@@ -338,31 +327,28 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
             addRollupIndexToCatalog(table);
         }
 
-        // Getting the `watershedTxnId` and adding the shadow index are not atomic. It's possible a
-        // transaction A begins between these operations. This is safe as long as A gets the tablet
-        // list(with database lock) after beginTransaction(), so that it sees the shadow index and
-        // writes to it. All current import transactions do this (beginTransaction first), so even
-        // without checking the `nextTxnId` here it should be safe. However, beginTransaction() first
-        // is just a convention not a requirement. If violated, transactions with IDs greater than
-        // the `watershedTxnId` may ignore the shadow index. To avoid this, we ensure no new
-        // beginTransaction() succeeds between getting the `watershedTxnId` and adding the shadow index.
+        // Getting the `watershedTxnId` and adding the rollup index are not atomic, and the id generator is
+        // shared by the whole cluster, so other ids are routinely drawn in between. That is safe without a
+        // check here: a writer that begins its transaction before resolving tablets does so under the table
+        // READ lock, which the WRITE lock above excludes, so any such transaction with an id above the
+        // watershed sees the rollup index and writes it. A writer that resolves tablets first (replication,
+        // a bypass-write client with cached metadata) is rejected at commit by
+        // LakeTableTxnStateListener#checkShadowIndexesLoaded if it misses the rollup index and commits before
+        // this job makes the index NORMAL.
+        // The next id is kept only as a breadcrumb for the log line below.
         long nextTxnId = peekNextTransactionId();
-        if (nextTxnId != watershedTxnId + 1) {
-            throw new AlterCancelException(
-                    "concurrent transaction detected while adding shadow index, please re-run the alter table command");
-        }
 
         if (span != null) {
             span.setAttribute("watershedTxnId", this.watershedTxnId);
             span.addEvent("setWaitingTxn");
         }
 
-        // can't add addRollIndexToCatalog into the applier, because of the nextTxnId check.
-        // But addRollIndexToCatalog is idempotent, so it's ok to re-add if Leader transferred.
+        // The rollup index is added to the catalog above rather than in the applier; replay re-adds it from
+        // the journaled state, so it's ok to re-add if Leader transferred.
         persistStateChange(this, JobState.WAITING_TXN);
 
-        LOG.info("transfer roll up job {} state to {}, watershed txn_id: {}", jobId, this.jobState,
-                watershedTxnId);
+        LOG.info("transfer roll up job {} state to {}, watershed txn_id: {}, next txn_id after adding rollup"
+                + " index: {}", jobId, this.jobState, watershedTxnId, nextTxnId);
     }
 
     @Override
@@ -567,9 +553,10 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
         info.add(watershedTxnId);
         info.add(jobState.name());
         info.add(errMsg);
-        // progress
-        if (jobState == JobState.RUNNING && rollupBatchTask.getTaskNum() > 0) {
-            info.add(rollupBatchTask.getFinishedTaskNum() + "/" + rollupBatchTask.getTaskNum());
+        // progress. Read once: this runs without the job lock, and pruning the done job replaces the batch.
+        AgentBatchTask batchTask = rollupBatchTask;
+        if (jobState == JobState.RUNNING && batchTask.getTaskNum() > 0) {
+            info.add(batchTask.getFinishedTaskNum() + "/" + batchTask.getTaskNum());
         } else {
             info.add(FeConstants.NULL_STRING);
         }
@@ -690,6 +677,9 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                 MaterializedIndex rollupIndex = this.physicalPartitionIdToRollupIndex.get(partitionId);
                 Preconditions.checkNotNull(rollupIndex);
                 Preconditions.checkState(rollupIndex.getState() == MaterializedIndex.IndexState.SHADOW, rollupIndex.getState());
+                // The rollup index stays visible to every transaction (visibleTxnId is left at 0), but a
+                // transaction drawn after the watershed must still write it; record that for the commit check.
+                rollupIndex.setShadowWatershedTxnId(watershedTxnId);
                 physicalPartition.createRollupIndex(rollupIndex);
             }
         }
@@ -883,6 +873,17 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
         return new LakeRollupJob(this);
     }
 
+    /**
+     * Drops the per-tablet data of a done job, which stays in memory only for SHOW ALTER. getInfo reads none of it.
+     * The maps are replaced, not cleared: replay shares them with the journal entry they came from.
+     */
+    @Override
+    public void pruneMeta() {
+        physicalPartitionIdToRollupIndex = Maps.newHashMap();
+        physicalPartitionIdToBaseRollupTabletIdMap = Maps.newHashMap();
+        rollupBatchTask = new AgentBatchTask();
+    }
+
     public String getRollupIndexName() {
         return rollupIndexName;
     }
@@ -890,5 +891,10 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
     @Override
     public void addMVIndex(long partitionId, MaterializedIndex mvIndex) {
         this.physicalPartitionIdToRollupIndex.put(partitionId, mvIndex);
+    }
+
+    @Override
+    public Map<Long, MaterializedIndex> getPartitionIdToRollupIndex() {
+        return physicalPartitionIdToRollupIndex;
     }
 }

@@ -42,7 +42,7 @@ public final class PushDownTopNBelowAIProjectRule extends TransformationRule {
 
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
-        if (!context.getSessionVariable().isEnableAiTopnPushdown()) {
+        if (!context.getSessionVariable().isEnableAITopnPushdown()) {
             return false;
         }
         LogicalTopNOperator topN = input.getOp().cast();
@@ -63,7 +63,7 @@ public final class PushDownTopNBelowAIProjectRule extends TransformationRule {
             project = child.getOp().cast();
             if (hasBarrier(project) || child.arity() != 1
                     || project.getColumnRefMap().values().stream()
-                            .anyMatch(AiFunctionExtractor::containsNonReusableExpression)) {
+                            .anyMatch(AIFunctionExtractor::containsNonReusableExpression)) {
                 return false;
             }
             child = child.inputAt(0);
@@ -103,7 +103,7 @@ public final class PushDownTopNBelowAIProjectRule extends TransformationRule {
 
         // Small limits use the standard global TopN path. For larger limits, keep candidates in
         // each input fragment instead of gathering all AI work into one instance.
-        SortPhase candidatePhase = topN.getLimit() <= context.getSessionVariable().getAiTopnPushdownMaxGlobalLimit()
+        SortPhase candidatePhase = topN.getLimit() <= context.getSessionVariable().getAITopnPushdownMaxGlobalLimit()
                 ? SortPhase.FINAL : SortPhase.PARTIAL;
         // Keep all prompt/common-expression inputs and ordinary per-instance (not per-pipeline) semantics.
         LogicalTopNOperator candidates = new LogicalTopNOperator(

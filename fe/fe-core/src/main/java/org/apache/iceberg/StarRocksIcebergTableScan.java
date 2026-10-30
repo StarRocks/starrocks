@@ -15,6 +15,7 @@
 package org.apache.iceberg;
 
 import com.github.benmanes.caffeine.cache.Cache;
+import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.common.Pair;
@@ -51,6 +52,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -72,6 +74,7 @@ public class StarRocksIcebergTableScan
     private final PlanMode planMode;
     private final Cache<String, Set<DataFile>> dataFileCache;
     private final Cache<String, Set<DeleteFile>> deleteFileCache;
+    private final DeleteFileIndexCache deleteFileIndexCache;
     private final Map<IcebergTableName, Set<String>> metaFileCacheMap;
     private final Map<Integer, PartitionSpec> scanSpecsById;
     private final Map<Integer, String> specStringCache;
@@ -128,6 +131,7 @@ public class StarRocksIcebergTableScan
         this.schemaString = SchemaParser.toJson(tableSchema());
         this.dataFileCache = scanContext.getDataFileCache();
         this.deleteFileCache = scanContext.getDeleteFileCache();
+        this.deleteFileIndexCache = scanContext.getDeleteFileIndexCache();
         this.metaFileCacheMap = scanContext.getMetaFileCacheMap();
         this.dataFileCacheWithMetrics = scanContext.isDataFileCacheWithMetrics();
         this.enableCacheDataFileIdentifierColumnMetrics = scanContext.isEnableCacheDataFileIdentifierColumnMetrics();
@@ -235,6 +239,7 @@ public class StarRocksIcebergTableScan
 
         return builder
                 .specsById(scanSpecsById)
+                .schemasById(table().schemas())
                 .filterData(filter())
                 .caseSensitive(isCaseSensitive())
                 .scanMetrics(scanMetrics())
@@ -283,6 +288,10 @@ public class StarRocksIcebergTableScan
     }
 
     private void planDeletesLocallyWithCache(List<ManifestFile> deleteManifests) {
+        if (reuseCachedDeleteFileIndex(deleteManifests)) {
+            return;
+        }
+
         List<ManifestFile> deleteManifestWithoutCache = new ArrayList<>();
         Set<DeleteFile> matchingCachedDeleteFiles = Sets.newHashSet();
         if (deleteFileCache != null) {
@@ -315,6 +324,54 @@ public class StarRocksIcebergTableScan
         }
 
         this.deleteFileIndex = planDeletesLocally(deleteManifestWithoutCache, matchingCachedDeleteFiles);
+    }
+
+    // Position deletes and DVs reach a data file only through its path or its (spec, partition), and every
+    // delete for a data file the filter keeps lives in a delete manifest the filter keeps. So an index built
+    // without the scan filter returns the deletes a filtered one would for those data files (the filter has no
+    // bounds of data columns to prune them with), and can be shared by every scan over the same delete
+    // manifests. Equality deletes are excluded: the filter prunes them by column bounds, and a filter-free
+    // index would hand the BE extra delete files.
+    private boolean reuseCachedDeleteFileIndex(List<ManifestFile> deleteManifests) {
+        if (deleteFileIndexCache == null || deleteFileCache == null || deleteManifests.isEmpty()
+                || mayHaveEqualityDeletes(snapshot())) {
+            return false;
+        }
+
+        DeleteFileIndexCache.Key key = new DeleteFileIndexCache.Key(icebergTableName, tableSchema().schemaId(),
+                Set.copyOf(table().specs().keySet()),
+                deleteManifests.stream().map(ManifestFile::path).collect(Collectors.toUnmodifiableSet()));
+        DeleteFileIndex index = deleteFileIndexCache.get(key);
+        if (index == null) {
+            // Build only from complete cache entries, so the index shares the cached delete file objects.
+            // Otherwise the regular path reads the missing manifests and fills the cache for the next scan.
+            List<Set<DeleteFile>> deleteFiles = new ArrayList<>();
+            for (ManifestFile manifestFile : deleteManifests) {
+                Set<DeleteFile> files = getCompleteCachedFiles(deleteFileCache, manifestFile);
+                if (files == null) {
+                    return false;
+                }
+                deleteFiles.add(files);
+            }
+
+            index = DeleteFileIndex.builderFor(io(), Collections.emptyList())
+                    .cachedDeleteFiles(Iterables.concat(deleteFiles))
+                    .specsById(scanSpecsById)
+                    .schemasById(table().schemas())
+                    .caseSensitive(isCaseSensitive())
+                    .scanMetrics(scanMetrics())
+                    .build();
+            if (index.hasEqualityDeletes()) {
+                return false;
+            }
+            // Sort every group now rather than on first lookup: the index is read by concurrent scans.
+            index.referencedDeleteFiles();
+            deleteFileIndexCache.put(key, index, deleteFiles);
+        }
+
+        scanMetrics().scannedDeleteManifests().increment(deleteManifests.size());
+        this.deleteFileIndex = index;
+        return true;
     }
 
     private CloseableIterable<FileScanTask> planTaskWithCache(List<ManifestFile> dataManifests) {
@@ -381,6 +438,7 @@ public class StarRocksIcebergTableScan
                         .select(shouldReturnColumnStats() ? SCAN_WITH_STATS_COLUMNS : SCAN_COLUMNS)
                         .filterData(filter())
                         .specsById(scanSpecsById)
+                        .schemasById(table().schemas())
                         .scanMetrics(scanMetrics())
                         .ignoreDeleted()
                         .withDataFileCache(dataFileCache)
@@ -498,6 +556,7 @@ public class StarRocksIcebergTableScan
                 builder.planWith(planExecutor());
             }
             builder.specsById(scanSpecsById)
+                    .schemasById(table().schemas())
                     .filterData(filter())
                     .caseSensitive(isCaseSensitive())
                     .scanMetrics(scanMetrics())

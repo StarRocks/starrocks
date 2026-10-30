@@ -54,6 +54,8 @@ DECLARE_int64(fslib_s3_min_upload_part_size);
 DECLARE_int64(fslib_gs_max_single_part_size);
 DECLARE_int64(fslib_azure_storage_max_single_part_size);
 DECLARE_int64(fslib_azure_storage_min_upload_part_size);
+// Cut S3 multipart uploads into parts of exactly fslib_s3_min_upload_part_size bytes.
+DECLARE_bool(fslib_s3_multipart_equal_part_size);
 // threadpool size for buffer prefetch task
 DECLARE_int32(fs_buffer_prefetch_threadpool_size);
 // switch to turn on/off buffer prefetch when read
@@ -99,6 +101,9 @@ void apply_starlet_upload_threshold_configs() {
     APPLY_STARLET_UPLOAD_THRESHOLD(starlet_fslib_azure_storage_min_upload_part_size,
                                    fslib_azure_storage_min_upload_part_size);
 #undef APPLY_STARLET_UPLOAD_THRESHOLD
+
+    // Shared with the BE S3 filesystem, hence no `starlet_` prefix on the BE config.
+    FLAGS_fslib_s3_multipart_equal_part_size = config::s3_multipart_equal_part_size;
 }
 
 namespace fslib = staros::starlet::fslib;

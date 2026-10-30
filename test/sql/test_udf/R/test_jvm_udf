@@ -1,4 +1,4 @@
--- name: test_jvm_udf @no_arrow_flight_sql
+-- name: test_jvm_udf @no_arrow_flight_sql @slow
 set enable_group_execution = true;
 -- result:
 -- !result
@@ -112,8 +112,10 @@ select count(udtfdouble) from t0, udtfdouble(c1);
 -- result:
 81920
 -- !result
-select * from TABLE(udtfstring(""));
+select concat('[', udtfstring, ']') from TABLE(udtfstring(""));
 -- result:
+[]
+[]
 -- !result
 select * from TABLE(udtfstring("▁▂▃▄▅▆▇█"));
 -- result:

@@ -1,0 +1,237 @@
+-- name: test_iceberg_eq_delete_rf_pruning
+-- A runtime filter on an identity partition column skips the equality delete files of the partitions it rejects.
+-- The delete files are written by hive tables and registered with add_equality_delete_files.
+
+create external catalog iceberg_eq_rf_${uuid0} PROPERTIES ("type"="iceberg",
+    "iceberg.catalog.type"="hive",
+    "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+);
+
+create external catalog hive_eq_rf_${uuid0} PROPERTIES ("type"="hive",
+    "hive.metastore.uris"="${hive_metastore_uris}",
+    "aws.s3.access_key"="${oss_ak}",
+    "aws.s3.secret_key"="${oss_sk}",
+    "aws.s3.endpoint"="${oss_endpoint}"
+);
+
+create database iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0} properties ("location" = "oss://${oss_bucket}/eq_rf_db_${uuid0}/iceberg");
+create database db_${uuid0};
+use db_${uuid0};
+
+create table dim_p(p int) distributed by hash(p) buckets 1 properties ("replication_num" = "1");
+insert into dim_p values (1);
+create table dim_id(id int) distributed by hash(id) buckets 1 properties ("replication_num" = "1");
+insert into dim_id values (1);
+
+-- partition-scoped deletes: p=1 deletes id 1, p=2 deletes id 2, p=3 deletes id 1
+create table iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact(
+    id int,
+    v string,
+    p int
+) partition by(p) properties ("format-version" = "2");
+
+insert into iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact values (1, 'a1', 1), (2, 'a2', 1), (1, 'b1', 2), (2, 'b2', 2), (1, 'c1', 3), (2, 'c2', 3);
+
+create table hive_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact_deletes(
+    id int,
+    p int
+) partition by(p) properties ("location" = "oss://${oss_bucket}/eq_rf_db_${uuid0}/fact_deletes");
+
+insert into hive_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact_deletes values (1, 1), (2, 2), (1, 3);
+
+alter table iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact execute add_equality_delete_files(location="oss://${oss_bucket}/eq_rf_db_${uuid0}/fact_deletes", file_format="parquet", equality_columns="id");
+
+function: assert_explain_contains('select f.* from iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact f join dim_p d on f.p = d.p', 'Runtime filter pruning columns: [p]')
+-- the identity column does the partition match, so the anti join has no $partition_key key
+function: assert_explain_not_contains('select f.* from iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact f join dim_p d on f.p = d.p', '$partition_key')
+
+set runtime_filter_scan_wait_time = 10000;
+set enable_profile = true;
+set enable_async_profile = false;
+
+-- the filter on p keeps partition 1 only: its delete must still apply, the deletes of 2 and 3 may be skipped
+select f.* from iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact f join dim_p d on f.p = d.p order by f.id;
+set @pruned_on = (select array_sum(cast(regexp_extract_all(get_query_profile(last_query_id()), '- ScanRangesPrunedByPartitionValue: ([0-9]+)', 1) as array<bigint>)));
+set enable_iceberg_eq_delete_runtime_filter_pruning = false;
+select f.* from iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact f join dim_p d on f.p = d.p order by f.id;
+set @pruned_off = (select array_sum(cast(regexp_extract_all(get_query_profile(last_query_id()), '- ScanRangesPrunedByPartitionValue: ([0-9]+)', 1) as array<bigint>)));
+function: assert_explain_not_contains('select f.* from iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact f join dim_p d on f.p = d.p', 'Runtime filter pruning columns')
+set enable_iceberg_eq_delete_runtime_filter_pruning = true;
+-- the two skipped delete files of partitions 2 and 3
+select @pruned_on - ifnull(@pruned_off, 0);
+
+-- a limit between the anti join and the join that built the filter: a skipped delete could let a deleted row take
+-- the place of a live one, so the filter does not reach the delete scan
+select f.* from (select * from iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact limit 10) f join dim_p d on f.p = d.p order by f.id;
+set @pruned_on = (select array_sum(cast(regexp_extract_all(get_query_profile(last_query_id()), '- ScanRangesPrunedByPartitionValue: ([0-9]+)', 1) as array<bigint>)));
+set enable_iceberg_eq_delete_runtime_filter_pruning = false;
+select f.* from (select * from iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact limit 10) f join dim_p d on f.p = d.p order by f.id;
+set @pruned_off = (select array_sum(cast(regexp_extract_all(get_query_profile(last_query_id()), '- ScanRangesPrunedByPartitionValue: ([0-9]+)', 1) as array<bigint>)));
+set enable_iceberg_eq_delete_runtime_filter_pruning = true;
+select ifnull(@pruned_on, 0) - ifnull(@pruned_off, 0);
+
+-- a filter on a column that is not a partition column skips no delete file
+select f.* from iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact f join dim_id d on f.id = d.id order by f.p;
+select f.* from iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact f where f.p in (select p from dim_p) order by f.id;
+select f.* from iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact f left join dim_p d on f.p = d.p order by f.p, f.id;
+select count(*) from iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact;
+set enable_profile = false;
+
+-- a query that does not read p still matches partitions by p, not by $partition_key
+function: assert_explain_not_contains('select count(*) from iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact', '$partition_key')
+function: assert_explain_contains('select sum(length(v)) from iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact', 'Runtime filter pruning columns: [p]')
+select sum(length(v)), count(*) from iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact;
+
+-- a filter on the equality key reaches the delete scan through `<=>`
+function: assert_explain_matches('select v from iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact where id = 2', 'fact_eq_delete_id((?!TABLE:).)*PREDICATES: [0-9]+: id = 2')
+select v, p from iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact where id = 2 order by p;
+select v, p from iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact where id in (1, 3) order by p;
+-- a non-deterministic key filter stays off the delete scan: evaluated apart, it could keep a deleted row
+function: assert_explain_matches('select v from iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact where array_contains([id], cast(floor(rand() * 2) as int))', 'fact_eq_delete_id(?:(?!TABLE:|rand).)*(?:TABLE:|$)')
+
+-- NULL keys: a NULL in a delete column matches NULL row values of its own partition only
+create table iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact_null(
+    id int,
+    v string,
+    p int
+) partition by(p) properties ("format-version" = "2");
+
+insert into iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact_null values (NULL, 'n1', 1), (NULL, 'n2', 2), (1, 'x1', 1), (2, 'x2', 2);
+
+create table hive_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact_null_deletes(
+    id int,
+    p int
+) partition by(p) properties ("location" = "oss://${oss_bucket}/eq_rf_db_${uuid0}/fact_null_deletes");
+
+insert into hive_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact_null_deletes values (NULL, 1), (2, 2);
+
+alter table iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact_null execute add_equality_delete_files(location="oss://${oss_bucket}/eq_rf_db_${uuid0}/fact_null_deletes", file_format="parquet", equality_columns="id");
+
+function: assert_explain_not_contains('select count(*) from iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact_null', '$partition_key')
+select count(*) from iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact_null;
+select v, p from iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact_null order by v;
+select v, p from iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact_null where id is null order by v;
+select v, p from iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact_null where id = 2 order by v;
+select v, p from iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact_null where id is null or id = 1 order by v;
+
+-- a table partitioned by a date string
+create table iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact_dt(
+    id int,
+    v string,
+    dt string
+) partition by(dt) properties ("format-version" = "2");
+
+-- the string 'null' is a partition value of its own, apart from the NULL partition
+insert into iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact_dt values (1, 'a1', '2024-01-01'), (2, 'a2', '2024-01-01'), (1, 'b1', '2024-01-02'), (2, 'b2', '2024-01-02'), (3, 'n1', 'null'), (3, 'n2', NULL);
+
+create table hive_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact_dt_deletes(
+    id int,
+    dt string
+) partition by(dt) properties ("location" = "oss://${oss_bucket}/eq_rf_db_${uuid0}/fact_dt_deletes");
+
+insert into hive_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact_dt_deletes values (1, '2024-01-01'), (2, '2024-01-02'), (3, 'null');
+
+alter table iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact_dt execute add_equality_delete_files(location="oss://${oss_bucket}/eq_rf_db_${uuid0}/fact_dt_deletes", file_format="parquet", equality_columns="id");
+
+create table dim_dt(dt string) distributed by hash(dt) buckets 1 properties ("replication_num" = "1");
+insert into dim_dt values ('2024-01-01'), ('null');
+
+function: assert_explain_contains('select f.* from iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact_dt f join dim_dt d on f.dt = d.dt', 'Runtime filter pruning columns: [dt]')
+select f.* from iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact_dt f join dim_dt d on f.dt = d.dt order by f.id;
+select * from iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact_dt order by dt, id;
+
+-- a global delete (unpartitioned spec) next to a partitioned one: no delete-side value for p, so nothing is pruned
+create table iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.mixed(
+    id int,
+    v string,
+    p int
+) partition by(p) properties ("format-version" = "2");
+
+insert into iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.mixed values (1, 'a1', 1), (2, 'a2', 1), (1, 'b1', 2), (2, 'b2', 2);
+
+alter table iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.mixed drop partition column p;
+
+create table hive_eq_rf_${uuid0}.eq_rf_db_${uuid0}.mixed_global_deletes(
+    id int
+) properties ("location" = "oss://${oss_bucket}/eq_rf_db_${uuid0}/mixed_global_deletes");
+
+insert into hive_eq_rf_${uuid0}.eq_rf_db_${uuid0}.mixed_global_deletes values (1);
+
+alter table iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.mixed execute add_equality_delete_files(location="oss://${oss_bucket}/eq_rf_db_${uuid0}/mixed_global_deletes", file_format="parquet", equality_columns="id");
+
+alter table iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.mixed add partition column p;
+
+create table hive_eq_rf_${uuid0}.eq_rf_db_${uuid0}.mixed_part_deletes(
+    id int,
+    p int
+) partition by(p) properties ("location" = "oss://${oss_bucket}/eq_rf_db_${uuid0}/mixed_part_deletes");
+
+insert into hive_eq_rf_${uuid0}.eq_rf_db_${uuid0}.mixed_part_deletes values (2, 1);
+
+set enable_read_iceberg_equality_delete_with_partition_evolution = true;
+alter table iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.mixed execute add_equality_delete_files(location="oss://${oss_bucket}/eq_rf_db_${uuid0}/mixed_part_deletes", file_format="parquet", equality_columns="id");
+
+function: assert_explain_not_contains('select m.* from iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.mixed m join dim_p d on m.p = d.p', 'Runtime filter pruning columns')
+select m.* from iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.mixed m join dim_p d on m.p = d.p order by m.id;
+set enable_read_iceberg_equality_delete_with_partition_evolution = false;
+
+-- data files without the partition column (hive-written, registered with add_files): with
+-- enable_iceberg_identity_column_optimize off the data-file scan would read p as NULL, so the match keeps $partition_key
+create table hive_eq_rf_${uuid0}.eq_rf_db_${uuid0}.migrated_src(
+    id int,
+    v string,
+    p int
+) partition by(p) properties ("location" = "oss://${oss_bucket}/eq_rf_db_${uuid0}/migrated_src");
+
+insert into hive_eq_rf_${uuid0}.eq_rf_db_${uuid0}.migrated_src values (1, 'a1', 1), (2, 'a2', 1), (1, 'b1', 2), (2, 'b2', 2);
+
+create table iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.migrated(
+    id int,
+    v string,
+    p int
+) partition by(p) properties ("format-version" = "2");
+
+alter table iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.migrated execute add_files(location="oss://${oss_bucket}/eq_rf_db_${uuid0}/migrated_src", file_format="parquet");
+
+create table hive_eq_rf_${uuid0}.eq_rf_db_${uuid0}.migrated_deletes(
+    id int,
+    p int
+) partition by(p) properties ("location" = "oss://${oss_bucket}/eq_rf_db_${uuid0}/migrated_deletes");
+
+insert into hive_eq_rf_${uuid0}.eq_rf_db_${uuid0}.migrated_deletes values (1, 1), (2, 2);
+
+alter table iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.migrated execute add_equality_delete_files(location="oss://${oss_bucket}/eq_rf_db_${uuid0}/migrated_deletes", file_format="parquet", equality_columns="id");
+
+select v from iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.migrated order by v;
+set enable_iceberg_identity_column_optimize = false;
+function: assert_explain_contains('select v from iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.migrated', '$partition_key')
+select v from iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.migrated order by v;
+select count(*) from iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.migrated;
+set enable_iceberg_identity_column_optimize = true;
+
+-- a DML target keeps every delete
+function: assert_explain_not_contains("delete from iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact where p in (select p from db_${uuid0}.dim_p) and v = 'a2'", 'Runtime filter pruning columns')
+delete from iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact where p in (select p from db_${uuid0}.dim_p) and v = 'a2';
+select * from iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact order by p, id;
+
+drop table iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact force;
+drop table iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.mixed force;
+drop table iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact_dt force;
+drop table hive_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact_dt_deletes force;
+drop table hive_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact_deletes force;
+drop table iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact_null force;
+drop table hive_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact_null_deletes force;
+drop table hive_eq_rf_${uuid0}.eq_rf_db_${uuid0}.mixed_global_deletes force;
+drop table hive_eq_rf_${uuid0}.eq_rf_db_${uuid0}.mixed_part_deletes force;
+drop table iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.migrated force;
+drop table hive_eq_rf_${uuid0}.eq_rf_db_${uuid0}.migrated_src force;
+drop table hive_eq_rf_${uuid0}.eq_rf_db_${uuid0}.migrated_deletes force;
+drop database iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0};
+drop database db_${uuid0};
+drop catalog iceberg_eq_rf_${uuid0};
+drop catalog hive_eq_rf_${uuid0};
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/eq_rf_db_${uuid0} >/dev/null || echo "exit 0" >/dev/null

@@ -155,6 +155,27 @@ select dt, k1, v1 from t_auto_pk where k1 = 12345;
 -- result:
 2026-01-01	12345	w12345
 -- !result
+create table t_bucket (k1 bigint, v1 string)
+    duplicate key(k1)
+    distributed by random buckets 1
+    properties('replication_num' = '1', 'file_bundling' = 'true', 'bucket_size' = '1');
+-- result:
+-- !result
+insert into t_bucket select generate_series, concat('v', generate_series) from table(generate_series(1, 20000));
+-- result:
+-- !result
+insert into t_bucket select generate_series, concat('w', generate_series) from table(generate_series(1, 20000));
+-- result:
+-- !result
+select count(*), count(distinct k1), sum(k1) from t_bucket;
+-- result:
+40000	20000	400020000
+-- !result
+select k1, v1 from t_bucket where k1 = 12345 order by v1;
+-- result:
+12345	v12345
+12345	w12345
+-- !result
 set lake_multi_node_tablet_write_mode = 'off';
 -- result:
 -- !result

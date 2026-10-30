@@ -1,4 +1,4 @@
--- name: test_schema_scan_rpc_failed
+-- name: test_schema_scan_rpc_failed @sequential
 admin enable failpoint 'schema_scan_rpc_failed';
 -- result:
 -- !result

@@ -377,7 +377,7 @@ public class SplitTabletJobColocateTest {
             // First child range non-canonically straddles the existing boundary at 100.
             Map<Long, TabletRangePB> result = new HashMap<>();
             result.put(newTabletIds.get(0),
-                    new TabletRange(Range.gelt(makeTwoColTuple(50, 0), makeTwoColTuple(150, 0))).toProto());
+                    new TabletRange(Range.lt(makeTwoColTuple(150, 0))).toProto());
             result.put(newTabletIds.get(1),
                     new TabletRange(Range.ge(makeTwoColTuple(150, 0))).toProto());
             return result;
@@ -527,12 +527,12 @@ public class SplitTabletJobColocateTest {
 
         installLakeServiceMockReturning((oldTabletId, newTabletIds) -> {
             // Return ONLY the first child's range → the missing second range triggers BE identical
-            // fallback (fallbackToIdenticalTablet keeps a single replacement tablet). The concrete range
-            // is contained in the single owning ColocateRange so the reconcile can place it; the
-            // identical flag itself is size-based (newTabletIds.size() == 1), not range-based.
+            // fallback (fallbackToIdenticalTablet keeps a single replacement tablet). An identical
+            // replacement has the old tablet's own range, which is contained in the single owning
+            // ColocateRange so the reconcile can place it; the identical flag itself is size-based
+            // (newTabletIds.size() == 1), not range-based.
             Map<Long, TabletRangePB> result = new HashMap<>();
-            result.put(newTabletIds.get(0),
-                    new TabletRange(Range.lt(makeTwoColTuple(100, 50))).toProto());
+            result.put(newTabletIds.get(0), new TabletRange().toProto());
             return result;
         });
         Map<Long, List<Long>> reassignedAdd = new HashMap<>();
@@ -707,15 +707,15 @@ public class SplitTabletJobColocateTest {
                 new ColocateRange(Range.lt(boundary), packLow),
                 new ColocateRange(Range.ge(boundary), packHigh)));
 
-        // Legacy/mismatched BE: a child [(50,0),(150,0)) straddling the boundary at 100, plus a
+        // Legacy/mismatched BE: a child (-inf,(150,0)) straddling the boundary at 100, plus a
         // contained high child [(150,0),+inf). Both are reported in packHigh by the mock:
-        //   - crossing child is NOT contained -> the filter must skip it (its lower prefix 50 maps to
-        //     packLow, so an UNFILTERED reconcile would wrongly reassign it packHigh -> packLow);
+        //   - crossing child is NOT contained -> the filter must skip it (its lower end is -inf, which maps
+        //     to packLow, so an UNFILTERED reconcile would wrongly reassign it packHigh -> packLow);
         //   - high child is contained in packHigh and already there -> correctly placed.
         installLakeServiceMockReturning((oldTabletId, newTabletIds) -> {
             Map<Long, TabletRangePB> result = new HashMap<>();
             result.put(newTabletIds.get(0),
-                    new TabletRange(Range.gelt(makeTwoColTuple(50, 0), makeTwoColTuple(150, 0))).toProto());
+                    new TabletRange(Range.lt(makeTwoColTuple(150, 0))).toProto());
             result.put(newTabletIds.get(1),
                     new TabletRange(Range.ge(makeTwoColTuple(150, 0))).toProto());
             return result;

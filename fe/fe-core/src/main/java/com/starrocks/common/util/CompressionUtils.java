@@ -22,7 +22,6 @@ import com.starrocks.thrift.TCompressionType;
 
 import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
@@ -30,7 +29,6 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.zip.GZIPInputStream;
-import java.util.zip.GZIPOutputStream;
 
 public class CompressionUtils {
     private static final ImmutableMap<String, TCompressionType> T_COMPRESSION_BY_NAME =
@@ -87,13 +85,8 @@ public class CompressionUtils {
         if (Strings.isNullOrEmpty(origStr)) {
             return null;
         }
-
-        ByteArrayOutputStream outStream = new ByteArrayOutputStream();
-        GZIPOutputStream gzip = new GZIPOutputStream(outStream);
-        gzip.write(origStr.getBytes());
-        gzip.flush();
-        gzip.close();
-        return outStream.toByteArray();
+        // Off-heap, so that compressing large profiles does not hold the GC locker; see OffHeapDeflate.
+        return OffHeapDeflate.gzip(origStr.getBytes());
     }
 
 

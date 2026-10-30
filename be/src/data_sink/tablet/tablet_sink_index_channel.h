@@ -95,6 +95,10 @@ struct TabletSinkProfile {
     RuntimeProfile::Counter* open_timer = nullptr;
     RuntimeProfile::Counter* close_timer = nullptr;
     RuntimeProfile::Counter* serialize_chunk_timer = nullptr;
+    RuntimeProfile::Counter* raw_input_bytes_counter = nullptr;
+    RuntimeProfile::Counter* serialized_bytes_counter = nullptr;
+    RuntimeProfile::Counter* compressed_input_bytes_counter = nullptr;
+    RuntimeProfile::Counter* compressed_bytes_counter = nullptr;
     RuntimeProfile::Counter* wait_response_timer = nullptr;
     RuntimeProfile::Counter* compress_timer = nullptr;
     RuntimeProfile::Counter* pack_chunk_timer = nullptr;
@@ -339,6 +343,7 @@ private:
     struct {
         std::unordered_set<std::string> invalid_dict_cache_column_set;
         std::unordered_map<std::string, int64_t> valid_dict_cache_column_set;
+        std::unordered_map<std::string, int64_t> content_identities;
     } _valid_dict_cache_info;
 
     AddBatchCounter _add_batch_counter;

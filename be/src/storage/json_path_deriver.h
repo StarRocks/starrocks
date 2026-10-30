@@ -19,6 +19,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <set>
 #include <string>
 #include <string_view>
 #include <unordered_set>
@@ -80,6 +81,23 @@ private:
     // clean sparsity path, to save memory
     void _clean_sparsity_path(const std::string_view& name, JsonFlatPath* root, size_t check_hits_min);
 
+    // Keeps the trie within _max_nodes between rows. See _derived().
+    void _shrink_path_tree(size_t current_row);
+    size_t _drop_singleton_paths(JsonFlatPath* node, size_t current_row);
+
+    // After a derivation: drops the paths an input cannot be read into and, from metadata, types JSON the paths
+    // some input may hold in its remain. Each input is given as its sub-column paths and whether it has a remain.
+    // With `type_from_remain` false the types stay as derived (the remain values were visited).
+    void _keep_readable_paths(const std::vector<std::pair<std::set<std::string>, bool>>& input_layouts,
+                              bool type_from_remain);
+    static size_t _count_nodes(const JsonFlatPath* node);
+    // A key left out of the trie ends up in the remain column, so the remain filter must report it.
+    void _add_remain_key(const std::string_view& key);
+    // Readers test only the last component of a path against the remain filter, so a subtree that goes
+    // to the remain column must report every key in it, not just its root.
+    void _add_remain_keys_in(const vpack::Slice& value);
+    void _add_remain_subtree(const JsonFlatPath* node);
+
 private:
     bool _has_remain = false;
     std::vector<std::string> _paths;
@@ -91,6 +109,14 @@ private:
 
     size_t _total_rows;
     std::shared_ptr<JsonFlatPath> _path_root;
+
+    // Bound on the derivation trie. Keys named by data (ids, timestamps) would otherwise grow it by one
+    // node per distinct name, and none of those can ever reach the sparsity threshold.
+    size_t _max_nodes = 0;
+    size_t _num_nodes = 0;
+    // Set once shrinking cannot bring the trie back under _max_nodes; from then on unseen keys are
+    // left out of the trie (and so out of the flat columns) instead of being added.
+    bool _path_tree_full = false;
 
     bool _generate_filter = false;
     std::shared_ptr<BloomFilter> _remain_filter = nullptr;

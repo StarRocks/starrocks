@@ -437,10 +437,7 @@ PARALLEL_TEST(ColumnArraySerdeTest, variant_column_shredded_base_shredded) {
     ASSERT_EQ(3, c2->remain_value_column()->size());
 
     const auto& tc = c2->typed_columns()[0];
-    ASSERT_EQ(3, tc->size());
-    ASSERT_EQ(100, tc->get(0).get_int64());
-    ASSERT_EQ(200, tc->get(1).get_int64());
-    ASSERT_EQ(300, tc->get(2).get_int64());
+    ASSERT_EQ("[100, 200, 300]", tc->debug_string());
 
     // Verify metadata/remain content round-trips correctly
     for (int i = 0; i < 3; ++i) {
@@ -930,38 +927,6 @@ PARALLEL_TEST(ColumnArraySerdeTest, binary_column_serialize_rejects_unrepresenta
 }
 
 // NOLINTNEXTLINE
-PARALLEL_TEST(ColumnArraySerdeTest, large_binary_column) {
-    std::vector<Slice> strings{{"bbb"}, {"bbc"}, {"ccc"}};
-    auto c1 = LargeBinaryColumn::create();
-    auto c2 = LargeBinaryColumn::create();
-    c1->append_strings(strings.data(), strings.size());
-
-    ASSERT_EQ(c1->get_immutable_bytes().size() + c1->get_offset().size() * sizeof(uint64_t) + sizeof(uint64_t) * 2,
-              ColumnArraySerde::max_serialized_size(*c1));
-
-    std::vector<uint8_t> buffer;
-    buffer.resize(ColumnArraySerde::max_serialized_size(*c1));
-    const auto end = buffer.data() + buffer.size();
-    ASSIGN_OR_ABORT(auto p1, ColumnArraySerde::serialize(*c1, buffer.data()));
-    ASSIGN_OR_ABORT(auto p2, ColumnArraySerde::deserialize(buffer.data(), end, c2.get()));
-    ASSERT_EQ(buffer.data() + buffer.size(), p1);
-    ASSERT_EQ(buffer.data() + buffer.size(), p2);
-    for (size_t i = 0; i < c1->size(); i++) {
-        ASSERT_EQ(c1->get_slice(i), c2->get_slice(i));
-    }
-
-    for (auto level = -1; level < 8; ++level) {
-        buffer.resize(ColumnArraySerde::max_serialized_size(*c1, level));
-        const auto* end = buffer.data() + buffer.size();
-        ASSERT_OK(ColumnArraySerde::serialize(*c1, buffer.data(), false, level));
-        ASSERT_OK(ColumnArraySerde::deserialize(buffer.data(), end, c2.get(), false, level));
-        for (size_t i = 0; i < c1->size(); i++) {
-            ASSERT_EQ(c1->get_slice(i), c2->get_slice(i));
-        }
-    }
-}
-
-// NOLINTNEXTLINE
 PARALLEL_TEST(ColumnArraySerdeTest, const_column) {
     auto create_const_column = [](int32_t value, size_t size) {
         auto c = Int32Column::create();
@@ -1128,8 +1093,7 @@ ProtobufChunkMeta make_wide_meta(size_t all_null_columns, size_t int_columns) {
     meta.is_consts.assign(total, false);
     for (size_t i = 0; i < total; i++) {
         meta.slot_id_to_index[static_cast<SlotId>(i)] = i;
-        meta.types[i] = i < all_null_columns ? TypeDescriptor::create_varchar_type(65533)
-                                             : TypeDescriptor(LogicalType::TYPE_INT);
+        meta.types[i] = i < all_null_columns ? TYPE_VARCHAR_DESC : TypeDescriptor(LogicalType::TYPE_INT);
     }
     return meta;
 }

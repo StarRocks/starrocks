@@ -14,13 +14,19 @@
 
 package com.starrocks.alter;
 
+import com.google.common.collect.Lists;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.type.IntegerType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.mockito.Mockito.doAnswer;
@@ -269,6 +275,77 @@ public class AlterHandlerTest {
                 "start() must rebuild the executor after demotion");
         Assertions.assertFalse(poolAfterRestart.isShutdown());
         handler.setStop();
+    }
+
+    @Test
+    public void testRunAfterLeaseValidPrunesDoneJob() {
+        SchemaChangeJobV2 job = newDoneJobWithTabletData();
+        handler.addAlterJobV2(job);
+
+        handler.runAfterLeaseValid();
+
+        assertPruned(job);
+    }
+
+    @Test
+    public void testRunAfterLeaseValidPrunesDoneJobOncePublishCompletes() {
+        SchemaChangeJobV2 job = newDoneJobWithTabletData();
+        CompletableFuture<Boolean> publish = new CompletableFuture<>();
+        job.publishVersionFuture = publish;
+        handler.addAlterJobV2(job);
+
+        // The publish worker may still read the per-tablet data.
+        handler.runAfterLeaseValid();
+        Assertions.assertFalse(job.physicalPartitionIndexMap.isEmpty());
+
+        publish.complete(true);
+        handler.runAfterLeaseValid();
+        assertPruned(job);
+    }
+
+    @Test
+    public void testRunAfterLeaseValidSurvivesPruneFailure() {
+        SchemaChangeJobV2 bad = spy(newDoneJobWithTabletData(1L));
+        doThrow(new IllegalStateException("prune failed")).when(bad).pruneMeta();
+        SchemaChangeJobV2 good = newDoneJobWithTabletData(2L);
+        handler.addAlterJobV2(bad);
+        handler.addAlterJobV2(good);
+        SchemaChangeHandler spied = spy(handler);
+
+        spied.runAfterLeaseValid();
+
+        assertPruned(good);
+        Mockito.verify(spied).clearExpireFinishedOrCancelledAlterJobsV2();
+    }
+
+    /**
+     * A done job that still holds its per-tablet data, as when it reached its final state while its publish
+     * was still running.
+     */
+    private static SchemaChangeJobV2 newDoneJobWithTabletData() {
+        return newDoneJobWithTabletData(1L);
+    }
+
+    private static SchemaChangeJobV2 newDoneJobWithTabletData(long jobId) {
+        SchemaChangeJobV2 job = new SchemaChangeJobV2(jobId, 2L, 3L, "tbl", 60_000L);
+        job.addIndexSchema(11L, 10L, "__starrocks_shadow_tbl", 1, 1, (short) 1,
+                Lists.newArrayList(new Column("k1", IntegerType.BIGINT)));
+        job.addTabletIdMap(20L, 11L, 21L, 22L);
+        job.addPartitionShadowIndex(20L, 11L, new MaterializedIndex(11L, MaterializedIndex.IndexState.SHADOW));
+        job.setJobState(AlterJobV2.JobState.FINISHED);
+        job.setFinishedTimeMs(System.currentTimeMillis());
+        Assertions.assertFalse(job.physicalPartitionIndexTabletMap.isEmpty());
+        Assertions.assertFalse(job.physicalPartitionIndexMap.isEmpty());
+        Assertions.assertFalse(job.indexMetaIdToSchema.isEmpty());
+        Assertions.assertFalse(job.indexMetaIdToShortKey.isEmpty());
+        return job;
+    }
+
+    private static void assertPruned(SchemaChangeJobV2 job) {
+        Assertions.assertTrue(job.physicalPartitionIndexTabletMap.isEmpty());
+        Assertions.assertTrue(job.physicalPartitionIndexMap.isEmpty());
+        Assertions.assertTrue(job.indexMetaIdToSchema.isEmpty());
+        Assertions.assertTrue(job.indexMetaIdToShortKey.isEmpty());
     }
 
     /**

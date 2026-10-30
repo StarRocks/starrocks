@@ -1,0 +1,21 @@
+-- name: test_paimon_nested_types_auto
+create external catalog paimon_coverage_${uuid0}
+properties (
+"type" = "paimon",
+"paimon.catalog.type" = "filesystem",
+"paimon.catalog.warehouse" = "oss://${oss_bucket}/ci_catalog_test_data/paimon/",
+"aws.s3.access_key" = "${oss_ak}",
+"aws.s3.secret_key" = "${oss_sk}",
+"aws.s3.endpoint" = "${oss_endpoint}"
+);
+set paimon_reader_mode = 'auto';
+[ORDER]select id, array_length(nums), map_size(attrs), array_length(matrix) from paimon_coverage_${uuid0}.paimon_test.nested_types_v1 order by id;
+[ORDER]select id, nums[1], nums[2], nums[3] from paimon_coverage_${uuid0}.paimon_test.nested_types_v1 order by id;
+[ORDER]select id, attrs["a"], attrs["b"], attrs["missing"] from paimon_coverage_${uuid0}.paimon_test.nested_types_v1 order by id;
+[ORDER]select id, detail.label, detail.score from paimon_coverage_${uuid0}.paimon_test.nested_types_v1 order by id;
+[ORDER]select id, matrix[1][2], array_length(matrix[2]), matrix[3] is null from paimon_coverage_${uuid0}.paimon_test.nested_types_v1 order by id;
+select id from paimon_coverage_${uuid0}.paimon_test.nested_types_v1 where nums is null;
+select id from paimon_coverage_${uuid0}.paimon_test.nested_types_v1 where array_length(nums) = 0;
+select id from paimon_coverage_${uuid0}.paimon_test.nested_types_v1 where detail.score = 7 and attrs["a"] = 10;
+set catalog default_catalog;
+drop catalog paimon_coverage_${uuid0};

@@ -39,7 +39,7 @@ TEST(StorageEnvTest, disabled_init_leaves_lake_resources_null) {
     ASSERT_OK(env.init(options));
 
     EXPECT_EQ(env.lake_location_provider().get(), nullptr);
-    EXPECT_EQ(env.lake_update_manager(), nullptr);
+    EXPECT_EQ(env.lake_primary_key_manager(), nullptr);
     EXPECT_EQ(env.lake_tablet_manager(), nullptr);
     EXPECT_EQ(env.lake_replication_txn_manager(), nullptr);
     EXPECT_EQ(env.parallel_compact_mgr(), nullptr);
@@ -64,7 +64,7 @@ TEST(StorageEnvTest, fixed_provider_init_owns_lake_resources) {
     ASSERT_OK(env.init(options));
 
     EXPECT_NE(env.lake_location_provider().get(), nullptr);
-    EXPECT_NE(env.lake_update_manager(), nullptr);
+    EXPECT_NE(env.lake_primary_key_manager(), nullptr);
     EXPECT_NE(env.lake_tablet_manager(), nullptr);
     EXPECT_EQ(env.lake_tablet_manager()->store_path_registry(), &store_path_registry);
     EXPECT_NE(env.lake_replication_txn_manager(), nullptr);
@@ -79,7 +79,7 @@ TEST(StorageEnvTest, fixed_provider_init_owns_lake_resources) {
     env.destroy();
 
     EXPECT_EQ(env.lake_location_provider().get(), nullptr);
-    EXPECT_EQ(env.lake_update_manager(), nullptr);
+    EXPECT_EQ(env.lake_primary_key_manager(), nullptr);
     EXPECT_EQ(env.lake_tablet_manager(), nullptr);
     EXPECT_EQ(env.lake_replication_txn_manager(), nullptr);
     EXPECT_EQ(env.parallel_compact_mgr(), nullptr);

@@ -67,9 +67,10 @@ public class SimpleLDAPSecurityIntegration extends SecurityIntegration {
         // Runtime path: an illegal value falls back to `group_provider` with an ERROR log instead of
         // failing the login, because the same value can also arrive from `fe.conf`, which has no
         // enum validation hook - a single typo must not lock every LDAP user out.
-        LdapGroupSource ldapGroupSource = LdapGroupSource.parseOrDefault(
+        GroupSource ldapGroupSource = GroupSource.parseOrDefault(
                 propertyMap.getOrDefault(AUTHENTICATION_LDAP_SIMPLE_GROUP_SOURCE,
-                        Config.authentication_ldap_simple_group_source));
+                        Config.authentication_ldap_simple_group_source),
+                AUTHENTICATION_LDAP_SIMPLE_GROUP_SOURCE);
         String ldapMemberOfAttr = propertyMap.getOrDefault(AUTHENTICATION_LDAP_SIMPLE_MEMBEROF_ATTR,
                 Config.authentication_ldap_simple_memberof_attr);
 
@@ -88,6 +89,20 @@ public class SimpleLDAPSecurityIntegration extends SecurityIntegration {
                 ldapMemberOfAttr);
     }
 
+    /**
+     * The one value ALTER has to refuse on the spot: a misspelled group source would otherwise sit
+     * in the metadata until the next login, where the runtime parse falls back to `group_provider`
+     * and only logs - the administrator would see the ALTER succeed and the setting silently not
+     * take effect.
+     */
+    @Override
+    public void checkAlteredProperties(Map<String, String> alteredProperties) throws SemanticException {
+        String groupSource = alteredProperties.get(AUTHENTICATION_LDAP_SIMPLE_GROUP_SOURCE);
+        if (groupSource != null) {
+            GroupSource.parseOrThrow(groupSource, AUTHENTICATION_LDAP_SIMPLE_GROUP_SOURCE);
+        }
+    }
+
     @Override
     public void checkProperty() throws SemanticException {
         super.checkProperty();
@@ -95,7 +110,8 @@ public class SimpleLDAPSecurityIntegration extends SecurityIntegration {
         // This covers CREATE; ALTER does not go through this hook and is validated in
         // SecurityIntegrationStatementAnalyzer.
         if (propertyMap.containsKey(AUTHENTICATION_LDAP_SIMPLE_GROUP_SOURCE)) {
-            LdapGroupSource.parseOrThrow(propertyMap.get(AUTHENTICATION_LDAP_SIMPLE_GROUP_SOURCE));
+            GroupSource.parseOrThrow(propertyMap.get(AUTHENTICATION_LDAP_SIMPLE_GROUP_SOURCE),
+                    AUTHENTICATION_LDAP_SIMPLE_GROUP_SOURCE);
         }
     }
 }

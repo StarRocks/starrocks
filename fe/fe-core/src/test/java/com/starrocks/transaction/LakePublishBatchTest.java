@@ -16,6 +16,7 @@
 package com.starrocks.transaction;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.LakeTableSchemaChangeJob;
 import com.starrocks.catalog.Database;
@@ -1169,5 +1170,59 @@ public class LakePublishBatchTest {
             }
         }
         awaitPublish(daemon, waiter1, waiter2);
+    }
+
+    @Test
+    public void testBatchSnapshottedWhileItsTableIsInFlightIsNotRepublished() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), TABLE_AGG_OFF);
+        Partition partition = Lists.newArrayList(table.getPartitions()).get(0);
+        List<TabletCommitInfo> tablets = getPartitionTabletCommitInfos(partition);
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        long txnId1 = globalTransactionMgr.beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
+                "in_flight_1_" + UUIDUtil.genUUID(), transactionSource,
+                TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        VisibleStateWaiter waiter1 = globalTransactionMgr.commitTransaction(
+                db.getId(), txnId1, tablets, Lists.newArrayList(), null);
+        long txnId2 = globalTransactionMgr.beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
+                "in_flight_2_" + UUIDUtil.genUUID(), transactionSource,
+                TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        VisibleStateWaiter waiter2 = globalTransactionMgr.commitTransaction(
+                db.getId(), txnId2, tablets, Lists.newArrayList(), null);
+
+        // A previous round left a batch of this table in flight.
+        PublishVersionDaemon daemon = new PublishVersionDaemon();
+        daemon.publishingLakeTransactionsBatchTableId = Sets.newConcurrentHashSet();
+        daemon.publishingLakeTransactionsBatchTableId.add(table.getId());
+        // That batch finishes right after the daemon takes its snapshot, so its marker is gone by the time
+        // the daemon reaches the batch: this is the window that used to publish the transactions again.
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public List<TransactionStateBatch> getReadyPublishTransactionsBatch(Invocation invocation) {
+                List<TransactionStateBatch> ready = invocation.proceed();
+                daemon.publishingLakeTransactionsBatchTableId.remove(table.getId());
+                return ready;
+            }
+        };
+        List<Long> publishedTableIds = Lists.newArrayList();
+        new MockUp<PublishVersionDaemon>() {
+            @Mock
+            void publishVersionForLakeTableBatch(Invocation invocation, List<TransactionStateBatch> batches) {
+                for (TransactionStateBatch batch : batches) {
+                    publishedTableIds.addAll(batch.getTableIdList());
+                }
+                invocation.proceed();
+            }
+        };
+
+        daemon.runAfterLeaseValid();
+        assertFalse(publishedTableIds.contains(table.getId()));
+        DatabaseTransactionMgr dbTxnMgr = globalTransactionMgr.getDatabaseTransactionMgr(db.getId());
+        assertFalse(dbTxnMgr.getTransactionState(txnId1).hasSendTask());
+        assertFalse(dbTxnMgr.getTransactionState(txnId2).hasSendTask());
+
+        // Nothing is in flight when the next snapshot is taken, so the batch publishes and finishes.
+        awaitPublish(daemon, waiter1, waiter2);
+        Assertions.assertTrue(publishedTableIds.contains(table.getId()));
     }
 }

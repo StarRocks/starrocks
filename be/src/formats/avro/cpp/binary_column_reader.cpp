@@ -84,7 +84,8 @@ Status BinaryColumnReader::read_numeric_value(const avro::GenericDatum& datum, B
 
         if (logical_type.type() == avro::LogicalType::TIMESTAMP_MILLIS ||
             logical_type.type() == avro::LogicalType::TIMESTAMP_MICROS) {
-            ASSIGN_OR_RETURN(auto timestamp_value, AvroUtils::long_to_timestamp_value(datum, _timezone));
+            ASSIGN_OR_RETURN(auto timestamp_value,
+                             AvroUtils::long_to_timestamp_value(datum, _timezone, &_offset_cache));
             return check_append_binary_column(timestamp_value.to_string(), _col_name, _type_desc, column);
         } else {
             return check_append_binary_column(std::to_string(from), _col_name, _type_desc, column);

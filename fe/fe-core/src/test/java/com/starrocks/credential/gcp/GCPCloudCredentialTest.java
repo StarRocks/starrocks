@@ -35,7 +35,16 @@ public class GCPCloudCredentialTest {
         Configuration conf = new Configuration();
         credential.applyToConfiguration(conf);
 
-        assertEquals("SERVICE_ACCOUNT_JSON_KEYFILE", conf.get("fs.gs.auth.type"));
+        // gcs-connector 3.x cannot consume an inline key directly: SERVICE_ACCOUNT_JSON_KEYFILE would
+        // open fs.gs.auth.service.account.json.keyfile and NPE, so the key must go through our provider.
+        assertEquals(GCPCloudConfigurationProvider.AUTH_TYPE_ACCESS_TOKEN_PROVIDER,
+                conf.get(GCPCloudConfigurationProvider.AUTH_TYPE_KEY));
+        assertEquals(GCPCloudConfigurationProvider.SERVICE_ACCOUNT_ACCESS_TOKEN_PROVIDER_IMPL,
+                conf.get(GCPCloudConfigurationProvider.ACCESS_TOKEN_PROVIDER_KEY));
+        assertEquals(GCPCloudConfigurationProvider.SERVICE_ACCOUNT_ACCESS_TOKEN_PROVIDER_IMPL,
+                conf.get(GCPCloudConfigurationProvider.LEGACY_ACCESS_TOKEN_PROVIDER_IMPL_KEY));
+        assertNull(conf.get("fs.gs.auth.service.account.json.keyfile"));
+        assertNull(conf.get(GCPCloudConfigurationProvider.ACCESS_TOKEN_KEY));
         assertEquals("test@project.iam.gserviceaccount.com",
                 conf.get("fs.gs.auth.service.account.email"));
         assertEquals("key-id-123",
@@ -99,6 +108,49 @@ public class GCPCloudCredentialTest {
 
         assertEquals("COMPUTE_ENGINE", conf.get("fs.gs.auth.type"));
         assertNull(conf.get("fs.gs.auth.service.account.email"));
+        assertNull(conf.get(GCPCloudConfigurationProvider.ACCESS_TOKEN_PROVIDER_KEY));
         assertTrue(credential.validate());
+    }
+
+    @Test
+    public void testServiceAccountCredentialsKeepImpersonation() {
+        GCPCloudCredential credential = new GCPCloudCredential(
+                "", false,
+                "test@project.iam.gserviceaccount.com",
+                "key-id-123",
+                "-----BEGIN PRIVATE KEY-----\nMIIE...\n-----END PRIVATE KEY-----",
+                "impersonated@project.iam.gserviceaccount.com", null, null);
+
+        Configuration conf = new Configuration();
+        credential.applyToConfiguration(conf);
+
+        // Unlike vended tokens, a service-account key may impersonate, so gcs-connector should still
+        // layer ImpersonatedCredentials on top of the provider-issued credentials.
+        assertEquals("impersonated@project.iam.gserviceaccount.com",
+                conf.get(GCPCloudConfigurationProvider.IMPERSONATION_SERVICE_ACCOUNT_KEY));
+        assertEquals(GCPCloudConfigurationProvider.SERVICE_ACCOUNT_ACCESS_TOKEN_PROVIDER_IMPL,
+                conf.get(GCPCloudConfigurationProvider.ACCESS_TOKEN_PROVIDER_KEY));
+    }
+
+    @Test
+    public void testVendedTokenOverridesServiceAccountProvider() {
+        GCPCloudCredential credential = new GCPCloudCredential(
+                "", false,
+                "test@project.iam.gserviceaccount.com",
+                "key-id-123",
+                "-----BEGIN PRIVATE KEY-----\nMIIE...\n-----END PRIVATE KEY-----",
+                "", "ya29.access-token", "2026-12-31T00:00:00Z");
+
+        Configuration conf = new Configuration();
+        credential.applyToConfiguration(conf);
+
+        assertEquals(GCPCloudConfigurationProvider.AUTH_TYPE_ACCESS_TOKEN_PROVIDER,
+                conf.get(GCPCloudConfigurationProvider.AUTH_TYPE_KEY));
+        assertEquals(GCPCloudConfigurationProvider.ACCESS_TOKEN_PROVIDER_IMPL,
+                conf.get(GCPCloudConfigurationProvider.ACCESS_TOKEN_PROVIDER_KEY));
+        // The service account key is unused in this mode and must not be propagated.
+        assertNull(conf.get(GCPCloudConfigurationProvider.SERVICE_ACCOUNT_EMAIL_KEY));
+        assertNull(conf.get(GCPCloudConfigurationProvider.SERVICE_ACCOUNT_PRIVATE_KEY_ID_KEY));
+        assertNull(conf.get(GCPCloudConfigurationProvider.SERVICE_ACCOUNT_PRIVATE_KEY_KEY));
     }
 }

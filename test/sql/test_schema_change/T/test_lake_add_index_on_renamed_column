@@ -1,0 +1,104 @@
+-- name: test_lake_add_index_on_renamed_column @cloud
+-- RENAME changes the display name, while the tablet schema retains ColumnId.
+-- Both index requests and per-index applicability must use that stable identity.
+create database lake_idx_rename_${uuid0};
+use lake_idx_rename_${uuid0};
+
+-- Columns present at CREATE TABLE: index historical data after renaming.
+CREATE TABLE t_original (
+    k int,
+    b int,
+    s varchar(64),
+    f int
+) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+insert into t_original values (1, 10, 'apple', 100), (2, 20, 'banana', 200), (3, 10, 'apricot', 300);
+ALTER TABLE t_original RENAME COLUMN b TO br;
+ALTER TABLE t_original RENAME COLUMN s TO sr;
+ALTER TABLE t_original RENAME COLUMN f TO fr;
+
+function: alter_and_wait('ALTER TABLE t_original ADD INDEX idx_b (br) USING BITMAP')
+function: assert_latest_schema_change_job_path('lake_idx_rename_${uuid0}', 't_original', 'fast')
+function: print_query_columns('SHOW INDEX FROM t_original', 'Key_name', 'Column_name', 'Index_type')
+select assert_true(count(*) = 2) from t_original where br = 10;
+
+function: alter_and_wait('ALTER TABLE t_original SET ("bloom_filter_columns" = "fr")')
+function: assert_latest_schema_change_job_path('lake_idx_rename_${uuid0}', 't_original', 'fast')
+function: assert_query_contains('SHOW CREATE TABLE t_original', '"bloom_filter_columns" = "fr"')
+select assert_true(count(*) = 1) from t_original where fr = 200;
+
+-- Dropping a renamed BF column must also remove its stable catalog identity.
+function: alter_and_wait('ALTER TABLE t_original SET ("bloom_filter_columns" = "")')
+function: assert_query_not_contains('SHOW CREATE TABLE t_original', '"bloom_filter_columns"')
+function: alter_and_wait('ALTER TABLE t_original SET ("bloom_filter_columns" = "fr")')
+function: assert_latest_schema_change_job_path('lake_idx_rename_${uuid0}', 't_original', 'fast')
+function: assert_query_contains('SHOW CREATE TABLE t_original', '"bloom_filter_columns" = "fr"')
+
+-- NGRAMBF uses the regular schema-change path; preserve rename parity there.
+function: alter_and_wait('ALTER TABLE t_original ADD INDEX idx_s (sr) USING NGRAMBF ("gram_num" = "3", "bloom_filter_fpp" = "0.05")')
+function: assert_query_contains('SHOW INDEX FROM t_original', 'idx_s', 'sr', 'NGRAMBF')
+insert into t_original (k, br, sr, fr) values (4, 20, 'pineapple', 200);
+select assert_true(count(*) = 2) from t_original where br = 20;
+select assert_true(count(*) = 2) from t_original where sr like '%apple%';
+select assert_true(count(*) = 2) from t_original where fr = 200;
+[ORDER]select k, br, sr, fr from t_original order by k;
+
+-- Added columns: historical segments lack the column, and reads use defaults.
+CREATE TABLE t_added (k int) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ("replication_num" = "1", "cloud_native_fast_schema_evolution_v2" = "true");
+insert into t_added values (1), (2);
+function: alter_and_wait('ALTER TABLE t_added ADD COLUMN b INT DEFAULT "0"')
+ALTER TABLE t_added RENAME COLUMN b TO br;
+function: alter_and_wait('ALTER TABLE t_added ADD INDEX idx_b (br) USING BITMAP')
+function: assert_latest_schema_change_job_path('lake_idx_rename_${uuid0}', 't_added', 'fast')
+function: print_query_columns('SHOW INDEX FROM t_added', 'Key_name', 'Column_name', 'Index_type')
+select assert_true(count(*) = 2) from t_added where br = 0;
+insert into t_added (k, br) values (3, 9);
+function: alter_and_wait('ALTER TABLE t_added ADD COLUMN f INT DEFAULT "0"')
+ALTER TABLE t_added RENAME COLUMN f TO fr;
+function: alter_and_wait('ALTER TABLE t_added SET ("bloom_filter_columns" = "fr")')
+function: assert_latest_schema_change_job_path('lake_idx_rename_${uuid0}', 't_added', 'fast')
+function: assert_query_contains('SHOW CREATE TABLE t_added', '"bloom_filter_columns" = "fr"')
+select assert_true(count(*) = 3) from t_added where fr = 0;
+insert into t_added (k, br, fr) values (4, 9, 7);
+select assert_true(count(*) = 2) from t_added where br = 9;
+select assert_true(count(*) = 1) from t_added where fr = 7;
+[ORDER]select k, br, fr from t_added order by k;
+
+-- A display name can be reused by another RENAME. The two logical columns
+-- must not inherit each other's bitmap, even when a name equals another ID.
+CREATE TABLE t_reused (k int, v int, u int) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+insert into t_reused select x, x, x + 10000 from table(generate_series(1, 2000)) t(x);
+ALTER TABLE t_reused RENAME COLUMN v TO vr;
+ALTER TABLE t_reused RENAME COLUMN u TO v;
+function: alter_and_wait('ALTER TABLE t_reused ADD INDEX idx_old (vr) USING BITMAP')
+function: assert_latest_schema_change_job_path('lake_idx_rename_${uuid0}', 't_reused', 'fast')
+function: print_query_columns('SHOW INDEX FROM t_reused', 'Key_name', 'Column_name', 'Index_type')
+select assert_true(count(*) = 1) from t_reused where vr = 10;
+function: alter_and_wait('ALTER TABLE t_reused ADD INDEX idx_reused (v) USING BITMAP')
+function: assert_latest_schema_change_job_path('lake_idx_rename_${uuid0}', 't_reused', 'fast')
+function: assert_query_contains('SHOW CREATE TABLE t_reused', 'INDEX idx_old (`vr`)', 'INDEX idx_reused (`v`)')
+select assert_true(count(*) = 1) from t_reused where v = 10200;
+select assert_true(count(*) = 0) from t_reused where v = 10;
+select assert_true(count(*) = 0) from t_reused where vr = 10200;
+
+-- Correct results alone can hide a missing/misdirected index behind a full scan.
+-- A selective predicate on historical data must prune with the renamed bitmap.
+set enable_profile = true;
+set enable_async_profile = false;
+select count(*) from t_reused where v = 10200;
+create table profile_lines properties("replication_num" = "1") as
+    select line from table(unnest(split(get_query_profile(last_query_id()), "\n"))) t(line);
+select assert_true(max(cast(coalesce(nullif(regexp_extract(line, '.*- BitmapIndexFilterRows: ([0-9.]+).*', 1), ''), '0') as double)) > 0)
+    from profile_lines where line like '%- BitmapIndexFilterRows:%';
+
+insert into t_reused (k, vr, v) values (2001, 2001, 12001);
+select assert_true(count(*) = 1) from t_reused where vr = 2001;
+select assert_true(count(*) = 1) from t_reused where v = 12001;
+[ORDER]select k, vr, v from t_reused where k in (1, 200, 2000, 2001) order by k;
+
+drop database lake_idx_rename_${uuid0};

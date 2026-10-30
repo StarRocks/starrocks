@@ -99,8 +99,10 @@ public class ExecuteAsExecutor {
             // Drop the memberOf groups of the original user before anything else. They were read from
             // that user's own LDAP entry at login and say nothing about the target identity. The
             // replacement below would already hide them, but clearing keeps the guarantee from
-            // resting on "no one happens to read the field".
-            ctx.getAccessControlContext().setMemberOfGroups(Set.of());
+            // resting on "no one happens to read the field". The same field now also carries the
+            // groups a JWT claim resolved, and those must not survive the switch either - the
+            // target identity has no token of its own, so it can never have claim groups.
+            ctx.getAccessControlContext().setAuthenticatorGroups(Set.of());
 
             ResolvedTarget target = resolveTarget(ctx, userIdentity);
 
@@ -187,7 +189,8 @@ public class ExecuteAsExecutor {
             return new ResolvedTarget(defaultGroupProviders, null, null);
         }
         // A pre-created LDAP user reads the FE configuration, exactly as at login. When it was
-        // created with AS '<dn>' the provider refuses memberOf on its own (legacy form).
+        // created with AS '<dn>' the provider refuses memberOf on its own (legacy form) and only
+        // hands back that DN for the group providers.
         LDAPAuthProvider provider =
                 asLdapProvider(AuthPlugin.Server.AUTHENTICATION_LDAP_SIMPLE.getProvider(info.getAuthString()));
         return new ResolvedTarget(defaultGroupProviders, provider,

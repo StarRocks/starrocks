@@ -144,7 +144,7 @@ It is not recommended to use the root user because it has excessive privileges. 
 Yes. It is simply a client tool and does not need to run on the same machine as StarRocks. Make sure the MySQL client can access the cluster.
 
 ## Is there a limit to the number of tablets on a BE node? For example, for a server with 64 GB RAM and 16 cores, what is the reasonable range of tablet count?
-There is no strict limit for the tablet number. However, for the tablet size, it is recommended to keep each tablet around 1 GB. Proper partitioning and bucketing strategies will help improve query performance. Tablet size planning is important.
+There is no strict limit for the tablet number. However, for the tablet size, it is recommended to keep each tablet around 1 GB. For shared-data clusters of v4.1 or later, which support large-capacity tablets, it is recommended to keep each tablet between 10 GB and 50 GB, and no more than 100 GB. Proper partitioning and bucketing strategies will help improve query performance. Tablet size planning is important.
 
 ## When starting BE, I see the error “error while loading shared libraries: libjvm.so: cannot open shared object file: No such file or directory”. And after manually creating the directory `lib/starrocks_be`, I get a permission denied error. What should I do?
 

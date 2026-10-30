@@ -16,8 +16,12 @@ package com.starrocks.alter.reshard.presplit;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.SqlModeHelper;
+import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.junit.jupiter.api.Assertions;
@@ -28,10 +32,34 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.MONTH_SQL;
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.bigintColumn;
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.jsonResultBatch;
 
 class InsertFromTableSampleSubqueryExecutorTest {
+
+    @Test
+    void externalTimestampSampleSqlCarriesTheLoadTimeZone() throws Exception {
+        InsertFromTableScanContext scanContext = new InsertFromTableScanContext(
+                Mockito.mock(IcebergTable.class), "`iceberg`.`db`.`src`", Map.of("ts", "ts"),
+                "`ts` >= '2026-09-15 17:00:00'", Mockito.mock(ComputeResource.class), 1024L, 100L,
+                Map.of(), Map.of(), "America/Los_Angeles",
+                SampleSessionSemantics.NONE);
+        StringBuilder capturedSql = new StringBuilder();
+        InsertFromTableSampleSubqueryExecutor executor = new InsertFromTableSampleSubqueryExecutor(
+                (sql, resource, timeout) -> {
+                    capturedSql.append(sql);
+                    return List.of();
+                });
+
+        executor.execute(new SampleRequest(scanContext, List.of(new Column("ts", DateType.DATETIME)),
+                Long.MAX_VALUE, 0L));
+
+        Assertions.assertTrue(capturedSql.toString().startsWith(
+                "SELECT /*+ SET_VAR(time_zone='America/Los_Angeles') */ `ts` FROM `iceberg`.`db`.`src`"),
+                capturedSql.toString());
+        Assertions.assertTrue(capturedSql.toString().contains("WHERE (`ts` >= '2026-09-15 17:00:00') AND"));
+    }
 
     // ---------------------------------------------------------------------------
     // SQL-shape tests
@@ -57,6 +85,21 @@ class InsertFromTableSampleSubqueryExecutorTest {
         Assertions.assertEquals(
                 "SELECT `k` FROM `db`.`src` WHERE rand(0) < 1.0 ORDER BY rand(6510615555426900570) LIMIT 200000",
                 capturedSql.toString());
+    }
+
+    @Test
+    void theScanContextsSessionSemanticsReachTheRunner() throws Exception {
+        SampleSessionSemantics semantics = new SampleSessionSemantics(SqlModeHelper.MODE_DEFAULT,
+                Map.of(SessionVariable.TIME_ZONE, "Asia/Shanghai"));
+        InsertFromTableScanContext scanContext = new InsertFromTableScanContext(
+                mockOlapTable(0L), "`db`.`src`", Map.of("k", "k"), /*wherePredicateSql*/ null,
+                Mockito.mock(ComputeResource.class), 0L, 0L, Map.of(), Map.of(), /*loadTimeZone*/ null, semantics);
+        PresplitTestSupport.SemanticsRecordingRunner runner = new PresplitTestSupport.SemanticsRecordingRunner();
+
+        new InsertFromTableSampleSubqueryExecutor(runner).execute(
+                new SampleRequest(scanContext, List.of(bigintColumn("k")), Long.MAX_VALUE, 0L));
+
+        Assertions.assertEquals(List.of(semantics), runner.received);
     }
 
     @Test
@@ -183,6 +226,60 @@ class InsertFromTableSampleSubqueryExecutorTest {
         Assertions.assertEquals("10", rows.get(0).sortKeyTuple().get(0).getStringValue());
         Assertions.assertEquals(1, rows.get(0).partitionSourceTuple().size());
         Assertions.assertEquals("20", rows.get(0).partitionSourceTuple().get(0).getStringValue());
+    }
+
+    @Test
+    void projectsALiteralFedPartitionColumnAsTheLiteralCastToTheColumnType() throws Exception {
+        // INSERT INTO t SELECT k, v, '20260917' AS dt FROM src: no source column backs dt, so the
+        // sample projects the literal, cast the way the load casts it, and decodes the DATE the
+        // load routes on into the partition tuple.
+        OlapTable sourceTable = mockOlapTable(0L);
+        StringBuilder capturedSql = new StringBuilder();
+        InsertFromTableSampleSubqueryExecutor executor = new InsertFromTableSampleSubqueryExecutor(
+                (sql, computeResource, ignoredTimeout) -> {
+                    capturedSql.append(sql);
+                    return List.of(jsonResultBatch("{\"data\":[\"10\", \"2026-09-17\"]}"));
+                });
+        InsertFromTableScanContext scanContext = new InsertFromTableScanContext(
+                sourceTable, "`db`.`src`", Map.of("k", "k"), /*where=*/ null, Mockito.mock(ComputeResource.class),
+                /*sourceTotalBytes=*/ 0L, /*sourceTotalRows=*/ 0L, Map.of("dt", "'20260917'"), Map.of(),
+                /*loadTimeZone*/ null, SampleSessionSemantics.NONE);
+
+        SampleSubqueryExecutor.SampleExecution execution = executor.execute(new SampleRequest(
+                scanContext, List.of(bigintColumn("k")), List.of(new Column("dt", DateType.DATE)),
+                /*sampleByteLimit=*/ Long.MAX_VALUE, /*seed=*/ 0L));
+
+        Assertions.assertTrue(capturedSql.toString().startsWith("SELECT `k`, CAST('20260917' AS date) FROM"),
+                "the literal stands in for the partition column: " + capturedSql);
+        List<SampleRow> rows = Lists.newArrayList(execution.rows());
+        Assertions.assertEquals(1, rows.size());
+        Assertions.assertEquals("2026-09-17", rows.get(0).partitionSourceTuple().get(0).getStringValue());
+    }
+
+    @Test
+    void literalFedSortKeyColumnIsProjectedAndDecodedIntoTheSortKeyTuple() throws Exception {
+        // ORDER BY (dt, k) with '20260917' AS dt: the boundary tuple must carry the DATE the rows have.
+        OlapTable sourceTable = mockOlapTable(0L);
+        StringBuilder capturedSql = new StringBuilder();
+        InsertFromTableSampleSubqueryExecutor executor = new InsertFromTableSampleSubqueryExecutor(
+                (sql, computeResource, ignoredTimeout) -> {
+                    capturedSql.append(sql);
+                    return List.of(jsonResultBatch("{\"data\":[\"2026-09-17\", \"10\"]}"));
+                });
+        InsertFromTableScanContext scanContext = new InsertFromTableScanContext(
+                sourceTable, "`db`.`src`", Map.of("k", "k"), /*where=*/ null, Mockito.mock(ComputeResource.class),
+                /*sourceTotalBytes=*/ 0L, /*sourceTotalRows=*/ 0L, Map.of("dt", "'20260917'"), Map.of(),
+                /*loadTimeZone*/ null, SampleSessionSemantics.NONE);
+
+        SampleSubqueryExecutor.SampleExecution execution = executor.execute(new SampleRequest(
+                scanContext, List.of(new Column("dt", DateType.DATE), bigintColumn("k")), List.of(),
+                /*sampleByteLimit=*/ Long.MAX_VALUE, /*seed=*/ 0L));
+
+        Assertions.assertTrue(capturedSql.toString().startsWith("SELECT CAST('20260917' AS date), `k` FROM"),
+                "the literal stands in for the sort-key column: " + capturedSql);
+        List<SampleRow> rows = Lists.newArrayList(execution.rows());
+        Assertions.assertEquals("2026-09-17", rows.get(0).sortKeyTuple().get(0).getStringValue());
+        Assertions.assertEquals("10", rows.get(0).sortKeyTuple().get(1).getStringValue());
     }
 
     // ---------------------------------------------------------------------------
@@ -359,5 +456,33 @@ class InsertFromTableSampleSubqueryExecutorTest {
         return new SampleRequest(
                 scanContext, baseSortKeyColumns, rollups, List.of(),
                 /*sampleByteLimit=*/ Long.MAX_VALUE, /*seed=*/ 0L);
+    }
+
+    @Test
+    void projectsAComputedPartitionColumnAsTheExpressionCastToTheColumnType() throws Exception {
+        // A generated partition column has no source column: the sample evaluates its definition over
+        // the source rows and decodes the DATETIME the load routes on into the partition tuple.
+        OlapTable sourceTable = mockOlapTable(0L);
+        StringBuilder capturedSql = new StringBuilder();
+        InsertFromTableSampleSubqueryExecutor executor = new InsertFromTableSampleSubqueryExecutor(
+                (sql, computeResource, ignoredTimeout) -> {
+                    capturedSql.append(sql);
+                    return List.of(jsonResultBatch("{\"data\":[\"10\", \"1001\", \"2025-11-01 00:00:00\"]}"));
+                });
+        InsertFromTableScanContext scanContext = new InsertFromTableScanContext(
+                sourceTable, "`db`.`src`", Map.of("k", "k", "tenant_id", "tenant_id"), /*where=*/ null,
+                Mockito.mock(ComputeResource.class), /*sourceTotalBytes=*/ 0L, /*sourceTotalRows=*/ 0L,
+                Map.of(), Map.of("activity_date_month", MONTH_SQL), /*loadTimeZone*/ null,
+                SampleSessionSemantics.NONE);
+
+        SampleSubqueryExecutor.SampleExecution execution = executor.execute(new SampleRequest(
+                scanContext, List.of(bigintColumn("k")),
+                List.of(bigintColumn("tenant_id"), new Column("activity_date_month", DateType.DATETIME, true)),
+                /*sampleByteLimit=*/ Long.MAX_VALUE, /*seed=*/ 0L));
+
+        Assertions.assertTrue(capturedSql.toString().startsWith(
+                "SELECT `k`, `tenant_id`, CAST(" + MONTH_SQL + " AS datetime) FROM"), capturedSql.toString());
+        List<SampleRow> rows = Lists.newArrayList(execution.rows());
+        Assertions.assertEquals("2025-11-01 00:00:00", rows.get(0).partitionSourceTuple().get(1).getStringValue());
     }
 }

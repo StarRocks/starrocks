@@ -35,6 +35,7 @@
 #include "exprs/lambda_function.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "runtime/runtime_state.h"
+#include "testutil/column_test_helper.h"
 #include "types/datum.h"
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
@@ -50,14 +51,14 @@ protected:
     // An array<int> column with kNumRows rows of [4, 1, 3]. Non-nullable, so evaluation never
     // has to touch the shared column in place.
     Expr* make_array_expr() {
-        auto array = ColumnHelper::create_column(TYPE_INT_ARRAY_DESC, false);
+        auto array = ColumnHelper::create_column(TYPE_ARRAY_INT_DESC, false);
         for (size_t i = 0; i < kNumRows; ++i) {
             array->append_datum(DatumArray{Datum((int32_t)4), Datum((int32_t)1), Datum((int32_t)3)});
         }
         TExprNode node;
         node.__set_node_type(TExprNodeType::INT_LITERAL);
         node.__set_num_children(0);
-        node.__set_type(TYPE_INT_ARRAY_DESC.to_thrift());
+        node.__set_type(TYPE_ARRAY_INT_DESC.to_thrift());
         auto* expr = _pool.add(new FakeConstExpr(node));
         expr->_column = std::move(array);
         return expr;
@@ -102,7 +103,7 @@ protected:
 
     // array_sort(array, (x, y) -> x <op> y)
     ArraySortLambdaExpr* make_array_sort(TExprOpcode::type op) {
-        auto* expr = _pool.add(new ArraySortLambdaExpr(TYPE_INT_ARRAY_DESC));
+        auto* expr = _pool.add(new ArraySortLambdaExpr(TYPE_ARRAY_INT_DESC));
         expr->add_child(make_array_expr());
         expr->add_child(make_comparator(op));
         return expr;
@@ -224,9 +225,8 @@ TEST_F(ArraySortLambdaExprTest, invalid_comparator_error_is_not_cached) {
 //   array_sort(arr_of_arrays, (x, y) -> array_length(array_map(z -> array_length(x) + z, x)) < array_length(y))
 // Must not crash.
 TEST_F(ArraySortLambdaExprTest, nested_array_map_in_comparator_captures_arg) {
-    const SlotId kZ = 100002;                         // inner array_map argument
-    TypeDescriptor int_arr = array_type(TYPE_INT);    // array<int>  (comparator element type: x, y)
-    TypeDescriptor int_arr_arr = array_type(int_arr); // array<array<int>> (sorted array)
+    const SlotId kZ = 100002;                                     // inner array_map argument
+    TypeDescriptor int_arr_arr = array_type(TYPE_ARRAY_INT_DESC); // array<array<int>> (sorted array)
 
     // Sorted array column: 2 rows, each an array<array<int>> = [[4,4],[1],[3,3,3]].
     auto array = ColumnHelper::create_column(int_arr_arr, false);
@@ -278,7 +278,7 @@ TEST_F(ArraySortLambdaExprTest, nested_array_map_in_comparator_captures_arg) {
     add_node.__isset.child_type = true;
     add_node.type = gen_type_desc(TPrimitiveType::INT);
     auto* add_expr = _pool.add(VectorizedArithmeticExprFactory::from_thrift(add_node));
-    add_expr->add_child(array_length(slot_ref(kArgX, int_arr)));
+    add_expr->add_child(array_length(slot_ref(kArgX, TYPE_ARRAY_INT_DESC)));
     add_expr->add_child(slot_ref(kZ, TypeDescriptor(TYPE_INT)));
 
     TExprNode tlambda_inner;
@@ -293,10 +293,10 @@ TEST_F(ArraySortLambdaExprTest, nested_array_map_in_comparator_captures_arg) {
     inner_lambda->add_child(add_expr);
     inner_lambda->add_child(slot_ref(kZ, TypeDescriptor(TYPE_INT)));
 
-    auto* inner_map = _pool.add(new ArrayMapExpr(int_arr));
+    auto* inner_map = _pool.add(new ArrayMapExpr(TYPE_ARRAY_INT_DESC));
     inner_map->clear_children();
     inner_map->add_child(inner_lambda);
-    inner_map->add_child(slot_ref(kArgX, int_arr));
+    inner_map->add_child(slot_ref(kArgX, TYPE_ARRAY_INT_DESC));
 
     // comparator body: array_length(inner_map) < array_length(y)
     TExprNode lt_node;
@@ -309,7 +309,7 @@ TEST_F(ArraySortLambdaExprTest, nested_array_map_in_comparator_captures_arg) {
     lt_node.type = gen_type_desc(TPrimitiveType::BOOLEAN);
     auto* lt = _pool.add(VectorizedBinaryPredicateFactory::from_thrift(lt_node));
     lt->add_child(array_length(inner_map));
-    lt->add_child(array_length(slot_ref(kArgY, int_arr)));
+    lt->add_child(array_length(slot_ref(kArgY, TYPE_ARRAY_INT_DESC)));
 
     TExprNode lambda_node;
     lambda_node.node_type = TExprNodeType::LAMBDA_FUNCTION_EXPR;
@@ -317,8 +317,8 @@ TEST_F(ArraySortLambdaExprTest, nested_array_map_in_comparator_captures_arg) {
     lambda_node.type = gen_type_desc(TPrimitiveType::BOOLEAN);
     auto* comparator = _pool.add(new LambdaFunction(lambda_node));
     comparator->add_child(lt);
-    comparator->add_child(slot_ref(kArgX, int_arr));
-    comparator->add_child(slot_ref(kArgY, int_arr));
+    comparator->add_child(slot_ref(kArgX, TYPE_ARRAY_INT_DESC));
+    comparator->add_child(slot_ref(kArgY, TYPE_ARRAY_INT_DESC));
 
     auto* expr = _pool.add(new ArraySortLambdaExpr(int_arr_arr));
     expr->add_child(array_expr);
@@ -330,9 +330,7 @@ TEST_F(ArraySortLambdaExprTest, nested_array_map_in_comparator_captures_arg) {
     ASSERT_OK(ExprExecutor::open(ctxs, &_runtime_state));
 
     auto chunk = std::make_shared<Chunk>();
-    auto rows = Int32Column::create();
-    rows->append(0);
-    rows->append(1);
+    auto rows = ColumnTestHelper::build_column<int32_t>({0, 1});
     chunk->append_column(std::move(rows), 1);
     ColumnPtr result = expr->evaluate(&ctx, chunk.get()); // must not crash
     ASSERT_EQ(2, result->size());

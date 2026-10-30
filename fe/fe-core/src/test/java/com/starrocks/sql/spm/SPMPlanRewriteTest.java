@@ -15,7 +15,6 @@
 package com.starrocks.sql.spm;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.metric.Metric;
 import com.starrocks.metric.MetricLabel;
@@ -25,6 +24,7 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.spm.CreateBaselinePlanStmt;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.PlanTestBase;
+import com.starrocks.utframe.AIProviderTestUtil;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -79,15 +79,15 @@ public class SPMPlanRewriteTest extends PlanTestBase {
     }
 
     private void assertAIFunctionRewriteReturnsOriginalAsMiss(String sql) {
-        String oldEndpoint = Config.ai_default_chat_endpoint;
-        String oldModel = Config.ai_default_chat_model;
-        String oldProvider = Config.ai_default_chat_provider;
+        String oldEndpoint = AIProviderTestUtil.chatProperty("endpoint");
+        String oldModel = AIProviderTestUtil.chatProperty("model");
+        String oldProvider = AIProviderTestUtil.chatProperty("protocol");
         SQLPlanStorage originalStorage = connectContext.getSqlPlanStorage();
         SQLPlanStorage spyStorage = Mockito.spy(originalStorage);
         try {
-            Config.ai_default_chat_endpoint = "https://models.example.test/v1/chat/completions";
-            Config.ai_default_chat_model = "default-model";
-            Config.ai_default_chat_provider = "openai_compatible";
+            AIProviderTestUtil.setChatProperty("endpoint", "https://models.example.test/v1/chat/completions");
+            AIProviderTestUtil.setChatProperty("model", "default-model");
+            AIProviderTestUtil.setChatProperty("protocol", "openai");
             Deencapsulation.setField(connectContext, "sqlPlanStorage", spyStorage);
 
             StatementBase original = SqlParser.parse(sql, connectContext.getSessionVariable()).get(0);
@@ -108,9 +108,9 @@ public class SPMPlanRewriteTest extends PlanTestBase {
                     Mockito.anyString(), Mockito.anyLong());
         } finally {
             Deencapsulation.setField(connectContext, "sqlPlanStorage", originalStorage);
-            Config.ai_default_chat_endpoint = oldEndpoint;
-            Config.ai_default_chat_model = oldModel;
-            Config.ai_default_chat_provider = oldProvider;
+            AIProviderTestUtil.setChatProperty("endpoint", oldEndpoint);
+            AIProviderTestUtil.setChatProperty("model", oldModel);
+            AIProviderTestUtil.setChatProperty("protocol", oldProvider);
         }
     }
 

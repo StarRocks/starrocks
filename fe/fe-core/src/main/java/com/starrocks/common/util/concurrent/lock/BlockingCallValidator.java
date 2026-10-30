@@ -16,6 +16,8 @@ package com.starrocks.common.util.concurrent.lock;
 
 import com.starrocks.common.util.concurrent.lock.LockInvariantViolations.Mode;
 
+import java.util.Iterator;
+
 /**
  * Enforces the second half of the metadata-lock contract:
  *
@@ -74,15 +76,6 @@ import com.starrocks.common.util.concurrent.lock.LockInvariantViolations.Mode;
  * The set of guarded points is meant to grow; each addition shrinks the blind spot rather than
  * changing the design. Known gaps today:
  * <ul>
- *     <li>BRPC to the BEs outside the publish path -- vacuum, compaction, delete, tablet stats --
- *         is awaited at a dozen scattered {@code Future.get()} sites with no shared helper.</li>
- *     <li>Paimon's per-call requests. {@code CachingPaimonCatalog} is the FE's own class, but it
- *         extends paimon's {@code CachingCatalog} and its {@code getTable} delegates to
- *         {@code super}, so the cache lookup happens above anything the FE can hook: a guard there,
- *         or in {@code PaimonMetadata}, would report the hits. The honest door is a delegating
- *         {@code Catalog} placed between that cache and the unwrapped catalog, which only misses
- *         reach -- thirty-odd methods of boilerplate against a third-party interface, deferred
- *         rather than judged unnecessary. Only the catalog's construction has a door today.</li>
  *     <li>Iceberg's write path through {@code IcebergCachingFileIO}. A door there would have to wrap
  *         the {@code OutputFile}, and iceberg picks its writer by that object's type -- so the wrapper
  *         would change how the file gets written. {@code deleteFile} is guarded; {@code create()} is
@@ -91,10 +84,32 @@ import com.starrocks.common.util.concurrent.lock.LockInvariantViolations.Mode;
  *         credential provider -- an instance profile queries IMDS, static credentials with an explicit
  *         region contact nothing -- and a guard that fires either way reports waits that did not happen.
  *         The jdbc and REST catalogs do contact their systems on construction, and are guarded there.</li>
- *     <li>{@code HdfsFsManager} -- the file-system layer used by broker-less load and
- *         {@code TableFunctionTable} -- caches an {@code HdfsFs} per identity and creates the
- *         underlying file system inside its per-scheme helpers, so a guard has to go in each of
- *         those rather than at {@code getFileSystem}'s entry, where it would report cache hits.</li>
+ *     <li>Paimon's view, repair and global-paging methods, for the same reason one layer up:
+ *         {@code Catalog} gives them a default body that contacts nothing, so a catalog without the
+ *         capability answers them locally while a REST catalog goes remote. Everything else paimon
+ *         offers is guarded; see {@code GuardedPaimonCatalog}.</li>
+ * </ul>
+ *
+ * <p>Three that were on this list are closed, each by moving the door to the layer where a wait is
+ * unambiguous rather than by guessing above it:
+ * <ul>
+ *     <li><b>BRPC to the BEs.</b> An asynchronous send returns at once and the wait is the caller's
+ *         {@code Future.get()}, scattered across a dozen loops. The futures are wrapped instead, at
+ *         the one seam every request passes through -- {@code LakeServiceWithMetrics} and
+ *         {@code BackendServiceClient} -- so the door is on the wait itself and a caller written
+ *         later inherits it. See {@code GuardedFuture}, which also explains why a future that is
+ *         already done is not reported.</li>
+ *     <li><b>Paimon's per-call requests.</b> {@code CachingPaimonCatalog} extends paimon's
+ *         {@code CachingCatalog} and resolves hits inside {@code super}, above anything the FE can
+ *         hook, so a guard there or in {@code PaimonMetadata} would report those hits.
+ *         {@code GuardedPaimonCatalog} sits between that cache and the unwrapped catalog, where a
+ *         call is a miss by construction.</li>
+ *     <li><b>{@code HdfsFsManager}</b>, the file-system layer behind broker-less load and
+ *         {@code TableFunctionTable}. The per-scheme helpers create their file system inside a catch
+ *         that rewrites every failure, so the miss is reported by {@code acquireCachedFileSystem}
+ *         instead -- on the entry it is about to hand back, while it holds that entry's lock, which
+ *         is the one moment the answer cannot change under it. The operations that go on to use the
+ *         file system are guarded below their own local validation and above the I/O.</li>
  * </ul>
  *
  * <p>ODPS and Delta Lake were on this list and are not any more. ODPS calls a third-party client
@@ -215,27 +230,30 @@ public class BlockingCallValidator {
      * overloads, a lambda inside it, or an inner class of the HMS client are all the same top-level
      * class and all get skipped.
      *
-     * <p>Walks the stack, so it runs only once a violation has already been established.
+     * <p>Walks the stack (lazily, see {@link LockInvariantViolations#STACK_WALKER}), so it runs only once a
+     * violation has already been established.
      */
     private static String callerOfTheGuard() {
-        String transportClass = null;
-        for (StackTraceElement frame : Thread.currentThread().getStackTrace()) {
-            String className = frame.getClassName();
-            if (className.startsWith("java.") || className.startsWith("jdk.")
-                    || className.startsWith(LockInvariantViolations.LOCK_PACKAGE)) {
-                continue;
+        return LockInvariantViolations.STACK_WALKER.walk(frames -> {
+            String transportClass = null;
+            for (Iterator<StackWalker.StackFrame> it = frames.iterator(); it.hasNext(); ) {
+                StackWalker.StackFrame frame = it.next();
+                String className = frame.getClassName();
+                if (LockInvariantViolations.isJdkOrLockLayer(className)) {
+                    continue;
+                }
+                String topLevel = topLevelClass(className);
+                if (transportClass == null) {
+                    transportClass = topLevel;
+                    continue;
+                }
+                if (topLevel.equals(transportClass)) {
+                    continue;
+                }
+                return LockInvariantViolations.siteOf(frame);
             }
-            String topLevel = topLevelClass(className);
-            if (transportClass == null) {
-                transportClass = topLevel;
-                continue;
-            }
-            if (topLevel.equals(transportClass)) {
-                continue;
-            }
-            return className + "." + frame.getMethodName() + ":" + frame.getLineNumber();
-        }
-        return LockInvariantViolations.UNKNOWN_SITE;
+            return LockInvariantViolations.UNKNOWN_SITE;
+        });
     }
 
     /** {@code Foo$Bar$1} and {@code Foo} are the same layer for the purpose of skipping. */

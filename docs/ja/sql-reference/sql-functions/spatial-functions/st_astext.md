@@ -16,7 +16,7 @@ VARCHAR ST_AsWKT(GEOMETRY geo)
 VARCHAR ST_AsWKT(GEOGRAPHY geography)
 ```
 
-`GEOGRAPHY` の場合、7 種類すべての OGC ジオメトリと `EMPTY` メンバーが保持されます。入力が `NULL` の場合は `NULL` を返します。
+ネイティブ `GEOMETRY` と `GEOGRAPHY` では、7 種類すべての OGC ジオメトリ、`EMPTY`、および空の子要素が保持されます。入力が `NULL` の場合は `NULL` を返します。シリアライズによって入力の CRS や座標は変更されません。
 
 ```SQL
 SELECT ST_AsText(ST_GeogFromText('GEOMETRYCOLLECTION (POINT EMPTY, LINESTRING (1 2, 3 4))'));
@@ -24,6 +24,14 @@ SELECT ST_AsText(ST_GeogFromText('GEOMETRYCOLLECTION (POINT EMPTY, LINESTRING (1
 
 ```text
 GEOMETRYCOLLECTION (POINT EMPTY, LINESTRING (1 2, 3 4))
+```
+
+```SQL
+SELECT ST_AsText(ST_GeomFromText('POINT (1000000 2000000)', 'EPSG:3857'));
+```
+
+```text
+POINT (1000000 2000000)
 ```
 
 ## 例

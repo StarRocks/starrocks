@@ -18,6 +18,7 @@
 #include <cstdint>
 #include <limits>
 
+#include "base/testutil/sync_point.h"
 #include "base/utility/updater.h"
 #include "common/logging.h"
 
@@ -40,20 +41,38 @@ public:
         }
     }
 
+    // Records a full -> not-full event for LocalExchanger::notify_sink() to wake up OUTPUT_FULL sinks.
+    // is_full() is `memory over limit || rows over limit` and can only become false when one of the two counters
+    // falls below its limit. Each counter's falling edge is detected exactly from its own fetch_add() result, so no
+    // full -> not-full transition is missed even under concurrent updates. Do not derive the edge from a separate
+    // is_full() read or from a combined state of both counters: neither is a consistent snapshot and may lose the
+    // edge, leaving sink drivers parked forever with the event scheduler.
+    //
+    // How the old `prev_full = is_full(); fetch_add(); if (prev_full != now_full) set flag` lost it
+    // (consumer C, producer P, consumer D, limit = 2 chunks, mem = 1 chunk):
+    //   C: prev_full = is_full();   // false, then C is preempted
+    //   P: fetch_add(+chunk);       // mem = 2, full: flag = true; sinks park in OUTPUT_FULL
+    //   D: notify_sink();           // consumes the flag while still full; woken sinks re-park
+    //   C: fetch_add(-chunk);       // mem = 1, not full, but prev_full == now_full == false: no flag
+    //   C: notify_sink();           // flag is false: no wake-up, the buffer is not full and every sink is parked
+    // A standalone model of this schedule is attached to PR #64858 (with a 200us delay in the window: 18/100 runs
+    // hang with the old code, 0/400 with this one).
     void update_memory_usage(int64_t memory_usage, int64_t num_rows) {
-        bool prev_full = is_full();
-        size_t prev_memusage = _memory_usage.fetch_add(memory_usage);
-        size_t prev_num_rows = _buffered_num_rows.fetch_add(num_rows);
+        TEST_SYNC_POINT_CALLBACK("ChunkBufferMemoryManager::update_memory_usage::begin", &memory_usage);
+        int64_t prev_memusage = _memory_usage.fetch_add(memory_usage);
+        TEST_SYNC_POINT_CALLBACK("ChunkBufferMemoryManager::update_memory_usage::between_counters", &memory_usage);
+        int64_t prev_num_rows = _buffered_num_rows.fetch_add(num_rows);
         _update_peak_memusage();
         _update_peak_num_rows();
-        bool is_full =
-                prev_memusage + memory_usage >= _max_memory_usage || prev_num_rows + num_rows > _max_buffered_rows;
-        bool expect = false;
-        bool full_changed = prev_full != is_full;
-        if (!full_changed) {
-            return;
+        // Load the limit after fetch_add(): update_max_memory_usage() may lower it concurrently, and a sink that
+        // parked on the lower limit must still see the fall below it.
+        const auto max_memory_usage = static_cast<int64_t>(_max_memory_usage.load());
+        const auto max_buffered_rows = static_cast<int64_t>(_max_buffered_rows);
+        bool memory_fell = prev_memusage >= max_memory_usage && prev_memusage + memory_usage < max_memory_usage;
+        bool rows_fell = prev_num_rows > max_buffered_rows && prev_num_rows + num_rows <= max_buffered_rows;
+        if (memory_fell || rows_fell) {
+            _full_events_changed.store(true, std::memory_order_release);
         }
-        _full_events_changed.compare_exchange_strong(expect, full_changed);
     }
 
     size_t get_memory_limit_per_driver() const { return _max_memory_usage_per_driver; }
@@ -72,6 +91,10 @@ public:
     void update_max_memory_usage(size_t max_memory_usage) {
         DCHECK(max_memory_usage > 0);
         _max_memory_usage = max_memory_usage;
+        // A sink may have combined a counter value read before this store with the new limit and parked on a
+        // "full" state that never existed, while the concurrent refund compared against the old limit and saw no
+        // falling edge. Record an event so the caller's notify_sink() makes every sink re-check the current state.
+        _full_events_changed.store(true, std::memory_order_release);
     }
 
     void clear() {

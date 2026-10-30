@@ -17,6 +17,7 @@ package com.starrocks.authentication;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.mysql.MysqlProto;
 import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -33,6 +34,9 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
@@ -167,10 +171,11 @@ public class LDAPMemberOfGroupResolutionTest {
 
     private static ConnectContext login(String user) throws AuthenticationException {
         ConnectContext context = new ConnectContext();
-        // The auth chain only offers a security integration to a client that negotiated the matching
-        // plugin; for authentication_ldap_simple that is mysql_clear_password.
-        context.setAuthPlugin(AuthPlugin.Client.MYSQL_CLEAR_PASSWORD.toString());
-        AuthenticationHandler.authenticate(context, user, "127.0.0.1", PASSWORD);
+        // The credential says what the client sent; for authentication_ldap_simple that is the
+        // mysql_clear_password frame, which the entry point reads as a plaintext password.
+        AuthenticationHandler.authenticate(context,
+                MysqlProto.handshakeCredentials(user, PASSWORD, AuthPlugin.Client.MYSQL_CLEAR_PASSWORD.toString(),
+                        "127.0.0.1"));
         return context;
     }
 
@@ -259,20 +264,23 @@ public class LDAPMemberOfGroupResolutionTest {
         ConnectContext context = login(USER);
 
         Assertions.assertEquals(Set.of(PROVIDER_ONLY_GROUP), context.getGroups());
-        Assertions.assertTrue(context.getAccessControlContext().getMemberOfGroups().isEmpty());
+        Assertions.assertTrue(context.getAccessControlContext().getAuthenticatorGroups().isEmpty());
     }
 
     /**
      * AC-13, the positive half: a pre-created user declared **without** `AS '<dn>'` does not go
      * through a security integration at all - its provider is built from the FE configuration - and
-     * it must still pick up the memberOf groups.
+     * it must still pick up the memberOf groups. Under `memberof` its group providers stay off: only
+     * the legacy `AS '<dn>'` form keeps them regardless of the group source.
      */
-    @Test
-    public void testPreCreatedUserWithoutAsGetsMemberOfGroupsFromTheFeConfig() throws Exception {
+    @ParameterizedTest
+    @CsvSource({"both, true", "memberof, false"})
+    public void testPreCreatedUserWithoutAsGetsMemberOfGroupsFromTheFeConfig(String groupSource,
+                                                                             boolean providerUsed) throws Exception {
         stubDirectory();
         createGroupProvider();
         Config.group_provider = new String[] {GP_NAME};
-        Config.authentication_ldap_simple_group_source = "both";
+        Config.authentication_ldap_simple_group_source = groupSource;
 
         authMgr().createUser(new CreateUserStmt(
                 new UserRef(USER, "%", false, NodePosition.ZERO),
@@ -283,20 +291,54 @@ public class LDAPMemberOfGroupResolutionTest {
 
         ConnectContext context = login(USER);
 
-        Assertions.assertEquals(Set.of(MEMBEROF_ONLY_GROUP, PROVIDER_ONLY_GROUP), context.getGroups());
+        Assertions.assertEquals(providerUsed ? Set.of(MEMBEROF_ONLY_GROUP, PROVIDER_ONLY_GROUP)
+                : Set.of(MEMBEROF_ONLY_GROUP), context.getGroups());
         Assertions.assertEquals(USER_DN, context.getDistinguishedName());
     }
 
     /**
-     * AC-13, the negative half at chain level: the legacy `AS '<dn>'` form is excluded even when the
-     * FE configuration turns memberOf on.
+     * `enable_auth_check = false` skips the provider's authenticate() altogether, so the
+     * authenticator never read its own groups. Letting `authenticator` suppress the group providers
+     * as well would leave such a login with no groups at all - the bypass is meant to skip the
+     * credential check, not to strip privileges.
      */
     @Test
-    public void testPreCreatedUserWithAsIsUnaffectedByTheFeConfig() throws Exception {
+    public void testAuthCheckBypassKeepsTheGroupProviders() throws Exception {
         stubDirectory();
         createGroupProvider();
         Config.group_provider = new String[] {GP_NAME};
-        Config.authentication_ldap_simple_group_source = "both";
+        Config.authentication_ldap_simple_group_source = "authenticator";
+
+        authMgr().createUser(new CreateUserStmt(
+                new UserRef(USER, "%", false, NodePosition.ZERO),
+                true,
+                new UserAuthOption("AUTHENTICATION_LDAP_SIMPLE", null, false, NodePosition.ZERO),
+                List.of(), Map.of(), NodePosition.ZERO));
+
+        boolean saved = Config.enable_auth_check;
+        Config.enable_auth_check = false;
+        try {
+            ConnectContext context = login(USER);
+
+            Assertions.assertEquals(Set.of(PROVIDER_ONLY_GROUP), context.getGroups());
+            Assertions.assertTrue(context.getAccessControlContext().getAuthenticatorGroups().isEmpty());
+        } finally {
+            Config.enable_auth_check = saved;
+        }
+    }
+
+    /**
+     * AC-13, the negative half at chain level: the legacy `AS '<dn>'` form gets the same groups whatever
+     * the FE configuration says - memberOf is never read, and the group providers are kept even under
+     * `memberof`, which would otherwise leave it with no group at all.
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {"group_provider", "both", "memberof"})
+    public void testPreCreatedUserWithAsIsUnaffectedByTheFeConfig(String groupSource) throws Exception {
+        stubDirectory();
+        createGroupProvider();
+        Config.group_provider = new String[] {GP_NAME};
+        Config.authentication_ldap_simple_group_source = groupSource;
 
         authMgr().createUser(new CreateUserStmt(
                 new UserRef(USER, "%", false, NodePosition.ZERO),
@@ -307,6 +349,6 @@ public class LDAPMemberOfGroupResolutionTest {
         ConnectContext context = login(USER);
 
         Assertions.assertEquals(Set.of(PROVIDER_ONLY_GROUP), context.getGroups());
-        Assertions.assertTrue(context.getAccessControlContext().getMemberOfGroups().isEmpty());
+        Assertions.assertTrue(context.getAccessControlContext().getAuthenticatorGroups().isEmpty());
     }
 }

@@ -244,6 +244,11 @@ void OlapTableSink::_prepare_profile(RuntimeState* state) {
     _ts_profile->wait_response_timer = ADD_CHILD_TIMER(_profile, "WaitResponseTime", "SendDataTime");
     _ts_profile->serialize_chunk_timer = ADD_CHILD_TIMER(_profile, "SerializeChunkTime", "SendRpcTime");
     _ts_profile->compress_timer = ADD_CHILD_TIMER(_profile, "CompressTime", "SendRpcTime");
+    _ts_profile->raw_input_bytes_counter = ADD_CHILD_COUNTER(_profile, "RawInputBytes", TUnit::BYTES, "SendRpcTime");
+    _ts_profile->serialized_bytes_counter = ADD_CHILD_COUNTER(_profile, "SerializedBytes", TUnit::BYTES, "SendRpcTime");
+    _ts_profile->compressed_input_bytes_counter =
+            ADD_CHILD_COUNTER(_profile, "CompressedInputBytes", TUnit::BYTES, "SendRpcTime");
+    _ts_profile->compressed_bytes_counter = ADD_CHILD_COUNTER(_profile, "CompressedBytes", TUnit::BYTES, "SendRpcTime");
     _ts_profile->client_rpc_timer = ADD_TIMER(_profile, "RpcClientSideTime");
     _ts_profile->server_rpc_timer = ADD_TIMER(_profile, "RpcServerSideTime");
     _ts_profile->server_wait_flush_timer = ADD_TIMER(_profile, "RpcServerWaitFlushTime");

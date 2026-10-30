@@ -263,6 +263,7 @@ It's similar to OLAP_SCAN operator but used for scan external tables like Iceber
 | RuntimeFilterEvalTime | Time spent evaluating join runtime filters against decoded rows inside the Parquet reader. | 
 | RuntimeFilterInputRows | Number of rows fed into the Parquet reader's join runtime filter evaluation. | 
 | RuntimeFilterOutputRows | Number of rows surviving the Parquet reader's join runtime filter evaluation. A large gap from `RuntimeFilterInputRows` means the filter dropped rows before lazy columns were materialized. | 
+| ScanRangesPrunedByPartitionValue | Number of scan ranges skipped before they are read because a predicate or an arrived join runtime filter rejects their identity partition values. |
 | PaimonFSAppIOCount | Number of valid read attempts received by the Paimon file-system adapter. It is the sum of sequential, positional, and asynchronous reads. |
 | PaimonFSAppIOBytes | Bytes returned successfully by reads at the Paimon file-system adapter boundary. |
 | PaimonFSAppIOTime | End-to-end time of reads at the Paimon file-system adapter boundary. |
@@ -306,6 +307,16 @@ Typical scenarios that can make Exchange Operator the bottleneck of a query:
 | BytesUnsent | Size of unsent data. This metric is non-zero when there is a short-circuit logic; otherwise, it is zero. |
 | BytesPassThrough | If the destination node is the current node, data will not be transmitted over the network, which is called passthrough data. This metric indicates the size of such passthrough data. Passthrough is controlled by `enable_exchange_pass_through`. |
 | PassThroughBufferPeakMemoryUsage | Peak memory usage of the PassThrough Buffer. |
+| ShuffleChunkBufferNum | Number of partial chunks the sink allocated to buffer rows per destination pipeline driver when PartType is HASH_PARTITIONED or BUCKET_SHUFFLE_HASH_PARTITIONED. It grows beyond the number of destination drivers when partial chunks are released and allocated again. |
+| ShuffleChunkBufferPeakMemoryUsage | Peak memory retained by these partial chunks. A partial chunk is only sent once it is full, so with many destinations, a high DOP, and wide rows this can approach the whole input of the sink. It is bounded by the BE configuration `exchange_sink_buffer_flush_threshold_bytes`. |
+| ShuffleBufferFlushCount | Number of times the partial chunks exceeded `exchange_sink_buffer_flush_threshold_bytes` and were sent before they were full. |
+| ShuffleBufferFlushRows | Number of rows sent by these early flushes. |
+| ShuffleBufferReleasedChunks | Number of partial chunks released after an early flush because the memory they still held exceeded half of `exchange_sink_buffer_flush_threshold_bytes`. |
+| PeakSerializedChunkBytes | Size of the largest serialized chunk before compression. |
+| SinkBufferPeakMemoryUsage | Peak memory of the requests waiting to be sent or in flight in the sink buffer. |
+| SinkBufferMemoryLimit | Memory limit of the sink buffer. By default, it is `sink_buffer_mem_limit_per_driver` multiplied by the number of destinations. When it is reached, the sink stops accepting data until requests complete. |
+| SinkBufferPeakInFlightRpcNum | Peak number of RPCs in flight at the same time. |
+| SinkBufferPeakRequestNum | Peak number of requests waiting to be sent or in flight in the sink buffer. |
 | CompressTime | Compression time. |
 | CompressedInputBytes | Size of the serialized (pre-compression) data that was actually fed to the compressor. Chunks skipped by the adaptive compression strategy are not counted. `CompressedInputBytes / CompressedBytes` gives the compression ratio, and `SerializedBytes - CompressedInputBytes` is the size of data that was not compressed. |
 | CompressedBytes | Size of compressed data. Only chunks that were actually compressed are counted. |
@@ -515,6 +526,10 @@ OlapTableSink Operator is responsible for performing the `INSERT INTO <table>` o
 | `RpcServerSideTime` | Total RPC time consumption for loading recorded by the server side. |
 | `PrepareDataTime` | Total time consumption for the data preparation phase, including data format conversion and data quality check. |
 | `SendDataTime` | Local time consumption for sending the data, including time for serializing and compressing data, and for submitting tasks to the sender queue. |
+| `RawInputBytes` | In-memory size of the chunk data passed to serialization. |
+| `SerializedBytes` | Size of the serialized chunk data before compression. Because `load_transmission_compression_type` defaults to `NO_COMPRESSION`, this is normally also the number of bytes sent over the network. |
+| `CompressedInputBytes` | Size of the serialized (pre-compression) data that was actually fed to the compressor. Chunks skipped because compression is disabled, or because the input exceeds the RPC compression size limit, are not counted. |
+| `CompressedBytes` | Size of the compressed chunk data. Only chunks that were actually compressed are counted, so both this metric and `CompressedInputBytes` are `0` under the default `NO_COMPRESSION`. `CompressedInputBytes / CompressedBytes` gives the compression ratio, and `SerializedBytes - CompressedInputBytes` is the size of the data that was not compressed. |
 
 ### Spill Metrics
 

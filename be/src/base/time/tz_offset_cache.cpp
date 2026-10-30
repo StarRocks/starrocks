@@ -18,6 +18,8 @@
 #include <chrono>
 #include <limits>
 
+#include "base/logging.h"
+
 namespace starrocks {
 
 namespace {
@@ -99,6 +101,261 @@ int64_t TzOffsetCache::offset_for_unix(int64_t unix_sec, const cctz::time_zone& 
     _abs_window.hi = hi;
     _abs_window.has_value = true;
     return _abs_window.offset;
+}
+
+bool TzOffsetCache::_cover(int64_t lo, int64_t hi, const cctz::time_zone& tz) {
+    const bool same_zone = _table.has_value && tz == _table.zone;
+    if (same_zone && lo >= _table.lo && hi <= _table.hi) {
+        return true;
+    }
+    // Far outside any real time zone data (e.g. a corrupt file), where the probes below would overflow; such values
+    // take the plain per-value lookup.
+    if (lo < -kMaxTableSeconds || hi > kMaxTableSeconds) {
+        return false;
+    }
+    // A range containing one that failed fails too; do not enumerate its transitions again.
+    if (_failed.has_value && lo <= _failed.lo && hi >= _failed.hi && tz == _failed.zone) {
+        return false;
+    }
+    // Values later than the table (time-ordered data): enumerate only the transitions after it.
+    if (same_zone && lo >= _table.lo && _extend_table(hi, tz, &_table)) {
+        _table.requested_hi = std::max(_table.requested_hi, hi);
+        return true;
+    }
+    if (!_build_table(lo, hi, tz, &_new_table)) {
+        _failed.has_value = true;
+        _failed.zone = tz;
+        _failed.lo = lo;
+        _failed.hi = hi;
+        return false;
+    }
+    std::swap(_table, _new_table);
+    _table_in_bound_zone = _bound && tz == _bound_zone;
+    return true;
+}
+
+bool TzOffsetCache::_build_table(int64_t lo, int64_t hi, const cctz::time_zone& tz, OffsetTable* table) {
+    static const cctz::time_point<cctz::seconds> epoch =
+            std::chrono::time_point_cast<cctz::seconds>(std::chrono::system_clock::from_time_t(0));
+    table->has_value = false;
+    table->trans.clear();
+    table->offsets.clear();
+    table->buckets.clear();
+
+    const cctz::time_point<cctz::seconds> tp = epoch + cctz::seconds(lo);
+    table->offsets.push_back(tz.lookup_offset(tp).offset);
+    cctz::time_zone::civil_transition ct;
+    // Past the zone's enumerable transitions with an offset that still varies (see offset_for_unix), the stretch
+    // back to the last enumerated transition is not known to be free of transitions: no table.
+    if (!tz.next_transition(tp, &ct) && !offset_is_constant_beyond(tz, tp, table->offsets.back())) {
+        return false;
+    }
+    // The offset at lo has been in force since the last transition at or before lo (see offset_for_unix).
+    table->lo = std::numeric_limits<int64_t>::min();
+    if (tz.prev_transition(tp + cctz::seconds(1), &ct)) {
+        table->lo = tz.lookup(ct.to).trans.time_since_epoch().count();
+    }
+    // An empty table up to lo, which _extend_table carries on from.
+    table->hi = lo;
+    if (!_extend_table(hi, tz, table)) {
+        return false;
+    }
+    table->zone = tz;
+    table->requested_lo = lo;
+    table->requested_hi = hi;
+    table->has_value = true;
+    return true;
+}
+
+bool TzOffsetCache::_extend_table(int64_t hi, const cctz::time_zone& tz, OffsetTable* table) {
+    static const cctz::time_point<cctz::seconds> epoch =
+            std::chrono::time_point_cast<cctz::seconds>(std::chrono::system_clock::from_time_t(0));
+    if (hi <= table->hi) {
+        return true;
+    }
+    // The table holds every transition up to table->hi, so the next one is after it.
+    const size_t old_size = table->trans.size();
+    const int64_t old_hi = table->hi;
+    cctz::time_point<cctz::seconds> cur = epoch + cctz::seconds(table->hi);
+    cctz::time_zone::civil_transition ct;
+    while (true) {
+        if (!tz.next_transition(cur, &ct)) {
+            // No enumerable transition after cur: the offset stays only if it does not vary later on (see
+            // offset_is_constant_beyond); else hi lies past the zone's transition table.
+            if (!offset_is_constant_beyond(tz, cur, table->offsets.back())) {
+                break;
+            }
+            table->hi = std::numeric_limits<int64_t>::max();
+            return _finish_extension(table, old_size);
+        }
+        const cctz::time_point<cctz::seconds> trans = tz.lookup(ct.to).trans;
+        const int64_t trans_sec = trans.time_since_epoch().count();
+        if (trans_sec > hi) {
+            table->hi = trans_sec - 1;
+            return _finish_extension(table, old_size);
+        }
+        if (table->trans.size() == kMaxTableTransitions) {
+            break;
+        }
+        table->trans.push_back(trans_sec);
+        table->offsets.push_back(tz.lookup_offset(trans).offset);
+        cur = trans;
+    }
+    // Leave the table as it was.
+    table->trans.resize(old_size);
+    table->offsets.resize(old_size + 1);
+    table->hi = old_hi;
+    return false;
+}
+
+bool TzOffsetCache::_finish_extension(OffsetTable* table, size_t old_size) {
+    if (table->trans.size() == old_size) {
+        // No new transition: the buckets still hold.
+        return true;
+    }
+    table->buckets.clear();
+    if (table->trans.size() > 8) {
+        const int64_t base = table->trans.front();
+        const size_t num_buckets = ((table->trans.back() - base) >> kBucketShift) + 1;
+        if (num_buckets <= kMaxBuckets) {
+            table->buckets.resize(num_buckets);
+            uint32_t index = 0;
+            for (size_t b = 0; b < num_buckets; ++b) {
+                const int64_t bucket_start = base + (static_cast<int64_t>(b) << kBucketShift);
+                while (index < table->trans.size() && table->trans[index] <= bucket_start) {
+                    ++index;
+                }
+                table->buckets[b] = index;
+            }
+        }
+    }
+    return true;
+}
+
+size_t TzOffsetCache::_table_index(int64_t unix_sec) const {
+    const std::vector<int64_t>& trans = _table.trans;
+    if (trans.size() <= 8) {
+        size_t index = 0;
+        for (int64_t t : trans) {
+            index += t <= unix_sec;
+        }
+        return index;
+    }
+    if (_table.buckets.empty()) {
+        return std::upper_bound(trans.begin(), trans.end(), unix_sec) - trans.begin();
+    }
+    if (unix_sec < trans.front()) {
+        return 0;
+    }
+    if (unix_sec >= trans.back()) {
+        return trans.size();
+    }
+    // trans.back() > unix_sec stops the scan.
+    size_t index = _table.buckets[(unix_sec - trans.front()) >> kBucketShift];
+    while (trans[index] <= unix_sec) {
+        ++index;
+    }
+    return index;
+}
+
+bool TzOffsetCache::uniform_offset_for_unix(int64_t lo, int64_t hi, const cctz::time_zone& tz, int64_t* offset) {
+    if (!_cover(lo, hi, tz)) {
+        return false;
+    }
+    const size_t index = _table_index(lo);
+    if (index != _table_index(hi)) {
+        return false;
+    }
+    *offset = _table.offsets[index];
+    return true;
+}
+
+bool TzOffsetCache::offset_range_for_unix(int64_t lo, int64_t hi, const cctz::time_zone& tz, int64_t* min_offset,
+                                          int64_t* max_offset) {
+    if (lo > hi || !_cover(lo, hi, tz)) {
+        return false;
+    }
+    const size_t first = _table_index(lo);
+    const size_t last = _table_index(hi);
+    *min_offset = *std::min_element(_table.offsets.begin() + first, _table.offsets.begin() + last + 1);
+    *max_offset = *std::max_element(_table.offsets.begin() + first, _table.offsets.begin() + last + 1);
+    return true;
+}
+
+void TzOffsetCache::offsets_for_unix(const int64_t* unix_secs, const uint8_t* is_null, size_t n,
+                                     const cctz::time_zone& tz, int64_t* offsets) {
+    int64_t lo = std::numeric_limits<int64_t>::max();
+    int64_t hi = std::numeric_limits<int64_t>::min();
+    for (size_t i = 0; i < n; ++i) {
+        if (is_null == nullptr || !is_null[i]) {
+            lo = std::min(lo, unix_secs[i]);
+            hi = std::max(hi, unix_secs[i]);
+        }
+    }
+    if (lo > hi) {
+        std::fill(offsets, offsets + n, 0);
+        return;
+    }
+    if (_cover(lo, hi, tz)) {
+        for (size_t i = 0; i < n; ++i) {
+            offsets[i] = (is_null != nullptr && is_null[i]) ? 0 : _table.offsets[_table_index(unix_secs[i])];
+        }
+        return;
+    }
+    static const cctz::time_point<cctz::seconds> epoch =
+            std::chrono::time_point_cast<cctz::seconds>(std::chrono::system_clock::from_time_t(0));
+    for (size_t i = 0; i < n; ++i) {
+        offsets[i] =
+                (is_null != nullptr && is_null[i]) ? 0 : tz.lookup_offset(epoch + cctz::seconds(unix_secs[i])).offset;
+    }
+}
+
+void TzOffsetCache::bind(const cctz::time_zone& tz) {
+    if (_bound && tz == _bound_zone) {
+        return;
+    }
+    _bound = true;
+    _bound_zone = tz;
+    _grow_failed = false;
+    _table_in_bound_zone = _table.has_value && _table.zone == tz;
+    _segment_lo = 1;
+    _segment_hi = 0;
+}
+
+int64_t TzOffsetCache::_offset_in_bound_zone_slow(int64_t unix_sec) {
+    DCHECK(_bound);
+    bool in_table = _table_in_bound_zone && unix_sec >= _table.lo && unix_sec <= _table.hi;
+    if (!in_table && !_grow_failed && unix_sec >= -kMaxTableSeconds && unix_sec <= kMaxTableSeconds) {
+        // Take in the value, widened on its side by the range seen so far (at least a year), so values spread over
+        // any span rebuild the table only a logarithmic number of times, and later values (time-ordered data) only
+        // extend it.
+        int64_t lo = unix_sec - kMinGrowSeconds;
+        int64_t hi = unix_sec + kMinGrowSeconds;
+        if (_table_in_bound_zone) {
+            const int64_t widen = std::max<int64_t>(_table.requested_hi - _table.requested_lo, kMinGrowSeconds);
+            lo = unix_sec > _table.hi ? _table.requested_lo : unix_sec - widen;
+            hi = unix_sec > _table.hi ? unix_sec + widen : _table.requested_hi;
+        }
+        lo = std::max(lo, -kMaxTableSeconds);
+        hi = std::min(hi, kMaxTableSeconds);
+        in_table = _cover(lo, hi, _bound_zone);
+        if (!in_table) {
+            // Too many transitions in the range seen so far: from now on, values outside the table are looked up
+            // in cctz one by one.
+            _grow_failed = true;
+        }
+    }
+    if (in_table) {
+        // Remember the stretch between the transitions around the value for the inline check.
+        const size_t index = _table_index(unix_sec);
+        _segment_lo = index == 0 ? _table.lo : _table.trans[index - 1];
+        _segment_hi = index == _table.trans.size() ? _table.hi : _table.trans[index] - 1;
+        _segment_offset = _table.offsets[index];
+        return _segment_offset;
+    }
+    static const cctz::time_point<cctz::seconds> epoch =
+            std::chrono::time_point_cast<cctz::seconds>(std::chrono::system_clock::from_time_t(0));
+    return _bound_zone.lookup_offset(epoch + cctz::seconds(unix_sec)).offset;
 }
 
 int64_t TzOffsetCache::unix_for_civil(int64_t civil_as_utc_sec, int year, int month, int day, int hour, int minute,

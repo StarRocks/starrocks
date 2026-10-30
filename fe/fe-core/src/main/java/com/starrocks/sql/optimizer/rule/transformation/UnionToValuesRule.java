@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -29,6 +30,7 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 // Transform all constant UNION ALLs into a single Values operator
@@ -96,8 +98,21 @@ public class UnionToValuesRule extends TransformationRule {
                             .map(valuesOp.getProjection().getColumnRefMap()::get)
                             .collect(Collectors.toList());
                     newRows.add(scalarOperators);
-                } else {
+                } else if (valuesOp.getColumnRefSet().equals(unionOp.getChildOutputColumns().get(i))) {
                     newRows.addAll(rows);
+                } else {
+                    List<ColumnRefOperator> outputRefs = valuesOp.getColumnRefSet();
+                    Map<ColumnRefOperator, Integer> outputRefMapping = Maps.newHashMap();
+                    for (int k = 0; k < outputRefs.size(); k++) {
+                        outputRefMapping.put(outputRefs.get(k), k);
+                    }
+
+                    for (List<ScalarOperator> row : rows) {
+                        List<ScalarOperator> l = unionOp.getChildOutputColumns().get(i).stream()
+                                .map(outputRefMapping::get)
+                                .map(row::get).collect(Collectors.toList());
+                        newRows.add(l);
+                    }
                 }
             } else {
                 newChildOutputs.add(unionOp.getChildOutputColumns().get(i));

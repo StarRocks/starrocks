@@ -19,6 +19,7 @@ import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.mysql.MysqlCodec;
+import com.starrocks.mysql.MysqlProto;
 import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.persist.NoOpEditLog;
 import com.starrocks.qe.ConnectContext;
@@ -176,8 +177,9 @@ public class SecurityIntegrationTest {
 
         ConnectContext connectContext = new ConnectContext();
         connectContext.setAuthPlugin(AuthPlugin.Client.AUTHENTICATION_OPENID_CONNECT_CLIENT.toString());
-        AuthenticationHandler.authenticate(
-                connectContext, "harbor", "127.0.0.1", outputStream.toByteArray());
+        AuthenticationHandler.authenticate(connectContext,
+                MysqlProto.handshakeCredentials("harbor", outputStream.toByteArray(),
+                        AuthPlugin.Client.AUTHENTICATION_OPENID_CONNECT_CLIENT.toString(), "127.0.0.1"));
     }
 
     private String getOpenIdConnect(String fileName) throws IOException {
@@ -231,8 +233,9 @@ public class SecurityIntegrationTest {
         try {
             ConnectContext connectContext = new ConnectContext();
             connectContext.setAuthPlugin(AuthPlugin.Client.AUTHENTICATION_OPENID_CONNECT_CLIENT.toString());
-            AuthenticationHandler.authenticate(
-                    connectContext, "harbor", "127.0.0.1", outputStream.toByteArray());
+            AuthenticationHandler.authenticate(connectContext,
+                    MysqlProto.handshakeCredentials("harbor", outputStream.toByteArray(),
+                            AuthPlugin.Client.AUTHENTICATION_OPENID_CONNECT_CLIENT.toString(), "127.0.0.1"));
             StatementBase statementBase = SqlParser.parse("select current_group()", connectContext.getSessionVariable()).get(0);
             Analyzer.analyze(statementBase, connectContext);
 
@@ -247,8 +250,9 @@ public class SecurityIntegrationTest {
         Map<String, String> alterProperties = new HashMap<>();
         alterProperties.put(SecurityIntegration.SECURITY_INTEGRATION_GROUP_ALLOWED_LOGIN, "group_5");
         authenticationMgr.replayAlterSecurityIntegration("oidc", alterProperties);
-        Assertions.assertThrows(AuthenticationException.class, () -> AuthenticationHandler.authenticate(
-                new ConnectContext(), "harbor", "127.0.0.1", outputStream.toByteArray()));
+        Assertions.assertThrows(AuthenticationException.class, () -> AuthenticationHandler.authenticate(new ConnectContext(),
+                MysqlProto.handshakeCredentials("harbor", outputStream.toByteArray(),
+                        AuthPlugin.Client.AUTHENTICATION_OPENID_CONNECT_CLIENT.toString(), "127.0.0.1")));
     }
 
     @Test
@@ -281,7 +285,7 @@ public class SecurityIntegrationTest {
                 ldapAuthProviderForNative.authenticate(
                         context.getAccessControlContext(),
                         new UserIdentity("admin", "%"),
-                        "x".getBytes(StandardCharsets.UTF_8)));
+                        AuthCredentials.ofNativeScramble("admin", "x".getBytes(StandardCharsets.UTF_8), null)));
     }
 
     @Test
@@ -842,5 +846,29 @@ public class SecurityIntegrationTest {
 
         // Clean up
         authenticationMgr.replayDropSecurityIntegration("ldap_pattern");
+    }
+
+    /**
+     * Test case: group_provider / permitted_groups written with stray whitespace or empty items.
+     * Test point: every item is trimmed and empty items are dropped, so a value such as "a , b" no
+     *             longer yields "a " which would compare unequal to everything.
+     */
+    @Test
+    public void testCommaSeparatedPropertiesAreTrimmed() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_GROUP_PROVIDER, " a , b ,c ");
+        properties.put(SecurityIntegration.SECURITY_INTEGRATION_GROUP_ALLOWED_LOGIN, "g1 , g2 ,g3");
+        SecurityIntegration si = new JWTSecurityIntegration("si", properties);
+
+        Assertions.assertEquals(List.of("a", "b", "c"), si.getGroupProviderName());
+        Assertions.assertEquals(List.of("g1", "g2", "g3"), si.getGroupAllowedLoginList());
+
+        // Empty items are dropped; a value made only of separators means "not configured".
+        properties.put(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_GROUP_PROVIDER, "a,,b,");
+        properties.put(SecurityIntegration.SECURITY_INTEGRATION_GROUP_ALLOWED_LOGIN, ", ,,");
+        si = new JWTSecurityIntegration("si", properties);
+
+        Assertions.assertEquals(List.of("a", "b"), si.getGroupProviderName());
+        Assertions.assertTrue(si.getGroupAllowedLoginList().isEmpty());
     }
 }

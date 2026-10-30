@@ -40,7 +40,12 @@ if (APPLE AND BISON_VERSION VERSION_LESS "3.0.0")
 endif()
 
 ADD_BE_LIB(Geo
+    geo_buffer.cpp
+    geo_coverage_simplify.cpp
+    geo_topology_simplify.cpp
     geo_common.cpp
+    geo_measurements.cpp
+    geo_overlay.cpp
     geo_types.cpp
     wkb.cpp
     wkt_parse.cpp

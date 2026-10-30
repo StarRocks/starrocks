@@ -15,11 +15,21 @@
 
 #ifdef __APPLE__
 
+#include <cerrno>
+#include <cstddef>
+
 extern "C" {
 
 // brpc weakly probes this gperftools compatibility hook. StarRocks uses jemalloc
 // on macOS and test binaries do not link the gperftools allocator, so keep the call as a no-op.
 void MallocExtension_ReleaseFreeMemory() {}
+
+// brpc weakly probes the unprefixed jemalloc API for its builtin /memory and /pprof/heap
+// pages. StarRocks builds jemalloc with the "je" prefix, so report every node as missing.
+int mallctl(const char*, void*, size_t*, void*, size_t) {
+    return ENOENT;
+}
+void malloc_stats_print(void (*)(void*, const char*), void*, const char*) {}
 
 } // extern "C"
 

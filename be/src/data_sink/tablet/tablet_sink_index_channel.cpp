@@ -45,6 +45,7 @@
 #include "runtime/runtime_state.h"
 #include "runtime/serde/protobuf_chunk_serde.h"
 #include "runtime/service_contexts.h"
+#include "storage/lake/combined_txn_log_writer.h"
 
 namespace starrocks {
 
@@ -298,6 +299,7 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
     DCHECK(fragment_dict_state != nullptr);
     const auto& global_dict = fragment_dict_state->load_global_dicts();
     const auto& dict_version = fragment_dict_state->load_dict_versions();
+    const auto& dict_identity = fragment_dict_state->load_dict_content_identities();
     for (size_t i = 0; i < request.schema().slot_descs_size(); i++) {
         auto slot = request.mutable_schema()->mutable_slot_descs(i);
         auto it = global_dict.find(slot->id());
@@ -306,6 +308,10 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
             for (auto& item : dict) {
                 slot->add_global_dict_words(item.first.to_string());
             }
+        }
+        auto it_identity = dict_identity.find(slot->id());
+        if (it_identity != dict_identity.end()) {
+            slot->set_global_dict_content_identity(it_identity->second);
         }
         auto it_version = dict_version.find(slot->id());
         if (it_version != dict_version.end()) {
@@ -460,6 +466,13 @@ Status NodeChannel::_open_wait(RefCountClosure<PTabletWriterOpenResult>* open_cl
 Status NodeChannel::_serialize_chunk(const Chunk* src, ChunkPB* dst) {
     VLOG_ROW << "serializing " << src->num_rows() << " rows";
 
+    // The byte counters below measure what this channel actually serializes and puts on the wire.
+    // _send_request() calls this once per index request that carries a chunk, so with multiple
+    // indexes the same source chunk is counted once per index. The exception is
+    // _enable_colocate_mv_index: there only requests(0) is serialized and the single payload is
+    // reused by every index of the request, so one call still equals one payload on the wire.
+    COUNTER_UPDATE(_ts_profile->raw_input_bytes_counter, src->bytes_usage());
+
     {
         SCOPED_RAW_TIMER(&_serialize_batch_ns);
         // Decide PER CHUNK, not once per channel. The bit only changes the layout of a column
@@ -509,6 +522,7 @@ Status NodeChannel::_serialize_chunk(const Chunk* src, ChunkPB* dst) {
     DCHECK_EQ(dst->uncompressed_size(), dst->data().size());
 
     size_t uncompressed_size = dst->uncompressed_size();
+    COUNTER_UPDATE(_ts_profile->serialized_bytes_counter, uncompressed_size);
 
     if (_compress_codec != nullptr && _compress_codec->exceed_max_input_size(uncompressed_size)) {
         _cancelled = true;
@@ -542,6 +556,11 @@ Status NodeChannel::_serialize_chunk(const Chunk* src, ChunkPB* dst) {
             _compression_scratch.resize(compressed_slice.size);
         }
 
+        // SerializedBytes counts every chunk, including those that skip compression entirely, so it
+        // cannot be the numerator of a compression ratio. Record what the compressor was actually
+        // fed, as the exchange sink does: CompressedInputBytes / CompressedBytes is the ratio.
+        COUNTER_UPDATE(_ts_profile->compressed_input_bytes_counter, uncompressed_size);
+        COUNTER_UPDATE(_ts_profile->compressed_bytes_counter, _compression_scratch.size());
         double compress_ratio = (static_cast<double>(uncompressed_size)) / _compression_scratch.size();
         if (LIKELY(compress_ratio > config::rpc_compress_ratio_threshold)) {
             dst->mutable_data()->swap(reinterpret_cast<std::string&>(_compression_scratch));
@@ -922,8 +941,15 @@ Status NodeChannel::_wait_request(ReusableClosure<PTabletWriterAddBatchResult>* 
         return _err_st;
     }
 
-    VLOG(2) << "NodeChannel[" << _load_info << "] recevied response : " << closure->result.DebugString() << "] from ["
-            << _node_info->host << ":" << _node_info->brpc_port << "]";
+    if (VLOG_IS_ON(2)) {
+        // Printed without the shard infos: they carry storage credentials.
+        PTabletWriterAddBatchResult printed = closure->result;
+        if (printed.has_lake_tablet_data()) {
+            printed.mutable_lake_tablet_data()->clear_shard_infos();
+        }
+        VLOG(2) << "NodeChannel[" << _load_info << "] recevied response : " << printed.DebugString() << "] from ["
+                << _node_info->host << ":" << _node_info->brpc_port << "]";
+    }
 
     Status st(closure->result.status());
     if (!st.ok()) {
@@ -985,6 +1011,9 @@ Status NodeChannel::_wait_request(ReusableClosure<PTabletWriterAddBatchResult>* 
             }
             const auto& col_name = tablet.valid_dict_cache_columns(i);
             _valid_dict_cache_info.valid_dict_cache_column_set.emplace(col_name, version);
+            if (tablet.valid_dict_content_identities_size() == tablet.valid_dict_cache_columns_size()) {
+                _valid_dict_cache_info.content_identities.emplace(col_name, tablet.valid_dict_content_identities(i));
+            }
         }
 
         _tablet_commit_infos.emplace_back(std::move(commit_info));
@@ -996,6 +1025,7 @@ Status NodeChannel::_wait_request(ReusableClosure<PTabletWriterAddBatchResult>* 
     for (auto& log : *(closure->result.mutable_lake_tablet_data()->mutable_txn_logs())) {
         _txn_logs.emplace_back(std::move(log));
     }
+    borrow_shard_infos(closure->result.lake_tablet_data().shard_infos());
 
     if (!tablet_ids.empty()) {
         string commit_tablet_id_list_str;
@@ -1165,14 +1195,19 @@ Status NodeChannel::close_wait(RuntimeState* state) {
 
         std::vector<std::string> valid_dict_cache_columns;
         std::vector<int64_t> valid_dict_collected_versions;
+        std::vector<int64_t> identities;
         for (const auto& [name, version] : _valid_dict_cache_info.valid_dict_cache_column_set) {
             if (_valid_dict_cache_info.invalid_dict_cache_column_set.count(name) == 0) {
                 valid_dict_cache_columns.emplace_back(name);
                 valid_dict_collected_versions.emplace_back(version);
+                if (!_valid_dict_cache_info.content_identities.empty()) {
+                    identities.emplace_back(_valid_dict_cache_info.content_identities.at(name));
+                }
             }
         }
         _tablet_commit_infos[0].__set_valid_dict_cache_columns(valid_dict_cache_columns);
         _tablet_commit_infos[0].__set_valid_dict_collected_versions(valid_dict_collected_versions);
+        _tablet_commit_infos[0].__set_valid_dict_content_identities(identities);
     }
 
     // 3. commit tablet infos

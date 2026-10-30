@@ -37,11 +37,11 @@
 #include "storage/lake/index_delta_group_loader.h"
 #include "storage/lake/lake_delvec_loader.h"
 #include "storage/lake/meta_file.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/segment_metadata_filter.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_range_helper.h"
 #include "storage/lake/tablet_writer.h"
-#include "storage/lake/update_manager.h"
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/segment.h"
@@ -58,6 +58,10 @@
 #include "types/type_descriptor.h"
 
 namespace starrocks::lake {
+
+static bool cancel_requested(const std::atomic<bool>* flag) {
+    return flag != nullptr && flag->load(std::memory_order_acquire);
+}
 
 static SegmentReadStateCache make_segment_read_state_cache(const PreparedSegmentReadState& state) {
     SegmentReadStateCache cache;
@@ -572,21 +576,16 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::do_read(const Schema& schema, co
         RETURN_IF_ERROR(load_segments(&segments, seg_options, nullptr, skip_ptr));
     }
 
-    // Update segments_read_count after filtering
-    if (options.stats) {
-        if (context.target_segment_idx.has_value()) {
-            options.stats->segments_read_count +=
-                    skip_segment_idxs.contains(static_cast<int>(*context.target_segment_idx)) ? 0 : 1;
-        } else {
-            options.stats->segments_read_count += num_segments() - skip_segment_idxs.size();
-        }
-    }
-
     const size_t segment_begin = context.target_segment_idx.value_or(0);
     const size_t segment_count =
             context.prepared_segments != nullptr ? context.prepared_segments->size() : segments.size();
     const size_t segment_end = context.target_segment_idx.has_value() ? *context.target_segment_idx + 1 : segment_count;
     for (size_t i = segment_begin; i < segment_end; i++) {
+        // Creating an iterator loads the segment's delete vector, which can be a remote read.
+        if (cancel_requested(seg_options.is_cancelled)) {
+            return Status::Cancelled(
+                    fmt::format("cancelled while opening segments, tablet:{} rowset:{}", _tablet_id, metadata().id()));
+        }
         // Prepared segments are indexed by metadata position and are not pre-filtered by load_segments(),
         // so apply the metadata filter here; the non-prepared path already carries nullptr placeholders
         // for filtered segments (handled by the nullptr check below).
@@ -633,6 +632,15 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::do_read(const Schema& schema, co
             seg_options.is_first_split_of_segment = options.short_key_ranges_option->is_first_split_of_tablet;
         } else {
             seg_options.is_first_split_of_segment = true;
+        }
+        // A split tablet hands the same segment to several readers (one per rowid range, or one per
+        // short-key range with every segment each). Count every open, and count the segment itself only in
+        // the split that owns its segment-level stats.
+        if (options.stats != nullptr) {
+            options.stats->segments_read_count++;
+            if (seg_options.is_first_split_of_segment) {
+                options.stats->phy_segments_count++;
+            }
         }
 
         if (context.reusable_segment_iterators != nullptr) {
@@ -999,7 +1007,8 @@ StatusOr<std::vector<SegmentPtr>> Rowset::segments(bool fill_cache) {
     return segments(lake_io_opts);
 }
 
-StatusOr<std::vector<SegmentPtr>> Rowset::segments(const LakeIOOptions& lake_io_opts) {
+StatusOr<std::vector<SegmentPtr>> Rowset::segments(const LakeIOOptions& lake_io_opts, OlapReaderStatistics* stats,
+                                                   const std::atomic<bool>* is_cancelled) {
     LakeIOOptions effective_opts = lake_io_opts;
     // A rowset that cannot use the prepared-segments path (partial compaction, segment-range mode)
     // reloads its segments on every read anyway, so holding would pin a second copy for the whole
@@ -1060,6 +1069,7 @@ StatusOr<std::vector<SegmentPtr>> Rowset::segments(const LakeIOOptions& lake_io_
     std::vector<LoadedSegment> loaded;
     SegmentReadOptions seg_options;
     seg_options.lake_io_opts = effective_opts;
+    seg_options.is_cancelled = is_cancelled;
     // NOTE: the held set is deliberately loaded under the ambient (task) tracker. Charging it to the
     // process-lifetime compaction tracker instead looks tempting -- that tracker outlives every
     // range-split subtask -- but it does not balance: a free is charged to whatever tracker is in TLS
@@ -1067,7 +1077,7 @@ StatusOr<std::vector<SegmentPtr>> Rowset::segments(const LakeIOOptions& lake_io_
     // segments with that tracker installed, so its consumption would drift up for good. The task
     // tracker balances instead: ~MemTracker hands its residual back to its ancestors
     // (release_without_root), and the eventual free removes the same bytes from the root.
-    RETURN_IF_ERROR(load_segments(&loaded, seg_options, nullptr));
+    RETURN_IF_ERROR(load_segments(&loaded, seg_options, nullptr, nullptr, stats));
     std::vector<SegmentPtr> segments;
     segments.reserve(loaded.size());
     for (auto& ls : loaded) {
@@ -1110,6 +1120,20 @@ StatusOr<std::vector<SegmentPtr>> Rowset::segments(const LakeIOOptions& lake_io_
     return _held_segments;
 }
 
+// Adds the fields Segment::open fills to |to|.
+static void add_segment_open_stats(const OlapReaderStatistics& from, OlapReaderStatistics* to) {
+    to->segments_opened += from.segments_opened;
+    to->io_ns += from.io_ns;
+    to->compressed_bytes_read += from.compressed_bytes_read;
+    to->compressed_bytes_read_local_disk += from.compressed_bytes_read_local_disk;
+    to->compressed_bytes_read_remote += from.compressed_bytes_read_remote;
+    to->io_count += from.io_count;
+    to->io_count_local_disk += from.io_count_local_disk;
+    to->io_count_remote += from.io_count_remote;
+    to->io_ns_read_local_disk += from.io_ns_read_local_disk;
+    to->io_ns_remote += from.io_ns_remote;
+}
+
 Status Rowset::load_segments(std::vector<SegmentPtr>* segments, bool fill_cache, int64_t buffer_size) {
     std::vector<LoadedSegment> loaded;
     RETURN_IF_ERROR(load_segments(&loaded, fill_cache, buffer_size));
@@ -1130,7 +1154,7 @@ Status Rowset::load_segments(std::vector<LoadedSegment>* segments, bool fill_cac
 
 Status Rowset::load_segments(std::vector<LoadedSegment>* segments, SegmentReadOptions& seg_options,
                              std::pair<std::vector<LoadedSegment>, std::vector<LoadedSegment>>* not_used_segments,
-                             const std::unordered_set<int>* skip_segment_idxs) {
+                             const std::unordered_set<int>* skip_segment_idxs, OlapReaderStatistics* open_stats) {
 #if !defined BE_TEST && !defined(BUILD_FORMAT_LIB)
     RETURN_IF_ERROR(tls_thread_status.mem_tracker()->check_mem_limit("LoadSegments"));
 #endif
@@ -1159,15 +1183,21 @@ Status Rowset::load_segments(std::vector<LoadedSegment>* segments, SegmentReadOp
         uint32_t segment_id;
         int32_t segment_meta_pos; // position in _metadata->segment_metas(); stored into LoadedSegment
         std::future<std::pair<StatusOr<SegmentPtr>, std::string>> future;
+        // The task's own footer read statistics, added to |open_stats| once the task is done.
+        std::shared_ptr<OlapReaderStatistics> open_stats;
     };
     std::vector<SegmentLoadFuture> segment_futures;
     // The parallel tasks capture |this| pointer. Must wait for all tasks
     // to complete before returning, to prevent use-after-free if the
     // Rowset is destroyed while tasks are still running.
-    DeferOp wait_futures([&segment_futures]() {
+    DeferOp wait_futures([&segment_futures, open_stats]() {
         for (auto& f : segment_futures) {
             if (f.future.valid()) {
                 f.future.wait();
+            }
+            // Every submitted task may have read a footer, including tasks after the first error.
+            if (f.open_stats != nullptr) {
+                add_segment_open_stats(*f.open_stats, open_stats);
             }
         }
     });
@@ -1210,6 +1240,13 @@ Status Rowset::load_segments(std::vector<LoadedSegment>* segments, SegmentReadOp
     // For segment range mode, seg_idx should match the original segment index
     seg_idx = seg_start;
     for (index = seg_start; index < seg_end; index++) {
+        // A rowset can hold thousands of segments and each one costs a footer read, so a query that
+        // was cancelled must stop here instead of opening the rest. Checked before every load: the
+        // check after one segment's IO is the check before the next one's.
+        if (cancel_requested(seg_options.is_cancelled)) {
+            return Status::Cancelled(fmt::format("cancelled while loading segments, tablet:{} rowset:{} segment:{}/{}",
+                                                 _tablet_id, metadata().id(), index - seg_start, seg_end - seg_start));
+        }
         const auto& segment_meta = metadata().segment_metas(index);
         const auto& seg_name = segment_meta.filename();
         int current_idx = base_idx + seg_idx;
@@ -1246,7 +1283,16 @@ Status Rowset::load_segments(std::vector<LoadedSegment>* segments, SegmentReadOp
 
         if (_parallel_load) {
             int captured_idx = current_idx;
+            auto task_open_stats = open_stats != nullptr ? std::make_shared<OlapReaderStatistics>() : nullptr;
+            // The flag outlives the task: |wait_futures| keeps this call, and so its caller, from
+            // returning before every submitted task has finished.
+            const std::atomic<bool>* cancel_flag = seg_options.is_cancelled;
             auto task = std::make_shared<std::packaged_task<std::pair<StatusOr<SegmentPtr>, std::string>()>>([=]() {
+                // A task still queued when the query is cancelled must not start its IO.
+                if (cancel_requested(cancel_flag)) {
+                    return std::make_pair(StatusOr<SegmentPtr>(Status::Cancelled("cancelled while loading segments")),
+                                          seg_name);
+                }
 #ifdef BE_TEST
                 Status injected_st;
                 TEST_SYNC_POINT_CALLBACK("Rowset::load_segments::parallel_load", &injected_st);
@@ -1255,7 +1301,8 @@ Status Rowset::load_segments(std::vector<LoadedSegment>* segments, SegmentReadOp
                 }
 #endif
                 auto result = _tablet_mgr->load_segment(segment_info, segment_id, lake_io_opts,
-                                                        lake_io_opts.fill_metadata_cache, _tablet_schema);
+                                                        lake_io_opts.fill_metadata_cache, _tablet_schema,
+                                                        task_open_stats.get());
                 return std::make_pair(std::move(result), seg_name);
             });
 
@@ -1265,23 +1312,25 @@ Status Rowset::load_segments(std::vector<LoadedSegment>* segments, SegmentReadOp
                 // try load segment serially
                 LOG(WARNING) << "sumbit_func failed: " << st.code_as_string()
                              << ", try to load segment serially, seg_id: " << segment_id;
-                auto segment_or = _tablet_mgr->load_segment(segment_info, segment_id, &footer_size_hint, lake_io_opts,
-                                                            lake_io_opts.fill_metadata_cache, _tablet_schema);
+                auto segment_or =
+                        _tablet_mgr->load_segment(segment_info, segment_id, &footer_size_hint, lake_io_opts,
+                                                  lake_io_opts.fill_metadata_cache, _tablet_schema, open_stats);
                 if (auto status = check_status_at_index(segment_or, seg_name, segment_id, captured_idx, index);
                     !status.ok()) {
                     return status;
                 }
             } else {
-                segment_futures.push_back({captured_idx, segment_id, index, task->get_future()});
+                segment_futures.push_back({captured_idx, segment_id, index, task->get_future(), task_open_stats});
             }
             seg_idx++;
         } else {
             auto segment_or = _tablet_mgr->load_segment(segment_info, segment_id, &footer_size_hint, lake_io_opts,
-                                                        lake_io_opts.fill_metadata_cache, _tablet_schema);
+                                                        lake_io_opts.fill_metadata_cache, _tablet_schema, open_stats);
             if (auto status = check_status_at_index(segment_or, seg_name, segment_id, current_idx, index);
                 !status.ok()) {
                 return status;
             }
+            TEST_SYNC_POINT_CALLBACK("Rowset::load_segments::serial_loaded", &index);
             seg_idx++;
         }
     }

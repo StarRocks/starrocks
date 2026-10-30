@@ -22,6 +22,11 @@ description: "StarRocks v3.4.1 以降で Iceberg テーブルのメタデータ�
 | `manifests`            | テーブルのログ内のスナップショットに関連付けられたマニフェストの概要を表示します。 |
 | `partitions`           | テーブル内のパーティションの詳細を表示します。               |
 | `files`                | テーブルの現在のスナップショット内のデータファイルと削除ファイルの詳細を表示します。 |
+| `entries`              | 現在のスナップショットのマニフェストエントリを表示します。削除されたファイルのエントリも含みます。 |
+| `all_data_files`       | テーブルのすべてのスナップショットのデータファイルを表示します。 |
+| `all_delete_files`     | テーブルのすべてのスナップショットの削除ファイルを表示します。 |
+| `all_manifests`        | テーブルのすべてのスナップショットのマニフェストを表示します。 |
+| `all_entries`          | テーブルのすべてのスナップショットのマニフェストエントリを表示します。 |
 | `refs`                 | Iceberg の参照に関する詳細を表示し、ブランチやタグを含みます。 |
 | `properties`           | テーブルプロパティをキーと値のペアで表示します。             |
 
@@ -125,7 +130,8 @@ SELECT * FROM [<catalog>.][<database>.]table$manifests;
 | existing_rows_count       | マニフェストファイル内で `EXISTING` ステータスのすべてのデータファイルの総行数。 |
 | deleted_data_files_count  | マニフェストファイル内で `DELETED` ステータスのデータファイルの数。 |
 | deleted_rows_count        | マニフェストファイル内で `DELETED` ステータスのすべてのデータファイルの総行数。 |
-| partition_summaries       | パーティション範囲のメタデータ。                             |
+| partitions                | パーティション範囲のメタデータ。                             |
+| content                   | マニフェストファイルのコンテンツタイプ。有効な値：`DATA(0)`、`DELETES(1)`。削除マニフェストの場合、`*_data_files_count` と `*_rows_count` フィールドは削除ファイルと削除された行を数えます。 |
 
 ## `partitions` テーブル
 
@@ -166,6 +172,7 @@ SELECT * FROM [<catalog>.][<database>.]table$files;
 | file_path          | データファイルの場所。                                       |
 | file_format        | データファイルの形式。                                       |
 | spec_id            | 行を含むファイルを追跡するために使用される Spec ID。         |
+| partition          | ファイルのパーティション値。テーブルのすべてのパーティション Spec のパーティションフィールドを持つ Struct です。ファイルのパーティション Spec にないフィールドは `NULL` です。テーブルが一度もパーティション化されていない場合、このフィールドはありません。`partition` は予約語のため、クエリではバッククォートで囲んでください。 |
 | record_count       | データファイルに含まれるエントリの数。                       |
 | file_size_in_bytes | データファイルのサイズ。                                     |
 | column_sizes       | Iceberg 列 ID とファイル内の対応するサイズとのマッピング。   |
@@ -178,6 +185,63 @@ SELECT * FROM [<catalog>.][<database>.]table$files;
 | sort_id            | このファイルのソート順序を表す ID。                          |
 | equality_ids       | Equality Delete ファイルでの等価比較に使用されるフィールド ID のセット。 |
 | key_metadata       | このファイルを暗号化するために使用される暗号化キーに関するメタデータ（該当する場合）。 |
+| first_row_id       | フォーマットバージョン 3 のテーブルにおける、データファイルの最初の行の行 ID。削除ファイルの場合は `NULL`。 |
+| referenced_data_file | 削除ベクトルまたはファイル単位の位置削除ファイルが適用されるデータファイルの場所。データファイルの場合は `NULL`。 |
+| content_offset     | Puffin ファイル内の削除ベクトルのオフセット。その他のファイルの場合は `NULL`。 |
+| content_size_in_bytes | Puffin ファイル内の削除ベクトルのサイズ。その他のファイルの場合は `NULL`。 |
+
+## `entries` テーブル
+
+使用法:
+
+```SQL
+SELECT * FROM [<catalog>.][<database>.]table$entries;
+```
+
+出力:
+
+| フィールド           | 説明                                                         |
+| :------------------- | :----------------------------------------------------------- |
+| status               | エントリのステータス。有効な値: `EXISTING(0)`, `ADDED(1)`, および `DELETED(2)`。 |
+| snapshot_id          | ファイルが追加または削除されたスナップショットの ID。        |
+| sequence_number      | ファイルのデータシーケンス番号。                             |
+| file_sequence_number | ファイルが追加されたスナップショットのシーケンス番号。       |
+| data_file            | ファイル。`files` テーブルのフィールドを持つ Struct です。ソート順序 ID のフィールド名は `sort_order_id` です。 |
+
+## `all_data_files` テーブルと `all_delete_files` テーブル
+
+使用法:
+
+```SQL
+SELECT * FROM [<catalog>.][<database>.]table$all_data_files;
+SELECT * FROM [<catalog>.][<database>.]table$all_delete_files;
+```
+
+これらのテーブルのフィールドは `files` テーブルと同じです。テーブルのすべてのスナップショットのマニフェストにあるデータファイルまたは削除ファイルを表示するため、同じファイルが複数回表示されることがあります。
+
+## `all_manifests` テーブル
+
+使用法:
+
+```SQL
+SELECT * FROM [<catalog>.][<database>.]table$all_manifests;
+```
+
+このテーブルには `manifests` テーブルのフィールドと次のフィールドがあります。マニフェストは、それを含むスナップショットごとに 1 回表示されます。
+
+| フィールド            | 説明                                               |
+| :-------------------- | :------------------------------------------------- |
+| reference_snapshot_id | マニフェストを含むスナップショットの ID。          |
+
+## `all_entries` テーブル
+
+使用法:
+
+```SQL
+SELECT * FROM [<catalog>.][<database>.]table$all_entries;
+```
+
+このテーブルのフィールドは `entries` テーブルと同じです。テーブルのすべてのスナップショットのマニフェストにあるエントリを表示します。
 
 ## `refs` テーブル
 

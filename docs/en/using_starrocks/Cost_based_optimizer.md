@@ -63,7 +63,7 @@ StarRocks 2.4 introduces histograms to complement basic statistics. Histogram is
 
 StarRocks uses equi-height histograms, which are constructed on several buckets. Each bucket contains an equal amount of data. For data values that are frequently queried and have a major impact on selectivity, StarRocks allocates separate buckets for them. More buckets mean more accurate estimation, but may also cause a slight increase in memory usage. You can adjust the number of buckets and most common values (MCVs) for a histogram collection task.
 
-**Histograms are applicable to columns with highly skewed data and frequent queries.If your table data is uniformly distributed, you do not need to create histograms. Histograms can be created only on columns of numeric, DATE, DATETIME, or string types.**
+**Histograms are applicable to columns with highly skewed data and frequent queries.If your table data is uniformly distributed, you do not need to create histograms. Histograms can be created only on columns of numeric, DATE, DATETIME, or string types. For string types, StarRocks collects only the most common values (MCVs) and does not collect histogram buckets.**
 
 Histograms are stored in the `histogram_statistics` table of the `_statistics_` database. Following is an example of querying statistics data from this table:
 
@@ -456,6 +456,12 @@ DROP ALL ANALYZE JOB;
 CREATE ANALYZE FULL ALL db_name PROPERTIES (
    "statistic_exclude_pattern" = "db_name.tbl_name"
 );
+```
+
+**Keep the auto collection task provided by StarRocks, but skip the `db_name.tbl_name` table.**
+
+```sql
+ALTER TABLE db_name.tbl_name SET ("enable_statistic_auto_collect" = "false");
 ```
 
 ### Collect statistics during data loading

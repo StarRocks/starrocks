@@ -39,6 +39,23 @@
 
 namespace starrocks {
 
+class TabletNonPoolCompressCodec final : public BlockCompressionCodec {
+public:
+    TabletNonPoolCompressCodec() : BlockCompressionCodec(SNAPPY) {}
+
+    Status compress(const Slice& input, Slice* output, bool use_compression_buffer, size_t uncompressed_size,
+                    faststring* compressed_body1, raw::RawString* compressed_body2,
+                    const BlockCompressionOptions& /*options*/) const override {
+        output->data[0] = 'x';
+        output->size = 1;
+        return Status::OK();
+    }
+
+    Status decompress(const Slice& input, Slice* output) const override { return Status::NotSupported("mock"); }
+
+    size_t max_compressed_len(size_t len) const override { return len; }
+};
+
 class TabletSinkIndexChannelTest : public testing::Test {
 public:
     void SetUp() override {
@@ -393,6 +410,65 @@ TEST_F(TabletSinkIndexChannelTest, load_diagnose) {
     test_load_diagnose_base("[E1008]Reached timeout 1200000ms@10.128.8.78:8060", 1200, 3, 3);
 }
 
+TEST_F(TabletSinkIndexChannelTest, serialize_chunk_non_pool_codec_compresses) {
+    TQueryOptions query_options;
+    auto runtime_state = _build_runtime_state(query_options);
+    auto sink = _build_prepared_sink(runtime_state.get());
+    NodeChannel channel(sink.get(), 0, false);
+    TabletNonPoolCompressCodec codec;
+    channel._compress_codec = &codec;
+    channel._compress_type = codec.type();
+
+    auto chunk = _build_test_chunk(runtime_state.get());
+    ChunkPB chunk_pb;
+    ASSERT_OK(channel._serialize_chunk(chunk.get(), &chunk_pb));
+    EXPECT_EQ(chunk_pb.compress_type(), CompressionTypePB::SNAPPY);
+    EXPECT_EQ(chunk_pb.data(), "x");
+    EXPECT_EQ(1, sink->_ts_profile->compressed_bytes_counter->value());
+    // The ratio's numerator is what the compressor was fed, not SerializedBytes.
+    EXPECT_EQ(static_cast<int64_t>(chunk_pb.uncompressed_size()),
+              sink->_ts_profile->compressed_input_bytes_counter->value());
+}
+
+// The sink profile carried only timers: SerializeChunkTime said how long a chunk took to
+// serialize but never how many bytes left the node, so a change to the wire encoding could only
+// be inferred from the timers moving. Pin each counter to the payload it describes.
+TEST_F(TabletSinkIndexChannelTest, serialize_chunk_counts_the_bytes_it_puts_on_the_wire) {
+    TQueryOptions query_options;
+    auto runtime_state = _build_runtime_state(query_options);
+    auto sink = _build_prepared_sink(runtime_state.get());
+    NodeChannel channel(sink.get(), 0, false);
+    auto* ts_profile = sink->_ts_profile;
+
+    auto chunk = _build_test_chunk(runtime_state.get());
+    ChunkPB first;
+    ASSERT_OK(channel._serialize_chunk(chunk.get(), &first));
+    EXPECT_EQ(static_cast<int64_t>(chunk->bytes_usage()), ts_profile->raw_input_bytes_counter->value());
+    EXPECT_EQ(static_cast<int64_t>(first.uncompressed_size()), ts_profile->serialized_bytes_counter->value());
+    // No codec is configured here, so nothing was compressed and SerializedBytes is what went out.
+    // This is the default: load_transmission_compression_type is NO_COMPRESSION. Both compression
+    // counters stay 0, which is why the ratio is CompressedInputBytes / CompressedBytes and not
+    // SerializedBytes / CompressedBytes -- the latter would divide by zero here.
+    EXPECT_EQ(0, ts_profile->compressed_input_bytes_counter->value());
+    EXPECT_EQ(0, ts_profile->compressed_bytes_counter->value());
+
+    // One counter per sink, shared by every NodeChannel, so a second send must accumulate.
+    ChunkPB second;
+    ASSERT_OK(channel._serialize_chunk(chunk.get(), &second));
+    EXPECT_EQ(static_cast<int64_t>(2 * chunk->bytes_usage()), ts_profile->raw_input_bytes_counter->value());
+    EXPECT_EQ(static_cast<int64_t>(first.uncompressed_size() + second.uncompressed_size()),
+              ts_profile->serialized_bytes_counter->value());
+
+    // A counter nobody can find in the profile is not observability. get_counter() is a flat
+    // lookup, so it only proves registration; the child map is what decides where the counter
+    // shows up in the reported tree, and these belong next to SerializeChunkTime under SendRpcTime.
+    auto* profile = ts_profile->runtime_profile;
+    const auto& send_rpc_children = profile->_child_counter_map["SendRpcTime"];
+    for (const auto& name : {"RawInputBytes", "SerializedBytes", "CompressedInputBytes", "CompressedBytes"}) {
+        EXPECT_NE(nullptr, profile->get_counter(name));
+        EXPECT_EQ(1, send_rpc_children.count(name)) << name << " is not a child of SendRpcTime";
+    }
+}
 // End-to-end check of the chunk encode level negotiation: what the receiving BE advertises in
 // PTabletWriterOpenResult decides whether the sender records per-column encode levels in ChunkPB.
 // A BE predating the field leaves it unset, which must come out as "no encoding" -- that peer
@@ -863,6 +939,87 @@ TEST_F(TabletSinkIndexChannelTest, ConcurrentSendAndIncrementalInit) {
     EXPECT_TRUE(init_acquired_lock.load());
 
     (void)sink->close(runtime_state.get(), Status::OK());
+}
+
+TEST_F(TabletSinkIndexChannelTest, DictionaryIdentityAggregationPreservesColumnOrder) {
+    TQueryOptions options;
+    auto state = _build_runtime_state(options);
+    auto sink = _build_prepared_sink(state.get());
+    SyncPoint::GetInstance()->SetCallBack("NodeChannel::rpc::add_chunk_join", [](void* arg) {
+        auto* rpc = static_cast<std::pair<ReusableClosure<PTabletWriterAddBatchResult>*, bool*>*>(arg);
+        *rpc->second = true;
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp cleanup([]() {
+        SyncPoint::GetInstance()->ClearCallBack("NodeChannel::rpc::add_chunk_join");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    auto receive = [&](NodeChannel& channel, const PTabletInfo& tablet) {
+        ASSERT_OK(channel.init(state.get()));
+        ReusableClosure<PTabletWriterAddBatchResult> closure;
+        closure.request_size = 0;
+        closure.result.mutable_status()->set_status_code(TStatusCode::OK);
+        closure.result.add_tablet_vec()->CopyFrom(tablet);
+        closure.ref();
+        closure.ref();
+        closure.Run();
+        ASSERT_OK(channel._wait_request(&closure));
+        EXPECT_TRUE(closure.unref());
+    };
+    {
+        NodeChannel channel(sink.get(), 0, false);
+        PTabletInfo legacy;
+        legacy.set_tablet_id(1);
+        legacy.set_schema_hash(0);
+        legacy.add_valid_dict_cache_columns("c");
+        legacy.add_valid_dict_collected_version(100);
+        receive(channel, legacy);
+        receive(channel, legacy);
+        EXPECT_TRUE(channel._valid_dict_cache_info.content_identities.empty());
+        ASSERT_OK(channel.close_wait(state.get()));
+        EXPECT_TRUE(channel._tablet_commit_infos[0].valid_dict_content_identities.empty());
+        EXPECT_TRUE(channel._valid_dict_cache_info.invalid_dict_cache_column_set.empty());
+        EXPECT_EQ(100, channel._valid_dict_cache_info.valid_dict_cache_column_set.at("c"));
+    }
+
+    NodeChannel channel(sink.get(), 0, false);
+    PTabletInfo report;
+    report.set_tablet_id(1);
+    report.set_schema_hash(0);
+    report.add_valid_dict_cache_columns("c");
+    report.add_valid_dict_collected_version(100);
+    report.add_valid_dict_content_identities(0);
+    report.add_valid_dict_cache_columns("d");
+    report.add_valid_dict_collected_version(101);
+    report.add_valid_dict_content_identities(-7);
+    receive(channel, report);
+    PTabletInfo reordered = report;
+    reordered.set_valid_dict_cache_columns(0, "d");
+    reordered.set_valid_dict_cache_columns(1, "c");
+    reordered.set_valid_dict_collected_version(0, 101);
+    reordered.set_valid_dict_collected_version(1, 100);
+    reordered.set_valid_dict_content_identities(0, -7);
+    reordered.set_valid_dict_content_identities(1, 0);
+    receive(channel, reordered);
+    PTabletInfo secondary;
+    secondary.set_tablet_id(2);
+    secondary.set_schema_hash(0);
+    receive(channel, secondary);
+    EXPECT_EQ(0, channel._valid_dict_cache_info.content_identities.at("c"));
+    EXPECT_EQ(-7, channel._valid_dict_cache_info.content_identities.at("d"));
+    EXPECT_TRUE(channel._valid_dict_cache_info.invalid_dict_cache_column_set.empty());
+    ASSERT_OK(channel.close_wait(state.get()));
+    const auto& commit = channel._tablet_commit_infos[0];
+    ASSERT_EQ(2, commit.valid_dict_cache_columns.size());
+    ASSERT_EQ(2, commit.valid_dict_collected_versions.size());
+    ASSERT_EQ(2, commit.valid_dict_content_identities.size());
+    for (size_t i = 0; i < commit.valid_dict_cache_columns.size(); ++i) {
+        const auto& column = commit.valid_dict_cache_columns[i];
+        EXPECT_EQ(channel._valid_dict_cache_info.valid_dict_cache_column_set.at(column),
+                  commit.valid_dict_collected_versions[i]);
+        EXPECT_EQ(channel._valid_dict_cache_info.content_identities.at(column),
+                  commit.valid_dict_content_identities[i]);
+    }
 }
 
 } // namespace starrocks

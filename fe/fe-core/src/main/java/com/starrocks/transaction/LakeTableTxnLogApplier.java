@@ -38,6 +38,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import javax.annotation.Nullable;
 
 public class LakeTableTxnLogApplier implements TransactionLogApplier {
@@ -174,7 +175,8 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
     }
 
     public void applyVisibleLog(TransactionState txnState, TableCommitInfo commitInfo, Database db) {
-        applyVisibleLog(txnState, commitInfo, db, null);
+        Set<Long> reshardingPartitions = getReshardingPartitionsLocked();
+        applyVisibleLog(txnState, commitInfo, db, null, reshardingPartitions);
     }
 
     /**
@@ -184,9 +186,14 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
      *                          order, once the whole batch has been applied.
      */
     private void applyVisibleLog(TransactionState txnState, TableCommitInfo commitInfo, Database db,
-                                 @Nullable Map<Long, DeferredPublish> deferredPublishes) {
+                                 @Nullable Map<Long, DeferredPublish> deferredPublishes, Set<Long> reshardingPartitions) {
+        // Also runs on replay and batch publish, when the original DeleteJob callback may be absent.
+        if (txnState.getSourceType() == TransactionState.LoadJobSourceType.DELETE) {
+            table.setHasDelete();
+        }
         List<ColumnId> validDictCacheColumns = Lists.newArrayList();
         List<Long> dictCollectedVersions = Lists.newArrayList();
+        List<Long> dictContentIdentities = Lists.newArrayList();
 
         long maxPartitionVersionTime = -1;
         long tableId = table.getId();
@@ -272,6 +279,7 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
             }
             if (!partitionCommitInfo.getValidDictCacheColumns().isEmpty()) {
                 validDictCacheColumns = partitionCommitInfo.getValidDictCacheColumns();
+                dictContentIdentities = partitionCommitInfo.getDictContentIdentities();
             }
             if (!partitionCommitInfo.getDictCollectedVersions().isEmpty()) {
                 dictCollectedVersions = partitionCommitInfo.getDictCollectedVersions();
@@ -281,7 +289,11 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
             if (GlobalStateMgr.getCurrentState().isLeader() && !GlobalStateMgr.isCheckpointThread()) {
                 Map<Long, TabletStatPB> tabletStats = partitionCommitInfo.getTabletStats();
                 if (tabletStats != null && !tabletStats.isEmpty()) {
-                    refreshTabletStatsAndMarkReshardCandidate(partition, tabletStats, db, version, versionTime);
+                    boolean canObserveSharedFiles = table.getState() == OlapTable.OlapTableState.NORMAL
+                            || (table.getState() == OlapTable.OlapTableState.TABLET_RESHARD
+                            && !reshardingPartitions.contains(partitionId));
+                    refreshTabletStatsAndMarkReshardCandidate(partition, tabletStats, db, version, versionTime,
+                            canObserveSharedFiles);
                 }
             }
             maxPartitionVersionTime = Math.max(maxPartitionVersionTime, versionTime);
@@ -293,11 +305,12 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
         }
 
         if (!GlobalStateMgr.isCheckpointThread() && dictCollectedVersions.size() == validDictCacheColumns.size()) {
+            boolean hasContentIdentities = !dictContentIdentities.isEmpty();
             for (int i = 0; i < validDictCacheColumns.size(); i++) {
                 ColumnId columnName = validDictCacheColumns.get(i);
-                long collectedVersion = dictCollectedVersions.get(i);
-                IDictManager.getInstance()
-                        .updateGlobalDict(table, columnName, collectedVersion, maxPartitionVersionTime);
+                Long contentIdentity = hasContentIdentities ? dictContentIdentities.get(i) : null;
+                IDictManager.getInstance().updateGlobalDict(table, columnName, dictCollectedVersions.get(i),
+                        maxPartitionVersionTime, contentIdentity);
             }
         }
     }
@@ -321,7 +334,8 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
      * statistics collector samples from LakeTablet.getFuzzyRowCount(), not from this map.
      */
     private void refreshTabletStatsAndMarkReshardCandidate(PhysicalPartition partition,
-            Map<Long, TabletStatPB> tabletStats, Database db, long version, long versionTime) {
+            Map<Long, TabletStatPB> tabletStats, Database db, long version, long versionTime,
+            boolean canObserveSharedFiles) {
         List<MaterializedIndex> indexes = partition.getLatestMaterializedIndices(IndexExtState.VISIBLE);
         long maxTabletSize = 0L;
         // Walk only the tablets this publish actually reported, not every tablet in the partition: this
@@ -344,15 +358,10 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
             // These stats came back with the publish of exactly this version.
             lakeTablet.setRowCount(tabletStat.numRows != null ? tabletStat.numRows : 0L, version);
             lakeTablet.setDataSizeUpdateTime(versionTime);
-            // Only apply the observation while the table is NORMAL. A split's children become
-            // catalog-visible while the table is still TABLET_RESHARD, and cross-published
-            // transactions flow through this method and update those same child LakeTablet objects. A
-            // cross-publish that happens to contribute no shared file would mark the tablet clean, and
-            // a merge could be planned in that window before the next cross-publish corrects it -- and
-            // a planned merge's transaction is already committed by publish time, so it cannot be
-            // abandoned. This method already runs under the table write lock that makes the
-            // transaction visible, so the state read here is not a TOCTOU.
-            if (table.getState() == OlapTable.OlapTableState.NORMAL) {
+            // An occupied partition's next cross-publish can invalidate a clean report before a
+            // planned merge consumes it. Eligibility was computed outside the tablet loop under
+            // the transaction-visible table WRITE lock; other alter states remain conservative.
+            if (canObserveSharedFiles) {
                 // See LakeTablet#observeSharedFiles(Boolean): an absent field fails closed too.
                 lakeTablet.observeSharedFiles(tabletStat.hasSharedFiles);
             }
@@ -363,6 +372,17 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
                     .addReshardCandidate(db.getId(), table.getId(), maxTabletSize, Long.MAX_VALUE);
         }
         tabletStats.clear();
+    }
+
+    // Leader publish holds the table WRITE lock for the entire call. Replay does not refresh these
+    // transient stats, and skips the query (single-transaction replay does not hold the table lock).
+    // A batch reuses the call-local snapshot across transactions and targets without rescanning jobs.
+    private Set<Long> getReshardingPartitionsLocked() {
+        return table.getState() == OlapTable.OlapTableState.TABLET_RESHARD
+                && GlobalStateMgr.getCurrentState().isLeader() && !GlobalStateMgr.isCheckpointThread()
+                ? GlobalStateMgr.getCurrentState().getTabletReshardJobMgr()
+                        .getReshardingPhysicalPartitionIdsLocked(table)
+                : Set.of();
     }
 
     /** Partition state a batch publish holds back until the whole batch has been applied. */
@@ -383,6 +403,7 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
      * the partition straight from its pre-batch version to the batch's final version.
      */
     public void applyVisibleLogBatch(TransactionStateBatch txnStateBatch, Database db) {
+        Set<Long> reshardingPartitions = getReshardingPartitionsLocked();
         Map<Long, DeferredPublish> deferredPublishes = new LinkedHashMap<>();
         for (TransactionState txnState : txnStateBatch.getTransactionStates()) {
             TableCommitInfo tableCommitInfo = txnState.getTableCommitInfo(table.getId());
@@ -390,7 +411,7 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
                 // in a multi-table batch this txn does not write this applier's table
                 continue;
             }
-            applyVisibleLog(txnState, tableCommitInfo, db, deferredPublishes);
+            applyVisibleLog(txnState, tableCommitInfo, db, deferredPublishes, reshardingPartitions);
         }
         for (Map.Entry<Long, DeferredPublish> entry : deferredPublishes.entrySet()) {
             // Resolved under the same table write lock that resolved it above, so it is still present.

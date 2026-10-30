@@ -28,8 +28,8 @@
 #include "gutil/strings/substitute.h"
 #include "platform/key_cache.h"
 #include "storage/lake/persistent_index_sstable.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/tablet_manager.h"
-#include "storage/lake/update_manager.h"
 
 namespace starrocks::lake {
 
@@ -216,7 +216,7 @@ Status PersistentIndexMemtable::flush() {
             return Status::AlreadyExist("PersistentIndexMemtable already flushed");
         }
     }
-    auto* block_cache = _tablet_mgr->update_mgr()->block_cache();
+    auto* block_cache = _tablet_mgr->primary_key_mgr()->block_cache();
     if (block_cache == nullptr) {
         return Status::InternalError("Block cache is null.");
     }

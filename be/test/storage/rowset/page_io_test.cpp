@@ -16,12 +16,16 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <set>
+
 #include "base/compression/block_compression.h"
 #include "base/testutil/assert.h"
 #include "base/utility/defer_op.h"
 #include "cache/datacache.h"
 #include "cache/mem_cache/lrucache_engine.h"
 #include "cache/mem_cache/page_cache.h"
+#include "cache/scan/shared_buffered_input_stream.h"
 #include "common/config_starlet_fwd.h"
 #include "fs/bundle_file.h"
 #include "fs/fs_memory.h"
@@ -623,6 +627,145 @@ TEST_F(PageIOTest, test_idg_read_file_must_use_named_wrapper) {
         ASSERT_OK(PageIO::read_and_decompress_page(ro, &handle, &body, &read_footer));
         ASSERT_EQ(decode_values(body), "[21, 22, 23]");
     }
+}
+
+// Models how the fslib cache stream accounts a read: the file is split into fixed-size blocks; a
+// block that is cached adds the requested bytes to bytes_read_local_disk, a block that is not
+// adds the whole block to bytes_read_remote and is cached from then on.
+class BlockCacheAccountingStream final : public io::SeekableInputStreamWrapper {
+public:
+    BlockCacheAccountingStream(io::SeekableInputStream* impl, int64_t block_size, std::set<int64_t> cached_blocks)
+            : io::SeekableInputStreamWrapper(impl, kDontTakeOwnership),
+              _block_size(block_size),
+              _cached_blocks(std::move(cached_blocks)) {}
+
+    Status read_at_fully(int64_t offset, void* out, int64_t count) override {
+        RETURN_IF_ERROR(io::SeekableInputStreamWrapper::read_at_fully(offset, out, count));
+        for (int64_t pos = offset; pos < offset + count;) {
+            const int64_t block = pos / _block_size;
+            const int64_t block_end = (block + 1) * _block_size;
+            const int64_t len = std::min(block_end, offset + count) - pos;
+            if (_cached_blocks.count(block) > 0) {
+                _stats.bytes_read_local_disk += len;
+            } else {
+                _stats.bytes_read_remote += _block_size;
+                _cached_blocks.insert(block);
+            }
+            pos += len;
+        }
+        // Remote bytes an async prefetch adds from another thread while this read is in flight.
+        _stats.bytes_read_remote += _remote_noise_per_read;
+        return Status::OK();
+    }
+
+    io::IoStatsSnapshot get_io_stats_snapshot() const override { return _stats; }
+
+    void set_remote_noise_per_read(int64_t bytes) { _remote_noise_per_read = bytes; }
+
+private:
+    const int64_t _block_size;
+    std::set<int64_t> _cached_blocks;
+    int64_t _remote_noise_per_read = 0;
+    io::IoStatsSnapshot _stats;
+};
+
+TEST_F(PageIOTest, test_pages_from_local_disk_follows_each_read) {
+    OwnedSlice page = _build_data_page({1, 2, 3});
+    PageFooterPB footer = _build_page_footer(page.slice().size);
+    WritableFileOptions write_opts;
+    write_opts.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE;
+    ASSIGN_OR_ASSERT_FAIL(auto write_file, _fs->new_writable_file(write_opts, "/test_pages_from_local_disk"));
+    PagePointer pp;
+    std::vector<Slice> body_slices{page.slice()};
+    ASSERT_OK(PageIO::write_page(write_file.get(), body_slices, footer, &pp));
+    ASSERT_OK(write_file->close());
+    const int64_t page_size = write_file->size();
+    ASSIGN_OR_ASSERT_FAIL(auto read_file, _fs->new_random_access_file("/test_pages_from_local_disk"));
+
+    // A block size that makes the page span blocks 0 and 1.
+    const int64_t block_size = page_size / 2 + 1;
+    ASSERT_GT(page_size, block_size);
+
+    auto read_page = [&](io::SeekableInputStream* file) {
+        _stats = OlapReaderStatistics();
+        PageReadOptions ro = _build_read_options(file, 0, page_size, false);
+        PageHandle handle;
+        Slice body;
+        PageFooterPB read_footer;
+        ASSERT_OK(PageIO::read_and_decompress_page(ro, &handle, &body, &read_footer));
+        ASSERT_EQ(1, _stats.total_pages_num);
+    };
+
+    // Hit: every block of the page is cached.
+    {
+        BlockCacheAccountingStream file(read_file.get(), block_size, {0, 1});
+        read_page(&file);
+        EXPECT_EQ(1, _stats.pages_from_local_disk);
+    }
+    // Miss: nothing is cached. The miss fills the cache, so reading the page again is a hit.
+    {
+        BlockCacheAccountingStream file(read_file.get(), block_size, {});
+        read_page(&file);
+        EXPECT_EQ(0, _stats.pages_from_local_disk);
+        read_page(&file);
+        EXPECT_EQ(1, _stats.pages_from_local_disk);
+    }
+    // Partial hit: the first block is cached and the second is not, so the page counts as remote.
+    {
+        BlockCacheAccountingStream file(read_file.get(), block_size, {0});
+        read_page(&file);
+        EXPECT_EQ(0, _stats.pages_from_local_disk);
+    }
+    // A full hit stays local even if a background prefetch adds remote bytes during the read.
+    {
+        BlockCacheAccountingStream file(read_file.get(), block_size, {0, 1});
+        file.set_remote_noise_per_read(block_size);
+        read_page(&file);
+        EXPECT_EQ(1, _stats.pages_from_local_disk);
+    }
+    // A stream that reports no IO stats never counts a page as local disk.
+    {
+        read_page(read_file.get());
+        EXPECT_EQ(0, _stats.pages_from_local_disk);
+    }
+}
+
+TEST_F(PageIOTest, test_coalesced_read_does_not_count_neighbor_hits) {
+    // Page A fills cache block 0, which misses; page B sits in cached blocks 1 and 2.
+    WritableFileOptions write_opts;
+    write_opts.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE;
+    ASSIGN_OR_ASSERT_FAIL(auto write_file, _fs->new_writable_file(write_opts, "/test_coalesced_pages"));
+    OwnedSlice page_a = _build_data_page({1, 2, 3});
+    OwnedSlice page_b = _build_data_page({4, 5, 6});
+    PageFooterPB footer_a = _build_page_footer(page_a.slice().size);
+    PageFooterPB footer_b = _build_page_footer(page_b.slice().size);
+    PagePointer pp_a;
+    PagePointer pp_b;
+    std::vector<Slice> body_a{page_a.slice()};
+    std::vector<Slice> body_b{page_b.slice()};
+    ASSERT_OK(PageIO::write_page(write_file.get(), body_a, footer_a, &pp_a));
+    ASSERT_OK(PageIO::write_page(write_file.get(), body_b, footer_b, &pp_b));
+    ASSERT_OK(write_file->close());
+    // The encoded pages can differ by a byte; B only has to be large enough for its hit to cover A.
+    ASSERT_GE(pp_b.size, pp_a.size);
+    const int64_t file_size = write_file->size();
+    ASSIGN_OR_ASSERT_FAIL(auto read_file, _fs->new_random_access_file("/test_coalesced_pages"));
+
+    auto cache_stream =
+            std::make_shared<BlockCacheAccountingStream>(read_file.get(), pp_b.offset, std::set<int64_t>{1, 2});
+    SharedBufferedInputStream coalesced(cache_stream, "/test_coalesced_pages", file_size);
+    ASSERT_OK(coalesced.set_io_ranges({SharedBufferedInputStream::IORange(pp_a.offset, pp_a.size),
+                                       SharedBufferedInputStream::IORange(pp_b.offset, pp_b.size)}));
+
+    // Reading page A fills the merged range, so the local delta (page B's hit) covers a whole page
+    // even though page A itself missed.
+    PageReadOptions ro = _build_read_options(&coalesced, pp_a.offset, pp_a.size, false);
+    PageHandle handle;
+    Slice body;
+    PageFooterPB read_footer;
+    ASSERT_OK(PageIO::read_and_decompress_page(ro, &handle, &body, &read_footer));
+    ASSERT_GE(cache_stream->get_io_stats_snapshot().bytes_read_local_disk, static_cast<int64_t>(pp_a.size));
+    EXPECT_EQ(0, _stats.pages_from_local_disk);
 }
 
 } // namespace starrocks
