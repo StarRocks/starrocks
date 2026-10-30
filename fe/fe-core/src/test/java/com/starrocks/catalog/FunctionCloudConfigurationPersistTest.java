@@ -14,11 +14,15 @@
 
 package com.starrocks.catalog;
 
+import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.starrocks.common.io.Text;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.credential.CloudType;
+import com.starrocks.persist.EditLogDeserializer;
+import com.starrocks.persist.OperationType;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.thrift.TFunction;
 import com.starrocks.thrift.TFunctionBinaryType;
@@ -29,6 +33,10 @@ import org.apache.thrift.protocol.TBinaryProtocol;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -94,5 +102,52 @@ public class FunctionCloudConfigurationPersistTest {
         Function restored = GsonUtils.GSON.fromJson(oldMetadata, Function.class);
         IllegalStateException exception = Assertions.assertThrows(IllegalStateException.class, restored::toThrift);
         Assertions.assertTrue(exception.getMessage().contains("recreate the function"));
+    }
+
+    @Test
+    public void testUnrestorableCloudConfigurationDoesNotAbortReplay() {
+        JsonObject metadata = JsonParser.parseString(GsonUtils.GSON.toJson(
+                newUdf(Map.of(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true")))).getAsJsonObject();
+        metadata.add("cloud_configuration_properties", new JsonObject());
+
+        Function restored = Assertions.assertDoesNotThrow(() -> GsonUtils.GSON.fromJson(metadata, Function.class));
+        Assertions.assertNull(restored.getCloudConfiguration());
+        IllegalStateException exception = Assertions.assertThrows(IllegalStateException.class, restored::toThrift);
+        Assertions.assertTrue(exception.getMessage().contains("could not be restored"));
+        Assertions.assertTrue(exception.getMessage().contains("recreate the function"));
+        Assertions.assertThrows(IllegalStateException.class, () -> restored.copy().toThrift());
+    }
+
+    @Test
+    public void testMalformedCloudConfigurationDoesNotAbortReplay() {
+        JsonObject metadata = JsonParser.parseString(GsonUtils.GSON.toJson(
+                newUdf(Map.of(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true")))).getAsJsonObject();
+        JsonObject malformedProperties = new JsonObject();
+        malformedProperties.add(AWS_S3_ACCESS_KEY, JsonNull.INSTANCE);
+        malformedProperties.addProperty(AWS_S3_SECRET_KEY, "test-secret-key");
+        metadata.add("cloud_configuration_properties", malformedProperties);
+
+        Function restored = Assertions.assertDoesNotThrow(() -> GsonUtils.GSON.fromJson(metadata, Function.class));
+        Assertions.assertNull(restored.getCloudConfiguration());
+        IllegalStateException exception = Assertions.assertThrows(IllegalStateException.class, restored::toThrift);
+        Assertions.assertTrue(exception.getMessage().contains("could not be restored"));
+        Assertions.assertFalse(exception.getMessage().contains("test-secret-key"));
+    }
+
+    @Test
+    public void testMalformedCloudConfigurationDoesNotAbortJournalDeserialization() throws Exception {
+        JsonObject metadata = JsonParser.parseString(GsonUtils.GSON.toJson(
+                newUdf(Map.of(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true")))).getAsJsonObject();
+        JsonObject malformedProperties = new JsonObject();
+        malformedProperties.add(AWS_S3_ACCESS_KEY, JsonNull.INSTANCE);
+        malformedProperties.addProperty(AWS_S3_SECRET_KEY, "test-secret-key");
+        metadata.add("cloud_configuration_properties", malformedProperties);
+
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        Text.writeString(new DataOutputStream(bytes), metadata.toString());
+        Function restored = (Function) Assertions.assertDoesNotThrow(() -> EditLogDeserializer.deserialize(
+                OperationType.OP_ADD_FUNCTION_V2, new DataInputStream(new ByteArrayInputStream(bytes.toByteArray()))));
+        Assertions.assertNull(restored.getCloudConfiguration());
+        Assertions.assertThrows(IllegalStateException.class, restored::toThrift);
     }
 }
