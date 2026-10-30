@@ -2901,6 +2901,39 @@ public class IcebergMetadataTest extends TableTestBase {
     }
 
     @Test
+    public void testInvalidateTableForReadDoesNoRemoteLoad() {
+        AtomicInteger remoteLoads = new AtomicInteger();
+        AtomicReference<org.apache.iceberg.Table> remoteTable = new AtomicReference<>(mockedNativeTableA);
+        new MockUp<IcebergHiveCatalog>() {
+            @Mock
+            org.apache.iceberg.Table getTable(ConnectContext context, String dbName, String tableName)
+                    throws StarRocksConnectorException {
+                remoteLoads.incrementAndGet();
+                return remoteTable.get();
+            }
+        };
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(CATALOG_NAME, icebergHiveCatalog,
+                DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, cachingIcebergCatalog,
+                Executors.newSingleThreadExecutor(), null);
+
+        Assertions.assertSame(mockedNativeTableA, cachingIcebergCatalog.getTable(connectContext, "db", "table"));
+        Assertions.assertEquals(1, remoteLoads.get());
+
+        // The remote table moves on; invalidating it for a read must not load it, only drop the cached object.
+        remoteTable.set(mockedNativeTableB);
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "db",
+                "table", "", new ArrayList<>(), mockedNativeTableA, Maps.newHashMap());
+        metadata.invalidateTableForRead("db", icebergTable);
+        Assertions.assertEquals(1, remoteLoads.get());
+
+        // The next read loads the table as it is now.
+        Assertions.assertSame(mockedNativeTableB, cachingIcebergCatalog.getTable(connectContext, "db", "table"));
+        Assertions.assertEquals(2, remoteLoads.get());
+    }
+
+    @Test
     public void testAlterTable(@Mocked IcebergHiveCatalog icebergHiveCatalog) throws StarRocksException {
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
                 Executors.newSingleThreadExecutor(), null);
