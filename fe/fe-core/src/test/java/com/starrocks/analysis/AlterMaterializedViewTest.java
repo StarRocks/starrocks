@@ -735,6 +735,79 @@ public class AlterMaterializedViewTest extends MVTestBase  {
         starRocksAssert.dropTable(baseTableName);
     }
 
+    private static void assertTracks(MaterializedView mv, Table baseTable) {
+        Assertions.assertEquals(baseTable.getId(), mv.getBaseTableInfos().get(0).getTableId());
+        Assertions.assertEquals(Set.of(baseTable.getId()),
+                mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap().keySet());
+    }
+
+    @Test
+    public void testSwapInactivatesMvsWhenAutomaticInactiveIsDisabled() throws Exception {
+        boolean automaticInactive = Config.enable_mv_automatic_inactive_by_base_table_changes;
+        Config.enable_mv_automatic_inactive_by_base_table_changes = false;
+        try {
+            starRocksAssert.withTable("create table swap_base (k1 int, k2 int) properties('replication_num'='1')");
+            starRocksAssert.withTable("create table swap_other (k1 int, k2 int) properties('replication_num'='1')");
+            starRocksAssert.withRefreshedMaterializedView("create materialized view mv_on_swap_base " +
+                    "refresh deferred manual as select * from swap_base");
+            MaterializedView mv = starRocksAssert.getMv("test", "mv_on_swap_base");
+
+            starRocksAssert.ddl("alter table swap_base swap with swap_other");
+            Assertions.assertFalse(mv.isActive());
+            Assertions.assertEquals("base-table swapped: swap_base", mv.getInactiveReason());
+
+            starRocksAssert.refreshMV("refresh materialized view mv_on_swap_base with sync mode");
+            Assertions.assertTrue(mv.isActive(), mv.getInactiveReason());
+            assertTracks(mv, starRocksAssert.getTable("test", "swap_base"));
+        } finally {
+            Config.enable_mv_automatic_inactive_by_base_table_changes = automaticInactive;
+        }
+    }
+
+    @Test
+    public void testRenameInactivatesMvsWhenAutomaticInactiveIsDisabled() throws Exception {
+        boolean automaticInactive = Config.enable_mv_automatic_inactive_by_base_table_changes;
+        Config.enable_mv_automatic_inactive_by_base_table_changes = false;
+        String createTableSql = "create table rename_base (k1 int, k2 int) properties('replication_num'='1')";
+        try {
+            starRocksAssert.withTable(createTableSql);
+            starRocksAssert.withRefreshedMaterializedView("create materialized view mv_on_rename_base " +
+                    "refresh deferred manual as select * from rename_base");
+            MaterializedView mv = starRocksAssert.getMv("test", "mv_on_rename_base");
+
+            starRocksAssert.ddl("alter table rename_base rename rename_base_old");
+            Assertions.assertFalse(mv.isActive());
+            Assertions.assertEquals("base-table renamed: rename_base", mv.getInactiveReason());
+
+            starRocksAssert.withTable(createTableSql);
+            starRocksAssert.refreshMV("refresh materialized view mv_on_rename_base with sync mode");
+            Assertions.assertTrue(mv.isActive(), mv.getInactiveReason());
+            assertTracks(mv, starRocksAssert.getTable("test", "rename_base"));
+        } finally {
+            Config.enable_mv_automatic_inactive_by_base_table_changes = automaticInactive;
+        }
+    }
+
+    @Test
+    public void testRenameBaseMvInactivatesMvsOnIt() throws Exception {
+        String createBaseMvSql = "create materialized view renamed_base_mv refresh deferred manual " +
+                "as select k1, k2 from rename_mv_base";
+        starRocksAssert.withTable("create table rename_mv_base (k1 int, k2 int) properties('replication_num'='1')");
+        starRocksAssert.withRefreshedMaterializedView(createBaseMvSql);
+        starRocksAssert.withRefreshedMaterializedView("create materialized view mv_on_renamed_mv " +
+                "refresh deferred manual as select * from renamed_base_mv");
+        MaterializedView mv = starRocksAssert.getMv("test", "mv_on_renamed_mv");
+
+        starRocksAssert.ddl("alter materialized view renamed_base_mv rename renamed_base_mv_old");
+        Assertions.assertFalse(mv.isActive());
+        Assertions.assertEquals("base-table renamed: renamed_base_mv", mv.getInactiveReason());
+
+        starRocksAssert.withRefreshedMaterializedView(createBaseMvSql);
+        starRocksAssert.refreshMV("refresh materialized view mv_on_renamed_mv with sync mode");
+        Assertions.assertTrue(mv.isActive(), mv.getInactiveReason());
+        assertTracks(mv, starRocksAssert.getTable("test", "renamed_base_mv"));
+    }
+
     @Test
     public void testActiveCheckerBackoff() {
         MVActiveChecker.MvActiveInfo activeInfo = MVActiveChecker.MvActiveInfo.firstFailure();

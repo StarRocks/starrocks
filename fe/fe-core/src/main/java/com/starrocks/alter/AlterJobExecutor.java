@@ -574,9 +574,9 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
                 }
 
                 // inactive the related MVs
-                AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(origTable,
+                AlterMVJobExecutor.inactiveRelatedMaterializedViewsForRename(origTable,
                         MaterializedViewExceptions.inactiveReasonForBaseTableSwapped(origTblName));
-                AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(olapNewTbl,
+                AlterMVJobExecutor.inactiveRelatedMaterializedViewsForRename(olapNewTbl,
                         MaterializedViewExceptions.inactiveReasonForBaseTableSwapped(newTblName));
 
                 SwapTableOperationLog log = new SwapTableOperationLog(db.getId(), origTable.getId(), olapNewTbl.getId());
