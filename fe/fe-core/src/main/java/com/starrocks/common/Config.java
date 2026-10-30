@@ -1417,7 +1417,7 @@ public class Config extends ConfigBase {
             "are upgraded to a version that supports it.")
     public static boolean lake_enable_batch_publish_multi_table = false;
 
-    @ConfField(mutable = true, comment = "Retry a failed lake publish batch with exactly the transactions it had, " +
+    @ConfField(mutable = true, comment = "Retry a failed lake publish batch with no more transactions than it had, " +
             "so that every partition keeps the new version of the failed attempt. When false, a retry batch is " +
             "rebuilt as usual and may take in transactions committed after the failure; turning it off also stops " +
             "honoring the batches already frozen.")

@@ -1473,7 +1473,7 @@ public class DatabaseTransactionMgrTest {
                 assertEquals(1, batches.size());
                 assertEquals(List.of(txnId6, txnId7), batches.get(0).getTxnIds());
             }
-            assertEquals(List.of(txnId6, txnId7), masterDbTransMgr.getFrozenPublishBatch(txnId6));
+            assertEquals(2, masterDbTransMgr.getFrozenPublishBatchSize(txnId6));
         } finally {
             Config.lake_enable_batch_publish_multi_table = oldMultiTable;
         }
@@ -1497,7 +1497,7 @@ public class DatabaseTransactionMgrTest {
         };
         masterTransMgr.finishTransactionBatch(GlobalStateMgrTestUtil.testDbId1, batches.get(0), null);
         assertEquals(TransactionStatus.VISIBLE, masterDbTransMgr.getTransactionState(txnId7).getTransactionStatus());
-        assertNull(masterDbTransMgr.getFrozenPublishBatch(txnId6));
+        assertNull(masterDbTransMgr.getFrozenPublishBatchSize(txnId6));
 
         batches = masterDbTransMgr.getReadyToPublishTxnListBatch();
         assertEquals(1, batches.size());
@@ -1505,17 +1505,19 @@ public class DatabaseTransactionMgrTest {
     }
 
     @Test
-    public void testFrozenPublishBatchIsDroppedWhenTheGraphNoLongerGivesIt() throws AnalysisException {
+    public void testFrozenOneTxnBatchStaysAlone() throws AnalysisException {
         DatabaseTransactionMgr masterDbTransMgr = dbTransMgrWithThreeBatchableTxns();
         long txnId6 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable6);
         long txnId7 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable7);
         long txnId8 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable8);
-        // The graph now chains 6 -> 7, not 6 -> 8: fall back to the normal, uncapped batch.
-        masterDbTransMgr.freezePublishBatch(List.of(txnId6, txnId8));
+        // Txn 6 failed alone: its retry stays alone even though 7 and 8 are ready to join it.
+        masterDbTransMgr.freezePublishBatch(List.of(txnId6));
         List<TransactionStateBatch> batches = masterDbTransMgr.getReadyToPublishTxnListBatch();
         assertEquals(1, batches.size());
-        assertEquals(List.of(txnId6, txnId7, txnId8), batches.get(0).getTxnIds());
-        assertNull(masterDbTransMgr.getFrozenPublishBatch(txnId6));
+        assertEquals(List.of(txnId6), batches.get(0).getTxnIds());
+        assertEquals(1, masterDbTransMgr.getFrozenPublishBatchSize(txnId6));
+        assertNull(masterDbTransMgr.getFrozenPublishBatchSize(txnId7));
+        assertNull(masterDbTransMgr.getFrozenPublishBatchSize(txnId8));
     }
 
     @Test
@@ -1552,7 +1554,7 @@ public class DatabaseTransactionMgrTest {
         long txnId1 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable1);
         long txnId6 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable6);
         masterDbTransMgr.freezePublishBatch(List.of(txnId1, txnId6));
-        assertNull(masterDbTransMgr.getFrozenPublishBatch(txnId1));
+        assertNull(masterDbTransMgr.getFrozenPublishBatchSize(txnId1));
     }
 
     @Test
@@ -1563,7 +1565,7 @@ public class DatabaseTransactionMgrTest {
             long txnId6 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable6);
             long txnId7 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable7);
             masterDbTransMgr.freezePublishBatch(List.of(txnId6, txnId7));
-            assertEquals(List.of(txnId6, txnId7), masterDbTransMgr.getFrozenPublishBatch(txnId6));
+            assertEquals(2, masterDbTransMgr.getFrozenPublishBatchSize(txnId6));
 
             // Batch publish turned off after the failure: no batch is built again, and the txns finish one by
             // one through the single-transaction path.
@@ -1571,7 +1573,7 @@ public class DatabaseTransactionMgrTest {
             masterTransMgr.finishTransaction(GlobalStateMgrTestUtil.testDbId1, txnId6, null);
             assertEquals(TransactionStatus.VISIBLE,
                     masterDbTransMgr.getTransactionState(txnId6).getTransactionStatus());
-            assertNull(masterDbTransMgr.getFrozenPublishBatch(txnId6));
+            assertNull(masterDbTransMgr.getFrozenPublishBatchSize(txnId6));
         } finally {
             Config.lake_enable_batch_publish_version = oldBatchPublish;
         }
@@ -1589,7 +1591,7 @@ public class DatabaseTransactionMgrTest {
         visible.setFinishTime(System.currentTimeMillis());
         visible.setTransactionStatus(TransactionStatus.VISIBLE);
         masterDbTransMgr.replayUpsertTransactionState(visible);
-        assertNull(masterDbTransMgr.getFrozenPublishBatch(txnId6));
+        assertNull(masterDbTransMgr.getFrozenPublishBatchSize(txnId6));
     }
 
     @Test
@@ -1603,7 +1605,7 @@ public class DatabaseTransactionMgrTest {
             long txnId8 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable8);
             // A batch [6, 7] failed before txn 8 committed: with the policy off its retry takes txn 8 in.
             masterDbTransMgr.freezePublishBatch(List.of(txnId6, txnId7));
-            assertNull(masterDbTransMgr.getFrozenPublishBatch(txnId6));
+            assertNull(masterDbTransMgr.getFrozenPublishBatchSize(txnId6));
             List<TransactionStateBatch> batches = masterDbTransMgr.getReadyToPublishTxnListBatch();
             assertEquals(1, batches.size());
             assertEquals(List.of(txnId6, txnId7, txnId8), batches.get(0).getTxnIds());
@@ -1630,7 +1632,7 @@ public class DatabaseTransactionMgrTest {
             batches = masterDbTransMgr.getReadyToPublishTxnListBatch();
             assertEquals(1, batches.size());
             assertEquals(List.of(txnId6, txnId7, txnId8), batches.get(0).getTxnIds());
-            assertNull(masterDbTransMgr.getFrozenPublishBatch(txnId6));
+            assertNull(masterDbTransMgr.getFrozenPublishBatchSize(txnId6));
 
             // Turning it back on does not bring the dropped batch back.
             Config.lake_enable_batch_publish_retry_freeze = true;

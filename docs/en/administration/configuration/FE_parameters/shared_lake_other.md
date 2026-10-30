@@ -820,7 +820,7 @@ This topic introduces the following types of FE configurations:
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether to retry a failed batch publish of a shared-data table with exactly the transactions the failed attempt had, including a batch of one transaction. Without it, the retry batch is rebuilt from scratch and takes in the transactions committed since the failure, so the new version of every partition changes and the work the failed attempt finished at the old version cannot be reused. Set it to `false` to rebuild retry batches as before; batches already frozen are no longer honored from the next publish round. Effective only when `lake_enable_batch_publish_version` is `true`.
+- Description: Whether to limit the retry of a failed batch publish of a shared-data table to the number of transactions the failed attempt had, including a batch of one transaction, so that the retry does not take in the transactions committed since the failure. Without it, the retry batch is rebuilt from scratch and takes in those transactions, so the new version of every partition changes and the work the failed attempt finished at the old version cannot be reused. Set it to `false` to rebuild retry batches as before; batches already frozen are no longer honored from the next publish round. Effective only when `lake_enable_batch_publish_version` is `true`.
 - Introduced in: v26.2
 
 ### `lake_enable_tablet_creation_optimization`

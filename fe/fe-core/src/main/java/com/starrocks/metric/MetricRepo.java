@@ -328,7 +328,7 @@ public final class MetricRepo {
 
     public static final LongCounterMetric COUNTER_LAKE_PUBLISH_BATCH_FROZEN =
             new LongCounterMetric("lake_publish_batch_frozen_total", MetricUnit.OPERATIONS,
-                    "counter of failed lake publish batches frozen so that their retry publishes the same txns");
+                    "counter of failed lake publish batches frozen so that their retry publishes no more txns");
 
     public static final LongCounterMetric SYNC_STATS_LOAD_BUDGET_EXHAUSTED_TOTAL =
             new LongCounterMetric("sync_stats_load_budget_exhausted_total", Metric.MetricUnit.OPERATIONS,

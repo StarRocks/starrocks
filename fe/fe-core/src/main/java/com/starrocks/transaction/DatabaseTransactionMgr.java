@@ -153,13 +153,13 @@ public class DatabaseTransactionMgr {
     // store committed transactions' dependency relationships
     private final TransactionGraph transactionGraph = new TransactionGraph();
 
-    // head txn id -> txn ids of a lake publish batch that failed. The retry from that head publishes
-    // exactly these txns, so every partition keeps the new version of the failed attempt instead of
-    // growing with txns committed since. An entry is added under the read lock and only for a running
-    // head, and removed under the write lock when the head reaches a final status, on whichever path
-    // (batch or single-txn publish, abort, replay), so none outlives its head txn.
-    // In memory only: losing it on failover just lets the retry batch grow again.
-    private final Map<Long, List<Long>> frozenPublishBatches = new ConcurrentHashMap<>();
+    // head txn id -> size of a lake publish batch that failed. The retry from that head publishes at most
+    // that many txns. Txns committed since come after them in the graph, so the retry rebuilds the same
+    // batch and every partition keeps the new version of the failed attempt instead of growing with them.
+    // An entry is added under the read lock and only for a running head, and removed under the write lock
+    // when the head reaches a final status, on whichever path (batch or single-txn publish, abort, replay),
+    // so none outlives its head txn. In memory only: losing it on failover just lets the retry batch grow.
+    private final Map<Long, Integer> frozenPublishBatchSizes = new ConcurrentHashMap<>();
 
     /*
      * `labelToTxnIds` is used for checking if label already used. map label to transaction id
@@ -1033,32 +1033,23 @@ public class DatabaseTransactionMgr {
         readLock();
 
         try {
-            if (!Config.lake_enable_batch_publish_retry_freeze && !frozenPublishBatches.isEmpty()) {
+            if (!Config.lake_enable_batch_publish_retry_freeze && !frozenPublishBatchSizes.isEmpty()) {
                 // The policy was turned off: every batch, frozen ones included, is rebuilt as before.
-                frozenPublishBatches.clear();
+                frozenPublishBatchSizes.clear();
             }
             List<Long> txnIds = transactionGraph.getTxnsWithoutDependency();
             for (long txnId : txnIds) {
-                List<Long> txnsWithDependency = null;
-                List<Long> frozenTxnIds = frozenPublishBatches.get(txnId);
-                if (frozenTxnIds != null) {
-                    // Retry a failed batch with exactly its txns: rebuild at most that many and use the
-                    // result only if it is the same list. Anything else means the graph has changed.
-                    int maxBatchSize = Math.min(frozenTxnIds.size(), Config.lake_batch_publish_max_version_num);
-                    txnsWithDependency = getTxnsWithTxnDependencyBatch(
-                            Math.min(Config.lake_batch_publish_min_version_num, maxBatchSize), maxBatchSize, txnId);
-                    if (txnsWithDependency.equals(frozenTxnIds)) {
-                        LOG.debug("retry frozen lake publish batch db:{} txns:{}", dbId, frozenTxnIds);
-                    } else {
-                        frozenPublishBatches.remove(txnId, frozenTxnIds);
-                        LOG.info("drop frozen lake publish batch db:{} txns:{}, graph now gives {}",
-                                dbId, frozenTxnIds, txnsWithDependency);
-                        txnsWithDependency = null;
-                    }
+                int minBatchSize = Config.lake_batch_publish_min_version_num;
+                int maxBatchSize = Config.lake_batch_publish_max_version_num;
+                Integer frozenSize = frozenPublishBatchSizes.get(txnId);
+                if (frozenSize != null) {
+                    // Retry a failed batch with no more txns than it had.
+                    maxBatchSize = Math.min(frozenSize, maxBatchSize);
+                    minBatchSize = Math.min(minBatchSize, maxBatchSize);
                 }
-                if (txnsWithDependency == null) {
-                    txnsWithDependency = getTxnsWithTxnDependencyBatch(Config.lake_batch_publish_min_version_num,
-                            Config.lake_batch_publish_max_version_num, txnId);
+                List<Long> txnsWithDependency = getTxnsWithTxnDependencyBatch(minBatchSize, maxBatchSize, txnId);
+                if (frozenSize != null) {
+                    LOG.debug("retry frozen lake publish batch db:{} txns:{}", dbId, txnsWithDependency);
                 }
                 List<TransactionState> states = txnsWithDependency.stream().map(idToRunningTransactionState::get)
                         .filter(Objects::nonNull)
@@ -1147,14 +1138,14 @@ public class DatabaseTransactionMgr {
         return transactionGraph.getTxnsWithTxnDependencyBatch(minBatchSize, maxBatchSize, txnId);
     }
 
-    // Called when a lake publish batch failed: its retry must cover the same txns so that every
-    // partition's new version stays the same. See frozenPublishBatches.
+    // Called when a lake publish batch failed: its retry must not take in more txns, so that every
+    // partition's new version stays the same. See frozenPublishBatchSizes.
     public void freezePublishBatch(List<Long> txnIds) {
         if (!Config.lake_enable_batch_publish_retry_freeze) {
             return;
         }
         long headTxnId = txnIds.get(0);
-        List<Long> previous;
+        Integer previous;
         // Under the lock that applies final statuses: a head that has already finished is never frozen,
         // since nothing would remove its entry afterwards.
         readLock();
@@ -1162,19 +1153,19 @@ public class DatabaseTransactionMgr {
             if (!idToRunningTransactionState.containsKey(headTxnId)) {
                 return;
             }
-            previous = frozenPublishBatches.put(headTxnId, txnIds);
+            previous = frozenPublishBatchSizes.put(headTxnId, txnIds.size());
         } finally {
             readUnlock();
         }
-        if (!txnIds.equals(previous)) {
+        if (previous == null || previous != txnIds.size()) {
             MetricRepo.COUNTER_LAKE_PUBLISH_BATCH_FROZEN.increase(1L);
             LOG.info("freeze lake publish batch db:{} txns:{}", dbId, txnIds);
         }
     }
 
     @VisibleForTesting
-    List<Long> getFrozenPublishBatch(long headTxnId) {
-        return frozenPublishBatches.get(headTxnId);
+    Integer getFrozenPublishBatchSize(long headTxnId) {
+        return frozenPublishBatchSizes.get(headTxnId);
     }
 
     private static boolean canCommitEmptyKafkaRoutineLoad(TransactionState transactionState,
@@ -1794,7 +1785,7 @@ public class DatabaseTransactionMgr {
                         .removeFromStartupActiveCompactionTransactionMap(transactionState.getTransactionId());
             }
             transactionGraph.remove(transactionState.getTransactionId());
-            frozenPublishBatches.remove(transactionState.getTransactionId());
+            frozenPublishBatchSizes.remove(transactionState.getTransactionId());
             // A transaction may reach a final status more than once (a duplicated finish, a replayed edit
             // log, an image load). The deque is what removeExpiredTxns walks and it must hold every
             // transaction exactly once: a second entry is popped after its label mapping was already
@@ -1848,7 +1839,7 @@ public class DatabaseTransactionMgr {
                         .removeFromStartupActiveCompactionTransactionMap(transactionState.getTransactionId());
             }
             transactionGraph.remove(transactionState.getTransactionId());
-            frozenPublishBatches.remove(transactionState.getTransactionId());
+            frozenPublishBatchSizes.remove(transactionState.getTransactionId());
             // See unprotectUpsertTransactionState(): enqueue a transaction at most once.
             if (idToFinalStatusTransactionState.put(transactionState.getTransactionId(), transactionState) == null) {
                 finalStatusTransactionStateDeque.add(transactionState);

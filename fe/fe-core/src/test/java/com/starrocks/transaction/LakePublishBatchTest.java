@@ -1286,9 +1286,9 @@ public class LakePublishBatchTest {
         PublishVersionDaemon daemon = new PublishVersionDaemon();
         Awaitility.await().atMost(60, TimeUnit.SECONDS).pollInterval(1, TimeUnit.SECONDS).until(() -> {
             daemon.runAfterLeaseValid();
-            return dbTxnMgr.getFrozenPublishBatch(headTxnId) != null;
+            return dbTxnMgr.getFrozenPublishBatchSize(headTxnId) != null;
         });
-        assertEquals(failedBatch, dbTxnMgr.getFrozenPublishBatch(headTxnId));
+        assertEquals(failedBatch.size(), dbTxnMgr.getFrozenPublishBatchSize(headTxnId));
 
         // Two more txns commit while the failed batch waits for its retry; they must not join it.
         VisibleStateWaiter waiter3 = commitOnPartition(db, table, partition, "frozen_retry_3_", txnIds);
@@ -1301,7 +1301,7 @@ public class LakePublishBatchTest {
 
         forcedResult.set(null);
         awaitPublish(daemon, waiter1, waiter2, waiter3, waiter4);
-        Assertions.assertNull(dbTxnMgr.getFrozenPublishBatch(headTxnId));
+        Assertions.assertNull(dbTxnMgr.getFrozenPublishBatchSize(headTxnId));
         for (List<Long> batch : publishedBatches) {
             if (batch.contains(headTxnId)) {
                 assertEquals(failedBatch, batch);
@@ -1335,7 +1335,7 @@ public class LakePublishBatchTest {
                 daemon.runAfterLeaseValid();
                 return publishedBatches.stream().anyMatch(batch -> batch.contains(headTxnId));
             });
-            Assertions.assertNull(dbTxnMgr.getFrozenPublishBatch(headTxnId));
+            Assertions.assertNull(dbTxnMgr.getFrozenPublishBatchSize(headTxnId));
 
             // Two more txns commit while the failed batch waits for its retry: with the policy off they join it.
             VisibleStateWaiter waiter3 = commitOnPartition(db, table, partition, "unfrozen_retry_3_", txnIds);
@@ -1388,9 +1388,9 @@ public class LakePublishBatchTest {
             PublishVersionDaemon daemon = new PublishVersionDaemon();
             Awaitility.await().atMost(60, TimeUnit.SECONDS).pollInterval(1, TimeUnit.SECONDS).until(() -> {
                 daemon.runAfterLeaseValid();
-                return dbTxnMgr.getFrozenPublishBatch(headTxnId) != null;
+                return dbTxnMgr.getFrozenPublishBatchSize(headTxnId) != null;
             });
-            assertEquals(List.of(headTxnId), dbTxnMgr.getFrozenPublishBatch(headTxnId));
+            assertEquals(1, dbTxnMgr.getFrozenPublishBatchSize(headTxnId));
 
             // Txns committed after the failure must not turn the retry into a bigger batch.
             VisibleStateWaiter waiter2 = commitOnPartition(db, table, partition, "frozen_single_2_", txnIds);
