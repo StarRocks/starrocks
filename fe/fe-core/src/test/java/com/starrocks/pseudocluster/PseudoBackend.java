@@ -60,6 +60,7 @@ import com.starrocks.proto.PExecShortCircuitResult;
 import com.starrocks.proto.PFetchArrowSchemaRequest;
 import com.starrocks.proto.PFetchArrowSchemaResult;
 import com.starrocks.proto.PFetchDataResult;
+import com.starrocks.proto.PGetCsvSplitsResult;
 import com.starrocks.proto.PGetFileSchemaResult;
 import com.starrocks.proto.PListFailPointResponse;
 import com.starrocks.proto.PProcessDictionaryCacheRequest;
@@ -107,6 +108,7 @@ import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.PBackendService;
 import com.starrocks.rpc.PExecBatchPlanFragmentsRequest;
 import com.starrocks.rpc.PExecShortCircuitRequest;
+import com.starrocks.rpc.PGetCsvSplitsRequest;
 import com.starrocks.rpc.PGetFileSchemaRequest;
 import com.starrocks.rpc.PListFailPointRequest;
 import com.starrocks.system.Backend;
@@ -1069,6 +1071,11 @@ public class PseudoBackend {
 
         @Override
         public Future<PGetFileSchemaResult> getFileSchema(PGetFileSchemaRequest request) {
+            throw new org.apache.commons.lang.NotImplementedException("TODO");
+        }
+
+        @Override
+        public Future<PGetCsvSplitsResult> getCsvSplits(PGetCsvSplitsRequest request) {
             throw new org.apache.commons.lang.NotImplementedException("TODO");
         }
 

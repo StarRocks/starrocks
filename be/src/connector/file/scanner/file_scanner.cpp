@@ -463,6 +463,41 @@ void FileScanner::sample_files(size_t total_file_count, int64_t sample_file_coun
     sample_file_indexes->emplace_back(total_file_count - 1);
 }
 
+Status FileScanner::csv_split_offsets(RuntimeState* state, const TBrokerScanRange& scan_range, int64_t split_size,
+                                      std::vector<std::vector<int64_t>>* offsets) {
+    offsets->clear();
+    offsets->reserve(scan_range.ranges.size());
+
+    // One counter for the whole request rather than one thrown away per file. There is no query
+    // profile to hang this off - the frontend asks for boundaries outside any fragment - so the
+    // totals are logged instead. Without them the only trace of a pass that reads every candidate
+    // file end to end, and that the load waits on, would be the frontend's line saying it finished.
+    RuntimeProfile profile{"csv_split_offsets", false};
+    ScannerCounter counter{};
+
+    // Reported however this returns. A file that fails part way through leaves the frontend loading
+    // everything whole, and the reads already done are exactly what an operator needs to see to
+    // explain the time that bought nothing - so the failing path is the one where this matters most.
+    DeferOp report([&] {
+        LOG(INFO) << "csv split discovery framed " << offsets->size() << " of " << scan_range.ranges.size()
+                  << " files in " << (counter.file_read_ns / 1000000) << "ms of reads over " << counter.file_read_count
+                  << " reads, " << state->num_bytes_scan_from_source() << " bytes";
+    });
+
+    for (const auto& range : scan_range.ranges) {
+        auto one_file = scan_range;
+        one_file.ranges = {range};
+
+        CSVScanner scanner(state, &profile, one_file, &counter, true);
+
+        std::vector<int64_t> file_offsets;
+        RETURN_IF_ERROR(scanner.get_split_offsets(split_size, &file_offsets));
+        offsets->emplace_back(std::move(file_offsets));
+    }
+
+    return Status::OK();
+}
+
 Status FileScanner::sample_schema(RuntimeState* state, const TBrokerScanRange& scan_range,
                                   std::vector<SlotDescriptor>* schema) {
     std::vector<std::vector<SlotDescriptor>> schemas;
