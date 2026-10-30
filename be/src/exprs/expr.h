@@ -113,6 +113,8 @@ public:
 
     bool is_monotonic() const { return _is_monotonic; }
     bool is_cast_expr() const { return _node_type == TExprNodeType::CAST_EXPR; }
+    // Whether this is an explicit cast that turns a DECIMAL with more digits than its precision into NULL (or an error)
+    virtual bool checks_decimal_precision() const { return false; }
     virtual bool is_lambda_function() const { return false; }
     virtual bool is_literal() const { return false; }
     virtual bool is_dictmapping_expr() const { return false; }

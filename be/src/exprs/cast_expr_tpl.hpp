@@ -1202,6 +1202,7 @@ public:
               _check_decimal_precision(node.__isset.cast_decimal_check_precision && node.cast_decimal_check_precision) {
     }
     Expr* clone(ObjectPool* pool) const override { return pool->add(new VectorizedCastExpr(*this)); }
+    bool checks_decimal_precision() const override { return _check_decimal_precision; }
 
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
         ASSIGN_OR_RETURN(ColumnPtr column, _children[0]->evaluate_checked(context, ptr));
