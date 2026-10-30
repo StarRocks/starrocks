@@ -1799,10 +1799,9 @@ StatusOr<CompactionTaskPtr> TabletManager::compact(CompactionTaskContext* contex
 
     ASSIGN_OR_RETURN(auto tablet, get_tablet(context->tablet_id, context->version));
     const auto& tablet_metadata = tablet.metadata();
-    ASSIGN_OR_RETURN(
-            auto compaction_policy,
-            CompactionPolicy::create(this, tablet_metadata, context->force_base_compaction, context->is_unshare,
-                                      context->allow_base_compaction));
+    ASSIGN_OR_RETURN(auto compaction_policy,
+                     CompactionPolicy::create(this, tablet_metadata, context->force_base_compaction,
+                                              context->is_unshare, context->allow_base_compaction));
     std::vector<RowsetPtr> input_rowsets;
     if (context->write_to_local_result) {
         // Autonomous compaction: pick honoring the exclusion set and atomically
