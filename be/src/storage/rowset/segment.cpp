@@ -568,8 +568,7 @@ StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator_or_defaul
         } else {
             auto nullable = _column_readers[id]->is_nullable();
             auto source_type = TypeDescriptor::from_logical_type(_column_readers[id]->column_type());
-            auto target_type = TypeDescriptor::from_logical_type(column.type(), column.length(), column.precision(),
-                                                                 column.scale());
+            auto target_type = TypeDescriptor::from_logical_type(column.type(), column.precision(), column.scale());
             return std::make_unique<CastColumnIterator>(std::move(source_iter), source_type, target_type, nullable);
         }
     }
@@ -637,8 +636,8 @@ StatusOr<ColumnIteratorUPtr> Segment::_new_extended_column_iterator(const Tablet
                 } else {
                     auto nullable = sub_reader->is_nullable();
                     auto source_type = TypeDescriptor::from_logical_type(reader_type);
-                    auto target_type = TypeDescriptor::from_logical_type(column.type(), column.length(),
-                                                                         column.precision(), column.scale());
+                    auto target_type =
+                            TypeDescriptor::from_logical_type(column.type(), column.precision(), column.scale());
                     return std::make_unique<CastColumnIterator>(std::move(source_iter), source_type, target_type,
                                                                 nullable);
                 }
@@ -695,8 +694,7 @@ StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator(const Tab
         } else {
             auto nullable = iter->second->is_nullable();
             auto source_type = TypeDescriptor::from_logical_type(iter->second->column_type());
-            auto target_type = TypeDescriptor::from_logical_type(column.type(), column.length(), column.precision(),
-                                                                 column.scale());
+            auto target_type = TypeDescriptor::from_logical_type(column.type(), column.precision(), column.scale());
             return std::make_unique<CastColumnIterator>(std::move(source_iter), source_type, target_type, nullable);
         }
     } else {

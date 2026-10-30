@@ -198,9 +198,13 @@ struct TypeDescriptor {
 
     static TypeDescriptor create_geo_type(LogicalType type, GeoTypeDescriptor descriptor);
 
-    static TypeDescriptor from_logical_type(LogicalType type,
-                                            [[maybe_unused]] int len = TypeDescriptor::MAX_VARCHAR_LENGTH,
-                                            [[maybe_unused]] int precision = 27, [[maybe_unused]] int scale = 9) {
+    // Builds the descriptor of |type| when only the logical type is known. String types never take a length here:
+    // CHAR and VARCHAR get their maximum length (MAX_CHAR_LENGTH, MAX_VARCHAR_LENGTH), and VARBINARY falls through
+    // to TypeDescriptor(type) and keeps len = -1, which length checks treat as unbounded. Note that -1 differs from
+    // TYPE_VARBINARY_DESC (len = MAX_VARCHAR_LENGTH) under operator==. Use create_char_type(),
+    // create_varchar_type() or create_varbinary_type() when a specific length is needed. |precision| and |scale|
+    // apply to decimal types only.
+    static TypeDescriptor from_logical_type(LogicalType type, int precision = 27, int scale = 9) {
         switch (type) {
         case TYPE_CHAR:
             return TypeDescriptor::create_char_type(MAX_CHAR_LENGTH);

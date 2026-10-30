@@ -478,9 +478,9 @@ private:
                 {"col_smallint", TYPE_SMALLINT_DESC},
                 {"col_int", TYPE_INT_DESC},
                 {"col_bigint", TYPE_BIGINT_DESC},
-                {"col_decimal_p6s2", TypeDescriptor::from_logical_type(TYPE_DECIMAL32, -1, 6, 2)},
-                {"col_decimal_p14s5", TypeDescriptor::from_logical_type(TYPE_DECIMAL64, -1, 14, 5)},
-                {"col_decimal_p27s9", TypeDescriptor::from_logical_type(TYPE_DECIMALV2, -1, 27, 9)},
+                {"col_decimal_p6s2", TypeDescriptor::from_logical_type(TYPE_DECIMAL32, 6, 2)},
+                {"col_decimal_p14s5", TypeDescriptor::from_logical_type(TYPE_DECIMAL64, 14, 5)},
+                {"col_decimal_p27s9", TypeDescriptor::from_logical_type(TYPE_DECIMALV2, 27, 9)},
 
                 {"col_int_null", TYPE_INT_DESC},
                 {"col_string_null", TYPE_VARCHAR_DESC},
