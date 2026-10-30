@@ -883,6 +883,16 @@ bool Aggregator::should_expand_preagg_hash_tables(size_t prev_row_returned, size
     return current_reduction > min_reduction;
 }
 
+// A NULL literal evaluates to a constant Nullable(Int8) column whatever its type is, so unpacking it would hand the
+// aggregate function a data column of the wrong type. Like the group-by columns in output_chunk_by_streaming, build
+// an all-NULL column of the argument's own type instead.
+static ColumnPtr unpack_agg_input_column(const TypeDescriptor& type, size_t num_rows, ColumnPtr&& column) {
+    if (column->only_null()) {
+        return ColumnHelper::unfold_const_column(type, num_rows, column);
+    }
+    return ColumnHelper::unpack_and_duplicate_const_column(num_rows, std::move(column));
+}
+
 Status Aggregator::evaluate_agg_input_column(Chunk* chunk, std::vector<ExprContext*>& agg_expr_ctxs, int i) {
     SCOPED_TIMER(_agg_stat->expr_compute_timer);
     for (size_t j = 0; j < agg_expr_ctxs.size(); j++) {
@@ -897,7 +907,7 @@ Status Aggregator::evaluate_agg_input_column(Chunk* chunk, std::vector<ExprConte
         // if first column is const, we have to unpack it. Most agg function only has one arg, and treat it as non-const column
         if (j == 0) {
             _agg_input_columns[i][j] =
-                    ColumnHelper::unpack_and_duplicate_const_column(chunk->num_rows(), std::move(col));
+                    unpack_agg_input_column(agg_expr_ctxs[j]->root()->type(), chunk->num_rows(), std::move(col));
         } else {
             // if function has at least two argument, unpack const column selectively
             // for function like percentile_disc, the second args is const, do not unpack it
@@ -910,7 +920,7 @@ Status Aggregator::evaluate_agg_input_column(Chunk* chunk, std::vector<ExprConte
                 _agg_input_columns[i][j] = std::move(col);
             } else {
                 _agg_input_columns[i][j] =
-                        ColumnHelper::unpack_and_duplicate_const_column(chunk->num_rows(), std::move(col));
+                        unpack_agg_input_column(agg_expr_ctxs[j]->root()->type(), chunk->num_rows(), std::move(col));
             }
         }
         _agg_input_raw_columns[i][j] = _agg_input_columns[i][j].get();
