@@ -25,7 +25,7 @@ definition fails to parse, and the caller falls back to plain string normalizati
 """
 
 import logging
-from typing import Optional
+from typing import List, Optional, Set
 
 
 logger = logging.getLogger(__name__)
@@ -116,3 +116,42 @@ def canonicalize_sql(sql: Optional[str], remove_qualifiers: bool = False) -> Opt
         # Best-effort: any parse/transform failure falls back to plain normalization.
         logger.debug("sqlglot canonicalization failed (%s); falling back to plain normalization.", exc)
         return None
+
+
+def output_column_names(sql: Optional[str]) -> Optional[List[str]]:
+    """Return the names of the columns a query outputs, in order, or None when they cannot be read.
+
+    They cannot when sqlglot is absent or cannot parse the query, when it is not a single SELECT, or when an
+    output is a ``*`` or an expression with no alias, whose name StarRocks makes up from its text.
+    """
+    if not _SQLGLOT_AVAILABLE or not sql or not sql.strip():
+        return None
+    try:
+        tree = sqlglot.parse_one(sql, dialect=_DIALECT)
+    except Exception as exc:
+        logger.debug("sqlglot could not read the outputs of a query (%s).", exc)
+        return None
+    if not isinstance(tree, exp.Select):
+        return None
+    names: List[str] = []
+    for projection in tree.expressions:
+        if not isinstance(projection, (exp.Alias, exp.Column)) or isinstance(projection.this, exp.Star):
+            return None
+        names.append(projection.alias_or_name)
+    return names
+
+
+def column_names_in_expressions(sql: Optional[str]) -> Optional[Set[str]]:
+    """Return the lower-cased names of the columns a comma-separated list of expressions reads, or None when it
+    cannot be read, as when sqlglot is absent or cannot parse it.
+
+    A function, as ``current_date()``, and a literal are not columns.
+    """
+    if not _SQLGLOT_AVAILABLE or not sql or not sql.strip():
+        return None
+    try:
+        tree = sqlglot.parse_one(f"SELECT {sql}", dialect=_DIALECT)
+    except Exception as exc:
+        logger.debug("sqlglot could not read the columns of an expression (%s).", exc)
+        return None
+    return {column.name.lower() for column in tree.find_all(exp.Column)}

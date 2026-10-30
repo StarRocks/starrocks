@@ -12,11 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import re
 from unittest.mock import Mock
 
 from alembic.autogenerate.api import AutogenContext
-import pytest
+from sqlalchemy import testing
+from sqlalchemy.testing import fixtures
 
 from starrocks.alembic.ops import (
     AlterTableDistributionOp,
@@ -54,57 +54,47 @@ from starrocks.datatype import (
     VARBINARY,
     VARCHAR,
 )
+from test.util import normalize_py_call
 
 
-def _normalize_py_call(s: str) -> str:
-    # strip whitespace and collapse multiple spaces, ignore line breaks
-    s = re.sub(r"\s+", " ", s).strip()
-    s = re.sub(r" , ", ", ", s)
-    s = re.sub(r"\( ", "(", s)
-    s = re.sub(r" \)", ")", s)
-    s = re.sub(r"\[ ", "[", s)
-    s = re.sub(r" \]", "]", s)
-    return s
-
-
-class TestTableRendering:
+class TableRenderingTest(fixtures.TestBase):
     def test_render_alter_table_distribution(self):
         ctx = Mock()
         op = AlterTableDistributionOp("t1", "HASH(k1, k2)", buckets=10, schema="s1")
         rendered = _render_alter_table_distribution(ctx, op)
         expected = "op.alter_table_distribution('t1', 'HASH(k1, k2)', buckets=10, schema='s1')"
-        assert _normalize_py_call(rendered) == _normalize_py_call(expected)
+        assert normalize_py_call(rendered) == normalize_py_call(expected)
 
         # No schema
         op = AlterTableDistributionOp("t1", "HASH(k1, k2)", buckets=10, schema=None)
         rendered = _render_alter_table_distribution(ctx, op)
         expected = "op.alter_table_distribution('t1', 'HASH(k1, k2)', buckets=10)"
-        assert _normalize_py_call(rendered) == _normalize_py_call(expected)
+        assert normalize_py_call(rendered) == normalize_py_call(expected)
 
         # No buckets
         op = AlterTableDistributionOp("t1", "RANDOM", buckets=None, schema="s1")
         rendered = _render_alter_table_distribution(ctx, op)
         expected = "op.alter_table_distribution('t1', 'RANDOM', schema='s1')"
-        assert _normalize_py_call(rendered) == _normalize_py_call(expected)
+        assert normalize_py_call(rendered) == normalize_py_call(expected)
 
         # Buckets is 0
         op = AlterTableDistributionOp("t1", "RANDOM", buckets=0, schema="s1")
         rendered = _render_alter_table_distribution(ctx, op)
         expected = "op.alter_table_distribution('t1', 'RANDOM', buckets=0, schema='s1')"
-        assert _normalize_py_call(rendered) == _normalize_py_call(expected)
+        assert normalize_py_call(rendered) == normalize_py_call(expected)
 
         # No buckets and no schema
         op = AlterTableDistributionOp("t1", "RANDOM", buckets=None, schema=None)
         rendered = _render_alter_table_distribution(ctx, op)
         expected = "op.alter_table_distribution('t1', 'RANDOM')"
-        assert _normalize_py_call(rendered) == _normalize_py_call(expected)
+        assert normalize_py_call(rendered) == normalize_py_call(expected)
 
     def test_render_alter_table_order(self):
         ctx = Mock()
         op = AlterTableOrderOp("t1", "k1, k2", schema="s1")
         rendered = _render_alter_table_order(ctx, op)
         expected = "op.alter_table_order('t1', 'k1, k2', schema='s1')"
-        assert _normalize_py_call(rendered) == _normalize_py_call(expected)
+        assert normalize_py_call(rendered) == normalize_py_call(expected)
 
         op = AlterTableOrderOp("t1", "k1", schema=None)
         rendered = _render_alter_table_order(ctx, op)
@@ -114,9 +104,9 @@ class TestTableRendering:
         ctx = Mock()
         op = AlterTablePropertiesOp("t1", {"replication_num": "1", "storage_medium": "SSD"}, schema="s1")
         rendered = _render_alter_table_properties(ctx, op)
-        rendered = _normalize_py_call(rendered)
+        rendered = normalize_py_call(rendered)
         # repr() on dict is order-sensitive in older pythons, so check keys/values
-        assert _normalize_py_call("op.alter_table_properties('t1', ") in rendered
+        assert normalize_py_call("op.alter_table_properties('t1', ") in rendered
         assert "'replication_num': '1'" in rendered
         assert "'storage_medium': 'SSD'" in rendered
         assert "schema='s1'" in rendered
@@ -130,7 +120,7 @@ class TestTableRendering:
         op = AlterTablePropertiesOp("t1", {}, schema="s1")
         rendered = _render_alter_table_properties(ctx, op)
         expected = "op.alter_table_properties('t1', {}, schema='s1')"
-        assert _normalize_py_call(rendered) == _normalize_py_call(expected)
+        assert normalize_py_call(rendered) == normalize_py_call(expected)
 
         # With no properties and no schema
         op = AlterTablePropertiesOp("t1", {}, schema=None)
@@ -151,7 +141,7 @@ BASIC_RENDER_TEST_CASES = [
     (BIGINT(), "BIGINT()"),
     (LARGEINT(), "LARGEINT()"),
     (FLOAT(), "FLOAT()"),
-    (DOUBLE(), "DOUBLE(asdecimal=True)"),
+    (DOUBLE(), "DOUBLE()"),
     (CHAR(10), "CHAR(length=10)"),
     (STRING(), "STRING()"),
     (BINARY(10), "BINARY(length=10)"),
@@ -173,7 +163,7 @@ COMPLEX_RENDER_TEST_CASES = [
 
     # MAP types
     (MAP(STRING, INTEGER), "MAP(STRING(), INTEGER())"),
-    (MAP(VARCHAR(50), DOUBLE), "MAP(VARCHAR(length=50), DOUBLE(asdecimal=True))"),
+    (MAP(VARCHAR(50), DOUBLE), "MAP(VARCHAR(length=50), DOUBLE())"),
     (MAP(STRING, MAP(INTEGER, STRING)), "MAP(STRING(), MAP(INTEGER(), STRING()))"),
     (MAP(STRING, DECIMAL(8, 2)), "MAP(STRING(), DECIMAL(precision=8, scale=2))"),
 
@@ -199,7 +189,7 @@ NON_STARROCKS_TYPE_TEST_CASES = [
 ]
 
 
-class TestDataTypeRendering:
+class DataTypeRenderingTest(fixtures.TestBase):
     """Test rendering of StarRocks data types in Alembic autogenerate"""
 
     def _create_mock_autogen_context(self):
@@ -211,7 +201,7 @@ class TestDataTypeRendering:
         ctx.imports = set()
         return AutogenContext(ctx, {}, None, True)
 
-    @pytest.mark.parametrize("type_instance, expected_render", BASIC_RENDER_TEST_CASES)
+    @testing.combinations(*BASIC_RENDER_TEST_CASES, argnames="type_instance, expected_render")
     def test_render_basic_types(self, type_instance, expected_render):
         """Test rendering of basic data types"""
         autogen_context = self._create_mock_autogen_context()
@@ -219,14 +209,14 @@ class TestDataTypeRendering:
         assert result == expected_render
         assert "from starrocks import *" in autogen_context.imports
 
-    @pytest.mark.parametrize("type_instance, expected_render", COMPLEX_RENDER_TEST_CASES)
+    @testing.combinations(*COMPLEX_RENDER_TEST_CASES, argnames="type_instance, expected_render")
     def test_render_complex_types(self, type_instance, expected_render):
         """Test rendering of complex data types"""
         autogen_context = self._create_mock_autogen_context()
         result = render_column_type('type', type_instance, autogen_context)
         assert result == expected_render
 
-    @pytest.mark.parametrize("type_instance, expected_render", EDGE_CASE_RENDER_TEST_CASES)
+    @testing.combinations(*EDGE_CASE_RENDER_TEST_CASES, argnames="type_instance, expected_render")
     def test_render_edge_cases(self, type_instance, expected_render):
         """Test edge cases in type rendering"""
         autogen_context = self._create_mock_autogen_context()

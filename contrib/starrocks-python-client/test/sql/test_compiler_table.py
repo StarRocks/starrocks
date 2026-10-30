@@ -12,326 +12,437 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import logging
+"""CREATE TABLE compilation, with StarRocks key, partition, distribution, ORDER BY and PROPERTIES clauses.
 
-import pytest
-from sqlalchemy import BigInteger, Column, Date, DateTime, Integer, MetaData, String, Table
-try:
-    from sqlalchemy import Double
-except ImportError:
-    from sqlalchemy import Float as Double
-from sqlalchemy.dialects import registry
-from sqlalchemy.schema import CreateTable
+The dialect puts each column on its own indented line and each table clause on its own line; ``assert_compile``
+drops the line breaks, so each expected string literal below is one line of the generated DDL.
+"""
+
+import re
+import warnings
+
+from sqlalchemy import (
+    JSON,
+    BigInteger,
+    Boolean,
+    Column,
+    Computed,
+    Date,
+    DateTime,
+    Float,
+    Index,
+    Integer,
+    LargeBinary,
+    MetaData,
+    Numeric,
+    PrimaryKeyConstraint,
+    String,
+    Table,
+    Text,
+    Time,
+    exc,
+    func,
+    testing,
+)
+from sqlalchemy.schema import CreateIndex, CreateTable, DropIndex
+from sqlalchemy.testing import expect_raises_message, expect_warnings, fixtures
+from sqlalchemy.testing.assertions import AssertsCompiledSQL
 
 from starrocks.common.params import ColumnAggInfoKeyWithPrefix
 from starrocks.common.types import ColumnAggType
-from test.test_utils import normalize_sql
+from starrocks.datatype import CHAR, DOUBLE, LARGEINT
+from starrocks.dialect import StarRocksDialect, warn_once_of_doubled_percents
+from starrocks.sql.ddl import (
+    AlterMaterializedView,
+    AlterTableDistribution,
+    AlterTableOrder,
+    AlterTableProperties,
+    CreateMaterializedView,
+    CreateView,
+)
+from starrocks.sql.schema import MaterializedView, View
 
 
-class TestCreateTableCompiler:
-    @classmethod
-    def setup_class(cls):
-        registry.register("starrocks", "starrocks.dialect", "StarRocksDialect")
-        cls.logger = logging.getLogger(__name__)
-        cls.dialect = registry.load("starrocks")()
-        cls.metadata = MetaData()
-
-    def _compile_table(self, table: Table) -> str:
-        return str(CreateTable(table).compile(dialect=self.dialect))
+class CreateTableCompileTest(fixtures.TestBase, AssertsCompiledSQL):
+    __dialect__ = StarRocksDialect()
 
     def test_engine_and_comment(self):
-        self.logger.info("Testing ENGINE and COMMENT clauses")
-        tbl = Table('engine_comment_tbl', self.metadata, Column('k1', Integer),
-                    starrocks_engine='OLAP',
-                    comment='A simple table comment.',
-                    starrocks_duplicate_key='k1',
-                    starrocks_distributed_by='HASH(k1)')
-        sql = self._compile_table(tbl)
-        expected = """
-            CREATE TABLE engine_comment_tbl(k1 INTEGER)
-            DUPLICATE KEY(k1)
-            COMMENT 'A simple table comment.'
-            DISTRIBUTED BY HASH(k1)
-        """
-        assert normalize_sql(sql) == normalize_sql(expected)
+        """``ENGINE = OLAP`` is StarRocks' default, so the dialect leaves it out."""
+        tbl = Table(
+            "engine_comment_tbl",
+            MetaData(),
+            Column("k1", Integer),
+            starrocks_engine="OLAP",
+            comment="A simple table comment.",
+            starrocks_duplicate_key="k1",
+            starrocks_distributed_by="HASH(k1)",
+        )
+        self.assert_compile(
+            CreateTable(tbl),
+            "CREATE TABLE engine_comment_tbl ("
+            "    k1 INTEGER"
+            ")"
+            "DUPLICATE KEY (k1)"
+            "COMMENT 'A simple table comment.'"
+            "DISTRIBUTED BY HASH(k1)",
+        )
 
-    def test_key_descriptions(self):
-        self.logger.info("Testing Key Description clauses")
-        # DUPLICATE KEY
-        tbl_dup = Table('key_duplicate_tbl', self.metadata, Column('k1', Integer),
-                        starrocks_duplicate_key='k1', starrocks_distributed_by='HASH(k1)')
-        sql = self._compile_table(tbl_dup)
-        expected_dup = """
-            CREATE TABLE key_duplicate_tbl(k1 INTEGER)
-            DUPLICATE KEY(k1)
-            DISTRIBUTED BY HASH(k1)
-        """
-        assert normalize_sql(sql) == normalize_sql(expected_dup)
-
-        # AGGREGATE KEY
-        tbl_agg = Table('key_aggregate_tbl', self.metadata, Column('k1', Integer),
-                        starrocks_aggregate_key='k1', starrocks_distributed_by='HASH(k1)')
-        sql = self._compile_table(tbl_agg)
-        expected_agg = """
-            CREATE TABLE key_aggregate_tbl(k1 INTEGER)
-            AGGREGATE KEY(k1)
-            DISTRIBUTED BY HASH(k1)
-        """
-        assert normalize_sql(sql) == normalize_sql(expected_agg)
-
-        # UNIQUE KEY
-        tbl_unique = Table('key_unique_tbl', self.metadata, Column('k1', Integer),
-                           starrocks_unique_key='k1', starrocks_distributed_by='HASH(k1)')
-        sql = self._compile_table(tbl_unique)
-        expected_unique = """
-            CREATE TABLE key_unique_tbl(k1 INTEGER)
-            UNIQUE KEY(k1)
-            DISTRIBUTED BY HASH(k1)
-        """
-        assert normalize_sql(sql) == normalize_sql(expected_unique)
-
-        # PRIMARY KEY
-        tbl_primary = Table('key_primary_tbl', self.metadata, Column('k1', Integer),
-                            starrocks_primary_key='k1', starrocks_distributed_by='HASH(k1)')
-        sql = self._compile_table(tbl_primary)
-        expected_primary = """
-            CREATE TABLE key_primary_tbl(k1 INTEGER)
-            PRIMARY KEY(k1)
-            DISTRIBUTED BY HASH(k1)
-        """
-        assert normalize_sql(sql) == normalize_sql(expected_primary)
+    @testing.combinations(
+        ("starrocks_duplicate_key", "DUPLICATE KEY (k1)"),
+        ("starrocks_aggregate_key", "AGGREGATE KEY (k1)"),
+        ("starrocks_unique_key", "UNIQUE KEY (k1)"),
+        ("starrocks_primary_key", "PRIMARY KEY (k1)"),
+        argnames="key_kwarg, key_clause",
+        id_="sa",
+    )
+    def test_key_description(self, key_kwarg, key_clause):
+        tbl = Table(
+            "key_tbl", MetaData(), Column("k1", Integer), starrocks_distributed_by="HASH(k1)", **{key_kwarg: "k1"}
+        )
+        self.assert_compile(
+            CreateTable(tbl),
+            "CREATE TABLE key_tbl ("
+            "    k1 INTEGER"
+            ")"
+            f"{key_clause}"
+            "DISTRIBUTED BY HASH(k1)",
+        )
 
     def test_column_comment(self):
-        self.logger.info("Testing Column Comment clause")
-        tbl = Table('col_comment_tbl', self.metadata,
-                    Column('k1', Integer, comment='This is a column comment.'),
-                    starrocks_distributed_by='HASH(k1)')
-        sql = self._compile_table(tbl)
-        expected = "CREATE TABLE col_comment_tbl(k1 INTEGER COMMENT 'This is a column comment.') DISTRIBUTED BY HASH(k1)"
-        assert normalize_sql(sql) == normalize_sql(expected)
+        tbl = Table(
+            "col_comment_tbl",
+            MetaData(),
+            Column("k1", Integer, comment="This is a column comment."),
+            starrocks_distributed_by="HASH(k1)",
+        )
+        self.assert_compile(
+            CreateTable(tbl),
+            "CREATE TABLE col_comment_tbl ("
+            "    k1 INTEGER COMMENT 'This is a column comment.'"
+            ")"
+            "DISTRIBUTED BY HASH(k1)",
+        )
 
     def test_column_attributes(self):
-        self.logger.info("Testing various column attributes")
-        tbl = Table('col_attr_tbl', self.metadata,
-                    Column('k1', Integer, primary_key=True, autoincrement=False),
-                    Column('k2', BigInteger, autoincrement=True),
-                    Column('k3', String(50), nullable=True),
-                    starrocks_distributed_by='HASH(k1)',
-                    starrocks_primary_key='k1')
-        sql = self._compile_table(tbl)
-        expected = """
-            CREATE TABLE col_attr_tbl(
-                k1 INTEGER NOT NULL,
-                k2 BIGINT NOT NULL AUTO_INCREMENT,
-                k3 VARCHAR(50)
-            )
-            PRIMARY KEY(k1)
-            DISTRIBUTED BY HASH(k1)
-        """
-        assert normalize_sql(sql) == normalize_sql(expected)
+        tbl = Table(
+            "col_attr_tbl",
+            MetaData(),
+            Column("k1", Integer, primary_key=True, autoincrement=False),
+            Column("k2", BigInteger, autoincrement=True),
+            Column("k3", String(50), nullable=True),
+            starrocks_distributed_by="HASH(k1)",
+            starrocks_primary_key="k1",
+        )
+        self.assert_compile(
+            CreateTable(tbl),
+            "CREATE TABLE col_attr_tbl ("
+            "    k1 INTEGER NOT NULL, "
+            "    k2 BIGINT NOT NULL AUTO_INCREMENT, "
+            "    k3 VARCHAR(50)"
+            ")"
+            "PRIMARY KEY (k1)"
+            "DISTRIBUTED BY HASH(k1)",
+        )
 
     def test_aggregate_key_table(self):
-        self.logger.info("Testing Aggregate Key Table DDL")
-        tbl = Table('agg_tbl', self.metadata,
-                    Column('k1', Integer),
-                    Column('v1', Integer, **{ColumnAggInfoKeyWithPrefix.AGG_TYPE: ColumnAggType.SUM}),
-                    Column('v2', String(50), **{ColumnAggInfoKeyWithPrefix.AGG_TYPE: ColumnAggType.REPLACE}),
-                    starrocks_AGGREGATE_KEY='k1')
-        sql = self._compile_table(tbl)
-        expected = """
-            CREATE TABLE agg_tbl(
-                k1 INTEGER,
-                v1 INTEGER SUM,
-                v2 VARCHAR(50) REPLACE
-            )
-            AGGREGATE KEY(k1)
-        """
-        assert normalize_sql(sql) == normalize_sql(expected)
+        tbl = Table(
+            "agg_tbl",
+            MetaData(),
+            Column("k1", Integer),
+            Column("v1", Integer, **{ColumnAggInfoKeyWithPrefix.AGG_TYPE: ColumnAggType.SUM}),
+            Column("v2", String(50), **{ColumnAggInfoKeyWithPrefix.AGG_TYPE: ColumnAggType.REPLACE}),
+            starrocks_AGGREGATE_KEY="k1",
+        )
+        self.assert_compile(
+            CreateTable(tbl),
+            "CREATE TABLE agg_tbl ("
+            "    k1 INTEGER, "
+            "    v1 INTEGER SUM, "
+            "    v2 VARCHAR(50) REPLACE"
+            ")"
+            "AGGREGATE KEY (k1)",
+        )
 
-    def test_aggregate_key_validation(self):
-        self.logger.info("Testing AGGREGATE KEY validation")
-        from sqlalchemy import exc
+    @testing.combinations(
+        ("percentile_union", "PERCENTILE_UNION", "v1 INTEGER PERCENTILE_UNION"),
+        ("state_function", "sum(BIGINT)", "v1 INTEGER sum(BIGINT)"),
+        argnames="agg_type, column_text",
+        id_="iaa",
+    )
+    def test_aggregate_type_forms(self, agg_type, column_text):
+        tbl = Table(
+            "agg_forms_tbl",
+            MetaData(),
+            Column("k1", Integer),
+            Column("v1", Integer, **{ColumnAggInfoKeyWithPrefix.AGG_TYPE: agg_type}),
+            starrocks_aggregate_key="k1",
+        )
+        self.assert_compile(
+            CreateTable(tbl), "CREATE TABLE agg_forms_tbl (" "    k1 INTEGER, " f"    {column_text}" ")" "AGGREGATE KEY (k1)"
+        )
 
-        # Test case 1: Column marked as both key and aggregate
-        with pytest.raises(exc.CompileError, match="cannot be both KEY and aggregated"):
-            tbl1 = Table('invalid_agg_tbl1', self.metadata,
-                         Column('k1', Integer, **{
-                             ColumnAggInfoKeyWithPrefix.IS_AGG_KEY: True,
-                             ColumnAggInfoKeyWithPrefix.AGG_TYPE: ColumnAggType.SUM
-                         }),
-                         starrocks_aggregate_key='k1')
-            self._compile_table(tbl1)
+    @testing.combinations(("count", "COUNT"), ("unknown", "AVERAGE"), argnames="agg_type", id_="ia")
+    def test_unknown_aggregate_type_raises(self, agg_type):
+        tbl = Table(
+            "agg_unknown_tbl",
+            MetaData(),
+            Column("k1", Integer),
+            Column("v1", Integer, **{ColumnAggInfoKeyWithPrefix.AGG_TYPE: agg_type}),
+            starrocks_aggregate_key="k1",
+        )
+        with expect_raises_message(exc.CompileError, f"Unsupported aggregate type for column 'v1': {agg_type}"):
+            CreateTable(tbl).compile(dialect=self.__dialect__)
 
-        # Test case 2: Column with aggregate marker on a non-aggregate table
-        with pytest.raises(exc.CompileError, match="only valid for AGGREGATE KEY tables"):
-            tbl2 = Table('invalid_agg_tbl2', self.metadata,
-                         Column('k1', Integer),
-                         Column('v1', Integer, **{ColumnAggInfoKeyWithPrefix.AGG_TYPE: ColumnAggType.SUM}),
-                         starrocks_duplicate_key='k1')
-            self._compile_table(tbl2)
+    def test_aggregate_key_column_cannot_be_aggregated(self):
+        tbl = Table(
+            "invalid_agg_tbl1",
+            MetaData(),
+            Column(
+                "k1",
+                Integer,
+                **{ColumnAggInfoKeyWithPrefix.IS_AGG_KEY: True, ColumnAggInfoKeyWithPrefix.AGG_TYPE: ColumnAggType.SUM},
+            ),
+            starrocks_aggregate_key="k1",
+        )
+        with expect_raises_message(exc.CompileError, "cannot be both KEY and aggregated"):
+            CreateTable(tbl).compile(dialect=self.__dialect__)
 
-    def test_aggregate_key_ordering(self):
-        self.logger.info("Testing AGGREGATE KEY column ordering validation")
+    def test_aggregate_type_needs_aggregate_key_table(self):
+        tbl = Table(
+            "invalid_agg_tbl2",
+            MetaData(),
+            Column("k1", Integer),
+            Column("v1", Integer, **{ColumnAggInfoKeyWithPrefix.AGG_TYPE: ColumnAggType.SUM}),
+            starrocks_duplicate_key="k1",
+        )
+        with expect_raises_message(exc.CompileError, "only valid for AGGREGATE KEY tables"):
+            CreateTable(tbl).compile(dialect=self.__dialect__)
 
-        # Test case 1: Value column before key column
-        # Don't check it now. leave it to SR.
-        # with pytest.raises(exc.CompileError, match="all key columns must be defined before any value columns"):
-        #     tbl1 = Table('invalid_order_tbl1', self.metadata,
-        #                  Column('v1', Integer, **{ColumnAggInfoKeyWithPrefix.AGG_TYPE: ColumnAggType.SUM}),
-        #                  Column('k1', Integer),
-        #                  **{TableInfoKeyWithPrefix.AGGREGATE_KEY: 'k1'})
-        #     self._compile_table(tbl1)
+    @testing.combinations(
+        ("string", "event_date, user_id"),
+        ("parenthesised_string", "(event_date, user_id)"),
+        ("list", ["event_date", "user_id"]),
+        ("tuple", ("event_date", "user_id")),
+        argnames="order_by",
+        id_="ia",
+    )
+    def test_order_by_forms(self, order_by):
+        """``starrocks_order_by`` takes a column list string, or a list of columns as ALTER TABLE ORDER BY does."""
+        tbl = Table(
+            "ordered_tbl",
+            MetaData(),
+            Column("user_id", Integer),
+            Column("event_date", Date),
+            starrocks_duplicate_key="user_id",
+            starrocks_order_by=order_by,
+        )
+        self.assert_compile(
+            CreateTable(tbl),
+            "CREATE TABLE ordered_tbl ("
+            "    user_id INTEGER, "
+            "    event_date DATE"
+            ")"
+            "DUPLICATE KEY (user_id)"
+            "ORDER BY (event_date, user_id)",
+        )
 
-        # Test case 2: Key columns in wrong order compared to starrocks_aggregate_key
-        # Don't check it now. leave it to SR.
-        # with pytest.raises(exc.CompileError, match="order of key columns in the table definition must match"):
-        #     tbl2 = Table('invalid_order_tbl2', self.metadata,
-        #                  Column('k2', Integer),
-        #                  Column('k1', Integer),
-        #                  Column('v1', Integer, **{ColumnAggInfoKeyWithPrefix.AGG_TYPE: ColumnAggType.SUM}),
-        #                  **{TableInfoKeyWithPrefix.AGGREGATE_KEY: 'k1,k2'})
-        #     self._compile_table(tbl2)
+    def test_order_by_list_quotes_the_names_starrocks_needs_quoted(self):
+        """A list names columns, so a reserved or mixed-case name is backquoted; ``ORDER BY (text)`` is a syntax error."""
+        tbl = Table(
+            "ordered_tbl",
+            MetaData(),
+            Column("text", Integer),
+            Column("Id", Integer),
+            Column("k", Integer),
+            starrocks_order_by=["text", "Id", "`k`"],
+        )
+        self.assert_compile(
+            CreateTable(tbl),
+            "CREATE TABLE ordered_tbl ("
+            "    `text` INTEGER, "
+            "    `Id` INTEGER, "
+            "    k INTEGER"
+            ")"
+            "ORDER BY (`text`, `Id`, `k`)",
+        )
 
     def test_column_default_value(self):
-        self.logger.info("Testing column server_default value")
-        tbl = Table('default_val_tbl', self.metadata,
-                    Column('k1', Integer),
-                    Column('k2', String(50), server_default="foo"),
-                    starrocks_distributed_by='HASH(k1)')
-        sql = self._compile_table(tbl)
-        expected = """
-            CREATE TABLE default_val_tbl(
-                k1 INTEGER,
-                k2 VARCHAR(50) DEFAULT 'foo'
-            )
-            DISTRIBUTED BY HASH(k1)
-        """
-        assert normalize_sql(sql) == normalize_sql(expected)
+        tbl = Table(
+            "default_val_tbl",
+            MetaData(),
+            Column("k1", Integer),
+            Column("k2", String(50), server_default="foo"),
+            starrocks_distributed_by="HASH(k1)",
+        )
+        self.assert_compile(
+            CreateTable(tbl),
+            "CREATE TABLE default_val_tbl ("
+            "    k1 INTEGER, "
+            "    k2 VARCHAR(50) DEFAULT 'foo'"
+            ")"
+            "DISTRIBUTED BY HASH(k1)",
+        )
 
     def test_generated_column(self):
-        self.logger.info("Testing generated column DDL")
-        from sqlalchemy import Computed
-        tbl = Table('generated_col_tbl', self.metadata,
-                    Column('k1', Integer),
-                    Column('k2', String(50)),
-                    Column('k3', Integer, Computed("left(k2, 10)")),
-                    starrocks_distributed_by='HASH(k1)')
-        sql = self._compile_table(tbl)
-        expected = """
-            CREATE TABLE generated_col_tbl(
-                k1 INTEGER,
-                k2 VARCHAR(50),
-                k3 INTEGER AS (left(k2, 10))
-            )
-            DISTRIBUTED BY HASH(k1)
+        tbl = Table(
+            "generated_col_tbl",
+            MetaData(),
+            Column("k1", Integer),
+            Column("k2", String(50)),
+            Column("k3", Integer, Computed("left(k2, 10)")),
+            starrocks_distributed_by="HASH(k1)",
+        )
+        self.assert_compile(
+            CreateTable(tbl),
+            "CREATE TABLE generated_col_tbl ("
+            "    k1 INTEGER, "
+            "    k2 VARCHAR(50), "
+            "    k3 INTEGER AS (left(k2, 10))"
+            ")"
+            "DISTRIBUTED BY HASH(k1)",
+        )
+
+    @testing.combinations(
+        (
+            "range",
+            [Column("event_date", Date)],
+            'RANGE(event_date) (PARTITION p2023 VALUES LESS THAN ("2024-01-01"))',
+            "    event_date DATE",
+        ),
+        (
+            "range_multi_column",
+            [Column("k1", Integer), Column("k2", Integer)],
+            'RANGE(k1, k2) (PARTITION p1 VALUES LESS THAN ("100", "200"))',
+            "    k1 INTEGER,     k2 INTEGER",
+        ),
+        (
+            "list",
+            [Column("city", String(50))],
+            'LIST(city) (PARTITION p_north VALUES IN ("Beihai", "Dalian"))',
+            "    city VARCHAR(50)",
+        ),
+        (
+            "date_trunc_recognised_as_range",
+            [Column("event_time", DateTime)],
+            "date_trunc('month', event_time)",
+            "    event_time DATETIME",
+        ),
+        (
+            "expression",
+            [Column("event_time", DateTime)],
+            "to_date(event_time)",
+            "    event_time DATETIME",
+        ),
+        (
+            "expression_multi",
+            [Column("s", String(20)), Column("id", Integer)],
+            "str2date(s, '%Y-%m-%d'), id",
+            "    s VARCHAR(20),     id INTEGER",
+        ),
+        (
+            "batch",
+            [Column("datekey", Integer)],
+            'RANGE(datekey) (START ("1") END ("5") EVERY (1))',
+            "    datekey INTEGER",
+        ),
+        argnames="columns, partition_by, column_lines",
+        id_="iaaa",
+    )
+    def test_partition_description(self, columns, partition_by, column_lines):
+        """The partition clause is passed through as given.
+
+        Keep the ``date_trunc`` case: StarRocks recognises it as a RANGE partition, unlike other expressions.
+        The ``expression_multi`` case is a list of partition expressions, which only StarRocks 4.1 accepts; 3.3
+        refuses any list of them. These tests only compile the DDL, so the case runs whatever the server.
         """
-        assert normalize_sql(sql) == normalize_sql(expected)
+        tbl = Table("p_tbl", MetaData(), *columns, starrocks_partition_by=partition_by)
+        self.assert_compile(
+            CreateTable(tbl),
+            f"CREATE TABLE p_tbl ({column_lines})PARTITION BY {partition_by.replace('%', '%%')}",
+        )
 
-    def test_partition_descriptions(self):
-        self.logger.info("Testing Partition Description clauses")
+    @testing.combinations(
+        ("bare", "k, s", "PARTITION BY (k, s)"),
+        ("backquoted", "`k`,`s`", "PARTITION BY (`k`,`s`)"),
+        ("one_column", "k", "PARTITION BY (k)"),
+        ("one_backquoted_column", "`s`", "PARTITION BY (`s`)"),
+        ("expressions", "date_trunc('day', dt), k", "PARTITION BY date_trunc('day', dt), k"),
+        argnames="partition_by, clause",
+        id_="iaa",
+    )
+    def test_a_column_list_partition_is_parenthesized(self, partition_by, clause):
+        """StarRocks 3.3 takes a partition column, or a list of them, only in parentheses."""
+        tbl = Table("p_tbl", MetaData(), Column("k", Integer), Column("s", Integer), starrocks_partition_by=partition_by)
+        self.assert_compile(CreateTable(tbl), f"CREATE TABLE p_tbl (    k INTEGER,     s INTEGER){clause}")
 
-        # Single-column RANGE partition
-        tbl_range = Table('p_range_tbl', self.metadata, Column('event_date', Date),
-                          starrocks_partition_by='RANGE(event_date) (PARTITION p2023 VALUES LESS THAN ("2024-01-01"))')
-        sql = self._compile_table(tbl_range)
-        expected = "CREATE TABLE p_range_tbl(event_date DATE) PARTITION BY RANGE(event_date)(PARTITION p2023 VALUES LESS THAN(\"2024-01-01\"))"
-        assert normalize_sql(sql) == normalize_sql(expected)
-
-        # Multi-column RANGE partition
-        tbl_range_multi = Table('p_range_multi_tbl', self.metadata, Column('k1', Integer), Column('k2', Integer),
-                                starrocks_partition_by='RANGE(k1, k2) (PARTITION p1 VALUES LESS THAN (100, 200))')
-        sql = self._compile_table(tbl_range_multi)
-        expected = "CREATE TABLE p_range_multi_tbl(k1 INTEGER,k2 INTEGER) PARTITION BY RANGE(k1,k2)(PARTITION p1 VALUES LESS THAN(100,200))"
-        assert normalize_sql(sql) == normalize_sql(expected)
-
-        # LIST partition
-        tbl_list = Table('p_list_tbl', self.metadata, Column('city', String(50)),
-                         starrocks_partition_by='LIST(city) (PARTITION p_north VALUES IN ("Beihai", "Dalian"))')
-        sql = self._compile_table(tbl_list)
-        expected = "CREATE TABLE p_list_tbl(city VARCHAR(50)) PARTITION BY LIST(city)(PARTITION p_north VALUES IN(\"Beihai\",\"Dalian\"))"
-        assert normalize_sql(sql) == normalize_sql(expected)
-
-        # Please keep it. It is a special case that is recoganized as a RANGE partition.
-        tbl_expr_single = Table('p_range_date_trunc_tbl', self.metadata, Column('event_time', DateTime),
-                                starrocks_partition_by="date_trunc('month', event_time)")
-        sql = self._compile_table(tbl_expr_single)
-        expected = "CREATE TABLE p_range_date_trunc_tbl(event_time DATETIME) PARTITION BY date_trunc('month',event_time)"
-        assert normalize_sql(sql) == normalize_sql(expected)
-
-        # Expression partition (single function)
-        tbl_expr_single = Table('p_expr_single_tbl', self.metadata, Column('event_time', DateTime),
-                                starrocks_partition_by="to_date(event_time)")
-        sql = self._compile_table(tbl_expr_single)
-        expected = "CREATE TABLE p_expr_single_tbl(event_time DATETIME) PARTITION BY to_date(event_time)"
-        assert normalize_sql(sql) == normalize_sql(expected)
-
-        # Expression partition (multiple functions and columns)
-        tbl_expr_multi = Table('p_expr_multi_tbl', self.metadata, Column('event_time', DateTime), Column('id', Integer),
-                               starrocks_partition_by="date_trunc('day', event_time), id % 10")
-        sql = self._compile_table(tbl_expr_multi)
-        expected = "CREATE TABLE p_expr_multi_tbl(event_time DATETIME,id INTEGER) PARTITION BY date_trunc('day',event_time),id % 10"
-        assert normalize_sql(sql) == normalize_sql(expected)
-
-        # Batch partition
-        tbl_batch = Table('p_batch_tbl', self.metadata, Column('datekey', Integer),
-                          starrocks_partition_by='RANGE(datekey) (START ("1") END ("5") EVERY (1))')
-        sql = self._compile_table(tbl_batch)
-        expected = "CREATE TABLE p_batch_tbl(datekey INTEGER) PARTITION BY RANGE(datekey)(START(\"1\")END(\"5\")EVERY(1))"
-        assert normalize_sql(sql) == normalize_sql(expected)
-
-    def test_distribution_descriptions(self):
-        self.logger.info("Testing Distribution Description clauses")
-
-        # HASH distribution
-        tbl_hash = Table('dist_hash_tbl', self.metadata, Column('user_id', Integer),
-                         starrocks_distributed_by='HASH(user_id) BUCKETS 10')
-        sql = self._compile_table(tbl_hash)
-        expected = "CREATE TABLE dist_hash_tbl(user_id INTEGER) DISTRIBUTED BY HASH(user_id) BUCKETS 10"
-        assert normalize_sql(sql) == normalize_sql(expected)
-
-        # RANDOM distribution
-        tbl_random = Table('dist_random_tbl', self.metadata, Column('log_id', BigInteger),
-                           starrocks_distributed_by='RANDOM BUCKETS 4')
-        sql = self._compile_table(tbl_random)
-        expected = "CREATE TABLE dist_random_tbl(log_id BIGINT) DISTRIBUTED BY RANDOM BUCKETS 4"
-        assert normalize_sql(sql) == normalize_sql(expected)
+    @testing.combinations(
+        ("hash", Column("user_id", Integer), "HASH(user_id) BUCKETS 10", "    user_id INTEGER"),
+        ("random", Column("log_id", BigInteger), "RANDOM BUCKETS 4", "    log_id BIGINT"),
+        argnames="column, distributed_by, column_line",
+        id_="iaaa",
+    )
+    def test_distribution_description(self, column, distributed_by, column_line):
+        tbl = Table("dist_tbl", MetaData(), column, starrocks_distributed_by=distributed_by)
+        self.assert_compile(
+            CreateTable(tbl),
+            f"CREATE TABLE dist_tbl ({column_line})DISTRIBUTED BY {distributed_by}",
+        )
 
     def test_order_by(self):
-        self.logger.info("Testing ORDER BY clause")
-        tbl = Table('orderby_tbl', self.metadata, Column('k1', Integer), Column('k2', String(50)),
-                    starrocks_order_by='k1, k2', starrocks_distributed_by='HASH(k1)')
-        sql = self._compile_table(tbl)
-        expected = "CREATE TABLE orderby_tbl(k1 INTEGER, k2 VARCHAR(50)) DISTRIBUTED BY HASH(k1) ORDER BY(k1, k2)"
-        assert normalize_sql(sql) == normalize_sql(expected)
+        tbl = Table(
+            "orderby_tbl",
+            MetaData(),
+            Column("k1", Integer),
+            Column("k2", String(50)),
+            starrocks_order_by="k1, k2",
+            starrocks_distributed_by="HASH(k1)",
+        )
+        self.assert_compile(
+            CreateTable(tbl),
+            "CREATE TABLE orderby_tbl ("
+            "    k1 INTEGER, "
+            "    k2 VARCHAR(50)"
+            ")"
+            "DISTRIBUTED BY HASH(k1)"
+            "ORDER BY (k1, k2)",
+        )
 
     def test_properties(self):
-        self.logger.info("Testing PROPERTIES clause")
-        tbl = Table('props_tbl', self.metadata, Column('k1', Integer),
-                    starrocks_properties={'replication_num': '1', 'storage_medium': 'SSD'},
-                    starrocks_distributed_by='HASH(k1)')
-        sql = self._compile_table(tbl)
-        expected = """
-            PROPERTIES(
-                "replication_num" = "1",
-                "storage_medium" = "SSD"
-            )
-        """
-        assert normalize_sql(expected) in normalize_sql(sql)
+        tbl = Table(
+            "props_tbl",
+            MetaData(),
+            Column("k1", Integer),
+            starrocks_properties={"replication_num": "1", "storage_medium": "SSD"},
+            starrocks_distributed_by="HASH(k1)",
+        )
+        self.assert_compile(
+            CreateTable(tbl),
+            "CREATE TABLE props_tbl ("
+            "    k1 INTEGER"
+            ")"
+            "DISTRIBUTED BY HASH(k1)"
+            "PROPERTIES("
+            '    "replication_num"="1",'
+            '    "storage_medium"="SSD"'
+            ")",
+        )
 
     def test_comprehensive_table(self):
-        self.logger.info("Testing comprehensive CREATE TABLE statement")
         tbl = Table(
-            'comprehensive_table', self.metadata,
-            Column('user_id', BigInteger, nullable=False, comment='User ID'),
-            Column('event_date', Date, nullable=False, comment='Event date'),
-            Column('city', String(50), server_default='Unknown'),
-            Column('revenue', Double, server_default='0.0'),
-            starrocks_engine='OLAP',
-            starrocks_aggregate_key='user_id, event_date',
-            comment='A comprehensive table',
-            starrocks_partition_by='RANGE(event_date) (START ("2023-01-01") END ("2024-01-01") EVERY (INTERVAL 1 MONTH))',
-            starrocks_distributed_by='HASH(user_id) BUCKETS 32',
-            starrocks_order_by='event_date, user_id',
+            "comprehensive_table",
+            MetaData(),
+            Column("user_id", BigInteger, nullable=False, comment="User ID"),
+            Column("event_date", Date, nullable=False, comment="Event date"),
+            Column("city", String(50), server_default="Unknown"),
+            Column("revenue", DOUBLE, server_default="0.0"),
+            starrocks_engine="OLAP",
+            starrocks_aggregate_key="user_id, event_date",
+            comment="A comprehensive table",
+            starrocks_partition_by=(
+                'RANGE(event_date) (START ("2023-01-01") END ("2024-01-01") EVERY (INTERVAL 1 MONTH))'
+            ),
+            starrocks_distributed_by="HASH(user_id) BUCKETS 32",
+            starrocks_order_by="event_date, user_id",
             starrocks_properties={
                 "replication_num": "1",
                 "storage_medium": "SSD",
@@ -339,31 +450,765 @@ class TestCreateTableCompiler:
                 "dynamic_partition.enable": "true",
                 "dynamic_partition.time_unit": "MONTH",
                 "dynamic_partition.end": "3",
-                "dynamic_partition.prefix": "p"
-            }
+                "dynamic_partition.prefix": "p",
+            },
         )
-        sql = self._compile_table(tbl)
-        expected = """
-            CREATE TABLE comprehensive_table (
-                user_id BIGINT NOT NULL COMMENT 'User ID',
-                event_date DATE NOT NULL COMMENT 'Event date',
-                city VARCHAR(50) DEFAULT 'Unknown',
-                revenue DOUBLE DEFAULT '0.0'
-            )
-            AGGREGATE KEY(user_id, event_date)
-            COMMENT 'A comprehensive table'
-            PARTITION BY RANGE(event_date) (START ("2023-01-01") END ("2024-01-01") EVERY (INTERVAL 1 MONTH))
-            DISTRIBUTED BY HASH(user_id) BUCKETS 32
-            ORDER BY(event_date, user_id)
-            PROPERTIES(
-                "replication_num" = "1",
-                "storage_medium" = "SSD",
-                "bloom_filter_columns" = "city",
-                "dynamic_partition.enable" = "true",
-                "dynamic_partition.time_unit" = "MONTH",
-                "dynamic_partition.end" = "3",
-                "dynamic_partition.prefix" = "p"
-            )
-        """
-        assert normalize_sql(sql) == normalize_sql(expected)
+        self.assert_compile(
+            CreateTable(tbl),
+            "CREATE TABLE comprehensive_table ("
+            "    user_id BIGINT NOT NULL COMMENT 'User ID', "
+            "    event_date DATE NOT NULL COMMENT 'Event date', "
+            "    city VARCHAR(50) DEFAULT 'Unknown', "
+            "    revenue DOUBLE DEFAULT '0.0'"
+            ")"
+            "AGGREGATE KEY (user_id, event_date)"
+            "COMMENT 'A comprehensive table'"
+            'PARTITION BY RANGE(event_date) (START ("2023-01-01") END ("2024-01-01") EVERY (INTERVAL 1 MONTH))'
+            "DISTRIBUTED BY HASH(user_id) BUCKETS 32"
+            "ORDER BY (event_date, user_id)"
+            "PROPERTIES("
+            '    "replication_num"="1",'
+            '    "storage_medium"="SSD",'
+            '    "bloom_filter_columns"="city",'
+            '    "dynamic_partition.enable"="true",'
+            '    "dynamic_partition.time_unit"="MONTH",'
+            '    "dynamic_partition.end"="3",'
+            '    "dynamic_partition.prefix"="p"'
+            ")",
+        )
 
+
+class CreateIndexCompileTest(fixtures.TestBase, AssertsCompiledSQL):
+    """``CREATE INDEX`` follows StarRocks' grammar: plain columns, and the index type as an unquoted keyword."""
+
+    __dialect__ = StarRocksDialect()
+
+    @staticmethod
+    def _table():
+        return Table("events", MetaData(), Column("id", Integer), Column("city", String(20)), Column("tags", String(50)))
+
+    @testing.combinations(
+        ("no_type", {}, "CREATE INDEX ix_city ON events (city)"),
+        ("bitmap", {"starrocks_using": "BITMAP"}, "CREATE INDEX ix_city ON events (city) USING BITMAP"),
+        ("lower_case_type", {"starrocks_using": "ngrambf"}, "CREATE INDEX ix_city ON events (city) USING NGRAMBF"),
+        ("gin", {"starrocks_using": "GIN"}, "CREATE INDEX ix_city ON events (city) USING GIN"),
+        argnames="kwargs, expected",
+        id_="iaa",
+    )
+    def test_index_type(self, kwargs, expected):
+        table = self._table()
+        self.assert_compile(CreateIndex(Index("ix_city", table.c.city, **kwargs)), expected)
+
+    @testing.combinations(
+        (
+            "properties",
+            {"starrocks_using": "NGRAMBF", "starrocks_properties": {"gram_num": "4", "bloom_filter_fpp": "0.05"}},
+            'CREATE INDEX ix_city ON events (city) USING NGRAMBF ("gram_num" = "4", "bloom_filter_fpp" = "0.05")',
+        ),
+        (
+            "comment",
+            {"starrocks_using": "BITMAP", "starrocks_comment": "city's index"},
+            "CREATE INDEX ix_city ON events (city) USING BITMAP COMMENT 'city''s index'",
+        ),
+        (
+            "comment_without_type",
+            {"starrocks_comment": "plain"},
+            "CREATE INDEX ix_city ON events (city) COMMENT 'plain'",
+        ),
+        argnames="kwargs, expected",
+        id_="iaa",
+    )
+    def test_properties_and_comment(self, kwargs, expected):
+        table = self._table()
+        self.assert_compile(CreateIndex(Index("ix_city", table.c.city, **kwargs)), expected)
+
+    def test_properties_without_type_raise(self):
+        table = self._table()
+        with expect_raises_message(exc.CompileError, "has starrocks_properties but no starrocks_using"):
+            CreateIndex(Index("ix_city", table.c.city, starrocks_properties={"gram_num": "4"})).compile(
+                dialect=self.__dialect__
+            )
+
+    def test_several_columns_are_refused(self):
+        """StarRocks answers "index can only apply to a single column"."""
+        table = self._table()
+        with expect_raises_message(exc.CompileError, "covers one column"):
+            CreateIndex(Index("ix_city_tags", table.c.city, table.c.tags)).compile(dialect=self.__dialect__)
+
+    def test_drop_index(self):
+        table = self._table()
+        self.assert_compile(DropIndex(Index("ix_city", table.c.city)), "DROP INDEX ix_city ON events")
+
+    def test_drop_index_if_exists_is_refused(self):
+        table = self._table()
+        with expect_raises_message(exc.CompileError, "no DROP INDEX IF EXISTS"):
+            DropIndex(Index("ix_city", table.c.city), if_exists=True).compile(dialect=self.__dialect__)
+
+    def test_unknown_index_type_raises(self):
+        table = self._table()
+        with expect_raises_message(exc.CompileError, "Unknown StarRocks index type 'BTREE'"):
+            CreateIndex(Index("ix_city", table.c.city, starrocks_using="BTREE")).compile(dialect=self.__dialect__)
+
+    def test_unique_index_raises(self):
+        table = self._table()
+        with expect_raises_message(exc.CompileError, "StarRocks has no unique indexes"):
+            CreateIndex(Index("ix_city", table.c.city, unique=True)).compile(dialect=self.__dialect__)
+
+    def test_if_not_exists_raises(self):
+        table = self._table()
+        with expect_raises_message(exc.CompileError, "StarRocks has no CREATE INDEX IF NOT EXISTS"):
+            CreateIndex(Index("ix_city", table.c.city), if_not_exists=True).compile(dialect=self.__dialect__)
+
+    def test_expression_index_raises(self):
+        table = self._table()
+        with expect_raises_message(exc.CompileError, "StarRocks indexes plain columns only"):
+            CreateIndex(Index("ix_lower_city", func.lower(table.c.city))).compile(dialect=self.__dialect__)
+
+    @testing.combinations(
+        ("length", {"starrocks_using": "BITMAP", "starrocks_length": 5}, "starrocks_length"),
+        ("length_per_column", {"starrocks_length": {"city": 5}}, "starrocks_length"),
+        ("prefix", {"starrocks_prefix": "FULLTEXT"}, "starrocks_prefix"),
+        ("with_parser", {"starrocks_using": "GIN", "starrocks_with_parser": "english"}, "starrocks_with_parser"),
+        ("mysql_using", {"mysql_using": "NGRAMBF"}, "mysql_using"),
+        argnames="kwargs, option",
+        id_="iaa",
+    )
+    def test_mysql_index_options_raise(self, kwargs, option):
+        """StarRocks has no ``city(5)``, ``CREATE FULLTEXT INDEX`` or ``WITH PARSER``: each is a syntax error."""
+        table = self._table()
+        with expect_raises_message(exc.CompileError, f"StarRocks' CREATE INDEX has no {option} \\(index 'ix_city'\\)"):
+            CreateIndex(Index("ix_city", table.c.city, **kwargs)).compile(dialect=self.__dialect__)
+
+
+class DoubledPercentSignWarningTest(fixtures.TestBase):
+    """DDL text holding ``%%``, which the dialect needed before it escaped ``%`` itself, warns once per text.
+
+    The ``%%`` now reaches StarRocks as ``%%``, so a ``date_format`` pattern written for the old rule changes
+    meaning without an error. A single ``%`` is what StarRocks should get, and gives no warning.
+    """
+
+    @testing.combinations(
+        (
+            "partition",
+            lambda pattern: CreateTable(
+                Table(
+                    "t",
+                    MetaData(),
+                    Column("s", String(10)),
+                    starrocks_partition_by=f"RANGE(str2date(s, '{pattern}')) (START ('2026') END ('2028') EVERY (1))",
+                )
+            ),
+        ),
+        ("distribution", lambda pattern: AlterTableDistribution("t", f"HASH(`p{pattern}ct`)")),
+        ("order_by", lambda pattern: AlterTableOrder("t", f"`p{pattern}ct`")),
+        ("properties", lambda pattern: AlterTableProperties("t", {"note": f"p{pattern}ct"})),
+        ("mv_refresh", lambda pattern: AlterMaterializedView("mv", refresh=f"ASYNC START('{pattern}')")),
+        argnames="build_ddl",
+        id_="ia",
+    )
+    def test_table_text(self, build_ddl):
+        self._assert_doubled_percents_warn_once(build_ddl)
+
+    @testing.requires.sqlalchemy_2
+    @testing.combinations(
+        ("view", lambda pattern: CreateView(View("v", MetaData(), definition=f"SELECT date_format(d, '{pattern}')"))),
+        (
+            "materialized_view",
+            lambda pattern: CreateMaterializedView(
+                MaterializedView(
+                    "mv", MetaData(), definition=f"SELECT date_format(d, '{pattern}')", starrocks_refresh="MANUAL"
+                )
+            ),
+        ),
+        argnames="build_ddl",
+        id_="ia",
+    )
+    def test_view_text(self, build_ddl):
+        self._assert_doubled_percents_warn_once(build_ddl)
+
+    @staticmethod
+    def _assert_doubled_percents_warn_once(build_ddl):
+        warn_once_of_doubled_percents.cache_clear()
+        dialect = StarRocksDialect()
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            build_ddl("%Y").compile(dialect=dialect)
+        doubled = build_ddl("%%Y")
+        with expect_warnings(r"DDL text .*%%Y.* holds '%%'\. The StarRocks dialect now escapes '%'"):
+            doubled.compile(dialect=dialect)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            doubled.compile(dialect=dialect)
+            build_ddl("%%Y").compile(dialect=dialect)
+
+    def test_the_warning_names_the_filter_that_keeps_a_doubled_percent_that_is_meant(self):
+        """A '%%' in a string literal reaches StarRocks as written, which may be what the model means."""
+        meant = CreateTable(
+            Table("pct_meant", MetaData(), Column("dt", Date), starrocks_partition_by="date_trunc('%%', dt)")
+        )
+        warn_once_of_doubled_percents.cache_clear()
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            meant.compile(dialect=StarRocksDialect())
+        filter_call = re.search(r"warnings\.filterwarnings\((.*)\)$", str(caught[0].message)).group(1)
+        warn_once_of_doubled_percents.cache_clear()
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            eval(f"warnings.filterwarnings({filter_call})", {"warnings": warnings})
+            meant.compile(dialect=StarRocksDialect())
+
+
+class CreateTablePropertyQuotingTest(fixtures.TestBase, AssertsCompiledSQL):
+    """PROPERTIES values are quoted so that StarRocks, which unescapes them once, stores them unchanged."""
+
+    __dialect__ = StarRocksDialect()
+
+    @testing.combinations(
+        ("double_quote", 'grp"1', r'"grp\"1"'),
+        ("backslash", r"C:\temp", r'"C:\\temp"'),
+        ("escaped_quote", r"a\"b", r'"a\\\"b"'),
+        argnames="value, rendered_value",
+        id_="iaa",
+    )
+    def test_property_value_quoting(self, value, rendered_value):
+        tbl = Table(
+            "quoted_props",
+            MetaData(),
+            Column("id", Integer),
+            starrocks_duplicate_key="id",
+            starrocks_properties={"colocate_with": value},
+        )
+        self.assert_compile(
+            CreateTable(tbl),
+            "CREATE TABLE quoted_props ("
+            "    id INTEGER"
+            ")"
+            "DUPLICATE KEY (id)"
+            "PROPERTIES("
+            f'    "colocate_with"={rendered_value}'
+            ")",
+        )
+
+
+class PrimaryKeyInferenceOffCompileTest(fixtures.TestBase, AssertsCompiledSQL):
+    """By default a table with a primary key and no ``starrocks_*_key`` gets no key clause and no warning, as in 1.3.
+
+    StarRocks then makes its default DUPLICATE KEY table, whatever shape the table has.
+    """
+
+    __dialect__ = StarRocksDialect()
+
+    def test_the_inference_is_off_by_default(self):
+        assert self.__dialect__.infer_primary_key is False
+
+    def test_single_column_key(self):
+        tbl = Table("pk_off", MetaData(), Column("id", Integer, primary_key=True), Column("v", String(10)))
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            self.assert_compile(CreateTable(tbl), "CREATE TABLE pk_off (    id INTEGER NOT NULL,     v VARCHAR(10))")
+
+    @testing.combinations(
+        ("composite", lambda: [Column("a", Integer, primary_key=True), Column("b", Integer, primary_key=True)], {}),
+        ("constraint", lambda: [Column("b", Integer), Column("a", Integer), PrimaryKeyConstraint("b", "a")], {}),
+        (
+            "partitioned_on_the_key",
+            lambda: [Column("id", Integer, primary_key=True), Column("dt", Date, primary_key=True)],
+            {"starrocks_partition_by": "date_trunc('day', dt)"},
+        ),
+        ("key_not_first", lambda: [Column("v0", String(10)), Column("id", Integer, primary_key=True)], {}),
+        ("char_key", lambda: [Column("id", CHAR(32), primary_key=True)], {}),
+        (
+            "nullable_key",
+            lambda: [Column("a", Integer, primary_key=True), Column("b", Integer, primary_key=True, nullable=True)],
+            {},
+        ),
+        ("random", lambda: [Column("id", Integer, primary_key=True)], {"starrocks_distributed_by": "RANDOM"}),
+        argnames="columns, table_kwargs",
+        id_="iaa",
+    )
+    def test_no_shape_gets_a_key_clause_or_a_warning(self, columns, table_kwargs):
+        """These include shapes the inference makes PRIMARY KEY tables, and shapes it warns about."""
+        tbl = Table("pk_off", MetaData(), *columns(), Column("v", Integer), **table_kwargs)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            ddl = str(CreateTable(tbl).compile(dialect=self.__dialect__))
+        assert "KEY (" not in ddl, ddl
+
+
+class InferredPrimaryKeyCompileTest(fixtures.TestBase, AssertsCompiledSQL):
+    """With ``starrocks_infer_primary_key`` on, a table with a primary key and no ``starrocks_*_key`` is a PRIMARY
+    KEY table where StarRocks can hold one.
+
+    Its key columns lead it in key order and are of the types StarRocks keys on, and its partition, distribution,
+    sort key and properties are ones a PRIMARY KEY table takes. Otherwise it gets no key clause, as before, so
+    StarRocks makes a DUPLICATE KEY table, and the dialect warns.
+    """
+
+    __dialect__ = StarRocksDialect(starrocks_infer_primary_key=True)
+
+    def test_single_column(self):
+        tbl = Table("pk_inferred", MetaData(), Column("id", Integer, primary_key=True), Column("v", String(10)))
+        self.assert_compile(
+            CreateTable(tbl),
+            "CREATE TABLE pk_inferred ("
+            "    id INTEGER NOT NULL, "
+            "    v VARCHAR(10)"
+            ")"
+            "PRIMARY KEY (id)",
+        )
+
+    def test_composite_key_in_column_order(self):
+        tbl = Table(
+            "pk_composite",
+            MetaData(),
+            Column("tenant", Integer, primary_key=True),
+            Column("id", Integer, primary_key=True),
+            Column("v", String(10)),
+        )
+        self.assert_compile(
+            CreateTable(tbl),
+            "CREATE TABLE pk_composite ("
+            "    tenant INTEGER NOT NULL, "
+            "    id INTEGER NOT NULL, "
+            "    v VARCHAR(10)"
+            ")"
+            "PRIMARY KEY (tenant, id)",
+        )
+
+    def test_key_constraint_leading_in_its_order(self):
+        tbl = Table(
+            "pk_constraint",
+            MetaData(),
+            Column("b", Integer),
+            Column("a", Integer),
+            Column("v", String(10)),
+            PrimaryKeyConstraint("b", "a"),
+        )
+        self.assert_compile(
+            CreateTable(tbl),
+            "CREATE TABLE pk_constraint ("
+            "    b INTEGER NOT NULL, "
+            "    a INTEGER NOT NULL, "
+            "    v VARCHAR(10)"
+            ")"
+            "PRIMARY KEY (b, a)",
+        )
+
+    def test_key_columns_not_first_get_no_key_clause(self):
+        tbl = Table("pk_late", MetaData(), Column("v", String(10)), Column("id", Integer, primary_key=True))
+        with expect_warnings(r"Table 'pk_late' has the primary key \(id\) and names no starrocks_\*_key"):
+            self.assert_compile(
+                CreateTable(tbl),
+                "CREATE TABLE pk_late ("
+                "    v VARCHAR(10), "
+                "    id INTEGER NOT NULL"
+                ")",
+            )
+
+    def test_key_columns_not_first_get_advice_to_put_them_first(self):
+        """StarRocks needs any key's columns first, so naming starrocks_duplicate_key on them would be refused too."""
+        tbl = Table("pk_late", MetaData(), Column("v", String(10)), Column("id", Integer, primary_key=True))
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            CreateTable(tbl).compile(dialect=self.__dialect__)
+        message = str(caught[0].message)
+        assert "key columns first, in key order, and its first columns are v. " in message, message
+        assert "Put the key columns first, in key order, to make it a PRIMARY KEY table" in message, message
+        assert "starrocks_duplicate_key" not in message, message
+
+    def test_the_warning_names_the_filter_that_silences_it(self):
+        tbl = Table("pk_late", MetaData(), Column("v", String(10)), Column("id", Integer, primary_key=True))
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            CreateTable(tbl).compile(dialect=self.__dialect__)
+        warning_filter = re.search(r"warnings\.filterwarnings\(.*\)$", str(caught[0].message)).group(0)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            eval(warning_filter)
+            ddl = str(CreateTable(tbl).compile(dialect=self.__dialect__))
+        assert "KEY (" not in ddl, ddl
+
+    @testing.requires.sqlalchemy_2
+    @testing.combinations(
+        ("after_the_class_columns", {}, None),
+        ("put_first", {"sort_order": -1}, "PRIMARY KEY (id)"),
+        argnames="mixin_column_arguments, key_clause",
+        id_="iaa",
+    )
+    def test_a_mixin_key_leads_with_sort_order(self, mixin_column_arguments, key_clause):
+        """SQLAlchemy 2.0 declarative puts a mixin's columns after the class's own, unless sort_order puts them
+        first.
+        """
+        from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
+        class Base(DeclarativeBase):
+            pass
+
+        class IdMixin:
+            id: Mapped[int] = mapped_column(primary_key=True, **mixin_column_arguments)
+
+        class User(IdMixin, Base):
+            __tablename__ = "pk_shape"
+            name: Mapped[str] = mapped_column(String(20))
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            ddl = str(CreateTable(User.__table__).compile(dialect=self.__dialect__))
+        if key_clause is None:
+            assert "KEY (" not in ddl and "its first columns are name" in str(caught[0].message), ddl
+        else:
+            assert key_clause in ddl and not caught, ddl
+
+    def test_key_declared_in_another_order_than_the_columns_gets_no_key_clause(self):
+        tbl = Table(
+            "pk_order",
+            MetaData(),
+            Column("a", Integer),
+            Column("b", Integer),
+            Column("v", String(10)),
+            PrimaryKeyConstraint("b", "a"),
+        )
+        with expect_warnings(r"Table 'pk_order' has the primary key \(b, a\)"):
+            self.assert_compile(
+                CreateTable(tbl),
+                "CREATE TABLE pk_order ("
+                "    a INTEGER NOT NULL, "
+                "    b INTEGER NOT NULL, "
+                "    v VARCHAR(10)"
+                ")",
+            )
+
+    def test_named_key_model_wins(self):
+        tbl = Table(
+            "pk_duplicate",
+            MetaData(),
+            Column("id", Integer, primary_key=True),
+            Column("v", String(10)),
+            starrocks_duplicate_key="id",
+        )
+        self.assert_compile(
+            CreateTable(tbl),
+            "CREATE TABLE pk_duplicate ("
+            "    id INTEGER NOT NULL, "
+            "    v VARCHAR(10)"
+            ")"
+            "DUPLICATE KEY (id)",
+        )
+
+    def test_no_primary_key_columns_leave_the_key_to_starrocks(self):
+        tbl = Table("no_pk", MetaData(), Column("id", Integer), Column("v", String(10)))
+        self.assert_compile(CreateTable(tbl), "CREATE TABLE no_pk (" "    id INTEGER, " "    v VARCHAR(10)" ")")
+
+    @staticmethod
+    def _shape(columns, **table_kwargs):
+        return Table("pk_shape", MetaData(), *columns, Column("v", Integer), Column("w", Integer), **table_kwargs)
+
+    @testing.combinations(
+        ("char", lambda: [Column("id", CHAR(32), primary_key=True)], {}, "key column id is CHAR"),
+        ("decimal", lambda: [Column("id", Numeric(10, 2), primary_key=True)], {}, "key column id is NUMERIC"),
+        (
+            "binary",
+            lambda: [Column("id", Integer, primary_key=True), Column("b", LargeBinary, primary_key=True)],
+            {},
+            "key column b is BINARY",
+        ),
+        ("float", lambda: [Column("id", Float, primary_key=True)], {}, "key column id is FLOAT"),
+        ("json", lambda: [Column("id", JSON, primary_key=True)], {}, "key column id is JSON"),
+        ("time", lambda: [Column("id", Time, primary_key=True)], {}, "key column id is TIME"),
+        (
+            "generated",
+            lambda: [
+                Column("id", Integer, primary_key=True),
+                Column("g", BigInteger, Computed("id + 1"), primary_key=True, nullable=True),
+            ],
+            {},
+            "key column g is a generated column",
+        ),
+        (
+            "nullable",
+            lambda: [Column("id", Integer, primary_key=True), Column("ref", Integer, primary_key=True, nullable=True)],
+            {},
+            "key column ref is nullable, and StarRocks makes a PRIMARY KEY table's key columns NOT NULL",
+        ),
+        (
+            "all_nullable",
+            lambda: [
+                Column("a", Integer, primary_key=True, nullable=True),
+                Column("b", Integer, primary_key=True, nullable=True),
+            ],
+            {},
+            "key columns a and b are nullable",
+        ),
+        (
+            "expression_partition",
+            lambda: [Column("id", Integer, primary_key=True)],
+            {"starrocks_partition_by": "date_trunc('day', v)"},
+            "PARTITION BY uses v, not a key column",
+        ),
+        (
+            "range_partition",
+            lambda: [Column("id", Integer, primary_key=True)],
+            {"starrocks_partition_by": "RANGE(`V`) (PARTITION id VALUES LESS THAN ('10'))"},
+            "PARTITION BY uses v, not a key column",
+        ),
+        (
+            "column_partition",
+            lambda: [Column("id", Integer, primary_key=True)],
+            {"starrocks_partition_by": "v, w"},
+            "PARTITION BY uses v and w, not key columns",
+        ),
+        (
+            "hash_distribution",
+            lambda: [Column("id", Integer, primary_key=True)],
+            {"starrocks_distributed_by": "HASH(id, v) BUCKETS 4"},
+            "DISTRIBUTED BY HASH uses v, not a key column",
+        ),
+        (
+            "random_distribution",
+            lambda: [Column("id", Integer, primary_key=True)],
+            {"starrocks_distributed_by": "RANDOM BUCKETS 4"},
+            "it is distributed by RANDOM",
+        ),
+        (
+            "sort_key_type",
+            lambda: [Column("id", Integer, primary_key=True), Column("amount", Numeric(10, 2))],
+            {"starrocks_order_by": "amount"},
+            "ORDER BY uses amount, which is NUMERIC",
+        ),
+        (
+            "cooldown_property",
+            lambda: [Column("id", Integer, primary_key=True)],
+            {"starrocks_properties": {"storage_medium": "SSD", "storage_cooldown_ttl": "1 day"}},
+            "StarRocks refuses the storage_cooldown_ttl property",
+        ),
+        (
+            "compaction_property",
+            lambda: [Column("id", Integer, primary_key=True)],
+            {"starrocks_properties": {"base_compaction_forbidden_time_ranges": "* * * * *"}},
+            "StarRocks refuses the base_compaction_forbidden_time_ranges property",
+        ),
+        (
+            "in_memory_index",
+            lambda: [Column("id", Integer, primary_key=True)],
+            {"starrocks_properties": {"enable_persistent_index": "false"}},
+            "enable_persistent_index is false",
+        ),
+        (
+            "bucket_size_with_the_default_distribution",
+            lambda: [Column("id", Integer, primary_key=True)],
+            {"starrocks_properties": {"bucket_size": "1073741824"}},
+            "StarRocks 4.1 allows bucket_size only with RANDOM distribution",
+        ),
+        (
+            "varchar_over_the_size_limit",
+            lambda: [Column("id", String(255), primary_key=True)],
+            {},
+            "its key columns can take 255 bytes a row",
+        ),
+        (
+            "varchar_before_int_over_the_size_limit",
+            lambda: [Column("s", String(123), primary_key=True), Column("id", Integer, primary_key=True)],
+            {},
+            "its key columns can take 129 bytes a row",
+        ),
+        (
+            "auto_increment_and_varchar_over_the_size_limit",
+            lambda: [
+                Column("id", Integer, primary_key=True, autoincrement=True),
+                Column("s", String(122), primary_key=True),
+            ],
+            {},
+            "its key columns can take 130 bytes a row",
+        ),
+        (
+            "fixed_widths_over_the_size_limit",
+            lambda: [Column(f"c{i}", LARGEINT, primary_key=True) for i in range(8)]
+            + [Column("b", Boolean, primary_key=True)],
+            {},
+            "its key columns can take 129 bytes a row",
+        ),
+        ("string", lambda: [Column("id", String(), primary_key=True)], {}, "key column id is STRING, which has no length"),
+        ("text", lambda: [Column("id", Text, primary_key=True)], {}, "key column id is STRING, which has no length"),
+        (
+            "partition_by_a_column_named_like_an_interval_unit",
+            lambda: [Column("id", Integer, primary_key=True), Column("day", DateTime)],
+            {"starrocks_partition_by": "time_slice(day, INTERVAL 1 day)"},
+            "PARTITION BY uses day, not a key column",
+        ),
+        (
+            "unread_partition",
+            lambda: [Column("id", Integer, primary_key=True)],
+            {"starrocks_partition_by": "date_trunc('day', no_such_column)"},
+            "the dialect can't tell which columns PARTITION BY",
+        ),
+        (
+            "unread_distribution",
+            lambda: [Column("id", Integer, primary_key=True)],
+            {"starrocks_distributed_by": "HASH(no_such_column)"},
+            "the dialect can't tell which columns DISTRIBUTED BY",
+        ),
+        argnames="columns, table_kwargs, obstacle",
+        id_="iaaa",
+    )
+    def test_shape_starrocks_cannot_hold_as_a_primary_key_table_gets_no_key_clause(
+        self, columns, table_kwargs, obstacle
+    ):
+        """StarRocks refuses each of these as a PRIMARY KEY table, or its rows, or the dialect can't read the clause,
+        so the dialect creates it with no key clause. The integration tests of the inference check each refusal.
+        """
+        tbl = self._shape(columns(), **table_kwargs)
+        with expect_warnings(
+            r"Table 'pk_shape' has the primary key \(.*\) and names no starrocks_\*_key, but it can't be made a "
+            r"PRIMARY KEY table: " + re.escape(obstacle)
+        ):
+            ddl = str(CreateTable(tbl).compile(dialect=self.__dialect__))
+        assert "KEY (" not in ddl, ddl
+
+    @testing.combinations(
+        (
+            "partition_on_the_key",
+            lambda: [Column("id", Integer, primary_key=True), Column("dt", Date, primary_key=True)],
+            {"starrocks_partition_by": "date_trunc('day', dt)"},
+            "PRIMARY KEY (id, dt)",
+        ),
+        (
+            "partition_values_naming_other_columns",
+            lambda: [Column("id", Integer, primary_key=True), Column("dt", Date, primary_key=True)],
+            {"starrocks_partition_by": "RANGE(dt) (PARTITION v VALUES LESS THAN ('2026-01-01'))"},
+            "PRIMARY KEY (id, dt)",
+        ),
+        (
+            "literal_naming_another_column",
+            lambda: [Column("id", Integer, primary_key=True), Column("dt", Date, primary_key=True)],
+            {"starrocks_partition_by": "date_trunc('v', dt)"},
+            "PRIMARY KEY (id, dt)",
+        ),
+        (
+            "interval_unit_named_like_a_column",
+            lambda: [
+                Column("id", Integer, primary_key=True),
+                Column("dt", DateTime, primary_key=True),
+                Column("day", Integer),
+            ],
+            {"starrocks_partition_by": "time_slice(dt, INTERVAL 1 day)"},
+            "PRIMARY KEY (id, dt)",
+        ),
+        (
+            "interval_unit_and_boundary_named_like_columns",
+            lambda: [
+                Column("id", Integer, primary_key=True),
+                Column("dt", DateTime, primary_key=True),
+                Column("Week", Integer),
+                Column("floor", Integer),
+            ],
+            {"starrocks_partition_by": "time_slice(dt, interval 2 WEEK, FLOOR)"},
+            "PRIMARY KEY (id, dt)",
+        ),
+        (
+            "hash_on_the_key_in_another_case",
+            lambda: [Column("id", Integer, primary_key=True)],
+            {"starrocks_distributed_by": "HASH(`ID`) BUCKETS 4"},
+            "PRIMARY KEY (id)",
+        ),
+        (
+            "sort_key_of_a_value_column",
+            lambda: [Column("id", Integer, primary_key=True), Column("name", String(10))],
+            {"starrocks_order_by": ["name", "id"]},
+            "PRIMARY KEY (id)",
+        ),
+        (
+            "olap_engine_and_persistent_index",
+            lambda: [Column("id", Integer, primary_key=True)],
+            {"starrocks_engine": "olap", "starrocks_properties": {"enable_persistent_index": "TRUE"}},
+            "PRIMARY KEY (id)",
+        ),
+        (
+            "accepted_key_types",
+            lambda: [
+                Column("b", Boolean, primary_key=True),
+                Column("i", BigInteger, primary_key=True),
+                Column("l", LARGEINT, primary_key=True),
+                Column("d", Date, primary_key=True),
+                Column("t", DateTime, primary_key=True),
+                Column("s", String(10), primary_key=True),
+            ],
+            {},
+            "PRIMARY KEY (b, i, l, d, t, s)",
+        ),
+        (
+            "varchar_and_int",
+            lambda: [Column("s", String(100), primary_key=True), Column("id", Integer, primary_key=True)],
+            {},
+            "PRIMARY KEY (s, id)",
+        ),
+        ("varchar_at_the_size_limit", lambda: [Column("s", String(128), primary_key=True)], {}, "PRIMARY KEY (s)"),
+        (
+            "varchar_before_int_at_the_size_limit",
+            lambda: [Column("s", String(122), primary_key=True), Column("id", Integer, primary_key=True)],
+            {},
+            "PRIMARY KEY (s, id)",
+        ),
+        (
+            "int_then_varchar_at_the_size_limit",
+            lambda: [Column("id", Integer, primary_key=True), Column("s", String(124), primary_key=True)],
+            {},
+            "PRIMARY KEY (id, s)",
+        ),
+        (
+            "fixed_widths_at_the_size_limit",
+            lambda: [Column(f"c{i}", LARGEINT, primary_key=True) for i in range(8)],
+            {},
+            "PRIMARY KEY (c0, c1, c2, c3, c4, c5, c6, c7)",
+        ),
+        (
+            "nullable_auto_increment",
+            lambda: [Column("id", Integer, primary_key=True, autoincrement=True, nullable=True)],
+            {},
+            "PRIMARY KEY (id)",
+        ),
+        argnames="columns, table_kwargs, key_clause",
+        id_="iaaa",
+    )
+    def test_shape_starrocks_holds_as_a_primary_key_table(self, columns, table_kwargs, key_clause):
+        tbl = self._shape(columns(), **table_kwargs)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            ddl = str(CreateTable(tbl).compile(dialect=self.__dialect__))
+        assert key_clause in ddl, ddl
+
+    @testing.requires.sqlalchemy_2
+    def test_uuid_key_is_char_and_gets_no_key_clause(self):
+        """``sa.Uuid()`` is CHAR(32), which StarRocks takes in no primary key."""
+        from sqlalchemy import Uuid
+
+        tbl = self._shape([Column("id", Uuid, primary_key=True)])
+        with expect_warnings(r"Table 'pk_shape' .* can't be made a PRIMARY KEY table: key column id is CHAR\(32\), "):
+            ddl = str(CreateTable(tbl).compile(dialect=self.__dialect__))
+        assert "id CHAR(32) NOT NULL" in ddl and "KEY (" not in ddl, ddl
+
+    @testing.requires.sqlalchemy_2
+    def test_optional_mapped_key_is_nullable_and_gets_no_key_clause(self):
+        """``Mapped[Optional[int]]`` makes the key column nullable, which StarRocks would make NOT NULL."""
+        from typing import Optional
+
+        from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
+        class Base(DeclarativeBase):
+            pass
+
+        class Event(Base):
+            __tablename__ = "pk_shape"
+            id: Mapped[Optional[int]] = mapped_column(primary_key=True)
+            v: Mapped[int]
+
+        with expect_warnings(r"Table 'pk_shape' .* can't be made a PRIMARY KEY table: key column id is nullable"):
+            ddl = str(CreateTable(Event.__table__).compile(dialect=self.__dialect__))
+        assert "id INTEGER," in ddl and "KEY (" not in ddl, ddl
+
+    def test_external_table_gets_neither_a_key_clause_nor_a_warning(self):
+        """A table of another engine has no key: StarRocks refuses any key clause on it."""
+        tbl = self._shape([Column("id", Integer, primary_key=True)], starrocks_engine="mysql")
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            ddl = str(CreateTable(tbl).compile(dialect=self.__dialect__))
+        assert "KEY (" not in ddl and "ENGINE=mysql" in ddl, ddl

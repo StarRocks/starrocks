@@ -12,163 +12,234 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import logging
-from typing import Union
+from sqlalchemy import Column, Integer, MetaData, String, Table, inspect, testing
+from sqlalchemy.testing import expect_warnings, fixtures
 
-import pytest
-from sqlalchemy import Column, Integer, MetaData, String, Table, inspect, text
-from sqlalchemy.engine import Engine, Inspector
-
-from starrocks.common.params import ColumnAggInfoKey, DialectName
+from starrocks.common.params import ColumnAggInfoKey, DialectName, TableInfoKeyWithPrefix
 from starrocks.common.types import ColumnAggType
-from starrocks.datatype import BITMAP, HLL
-from starrocks.engine.interfaces import ReflectedColumn
-from test.conftest_sr import create_test_engine, test_default_schema
+from starrocks.datatype import BITMAP, HLL, PERCENTILE
+from test.util import normalize_sql
 
 
-logger = logging.getLogger(__name__)
+class ReflectionColumnsAggTest(fixtures.TestBase):
+    __backend__ = True
+    __only_on__ = "starrocks"
 
-
-class TestReflectionColumnsAggIntegration:
-    def test_reflect_aggregate_key_table(self, sr_root_engine: Engine):
-        table_name = "test_reflect_columns"
-        metadata = MetaData()
-        sr_engine = sr_root_engine
-
-        table = Table(
-            table_name,
+    def test_reflect_aggregate_key_table(self, connection, metadata):
+        Table(
+            "test_reflect_columns",
             metadata,
             Column("id", Integer),
             Column("key1", String(32), starrocks_IS_AGG_KEY=True),
             Column("val_sum", Integer, starrocks_agg_type="sum"),
-            # Column("val_count", Integer, starrocks_agg_type=ColumnAggType.COUNT),
             Column("val_min", Integer, starrocks_agg_type="Min"),
             Column("val_max", Integer, starrocks_agg_type=ColumnAggType.MAX),
-
             Column("val_replace", String(32), starrocks_agg_type=ColumnAggType.REPLACE),
-            Column(
-                "val_replace_if_not_null",
-                Integer,
-                starrocks_agg_type=ColumnAggType.REPLACE_IF_NOT_NULL,
-            ),
+            Column("val_replace_if_not_null", Integer, starrocks_agg_type=ColumnAggType.REPLACE_IF_NOT_NULL),
             Column("val_hll", HLL, starrocks_agg_type=ColumnAggType.HLL_UNION),
             Column("val_bitmap", BITMAP, starrocks_agg_type=ColumnAggType.BITMAP_UNION),
-            starrocks_engine='OLAP',
-            starrocks_aggregate_key='id, key1',
-            starrocks_distributed_by='HASH(id)',
+            Column("val_percentile", PERCENTILE, starrocks_agg_type=ColumnAggType.PERCENTILE_UNION),
+            starrocks_engine="OLAP",
+            starrocks_aggregate_key="id, key1",
+            starrocks_distributed_by="HASH(id)",
             starrocks_properties={"replication_num": "1"},
         )
+        metadata.create_all(connection)
 
-        with sr_engine.connect() as connection:
-            connection.execute(text(f"DROP TABLE IF EXISTS {table_name}"))
-            table.create(connection)
+        reflected = Table("test_reflect_columns", MetaData(), autoload_with=connection)
+        agg_types = {
+            column.name: column.dialect_options[DialectName].get(ColumnAggInfoKey.AGG_TYPE)
+            for column in reflected.columns
+        }
 
-            try:
-                # Create a map of column name to its reflected info dict
-                conn_db = MetaData()
-                conn_table = Table(table_name, conn_db, autoload_with=sr_engine, schema=test_default_schema)
-                reflected_map: dict[str, ReflectedColumn] = {col.name: col for col in conn_table.columns}
-
-                # Create a map of column name to its reflected info dict
-                # By using this way, the dialect options are raw as set, haven't been processed by `check_kwargs`
-                # to form dialect_options object/property.
-                # inspector = inspect(sr_engine)
-                # reflected_columns: list[ReflectedColumn] = inspector.get_columns(table_name)
-                #reflected_map: dict[str, ReflectedColumn] = {col["name"]: col for col in reflected_columns}
-
-
-                # Assertions
-                logger.info(f"reflected_column: id {reflected_map['id']!r}")
-                assert ColumnAggInfoKey.AGG_TYPE not in reflected_map["id"].dialect_options[DialectName] or \
-                    reflected_map["id"].dialect_options[DialectName][ColumnAggInfoKey.AGG_TYPE] is None
-                logger.info(f"reflected_column: key1 {reflected_map['key1']!r}")
-                assert ColumnAggInfoKey.AGG_TYPE not in reflected_map["key1"].dialect_options[DialectName] or \
-                    reflected_map["key1"].dialect_options[DialectName][ColumnAggInfoKey.AGG_TYPE] is None
-                logger.info(f"reflected_column: val_sum {reflected_map['val_sum']!r}")
-                logger.debug(f"dialect options for column: val_sum {reflected_map['val_sum'].dialect_options[DialectName]}")
-                assert reflected_map["val_sum"].dialect_options[DialectName][ColumnAggInfoKey.AGG_TYPE] == ColumnAggType.SUM
-                assert reflected_map["val_replace"].dialect_options[DialectName][ColumnAggInfoKey.AGG_TYPE] == ColumnAggType.REPLACE
-                assert (
-                    reflected_map["val_replace_if_not_null"].dialect_options[DialectName][ColumnAggInfoKey.AGG_TYPE]
-                    == ColumnAggType.REPLACE_IF_NOT_NULL
-                )
-                assert reflected_map["val_min"].dialect_options[DialectName][ColumnAggInfoKey.AGG_TYPE] == ColumnAggType.MIN
-                assert reflected_map["val_max"].dialect_options[DialectName][ColumnAggInfoKey.AGG_TYPE] == ColumnAggType.MAX
-                assert reflected_map["val_hll"].dialect_options[DialectName][ColumnAggInfoKey.AGG_TYPE] == ColumnAggType.HLL_UNION
-                assert (
-                    reflected_map["val_bitmap"].dialect_options[DialectName][ColumnAggInfoKey.AGG_TYPE]
-                    == ColumnAggType.BITMAP_UNION
-                )
-
-            finally:
-                # Clean up
-                connection.execute(text(f"DROP TABLE IF EXISTS {table_name}"))
+        assert agg_types == {
+            "id": None,
+            "key1": None,
+            "val_sum": ColumnAggType.SUM,
+            "val_min": ColumnAggType.MIN,
+            "val_max": ColumnAggType.MAX,
+            "val_replace": ColumnAggType.REPLACE,
+            "val_replace_if_not_null": ColumnAggType.REPLACE_IF_NOT_NULL,
+            "val_hll": ColumnAggType.HLL_UNION,
+            "val_bitmap": ColumnAggType.BITMAP_UNION,
+            "val_percentile": ColumnAggType.PERCENTILE_UNION,
+        }
 
 
-@pytest.mark.integration
-class TestReflectionColumnAutoIncrementIntegration:
-    sr_engine: Engine
-    test_schema: Union[str, None]
+class ReflectionColumnAutoIncrementTest(fixtures.TestBase):
+    """The tables are created with plain DDL, so reflection is checked against what the server reports."""
 
-    @classmethod
-    def setup_class(cls) -> None:
-        cls.sr_engine = create_test_engine()
-        cls.test_schema = test_default_schema
-        with cls.sr_engine.begin() as conn:
-            if cls.test_schema:
-                conn.exec_driver_sql(f"CREATE DATABASE IF NOT EXISTS {cls.test_schema}")
+    __backend__ = True
+    __only_on__ = "starrocks"
 
-    @classmethod
-    def teardown_class(cls) -> None:
-        with cls.sr_engine.begin() as conn:
-            res = conn.exec_driver_sql("SHOW TABLES")
-            for row in res:
-                conn.exec_driver_sql(f"DROP TABLE IF EXISTS {row[0]}")
-        cls.sr_engine.dispose()
+    @testing.fixture
+    def table_from_ddl(self, connection):
+        created = []
 
-    def _full_table_name(self, name: str) -> str:
-        return f"{self.test_schema}.{name}" if self.test_schema else name
-
-    def test_reflects_autoincrement_true(self) -> None:
-        tname = "reflect_columns_ai_true"
-        with self.sr_engine.begin() as conn:
-            conn.exec_driver_sql(
-                f"""
-                CREATE TABLE {self._full_table_name(tname)} (
-                    id BIGINT NOT NULL AUTO_INCREMENT,
-                    v INT
-                )
-                DISTRIBUTED BY RANDOM
-                PROPERTIES("replication_num"="1")
-                """
+        def create(name: str, id_column: str) -> str:
+            connection.exec_driver_sql(
+                f"CREATE TABLE {name} ({id_column}, v INT) DISTRIBUTED BY RANDOM PROPERTIES(\"replication_num\"=\"1\")"
             )
-        try:
-            insp: Inspector = inspect(self.sr_engine)
-            cols: list[ReflectedColumn] = insp.get_columns(tname, schema=self.test_schema)
-            id_col: ReflectedColumn = next(c for c in cols if c["name"].lower() == "id")
-            assert id_col["autoincrement"] is True
-        finally:
-            with self.sr_engine.begin() as conn:
-                conn.exec_driver_sql(f"DROP TABLE IF EXISTS {self._full_table_name(tname)}")
+            created.append(name)
+            return name
 
-    def test_reflects_autoincrement_false(self) -> None:
-        tname = "reflect_columns_ai_false"
-        with self.sr_engine.begin() as conn:
-            conn.exec_driver_sql(
-                f"""
-                CREATE TABLE {self._full_table_name(tname)} (
-                    id BIGINT NOT NULL,
-                    v INT
-                )
-                DISTRIBUTED BY RANDOM
-                PROPERTIES("replication_num"="1")
-                """
-            )
+        yield create
+        for name in created:
+            connection.exec_driver_sql(f"DROP TABLE IF EXISTS {name}")
+
+    @testing.combinations(
+        ("autoincrement", "id BIGINT NOT NULL AUTO_INCREMENT", True),
+        ("no_autoincrement", "id BIGINT NOT NULL", False),
+        ("named_in_the_comment", "id INT NULL COMMENT 'not AUTO_INCREMENT'", False),
+        ("named_in_the_default", "id VARCHAR(20) NULL DEFAULT 'AUTO_INCREMENT'", False),
+        argnames="id_column, expected",
+        id_="iaa",
+    )
+    def test_reflects_autoincrement(self, connection, table_from_ddl, id_column, expected):
+        table_name = table_from_ddl("reflect_columns_ai", id_column)
+        id_col = next(c for c in inspect(connection).get_columns(table_name) if c["name"].lower() == "id")
+        assert id_col["autoincrement"] is expected
+
+    def test_a_struct_field_named_auto_increment(self, connection, table_from_ddl):
+        """StarRocks prints the field's name in the column's type, backquoted from 4.1 and bare in 3.3."""
+        table_name = table_from_ddl("reflect_columns_ai_struct", "k INT, s STRUCT<auto_increment INT, b INT> NULL")
+        s_col = next(c for c in inspect(connection).get_columns(table_name) if c["name"] == "s")
+        assert s_col["autoincrement"] is False
+
+    def test_columns_after_a_comment_holding_a_quote(self, connection):
+        """StarRocks 3.3 leaves the ``"`` of a PRIMARY KEY table's column comment unescaped in SHOW CREATE TABLE."""
+        connection.exec_driver_sql(
+            "CREATE TABLE reflect_columns_quote ("
+            "id BIGINT NOT NULL COMMENT '12\" pizza', "
+            "v BIGINT NOT NULL AUTO_INCREMENT, "
+            "s VARCHAR(10) DEFAULT 'NULL', "
+            "w VARCHAR(10) DEFAULT '  x  ', "
+            "k BIGINT NULL COMMENT 'not \"AUTO_INCREMENT\" here', "
+            "z VARCHAR(10) COMMENT 'closing\"'"
+            ") PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES (\"replication_num\" = \"1\")"
+        )
         try:
-            insp: Inspector = inspect(self.sr_engine)
-            cols: list[ReflectedColumn] = insp.get_columns(tname, schema=self.test_schema)
-            id_col: ReflectedColumn = next(c for c in cols if c["name"].lower() == "id")
-            assert id_col["autoincrement"] is False
+            columns = {c["name"]: c for c in inspect(connection).get_columns("reflect_columns_quote")}
         finally:
-            with self.sr_engine.begin() as conn:
-                conn.exec_driver_sql(f"DROP TABLE IF EXISTS {self._full_table_name(tname)}")
+            connection.exec_driver_sql("DROP TABLE IF EXISTS reflect_columns_quote")
+
+        assert {name: column["autoincrement"] for name, column in columns.items()} == {
+            "id": False, "v": True, "s": False, "w": False, "k": False, "z": False
+        }
+        assert (columns["s"]["default"], columns["w"]["default"]) == ("'NULL'", "'  x  '")
+
+
+class ReflectionStructFieldNameTest(fixtures.TestBase):
+    """A quote or a keyword in a STRUCT field name changes nothing else that reflects from SHOW CREATE TABLE.
+
+    StarRocks 3.3 prints STRUCT field names bare, and can't read such a type back (see
+    ``STRUCT_FIELD_NAMES_UNQUOTED``), so the type's warning is let through here.
+    """
+
+    __backend__ = True
+    __only_on__ = "starrocks"
+
+    @testing.combinations(
+        ("single_quote", "`owner's`"),
+        ("double_quote", '`a"b`'),
+        ("backquote", "`a``b`"),
+        ("comment_clause", '`x COMMENT "y`'),
+        ("null_auto_increment", "`null auto_increment`"),
+        argnames="field",
+        id_="ia",
+    )
+    def test_the_later_columns_and_the_partition(self, connection, field):
+        name = "reflect_struct_field"
+        connection.exec_driver_sql(f"DROP TABLE IF EXISTS {name}")
+        connection.exec_driver_sql(
+            f"CREATE TABLE {name} (id BIGINT NOT NULL, dt DATETIME NOT NULL, s STRUCT<{field} INT> NULL, "
+            "w VARCHAR(10) NULL DEFAULT 'NULL', ai BIGINT NOT NULL AUTO_INCREMENT) DUPLICATE KEY(id, dt) "
+            "PARTITION BY date_trunc('day', dt) DISTRIBUTED BY HASH(id) BUCKETS 1 "
+            'PROPERTIES ("replication_num" = "1")'
+        )
+        try:
+            with expect_warnings("Did not recognize type", assert_=False):
+                inspector = inspect(connection)
+                columns = {c["name"]: (c["default"], c["autoincrement"]) for c in inspector.get_columns(name)}
+                partition = inspector.get_table_options(name).get(TableInfoKeyWithPrefix.PARTITION_BY)
+        finally:
+            connection.exec_driver_sql(f"DROP TABLE IF EXISTS {name}")
+
+        assert columns == {
+            "id": (None, False), "dt": (None, False), "s": (None, False), "w": ("'NULL'", False), "ai": (None, True)
+        }
+        assert normalize_sql(partition.partition_method) == normalize_sql("date_trunc('day', dt)")
+
+    def test_a_generated_column_reading_a_column_named_null_auto_increment(self, connection):
+        name = "reflect_generated_name"
+        connection.exec_driver_sql(f"DROP TABLE IF EXISTS {name}")
+        connection.exec_driver_sql(
+            f"CREATE TABLE {name} (id BIGINT NOT NULL, `null auto_increment` BIGINT NULL, "
+            "ai BIGINT NOT NULL AUTO_INCREMENT, g BIGINT AS `null auto_increment` + 1) DUPLICATE KEY(id) "
+            'DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES ("replication_num" = "1")'
+        )
+        try:
+            columns = {c["name"]: c["autoincrement"] for c in inspect(connection).get_columns(name)}
+        finally:
+            connection.exec_driver_sql(f"DROP TABLE IF EXISTS {name}")
+
+        assert columns == {"id": False, "null auto_increment": False, "ai": True, "g": False}
+
+
+class ReflectionMultiLineCommentTest(fixtures.TestBase):
+    """A comment line that starts with the next column's backquoted name doesn't hide that column's definition.
+
+    StarRocks prints a column comment's newlines as they are, on every key model, and 3.3 leaves the ``"`` of a
+    PRIMARY KEY table's column comment unescaped.
+    """
+
+    __backend__ = True
+    __only_on__ = "starrocks"
+
+    @testing.fixture
+    def table_from_ddl(self, connection):
+        created = []
+
+        def create(name: str, ddl: str) -> str:
+            connection.exec_driver_sql(f"DROP TABLE IF EXISTS {name}")
+            connection.exec_driver_sql(ddl)
+            created.append(name)
+            return name
+
+        yield create
+        for name in created:
+            connection.exec_driver_sql(f"DROP TABLE IF EXISTS {name}")
+
+    @testing.combinations(("duplicate_key", "DUPLICATE"), ("primary_key", "PRIMARY"), argnames="model", id_="ia")
+    def test_a_doc_comment_naming_the_next_column(self, connection, table_from_ddl, model):
+        name = table_from_ddl(
+            "reflect_doc_comment",
+            "CREATE TABLE reflect_doc_comment (id BIGINT NOT NULL, "
+            "dt DATE NOT NULL COMMENT 'Event day, in \"UTC\",\n`currency` is next.', "
+            f"currency VARCHAR(3) NULL DEFAULT 'EUR') {model} KEY(id, dt) PARTITION BY date_trunc('day', dt) "
+            "DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES (\"replication_num\" = \"1\")",
+        )
+
+        inspector = inspect(connection)
+        columns = {c["name"]: c for c in inspector.get_columns(name)}
+        partition = inspector.get_table_options(name)[TableInfoKeyWithPrefix.PARTITION_BY]
+        reflected = Table(name, MetaData(), autoload_with=connection)
+
+        assert columns["currency"]["default"] == "'EUR'"
+        assert normalize_sql(partition.partition_method) == normalize_sql("date_trunc('day', dt)")
+        assert reflected.c.currency.server_default.arg.text == "'EUR'"
+        assert TableInfoKeyWithPrefix.PARTITION_BY in reflected.dialect_kwargs
+
+    @testing.combinations(("duplicate_key", "DUPLICATE"), ("primary_key", "PRIMARY"), argnames="model", id_="ia")
+    def test_a_comment_holding_the_next_column_line(self, connection, table_from_ddl, model):
+        name = table_from_ddl(
+            "reflect_next_line_comment",
+            "CREATE TABLE reflect_next_line_comment ("
+            "a INT NOT NULL COMMENT 'one,\n  `b` bigint(20) NOT NULL AUTO_INCREMENT COMMENT \"', "
+            f"b BIGINT NULL DEFAULT '7' COMMENT 'b''s own') {model} KEY(a) DISTRIBUTED BY HASH(a) BUCKETS 1 "
+            "PROPERTIES (\"replication_num\" = \"1\")",
+        )
+
+        b = next(c for c in inspect(connection).get_columns(name) if c["name"] == "b")
+
+        assert (b["default"], b["autoincrement"]) == ("'7'", False)
