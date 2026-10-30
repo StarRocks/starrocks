@@ -174,6 +174,11 @@ public class FoldConstantsRuleTest {
         // An implicit cast keeps the value, for the sink to check
         assertEquals(ConstantOperator.createDecimal(new BigDecimal("99999"), decimal3),
                 rule.apply(new CastOperator(decimal3, ConstantOperator.createVarchar("99999"), true), null));
+        // The BE rounds the binary value of a DOUBLE, 9.99499..., to 9.99, so the FE, which rounds 9.995 to 10.00,
+        // leaves that cast to the BE
+        Type decimal32 = TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL32, 3, 2);
+        CastOperator doubleCast = new CastOperator(decimal32, ConstantOperator.createDouble(9.995));
+        assertEquals(doubleCast, rule.apply(doubleCast, null));
         // As in the BE, a cast between fully compatible types is not checked: the planner takes it for one that
         // gives no NULL
         Type decimal53 = TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL32, 5, 3);

@@ -683,7 +683,9 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
         if (desc.isDecimalV3() && CastOperator.checksDecimalPrecision(getType(), desc, false)
                 && result.isPresent() && !result.get().isNull()
                 && !DecimalLiteral.checkLiteralOverflowInDecimalStyle(result.get().getDecimal(), (ScalarType) desc)) {
-            return Optional.of(ConstantOperator.createNull(desc));
+            // castTo rounds a FLOAT or DOUBLE by its decimal string, where the BE rounds its binary value, so it can
+            // round up past the precision where the BE doesn't (9.995 is 9.99499...): leave such a cast to the BE
+            return getType().isFloatingPointType() ? Optional.empty() : Optional.of(ConstantOperator.createNull(desc));
         }
         if (!desc.isChar() || ((ScalarType) desc).getLength() < 0) {
             return result;
