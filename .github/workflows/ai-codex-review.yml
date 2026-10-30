@@ -1,0 +1,182 @@
+name: AI CODEX REVIEW
+
+# Self-hosted Codex review, for what the hosted Codex review (chatgpt-codex-connector) cannot
+# do: it fails on fork PRs with "An unknown error occurred".
+#   - Automatically when chatgpt-codex-connector[bot] posts "Something went wrong" on an open
+#     PR into main (the hosted review only covers main; its own gating — draft, [UT]/[Doc],
+#     60-minute throttle, unresolved threads — already decided this push should be reviewed),
+#     and only for a trusted author (MEMBER/OWNER/COLLABORATOR or ci-tool's internal
+#     allowlist): this repo is public, and the model holds the ChatGPT login while it reads
+#     the PR. Other authors' PRs are reviewed by hand after a maintainer has read them.
+#     Skipped if this head commit already has our successful review: the bot often fails
+#     twice on one push. Every comment starts this workflow; the others skip in seconds.
+#   - By hand (workflow_dispatch): an open PR gets the review of refs/pull/N/merge; a merged
+#     PR gets the same review of its squash commit against its parent, posted as a separate
+#     post-merge comment.
+#
+# Two jobs, so the model never shares a job with a write token:
+#   review  : codex reads the (untrusted) PR inside a locked-down container on the
+#             [self-hosted, codex] runner (user codexci). Read-only github.token; the
+#             checkout does not persist it. Only the review text leaves the job.
+#   publish : no model. starrocks-bot posts the sanitized result (mentions broken, HTML comments
+#             dropped, length capped). Findings: one PR review with an inline comment per
+#             finding (a conversation to resolve), like the hosted Codex review. No findings or
+#             a failure: one upserted comment per PR and mode ("<!-- codex-ci-review -->" /
+#             "<!-- codex-ci-post-merge-review -->").
+# A failed review is published too: the comment then carries the error, a log excerpt and
+# what to check, and the run is marked failed.
+# Review context: root/nested AGENTS.md from the checkout, the base branch's REVIEW.md
+# (severe-risk profile, on by default) and the PR's bot-posted
+# module-risk briefing, if any.
+# Logic: ci-tool bin/ai_codex_review.sh (--resolve / --compute / --publish).
+
+run-name: "AI Codex Review · PR #${{ github.event.issue.number || inputs.pr_number }}"
+
+on:
+  issue_comment:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: PR number to review
+        required: true
+      profile:
+        description: severe adds the severe-risk profile (REVIEW.md); default is the plain review.
+        type: choice
+        options: [severe, default]
+        default: severe
+
+permissions:
+  contents: read
+  pull-requests: read
+
+env:
+  REPO: ${{ github.repository }}
+
+jobs:
+  review:
+    runs-on: [self-hosted, codex]
+    if: >-
+      github.repository == 'StarRocks/starrocks' &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event.issue.pull_request &&
+        github.event.issue.state == 'open' &&
+        github.event.comment.user.login == 'chatgpt-codex-connector[bot]' &&
+        contains(github.event.comment.body, 'Something went wrong')))
+    timeout-minutes: 40
+    # Job-level, so the skipped runs of unrelated comments never touch it. Not cancelling: a
+    # second hosted failure on the same push waits, then skips as already reviewed.
+    concurrency:
+      group: ai-codex-review-${{ github.event.issue.number || inputs.pr_number }}
+      cancel-in-progress: false
+    env:
+      PR_NUMBER: ${{ github.event.issue.number || inputs.pr_number }}
+    outputs:
+      mode: ${{ steps.resolve.outputs.mode }}
+      status: ${{ steps.review.outputs.status }}
+      head_sha: ${{ steps.review.outputs.head_sha }}
+      review_b64: ${{ steps.review.outputs.review_b64 }}
+      inline_b64: ${{ steps.review.outputs.inline_b64 }}
+    steps:
+      - name: check PR number
+        run: |
+          [[ "${PR_NUMBER}" =~ ^[0-9]+$ ]] || { echo "bad PR number '${PR_NUMBER}'"; exit 1; }
+
+      # Open PR -> pre (refs/pull/N/merge), merged -> post (its squash commit), else skip.
+      # Automatic runs: only an open PR into main by a trusted author, once per head commit.
+      - name: resolve what to review
+        id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUIRE_OPEN_BASE: ${{ github.event_name == 'issue_comment' && 'main' || '' }}
+          REQUIRE_TRUSTED_AUTHOR: ${{ github.event_name == 'issue_comment' && '1' || '0' }}
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && (cd ci-tool && git pull -q 2>/dev/null || true)
+          OUT="${RUNNER_TEMP}/codex-review-${PR_NUMBER}.md"
+          if ! OUT="${OUT}" ./ci-tool/bin/ai_codex_review.sh --resolve; then
+            echo "mode=failed" >> "${GITHUB_OUTPUT}"
+          fi
+
+      # Both parents are needed: the merge ref's first parent / the squash commit's parent is
+      # the base. A PR with conflicts has no merge ref; this step then fails and the next
+      # step reports it.
+      - uses: actions/checkout@v4
+        id: checkout
+        if: steps.resolve.outputs.mode == 'pre' || steps.resolve.outputs.mode == 'post'
+        continue-on-error: true
+        with:
+          ref: ${{ steps.resolve.outputs.ref }}
+          fetch-depth: 2
+          persist-credentials: false
+          path: pr
+
+      # Never fails by itself, so the result (review or failure report) always reaches publish.
+      - name: codex review (read-only token, container)
+        id: review
+        if: steps.resolve.outputs.mode != 'skip'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PROFILE: ${{ inputs.profile || 'severe' }}
+          REVIEW_MODE: ${{ steps.resolve.outputs.mode }}
+          CHECKOUT_OK: ${{ steps.checkout.outcome == 'success' }}
+        run: |
+          OUT="${RUNNER_TEMP}/codex-review-${PR_NUMBER}.md"
+          if [ "${REVIEW_MODE}" = failed ]; then
+            # --resolve already wrote the failure report to OUT.
+            echo "status=failed" >> "${GITHUB_OUTPUT}"
+          else
+            # A failed checkout can leave an older PR's files in ./pr; never review those.
+            WORKDIR=""
+            [ "${CHECKOUT_OK}" = true ] && WORKDIR="${GITHUB_WORKSPACE}/pr"
+            if WORKDIR="${WORKDIR}" OUT="${OUT}" ./ci-tool/bin/ai_codex_review.sh --compute; then
+              echo "status=ok" >> "${GITHUB_OUTPUT}"
+            else
+              echo "status=failed" >> "${GITHUB_OUTPUT}"
+            fi
+            [ -n "${WORKDIR}" ] && echo "head_sha=$(git -C pr rev-parse -q --verify HEAD^2 || git -C pr rev-parse HEAD)" >> "${GITHUB_OUTPUT}"
+          fi
+          echo "review_b64=$(base64 -w0 < "${OUT}")" >> "${GITHUB_OUTPUT}"
+          # Finding paths whose lines hold at the PR head (for inline comments).
+          if [ -s "${OUT}.inline" ]; then
+            echo "inline_b64=$(base64 -w0 < "${OUT}.inline")" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: mark the run failed
+        if: steps.resolve.outputs.mode != 'skip' && steps.review.outputs.status != 'ok'
+        run: |
+          echo "Codex review failed; the failure report is in the step above and in the PR comment."
+          exit 1
+
+  publish:
+    needs: review
+    # Also after a failed review, to post its failure report.
+    if: ${{ !cancelled() && needs.review.outputs.review_b64 != '' }}
+    runs-on: [self-hosted, quick]
+    env:
+      PR_NUMBER: ${{ github.event.issue.number || inputs.pr_number }}
+      STATUS: ${{ needs.review.outputs.status }}
+      # A resolve failure has no mode to file it under; it goes to the pre-merge comment.
+      REVIEW_MODE: ${{ needs.review.outputs.mode == 'post' && 'post' || 'pre' }}
+      HEAD_SHA: ${{ needs.review.outputs.head_sha }}
+      REVIEW_B64: ${{ needs.review.outputs.review_b64 }}
+      INLINE_B64: ${{ needs.review.outputs.inline_b64 }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - name: starrocks-bot token
+        id: bot-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.STARROCKS_BOT_APP_ID }}
+          private-key: ${{ secrets.STARROCKS_BOT_PRIVATE_KEY }}
+
+      # No model here. Fresh ci-tool, fail-closed pull: this step holds the write token.
+      - name: post review comment (bot token, no AI)
+        env:
+          GH_TOKEN: ${{ steps.bot-token.outputs.token }}
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && (cd ci-tool && git pull -q)
+          IN="${RUNNER_TEMP}/codex-review-${PR_NUMBER}.md"
+          printf '%s' "${REVIEW_B64}" | base64 -d > "${IN}"
+          INLINE_PATHS="${RUNNER_TEMP}/codex-review-${PR_NUMBER}.inline"
+          printf '%s' "${INLINE_B64}" | base64 -d > "${INLINE_PATHS}"
+          IN="${IN}" INLINE_PATHS="${INLINE_PATHS}" ./ci-tool/bin/ai_codex_review.sh --publish
