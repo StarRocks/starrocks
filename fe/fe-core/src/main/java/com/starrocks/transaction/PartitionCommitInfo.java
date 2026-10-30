@@ -264,9 +264,10 @@ public class PartitionCommitInfo implements Writable {
     }
 
     /**
-     * Takes over the dictionary metadata of another commit info of the same load, one the commit drops. The listener
-     * puts the metadata of a table on one of its partitions only (OlapTableTxnStateListener.preWriteCommitLog), and
-     * without it the global dicts of the table are neither invalidated nor advanced when the load becomes visible.
+     * Takes over the dictionary metadata of another commit info of the same load, one the commit drops or one whose
+     * partition may be dropped before the load becomes visible. The listener puts the metadata of a table on one of its
+     * partitions only (OlapTableTxnStateListener.preWriteCommitLog), and without it the global dicts of the table are
+     * neither invalidated nor advanced when the load becomes visible.
      */
     public void takeDictMetadataFrom(PartitionCommitInfo other) {
         invalidDictCacheColumns.addAll(other.invalidDictCacheColumns);

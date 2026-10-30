@@ -1716,6 +1716,9 @@ public class DatabaseTransactionMgr {
                 }
                 partitionCommitInfo.setVersion(version);
                 partitionCommitInfo.setIsDoubleWrite(true);
+                // The job swaps the temp partition in without waiting for this load to become visible, and the swap
+                // drops the source partition, which the listener may have put the dictionary metadata of the load on.
+                partitionCommitInfo.takeDictMetadataFrom(doubleWriteSourceCommitInfos.get(tempPartitionId));
                 LOG.info("set double write partition {}:{} version to {} in transaction {}",
                         tempPartitionId, partitionCommitInfo.getPhysicalPartitionId(), version, transactionState);
             }

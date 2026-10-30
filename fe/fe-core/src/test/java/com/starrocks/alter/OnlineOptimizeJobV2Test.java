@@ -656,6 +656,66 @@ public class OnlineOptimizeJobV2Test extends DDLTestBase {
     }
 
     @Test
+    public void testKeptDoubleWriteCarriesDictMetadataOfSource() throws Exception {
+        // The listener puts the dictionary metadata of a load on one of its partition commit infos only. The job swaps
+        // the temp partition in without waiting for the loads that kept their double write, and a load still unpublished
+        // then loses the commit info of the dropped source partition: the double write must carry the metadata too, or
+        // the global dicts of the table are neither invalidated nor advanced when the load becomes visible.
+        holdPublishDaemon();
+        OlapTable table = createPartitionedTable("t_online_optimize_kept_dict");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
+        OnlineOptimizeJobV2 job = submitOptimize(table);
+        runToRunning(job);
+        Mockito.doReturn(false).when(job).isPreviousLoadFinished();
+        job.runRunningJob();
+        OptimizeTask task = job.getOptimizeTasks().get(0);
+        Partition source = table.getPartition(task.getPartitionName());
+        Partition temp = table.getPartition(task.getTempPartitionName(), true);
+        // A load commits before the job fixes the rewrite version, which the job then fixes at the load's version.
+        TransactionState before = commitLoad(db, table, source, temp);
+        Mockito.doReturn(true).when(job).isPreviousLoadFinished();
+        job.runRunningJob();
+        Assertions.assertEquals(partitionCommitInfo(before, table, source).getVersion(),
+                table.getDoubleWriteRewriteVersion(temp.getId()));
+        ColumnId column = table.getColumn("v1").getColumnId();
+
+        GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        long txnId = transactionMgr.beginTransaction(db.getId(), List.of(table.getId()),
+                "online_optimize_" + UUIDUtil.genUUID(),
+                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, "127.0.0.1"),
+                TransactionState.LoadJobSourceType.FRONTEND, 600);
+        transactionMgr.prepareTransaction(db.getId(), txnId, 60_000L, tabletCommitInfos(source, temp), List.of(),
+                null);
+        // As if the listener had put the metadata on the source partition.
+        TableCommitInfo tableCommitInfo =
+                transactionMgr.getTransactionState(db.getId(), txnId).getTableCommitInfo(table.getId());
+        tableCommitInfo.addPartitionCommitInfo(new PartitionCommitInfo(source.getDefaultPhysicalPartition().getId(),
+                -1, System.currentTimeMillis(), Lists.newArrayList(column), Lists.newArrayList(),
+                Lists.newArrayList()));
+        tableCommitInfo.addPartitionCommitInfo(new PartitionCommitInfo(temp.getDefaultPhysicalPartition().getId(),
+                -1, System.currentTimeMillis()));
+        // Commit as GlobalTransactionMgr does, without its wait for the publish that the test holds back.
+        try (AutoCloseableLock ignored =
+                new AutoCloseableLock(new Locker(), db.getId(), List.of(table.getId()), LockType.WRITE)) {
+            transactionMgr.getDatabaseTransactionMgr(db.getId()).commitPreparedTransaction(txnId);
+        }
+
+        TransactionState load = transactionMgr.getTransactionState(db.getId(), txnId);
+        PartitionCommitInfo doubleWrite = partitionCommitInfo(load, table, temp);
+        Assertions.assertTrue(doubleWrite.isDoubleWrite());
+        Assertions.assertEquals(List.of(column), doubleWrite.getInvalidDictCacheColumns());
+        Assertions.assertEquals(List.of(column), partitionCommitInfo(load, table, source).getInvalidDictCacheColumns());
+
+        // Publish both loads: a committed transaction left behind keeps the next test from dropping the database.
+        transactionMgr.finishTransaction(db.getId(), before.getTransactionId(), new HashSet<>());
+        transactionMgr.finishTransaction(db.getId(), txnId, new HashSet<>());
+        Assertions.assertEquals(TransactionStatus.VISIBLE,
+                transactionMgr.getTransactionState(db.getId(), before.getTransactionId()).getTransactionStatus());
+        Assertions.assertEquals(TransactionStatus.VISIBLE,
+                transactionMgr.getTransactionState(db.getId(), txnId).getTransactionStatus());
+    }
+
+    @Test
     public void testDoubleWritesPendingAtSwapBecomeVisibleInOrder() throws Exception {
         // The job swaps the temp partition in without waiting for a moment free of unpublished loads. The double
         // writes still pending then are the next versions of the swapped-in partition and must become visible in
