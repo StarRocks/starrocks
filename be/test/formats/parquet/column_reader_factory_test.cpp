@@ -21,6 +21,7 @@
 #include "base/testutil/assert.h"
 #include "formats/parquet/column_reader.h"
 #include "formats/parquet/complex_column_reader.h"
+#include "testutil/type_test_helper.h"
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
 
@@ -428,9 +429,9 @@ TEST(ColumnReaderFactoryTest, StructWithoutFieldIdMatchesIcebergSubfieldsByName)
     field.children.emplace_back(make_scalar_field("b", 1, tparquet::Type::INT32));
 
     TypeDescriptor col_type = TypeDescriptor::from_logical_type(TYPE_STRUCT);
-    col_type.children.emplace_back(TypeDescriptor::from_logical_type(TYPE_INT));
+    col_type.children.emplace_back(TYPE_INT_DESC);
     col_type.field_names.emplace_back("a");
-    col_type.children.emplace_back(TypeDescriptor::from_logical_type(TYPE_INT));
+    col_type.children.emplace_back(TYPE_INT_DESC);
     col_type.field_names.emplace_back("missing");
 
     TIcebergSchemaField field_a;
@@ -482,10 +483,10 @@ TEST(ColumnReaderFactoryTest, StructWithoutFieldIdMatchesIcebergSubfieldsByPhysi
     field.children.emplace_back(make_scalar_field("b_phys", 1, tparquet::Type::INT32));
 
     TypeDescriptor col_type = TypeDescriptor::from_logical_type(TYPE_STRUCT);
-    col_type.children.emplace_back(TypeDescriptor::from_logical_type(TYPE_INT));
+    col_type.children.emplace_back(TYPE_INT_DESC);
     col_type.field_names.emplace_back("a");
     col_type.field_physical_names.emplace_back("a_phys");
-    col_type.children.emplace_back(TypeDescriptor::from_logical_type(TYPE_INT));
+    col_type.children.emplace_back(TYPE_INT_DESC);
     col_type.field_names.emplace_back("missing");
     col_type.field_physical_names.emplace_back("missing_phys");
 
@@ -549,7 +550,7 @@ ParquetField make_resolver_struct_field() {
 TypeDescriptor make_resolver_struct_type(const std::vector<std::string>& names) {
     TypeDescriptor col_type = TypeDescriptor::from_logical_type(TYPE_STRUCT);
     for (const auto& name : names) {
-        col_type.children.emplace_back(TypeDescriptor::from_logical_type(TYPE_INT));
+        col_type.children.emplace_back(TYPE_INT_DESC);
         col_type.field_names.emplace_back(name);
     }
     return col_type;
@@ -635,7 +636,8 @@ TEST(ColumnReaderFactoryTest, ResolveStructSubfieldsIceberg) {
     ASSERT_EQ(mapping.parquet_children[1], &field.children[2]);
     ASSERT_EQ(mapping.lake_children[1], &root.children[1]);
     ASSERT_EQ(mapping.parquet_children[2], nullptr);
-    ASSERT_EQ(mapping.lake_children[2], nullptr);
+    // kept so its initial-default can fill the missing subfield
+    ASSERT_EQ(mapping.lake_children[2], &root.children[2]);
 
     // file without field ids: match by physical name, else table field name
     mapping = ColumnReaderFactory::resolve_struct_subfields(field, col_type, false, &root, false);
@@ -644,7 +646,8 @@ TEST(ColumnReaderFactoryTest, ResolveStructSubfieldsIceberg) {
     ASSERT_EQ(mapping.parquet_children[1], &field.children[2]);
     ASSERT_EQ(mapping.lake_children[1], &root.children[1]);
     ASSERT_EQ(mapping.parquet_children[2], nullptr);
-    ASSERT_EQ(mapping.lake_children[2], nullptr);
+    // kept so its initial-default can fill the missing subfield
+    ASSERT_EQ(mapping.lake_children[2], &root.children[2]);
 }
 
 // field_ids / field_physical_names hold -1 / "" for a subfield without one; such a subfield is matched by its
@@ -660,7 +663,7 @@ TEST(ColumnReaderFactoryTest, StructSubfieldPosWithPlaceholderFieldIds) {
     field.children.emplace_back(make_scalar_field("c", 2, tparquet::Type::INT32));
     field.children.back().field_id = 3;
 
-    TypeDescriptor int_type = TypeDescriptor::from_logical_type(TYPE_INT);
+    TypeDescriptor int_type = TYPE_INT_DESC;
     // renamed_c is matched by its id, b (no id) by its name.
     TypeDescriptor col_type = TypeDescriptor::create_struct_type({"renamed_c", "b"}, {int_type, int_type});
     col_type.field_ids = {3, -1};
@@ -676,7 +679,7 @@ TEST(ColumnReaderFactoryTest, StructSubfieldPosWithPlaceholderPhysicalNames) {
     field.children.emplace_back(make_scalar_field("a_phys", 0, tparquet::Type::INT32));
     field.children.emplace_back(make_scalar_field("b", 1, tparquet::Type::INT32));
 
-    TypeDescriptor int_type = TypeDescriptor::from_logical_type(TYPE_INT);
+    TypeDescriptor int_type = TYPE_INT_DESC;
     // a is matched by its physical name, b (no physical name) by its name; missing is not in the file.
     TypeDescriptor col_type = TypeDescriptor::create_struct_type({"a", "b", "missing"}, {int_type, int_type, int_type});
     col_type.field_physical_names = {"a_phys", "", ""};
@@ -716,7 +719,7 @@ TEST(ColumnReaderFactoryTest, MapWithGroupKey) {
     map.children.emplace_back(make_scalar_field("value", 2, tparquet::Type::INT32));
 
     auto opts = make_opts_with_num_cols(3);
-    const TypeDescriptor int_type = TypeDescriptor::from_logical_type(TYPE_INT);
+    const TypeDescriptor int_type = TYPE_INT_DESC;
 
     // scalar table key over a group key: rejected when read
     {

@@ -250,6 +250,7 @@ OLAP_SCANオペレーターに似ていますが、Iceberg/Hive/Hudi/Deltaなど
 | RuntimeFilterEvalTime | Parquetリーダー内でデコード済みの行に対してJoin Runtime Filterを評価するのにかかった時間。 |
 | RuntimeFilterInputRows | ParquetリーダーのJoin Runtime Filter評価に入力された行数。 |
 | RuntimeFilterOutputRows | ParquetリーダーのJoin Runtime Filter評価を通過した行数。`RuntimeFilterInputRows` との差が大きいほど、Lazy列がマテリアライズされる前に多くの行がフィルタリングされたことを意味します。 |
+| ScanRangesPrunedByPartitionValue | identity パーティション値が述語または到着済みの Join Runtime Filter で除外されたため、読み取り前にスキップされた Scan Range の数。 |
 | PaimonFSAppIOCount | Paimonファイルシステムアダプターが受け取った有効な読み取り試行回数。順次読み取り、位置指定読み取り、非同期読み取りの合計です。 |
 | PaimonFSAppIOBytes | Paimonファイルシステムアダプター境界で正常に返された読み取りバイト数。 |
 | PaimonFSAppIOTime | Paimonファイルシステムアダプター境界での読み取りのエンドツーエンド時間。 |
@@ -294,6 +295,16 @@ OLAP_SCANオペレーターに似ていますが、Iceberg/Hive/Hudi/Deltaなど
 | BytesUnsent | 未送信データのサイズ。ショートサーキットロジックがある場合にゼロ以外になります。それ以外はゼロです。 |
 | BytesPassThrough | 宛先ノードが現在のノードである場合、データはネットワーク経由で転送されません。これをパススルーデータと呼びます。このメトリックはそのパススルーデータのサイズを示します。パススルーは`enable_exchange_pass_through`によって制御されます。 |
 | PassThroughBufferPeakMemoryUsage | パススルーバッファのピークメモリ使用量。 |
+| ShuffleChunkBufferNum | PartType が HASH_PARTITIONED または BUCKET_SHUFFLE_HASH_PARTITIONED の場合に、Sink が宛先の Pipeline Driver ごとにデータをバッファリングするために割り当てた Partial Chunk の数。Partial Chunk が解放されて再割り当てされると、宛先 Driver の数を超えます。 |
+| ShuffleChunkBufferPeakMemoryUsage | これらの Partial Chunk が保持するメモリのピーク値。Partial Chunk はいっぱいになってから送信されるため、宛先が多く、DOP が高く、行が広い場合は Sink の入力全体に近づくことがあります。BE 設定項目 `exchange_sink_buffer_flush_threshold_bytes` によって制限されます。 |
+| ShuffleBufferFlushCount | Partial Chunk のメモリが `exchange_sink_buffer_flush_threshold_bytes` を超え、いっぱいになる前に送信された回数。 |
+| ShuffleBufferFlushRows | この早期送信で送信された行数。 |
+| ShuffleBufferReleasedChunks | 早期送信の後、残りのメモリが `exchange_sink_buffer_flush_threshold_bytes` の半分を超えていたために解放された Partial Chunk の数。 |
+| PeakSerializedChunkBytes | シリアライズ後（圧縮前）の Chunk サイズの最大値。 |
+| SinkBufferPeakMemoryUsage | Sink Buffer で送信待ちまたは送信中のリクエストが使用するメモリのピーク値。 |
+| SinkBufferMemoryLimit | Sink Buffer のメモリ上限。デフォルトは `sink_buffer_mem_limit_per_driver` × 宛先の数です。上限に達すると、リクエストが完了するまで Sink はデータの受け入れを停止します。 |
+| SinkBufferPeakInFlightRpcNum | 同時に実行中の RPC 数のピーク値。 |
+| SinkBufferPeakRequestNum | Sink Buffer で送信待ちまたは送信中のリクエスト数のピーク値。 |
 | CompressTime | 圧縮時間。 |
 | CompressedInputBytes | 実際に圧縮器へ入力されたシリアライズ済み（圧縮前）データのサイズ。アダプティブ圧縮戦略によってスキップされた chunk は含まれません。`CompressedInputBytes / CompressedBytes` が圧縮率であり、`SerializedBytes - CompressedInputBytes` が圧縮されなかったデータのサイズです。 |
 | CompressedBytes | 圧縮データのサイズ。実際に圧縮された chunk のみが対象です。 |

@@ -33,6 +33,13 @@
 
 2. (オプション) Ranger の監査ログサービスを使用する場合は、各 FE マシンの `fe/conf` フォルダーに [ranger-starrocks-audit.xml](https://github.com/StarRocks/starrocks/blob/main/conf/ranger/ranger-starrocks-audit.xml) ファイルを作成します。内容をコピーし、**`xasecure.audit.solr.solr_url` の `solr_url` を自分の `solr_url` に置き換えて**、ファイルを保存します。
 
+   StarRocks は Ranger の監査ログの送信先として次の 2 つをサポートしますが、同時に使用できるのはどちらか一方のみです。
+
+   - Solr: テンプレートで使用されている `xasecure.audit.solr.*` プロパティを使用します。`xasecure.audit.destination.solr` による Solr の設定はサポートされていません。
+   - ローカルファイル: `xasecure.audit.destination.file` を `true` に、`xasecure.audit.destination.file.dir` を監査ファイルのディレクトリに設定します。
+
+   `xasecure.audit.destination.*` プロパティのいずれかが有効になると、Ranger は Solr のものを含め、すべての `xasecure.audit.<destination>.*` プロパティを無視します。`ranger-hive-audit.xml` も同様です。
+
 3. すべての FE 設定ファイルに `access_control = ranger` の設定を追加します。
 
    ```SQL

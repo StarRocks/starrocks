@@ -376,6 +376,9 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
             PropertyAnalyzer.analyzeEnableLoadProfile(properties);
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD)) {
             PropertyAnalyzer.analyzeEnableStatisticCollectOnFirstLoad(properties);
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_AUTO_COLLECT)) {
+            PropertyAnalyzer.parseBooleanStrictly(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_AUTO_COLLECT,
+                    properties.get(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_AUTO_COLLECT));
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES)) {
             if (table instanceof OlapTable) {
                 OlapTable olapTable = (OlapTable) table;
@@ -1011,11 +1014,12 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
             throw new SemanticException(PARSER_ERROR_MSG.invalidColFormat(columnName));
         }
 
-        if (!table.isOlapTable() && !table.isCloudNativeTable()) {
-            throw new SemanticException("Add field only support olap table");
+        if (!table.isOlapTable() && !table.isCloudNativeTable() && !table.isIcebergTable()) {
+            throw new SemanticException("Add field only support olap table and iceberg table");
         }
 
-        Column baseColumn = ((OlapTable) table).getBaseColumn(columnName);
+        Column baseColumn = table.isIcebergTable() ? table.getColumn(columnName)
+                : ((OlapTable) table).getBaseColumn(columnName);
         StructFieldDesc fieldDesc = clause.getFieldDesc();
         StructFieldDescAnalyzer.analyze(fieldDesc, baseColumn, false);
         return null;
@@ -1028,11 +1032,12 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
             throw new SemanticException(PARSER_ERROR_MSG.invalidColFormat(columnName));
         }
 
-        if (!table.isOlapTable() && !table.isCloudNativeTable()) {
-            throw new SemanticException("Drop field only support olap table");
+        if (!table.isOlapTable() && !table.isCloudNativeTable() && !table.isIcebergTable()) {
+            throw new SemanticException("Drop field only support olap table and iceberg table");
         }
 
-        Column baseColumn = ((OlapTable) table).getBaseColumn(columnName);
+        Column baseColumn = table.isIcebergTable() ? table.getColumn(columnName)
+                : ((OlapTable) table).getBaseColumn(columnName);
         StructFieldDesc fieldDesc = new StructFieldDesc(clause.getFieldName(), clause.getNestedParentFieldNames(), null, null);
         StructFieldDescAnalyzer.analyze(fieldDesc, baseColumn, true);
         return null;
@@ -1988,6 +1993,12 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
             }
         }
         clause.setAnalyzedArgs(constantArgs);
+
+        // add_equality_delete_files registers every file under its location; a WHERE clause would be silently ignored
+        if (clause.getWhere() != null &&
+                icebergTableProcedure.getOperation() == IcebergTableOperation.ADD_EQUALITY_DELETE_FILES) {
+            throw new SemanticException("WHERE is not supported for %s", icebergTableProcedure.getProcedureName());
+        }
 
         if (clause.getWhere() != null && icebergTableProcedure.getOperation() == IcebergTableOperation.REWRITE_DATA_FILES) {
             ColumnRefFactory columnRefFactory = new ColumnRefFactory();

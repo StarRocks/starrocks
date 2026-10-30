@@ -311,15 +311,15 @@ TEST(EvHttpServerAuthTest, verifier_returns_failure_short_circuits_handler) {
     server->register_handler(GET, "/probe", handler.get());
 
     std::atomic<int> verifier_calls{0};
-    server->set_auth_verifier(
-            [&](HttpRequest*, HttpHandler::RequiredPrivilege) -> std::optional<EvHttpServer::AuthVerifyFailure> {
-                ++verifier_calls;
-                EvHttpServer::AuthVerifyFailure f;
-                f.http_status = HttpStatus::UNAUTHORIZED;
-                f.www_authenticate = "Basic realm=\"\"";
-                f.body = "{\"status\":\"FAILED\",\"code\":\"1\",\"message\":\"denied\"}";
-                return f;
-            });
+    server->set_auth_verifier([&](HttpRequest*,
+                                  HttpHandler::RequiredPrivilege) -> std::optional<EvHttpServer::AuthVerifyFailure> {
+        ++verifier_calls;
+        EvHttpServer::AuthVerifyFailure f;
+        f.http_status = HttpStatus::UNAUTHORIZED;
+        f.www_authenticate = {"Basic realm=\"StarRocks\"", "Bearer realm=\"StarRocks\", error=\"invalid_token\""};
+        f.body = "{\"status\":\"FAILED\",\"code\":\"1\",\"message\":\"denied\"}";
+        return f;
+    });
 
     ASSERT_OK(server->start());
     int port = server->get_real_port();

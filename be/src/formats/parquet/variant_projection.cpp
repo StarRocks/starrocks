@@ -173,6 +173,8 @@ StatusOr<ColumnPtr> build_variant_projection_column(const VariantColumn* variant
     reader.prepare(variant_column, &path);
 
     const bool src_is_const = variant_src->is_constant();
+    TzOffsetCache offset_cache;
+    offset_cache.bind(zone);
     for (size_t row = 0; row < num_rows; ++row) {
         if (variant_src->is_null(row)) {
             builder.append_null();
@@ -184,7 +186,8 @@ StatusOr<ColumnPtr> build_variant_projection_column(const VariantColumn* variant
             builder.append_null();
             continue;
         }
-        auto cast_status = VariantRowConverter::cast_to<ResultType, false>(read.value.as_ref(), zone, builder);
+        auto cast_status =
+                VariantRowConverter::cast_to<ResultType, false>(read.value.as_ref(), zone, builder, &offset_cache);
         RETURN_IF_ERROR(cast_status);
     }
 

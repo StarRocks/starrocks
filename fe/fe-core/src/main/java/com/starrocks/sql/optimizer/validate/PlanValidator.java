@@ -57,6 +57,7 @@ public final class PlanValidator {
         checkerList = ImmutableList.of(
                 TypeChecker.getInstance(),
                 ConditionalTypeChecker.getInstance(),
+                ConstInPredicateChecker.getInstance(),
                 CTEUniqueChecker.getInstance(),
                 InputDependenciesChecker.getInstance(),
                 ColumnReuseChecker.getInstance());

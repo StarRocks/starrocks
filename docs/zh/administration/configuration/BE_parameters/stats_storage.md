@@ -763,6 +763,15 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 描述：主键表单次 Compaction 合并的最大 Rowset 数。
 - 引入版本：-
 
+### max_update_compaction_num_level_minus_one_rowsets
+
+- 默认值：10000
+- 类型：Int
+- 单位：Rowset
+- 是否动态：是
+- 描述：主键表 size-tiered 合并时，单次选入的 level=-1 Rowset 最大数量；配置小于 2 时按 2 生效。level=-1 包括零行或估算有效字节为零的 Rowset。与其他层同时合并时，此配置不限制总输入数。
+- 引入版本：-
+
 ### memory_limitation_per_thread_for_schema_change
 
 - 默认值：2
@@ -1132,6 +1141,15 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 描述：Size-tiered Compaction 策略中，最小 Level 的大小，小于此数值的 Rowset 会直接触发 Compaction。
 - 引入版本：-
 
+### skip_pindex_l1_l2_check_in_insert
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：在存算一体集群中，向本地持久化主键索引执行 insert 时，是否跳过不可变 L1/L2 文件的重复键检查。默认值 `true` 表示仅检查 L0 memtable，避免这些检查带来的磁盘读取，与存算分离集群的云原生主键索引行为对齐。设置为 `false` 可恢复不可变索引检查。此配置控制索引内部的一致性检查，不改变主键表 SQL INSERT 语句的更新语义。
+- 引入版本：-
+
 ### snapshot_expire_time_sec
 
 - 默认值：172800
@@ -1323,6 +1341,15 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 是否动态：是
 - 描述：用于存算分离表 tablet 元数据获取操作（例如 `get_tablet_stats`、`get_tablet_metadatas`）的线程数。
 - 引入版本：v3.5.16, v4.0.9
+
+### tablet_writer_add_segment_lock_timeout_ms
+
+- 默认值：0
+- 类型：Int
+- 单位：毫秒
+- 是否动态：是
+- 描述：存算一体集群中，从副本 BE 接收 segment 复制请求时的总等锁预算。小于或等于 `0` 表示使用 `be_exit_after_disk_write_hang_second` 换算成毫秒后的值；正值直接覆盖该预算。LoadChannel 互斥锁和 LocalTabletsChannel 读锁共用一个截止时间，在 BRPC 请求处理函数入口统一计算一次。任一锁等待超时，RPC 都会在提交本次 segment 写入前返回超时错误。此预算与 RPC 超时独立，不限制后续 segment flush 或 commit 的执行时间，仅作用于 segment 复制接收路径。writer 挂起退出的计时起点不同，因此不能保证等锁超时一定早于 BE 退出。
+- 引入版本：-
 
 ### tablet_writer_open_rpc_timeout_sec
 

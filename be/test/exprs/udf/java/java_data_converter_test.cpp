@@ -31,6 +31,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "exprs/udf/java/java_udf.h"
+#include "testutil/type_test_helper.h"
 #include "types/date_value.h"
 #include "types/datum.h"
 #include "types/decimalv3.h"
@@ -83,8 +84,6 @@ TEST_F(DataConverterTest, cast_to_jval) {
     }
 
     {
-        TypeDescriptor tdesc(TYPE_ARRAY);
-        tdesc.children.emplace_back(TYPE_INT);
         auto i32c = Int32Column::create();
         auto& elements_data = i32c->get_data();
         elements_data.resize(20);
@@ -102,7 +101,7 @@ TEST_F(DataConverterTest, cast_to_jval) {
         auto arr_col = ArrayColumn::create(std::move(nullable), std::move(offsets));
         auto& jvm = JVMHelper::getInstance();
         for (size_t i = 0; i < 3; ++i) {
-            ASSIGN_OR_ASSERT_FAIL(jvalue v, cast_to_jvalue(tdesc, true, arr_col.get(), i));
+            ASSIGN_OR_ASSERT_FAIL(jvalue v, cast_to_jvalue(TYPE_ARRAY_INT_DESC, true, arr_col.get(), i));
             jobject obj = v.l;
             target = target + jvm.to_string(obj);
             LOCAL_REF_GUARD(obj);
@@ -130,10 +129,8 @@ TEST_F(DataConverterTest, cast_to_jval) {
 
     {
         TypeDescriptor tdesc(TYPE_MAP);
-        TypeDescriptor ta(TYPE_ARRAY);
-        ta.children.emplace_back(TYPE_INT);
-        tdesc.children.emplace_back(ta);
-        tdesc.children.emplace_back(ta);
+        tdesc.children.emplace_back(TYPE_ARRAY_INT_DESC);
+        tdesc.children.emplace_back(TYPE_ARRAY_INT_DESC);
         auto c1 = ColumnHelper::create_column(tdesc, true);
         c1->append_default();
         auto c2 = ColumnHelper::create_column(tdesc, false);
@@ -195,10 +192,8 @@ TEST_F(DataConverterTest, convert_to_boxed_array) {
         args.emplace_back(type);
         context._arg_types = args;
         TypeDescriptor tdesc(TYPE_MAP);
-        TypeDescriptor ta(TYPE_ARRAY);
-        ta.children.emplace_back(TYPE_INT);
-        tdesc.children.emplace_back(ta);
-        tdesc.children.emplace_back(ta);
+        tdesc.children.emplace_back(TYPE_ARRAY_INT_DESC);
+        tdesc.children.emplace_back(TYPE_ARRAY_INT_DESC);
 
         auto c1 = ColumnHelper::create_column(tdesc, true);
         c1->append_default();
@@ -219,16 +214,14 @@ TEST_F(DataConverterTest, convert_to_boxed_array) {
 
 TEST_F(DataConverterTest, append_jvalue) {
     {
-        TypeDescriptor tdesc(TYPE_ARRAY);
-        tdesc.children.emplace_back(TYPE_INT);
-        auto c1 = ColumnHelper::create_column(tdesc, true);
-        auto c2 = ColumnHelper::create_column(tdesc, true);
+        auto c1 = ColumnHelper::create_column(TYPE_ARRAY_INT_DESC, true);
+        auto c2 = ColumnHelper::create_column(TYPE_ARRAY_INT_DESC, true);
         Datum datum = std::vector<Datum>{1, 2, 3};
         c2->append_datum(datum);
-        ASSIGN_OR_ASSERT_FAIL(jvalue val2, cast_to_jvalue(tdesc, true, c2.get(), 0));
+        ASSIGN_OR_ASSERT_FAIL(jvalue val2, cast_to_jvalue(TYPE_ARRAY_INT_DESC, true, c2.get(), 0));
         jobject obj = val2.l;
         LOCAL_REF_GUARD(obj);
-        ASSERT_OK(append_jvalue(tdesc, true, c1.get(), val2));
+        ASSERT_OK(append_jvalue(TYPE_ARRAY_INT_DESC, true, c1.get(), val2));
     }
     {
         TypeDescriptor tdesc(TYPE_MAP);
@@ -796,12 +789,12 @@ TEST_F(DataConverterTest, convert_to_boxed_array_with_null_descs) {
     auto* env = JVMHelper::getInstance().getEnv();
 
     // ARRAY<INT> column with one populated row.
-    TypeDescriptor td = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_INT));
-    auto col = ColumnHelper::create_column(td, true);
+    auto col = ColumnHelper::create_column(TYPE_ARRAY_INT_DESC, true);
     Datum datum = std::vector<Datum>{1, 2, 3};
     col->append_datum(datum);
 
-    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context({td}, td));
+    std::unique_ptr<FunctionContext> ctx(
+            FunctionContext::create_test_context({TYPE_ARRAY_INT_DESC}, TYPE_ARRAY_INT_DESC));
     std::vector<const Column*> cols = {col.get()};
     std::vector<jobject> arg_descs = {nullptr};
     std::vector<jobject> res;

@@ -24,6 +24,7 @@
 #include "exec/pipeline/query_context.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
+#include "testutil/column_test_helper.h"
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
 
@@ -106,13 +107,7 @@ TEST_F(LocalBucketShuffleTest, test_local_bucket_shuffle) {
                                             partition_exprs, bucket_properies);
     auto chunk = std::make_shared<Chunk>();
 
-    auto col = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
-    col->append_datum(Datum(1));
-    col->append_datum(Datum(2));
-    col->append_datum(Datum(3));
-    col->append_nulls(1);
-    col->append_datum(Datum(4));
-    col->append_nulls(1);
+    auto col = ColumnTestHelper::build_nullable_column<int32_t>({1, 2, 3, 0, 4, 0}, {0, 0, 0, 1, 0, 1});
     chunk->append_column(std::move(col), 1);
 
     auto col_s = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true);

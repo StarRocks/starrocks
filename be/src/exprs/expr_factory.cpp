@@ -67,18 +67,12 @@ ExprFactory::ExprCreateHook& non_core_create_post_hook() {
     return hook;
 }
 
-bool has_explicit_ai_marker(const TExprNode& node) {
-    if (node.__isset.ai_model_config_id) {
-        return true;
-    }
-    if (!node.__isset.fn) {
-        return false;
-    }
-    return node.fn.binary_type == TFunctionBinaryType::AI || node.fn.__isset.ai_model_source;
+bool has_ai_function(const TExprNode& node) {
+    return node.__isset.fn && node.fn.binary_type == TFunctionBinaryType::AI;
 }
 
-bool contains_explicit_ai_marker(const TExpr& expression) {
-    return std::any_of(expression.nodes.begin(), expression.nodes.end(), has_explicit_ai_marker);
+bool contains_ai_function(const TExpr& expression) {
+    return std::any_of(expression.nodes.begin(), expression.nodes.end(), has_ai_function);
 }
 
 Status invalid_ai_expression() {
@@ -97,9 +91,7 @@ Status create_vectorized_expr(ObjectPool* pool, const TExprNode& texpr_node, Exp
     FAIL_POINT_TRIGGER_RETURN_ERROR(random_error);
     const bool is_function_call = texpr_node.node_type == TExprNodeType::FUNCTION_CALL ||
                                   texpr_node.node_type == TExprNodeType::COMPUTE_FUNCTION_CALL;
-    const bool is_ai_function =
-            is_function_call && texpr_node.__isset.fn && texpr_node.fn.binary_type == TFunctionBinaryType::AI;
-    if (has_explicit_ai_marker(texpr_node) && !is_ai_function) {
+    if (has_ai_function(texpr_node) && !is_function_call) {
         return invalid_ai_expression();
     }
     switch (texpr_node.node_type) {
@@ -170,8 +162,6 @@ Status create_vectorized_expr(ObjectPool* pool, const TExprNode& texpr_node, Exp
                 return ai_expr.status();
             }
             *expr = ai_expr.value();
-        } else if (has_explicit_ai_marker(texpr_node)) {
-            return invalid_ai_expression();
         }
         if (*expr != nullptr) {
             break;
@@ -342,7 +332,7 @@ Status ExprFactory::create_expr_tree(ObjectPool* pool, const TExpr& texpr, Expr*
         *root_expr = nullptr;
         return Status::OK();
     }
-    const bool contains_ai = contains_explicit_ai_marker(texpr);
+    const bool contains_ai = contains_ai_function(texpr);
     int node_idx = 0;
     Status status = create_expr_from_thrift_nodes(pool, texpr.nodes, &node_idx, root_expr, state, can_jit);
     if (status.ok() && node_idx + 1 != texpr.nodes.size()) {
@@ -384,7 +374,7 @@ Status ExprFactory::create_expr_from_thrift_nodes(ObjectPool* pool, const std::v
 
 Status ExprFactory::create_expr_tree(ObjectPool* pool, const TExpr& texpr, ExprContext** ctx, RuntimeState* state,
                                      bool can_jit) {
-    if (contains_explicit_ai_marker(texpr)) {
+    if (contains_ai_function(texpr)) {
         *ctx = nullptr;
     }
     Expr* root_expr = nullptr;

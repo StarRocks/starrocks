@@ -54,11 +54,18 @@ public class MysqlHandshakePacket extends MysqlPacket {
     private final int connectionId;
     private final byte[] authPluginData;
     private final boolean supportSSL;
+    private final boolean supportCompression;
 
     public MysqlHandshakePacket(int connectionId, boolean supportSSL, byte[] authPluginData) {
+        this(connectionId, supportSSL, authPluginData, false);
+    }
+
+    public MysqlHandshakePacket(int connectionId, boolean supportSSL, byte[] authPluginData,
+                                boolean supportCompression) {
         this.connectionId = connectionId;
         this.authPluginData = authPluginData;
         this.supportSSL = supportSSL;
+        this.supportCompression = supportCompression;
     }
 
     @Override
@@ -67,6 +74,11 @@ public class MysqlHandshakePacket extends MysqlPacket {
         if (supportSSL) {
             capability = new MysqlCapability(capability.getFlags()
                     | MysqlCapability.Flag.CLIENT_SSL.getFlagBit());
+        }
+        if (supportCompression) {
+            capability = new MysqlCapability(capability.getFlags()
+                    | MysqlCapability.Flag.CLIENT_COMPRESS.getFlagBit()
+                    | MysqlCapability.Flag.CLIENT_ZSTD_COMPRESSION_ALGORITHM.getFlagBit());
         }
 
         serializer.writeInt1(PROTOCOL_VERSION);

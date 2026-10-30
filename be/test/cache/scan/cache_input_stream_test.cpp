@@ -615,6 +615,39 @@ TEST_F(CacheInputStreamTest, test_peer_cache_read_without_block_buffer) {
     }
 }
 
+class FailingPeerCacheEngine : public PeerCacheEngine {
+public:
+    Status read(const std::string& key, size_t offset, size_t size, IOBuffer* buffer,
+                DiskCacheReadOptions* options) override {
+        return Status::IOError("injected peer cache error");
+    }
+};
+
+TEST_F(CacheInputStreamTest, test_read_cache_error_falls_back_to_remote) {
+    const int64_t block_count = 3;
+    const int64_t data_size = block_size * block_count;
+    std::vector<char> data(data_size);
+    gen_test_data(data.data(), data_size, block_size);
+    auto peer_cache = std::make_shared<FailingPeerCacheEngine>();
+    ASSERT_OK(peer_cache->init(RemoteCacheOptions{}));
+    BlockCache::instance()->_remote_cache = peer_cache;
+
+    const std::string file_name = "test_read_cache_error";
+    auto stream = std::make_shared<MockSeekableInputStream>(data.data(), data_size);
+    auto sb_stream = std::make_shared<SharedBufferedInputStream>(stream, file_name, data_size);
+    CacheInputStream cache_stream(sb_stream, file_name, data_size, 1000000);
+    cache_stream.set_peer_cache_node("peer:1234");
+
+    std::vector<char> buffer(data_size);
+    ASSERT_OK(cache_stream.read_at_fully(0, buffer.data(), data_size));
+    ASSERT_EQ(0, memcmp(buffer.data(), data.data(), data_size));
+    const auto& stats = cache_stream.stats();
+    // Every block misses locally, and the peer read error is counted rather than returned.
+    ASSERT_EQ(block_count, stats.read_cache_error_count);
+    ASSERT_EQ(0, stats.read_peer_cache_count);
+    ASSERT_EQ(0, stats.skip_read_peer_cache_count);
+}
+
 TEST_F(CacheInputStreamTest, test_try_peer_cache) {
     const int64_t block_count = 3;
 
@@ -651,6 +684,43 @@ TEST_F(CacheInputStreamTest, test_try_peer_cache) {
         ASSERT_TRUE(check_data_content(buffer, block_size, 'a' + i));
     }
     ASSERT_EQ(stats.read_block_cache_count, block_count);
+}
+
+TEST_F(CacheInputStreamTest, test_remove_cached_blocks) {
+    const int64_t block_count = 4;
+    const int64_t data_size = block_size * block_count;
+    std::vector<char> data(data_size + 1);
+    gen_test_data(data.data(), data_size, block_size);
+    const std::string file_name = "test_remove_cached_blocks";
+    const int64_t modification_time = 1000000;
+
+    // Populate all the blocks. Nothing is read from the datacache, so nothing is removed.
+    {
+        std::shared_ptr<io::SeekableInputStream> stream(new MockSeekableInputStream(data.data(), data_size));
+        auto sb_stream = std::make_shared<SharedBufferedInputStream>(stream, file_name, data_size);
+        CacheInputStream cache_stream(sb_stream, file_name, data_size, modification_time);
+        cache_stream.set_enable_populate_cache(true);
+        std::vector<char> buffer(data_size);
+        ASSERT_OK(cache_stream.read_at_fully(0, buffer.data(), data_size));
+        ASSERT_EQ(block_count, cache_stream.stats().write_block_cache_count);
+        ASSERT_EQ(0, cache_stream.remove_cached_blocks());
+    }
+
+    // Only the blocks read from the datacache are removed.
+    std::shared_ptr<io::SeekableInputStream> stream(new MockSeekableInputStream(data.data(), data_size));
+    auto sb_stream = std::make_shared<SharedBufferedInputStream>(stream, file_name, data_size);
+    CacheInputStream cache_stream(sb_stream, file_name, data_size, modification_time);
+    std::vector<char> buffer(2 * block_size);
+    ASSERT_OK(cache_stream.read_at_fully(block_size, buffer.data(), 2 * block_size));
+    ASSERT_EQ(2, cache_stream.stats().read_block_cache_count);
+    ASSERT_EQ(2, cache_stream.remove_cached_blocks());
+
+    auto* cache = BlockCache::instance();
+    const std::string cache_key = CacheInputStream::calc_cache_key(file_name, data_size, modification_time);
+    ASSERT_TRUE(cache->exist(cache_key, 0, block_size));
+    ASSERT_FALSE(cache->exist(cache_key, block_size, block_size));
+    ASSERT_FALSE(cache->exist(cache_key, 2 * block_size, block_size));
+    ASSERT_TRUE(cache->exist(cache_key, 3 * block_size, block_size));
 }
 
 } // namespace starrocks

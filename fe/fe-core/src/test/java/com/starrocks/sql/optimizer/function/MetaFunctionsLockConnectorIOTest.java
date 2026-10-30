@@ -14,9 +14,16 @@
 
 package com.starrocks.sql.optimizer.function;
 
+import com.google.common.collect.Maps;
+import com.starrocks.catalog.BaseTableInfo;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.util.concurrent.lock.LockHoldDepth;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.MockedMetadataMgr;
@@ -28,12 +35,19 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.utframe.LockProbe;
+import mockit.Invocation;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.util.Collection;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * {@code inspect_mv_refresh_info} takes a READ lock on (db, mv) and then, for every base table, resolves
@@ -137,16 +151,17 @@ public class MetaFunctionsLockConnectorIOTest extends MVTestBase {
     }
 
     /**
-     * The gathering above runs outside the lock and compares the connector's partitions against the MV's
-     * own refresh state, which the lock does protect. A refresh committing in that window must not leave
-     * the comparison and the visible-version maps describing two different moments.
+     * The report compares the connector's partitions against the MV's own refresh state. It works on a copy of
+     * that state taken under the MV lock, so a refresh committing while the connector is being read neither
+     * pulls a connector call under the lock nor makes the report mix two refresh states.
      *
-     * <p>Reproduced without threads: the probe swaps the MV's refresh scheme on the first connector call,
-     * which is exactly the moment the gathering is in flight and the lock is not yet held -- the same
-     * interleaving a concurrent MVVersionManager commit produces.
+     * <p>Reproduced without threads: the probe swaps the MV's refresh scheme on every connector call, which is
+     * exactly where a concurrent MVVersionManager commit would land, adding one more marker partition each time.
+     * The connector calls before the copy (the mvToRefreshPartitions block) may land in it; the last one is made
+     * while the copy is compared against the connector, so its marker must not be in the report.
      */
     @Test
-    public void testAConcurrentRefreshCommitForcesTheGatheringToBeRedoneUnderTheLock() throws Exception {
+    public void testAConcurrentRefreshCommitDoesNotPullTheConnectorUnderTheLock() throws Exception {
         starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv_raced\n"
                 + "PARTITION BY (`l_shipdate`)\n"
                 + "DISTRIBUTED BY RANDOM\n"
@@ -155,40 +170,145 @@ public class MetaFunctionsLockConnectorIOTest extends MVTestBase {
         try {
             MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                     .getTable(DB_NAME, "mv_raced");
+            BaseTableInfo hiveTable = mv.getBaseTableInfos().get(0);
 
-            // Baseline: the same statement with nothing racing it. Measured rather than hard-coded --
-            // the block hoisted out of this lock before this change resolves base tables too, so the
-            // absolute call count is not this test's business; the delta is.
             installProbe();
-            MetaFunctions.inspectMVRefreshInfo(ConstantOperator.createVarchar(DB_NAME + ".mv_raced"));
-            int undisturbedCalls = probe.lock.calls(LockProbeHiveMetadata.GET_TABLE);
-            Assertions.assertFalse(probe.lock.anyUnderLock(),
-                    "connector metadata was fetched while an FE metadata lock was held");
-
-            // Now commit a refresh in the window: the probe swaps the MV's refresh scheme on the first
-            // connector call, which is where the gathering is in flight and the lock is not yet held.
-            installProbe();
-            // Swap on every call made outside the lock. The method resolves base tables in an earlier,
-            // already-hoisted block too, so "the first call" lands before the reference this branch
-            // compares is even captured; swapping on all of them guarantees one lands after it. The redo
-            // runs under the lock, where this does nothing, so exactly one redo happens and it terminates.
+            AtomicInteger commits = new AtomicInteger();
             probe.onGetTable = () -> {
-                if (!LockHoldDepth.isUnderLock()) {
-                    mv.setRefreshScheme(mv.getRefreshScheme().copy());
-                }
+                MaterializedView.MvRefreshScheme committed = mv.getRefreshScheme().copy();
+                committed.getAsyncRefreshContext().getBaseTableInfoVisibleVersionMap()
+                        .computeIfAbsent(hiveTable, k -> Maps.newHashMap())
+                        .put("p_commit_" + commits.incrementAndGet() + "_",
+                                new MaterializedView.BasePartitionInfo(1L, 1L, 1L));
+                mv.setRefreshScheme(committed);
             };
             ConstantOperator result =
                     MetaFunctions.inspectMVRefreshInfo(ConstantOperator.createVarchar(DB_NAME + ".mv_raced"));
 
             Assertions.assertNotNull(result);
-            Assertions.assertTrue(probe.lock.calls(LockProbeHiveMetadata.GET_TABLE) > undisturbedCalls,
-                    "the refresh-scheme swap went unnoticed, so the report mixes two moments");
-            Assertions.assertTrue(probe.lock.anyUnderLock(),
-                    "the redo is supposed to happen under the lock; if it did not, this test is not "
-                            + "exercising the branch it claims to");
+            Assertions.assertTrue(commits.get() > 0, "no connector call was made");
+            Assertions.assertFalse(result.getVarchar().contains("p_commit_" + commits.get() + "_"),
+                    result.getVarchar());
+            probe.lock.assertNothingUnderTheLock("connector metadata was fetched while an FE metadata lock was held");
         } finally {
             starRocksAssert.dropMaterializedView("mv_raced");
         }
+    }
+
+    /**
+     * An internal base table's partitions must be read under that table's own lock: the (db, mv) lock does not
+     * exclude an ADD/DROP PARTITION on another table, whose partition map is a plain HashMap. Probed from another
+     * thread while the report iterates the base table's partitions: a WRITE lock on the base table must not be
+     * grantable at that moment.
+     */
+    @Test
+    public void testInspectReadsAnInternalBaseTableUnderItsOwnLock() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE locked_base(k1 int, v int) "
+                + "DISTRIBUTED BY HASH(k1) PROPERTIES('replication_num'='1')");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv_over_locked_base\n"
+                + "DISTRIBUTED BY RANDOM\n"
+                + "REFRESH DEFERRED MANUAL\n"
+                + "AS SELECT k1, v FROM locked_base;");
+        try {
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
+            OlapTable baseTable = (OlapTable) db.getTable("locked_base");
+            BaseTableWriteProbe probe = probeBaseTableWritability(db.getId(), baseTable.getId());
+            ConstantOperator result = MetaFunctions.inspectMVRefreshInfo(
+                    ConstantOperator.createVarchar(DB_NAME + ".mv_over_locked_base"));
+
+            Assertions.assertTrue(result.getVarchar().contains("locked_base"), result.getVarchar());
+            Assertions.assertTrue(probe.reads().get() > 0, "the base table's partitions were never read");
+            Assertions.assertFalse(probe.writable().get(),
+                    "the base table's partitions were read without holding its lock");
+        } finally {
+            starRocksAssert.dropMaterializedView("mv_over_locked_base");
+            starRocksAssert.dropTable("locked_base");
+        }
+    }
+
+    /**
+     * Some statements are planned, and this function constant-folded, under the planner's locks on the tables they
+     * reference. One more lock taken there could close a wait cycle: this statement holds the MV and waits for the
+     * base table behind a queued writer, while another holds the base table and waits for the MV behind another
+     * queued writer. So a caller that already holds a lock gets no further lock taken on its behalf.
+     */
+    @Test
+    public void testInspectTakesNoFurtherLockWhenTheCallerAlreadyHoldsOne() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE planner_locked_base(k1 int, v int) "
+                + "DISTRIBUTED BY HASH(k1) PROPERTIES('replication_num'='1')");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv_over_planner_locked_base\n"
+                + "DISTRIBUTED BY RANDOM\n"
+                + "REFRESH DEFERRED MANUAL\n"
+                + "AS SELECT k1, v FROM planner_locked_base;");
+        try {
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
+            OlapTable baseTable = (OlapTable) db.getTable("planner_locked_base");
+            MaterializedView mv = (MaterializedView) db.getTable("mv_over_planner_locked_base");
+            BaseTableWriteProbe probe = probeBaseTableWritability(db.getId(), baseTable.getId());
+            // the planner's lock on the table the statement reads FROM
+            Locker plannerLocker = new Locker();
+            plannerLocker.lockTableWithIntensiveDbLock(db.getId(), mv.getId(), LockType.READ);
+            ConstantOperator result;
+            try {
+                result = MetaFunctions.inspectMVRefreshInfo(
+                        ConstantOperator.createVarchar(DB_NAME + ".mv_over_planner_locked_base"));
+            } finally {
+                plannerLocker.unLockTableWithIntensiveDbLock(db.getId(), mv.getId(), LockType.READ);
+            }
+
+            Assertions.assertTrue(result.getVarchar().contains("planner_locked_base"), result.getVarchar());
+            Assertions.assertTrue(probe.reads().get() > 0, "the base table's partitions were never read");
+            Assertions.assertTrue(probe.writable().get(),
+                    "a lock was taken on the base table while the caller already held one");
+        } finally {
+            starRocksAssert.dropMaterializedView("mv_over_planner_locked_base");
+            starRocksAssert.dropTable("planner_locked_base");
+        }
+    }
+
+    private record BaseTableWriteProbe(AtomicInteger reads, AtomicBoolean writable) {
+    }
+
+    /**
+     * Each time this thread reads the base table's partitions, checks from another thread whether a WRITE lock on
+     * the base table is grantable at that moment.
+     */
+    private static BaseTableWriteProbe probeBaseTableWritability(long dbId, long baseTableId) {
+        Thread inspectThread = Thread.currentThread();
+        BaseTableWriteProbe probe = new BaseTableWriteProbe(new AtomicInteger(), new AtomicBoolean());
+        new MockUp<OlapTable>() {
+            @Mock
+            public Collection<Partition> getPartitions(Invocation invocation) {
+                OlapTable table = invocation.getInvokedInstance();
+                if (Thread.currentThread() == inspectThread && table.getId() == baseTableId) {
+                    probe.reads().incrementAndGet();
+                    if (canWriteLockFromAnotherThread(dbId, baseTableId)) {
+                        probe.writable().set(true);
+                    }
+                }
+                return invocation.proceed();
+            }
+        };
+        return probe;
+    }
+
+    private static boolean canWriteLockFromAnotherThread(long dbId, long tableId) {
+        AtomicBoolean acquired = new AtomicBoolean();
+        Thread prober = new Thread(() -> {
+            Locker locker = new Locker();
+            if (locker.tryLockTableWithIntensiveDbLock(dbId, tableId, LockType.WRITE, 200, TimeUnit.MILLISECONDS)) {
+                acquired.set(true);
+                locker.unLockTableWithIntensiveDbLock(dbId, tableId, LockType.WRITE);
+            }
+        });
+        prober.start();
+        try {
+            prober.join();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException(e);
+        }
+        return acquired.get();
     }
 
     @Test

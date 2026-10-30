@@ -403,6 +403,16 @@ public class InsertSourceRefreshTest extends ConnectorPlanTestBase {
         }
     }
 
+    /**
+     * The relation holds the declared table, not the metastore's: the private copy a query plans a resource-mapping
+     * table on (HiveTable.forQueryPlanning), with the declared schema.
+     */
+    private static void assertDeclared(HiveTable declared, Table bound) {
+        Assertions.assertInstanceOf(HiveTable.class, bound);
+        Assertions.assertEquals(declared.getId(), bound.getId());
+        Assertions.assertEquals(declared.getFullSchema(), bound.getFullSchema());
+    }
+
     @Test
     public void testResourceMappingSourceRefreshedButKeepsDeclaredSchema() throws Exception {
         // Reloaded through its catalog's names it would come back as the metastore's table and fail the statement as
@@ -410,7 +420,7 @@ public class InsertSourceRefreshTest extends ConnectorPlanTestBase {
         withResourceMappingLineitem((metadata, declared) -> {
             StatementBase stmt = analyze("insert into t0 (v1, v2) select l_orderkey, l_partkey from test.ex_lineitem");
             Assertions.assertEquals(List.of("lineitem"), metadata.refreshed);
-            Assertions.assertSame(declared, boundSources(stmt).get(0));
+            assertDeclared(declared, boundSources(stmt).get(0));
         });
     }
 
@@ -425,7 +435,7 @@ public class InsertSourceRefreshTest extends ConnectorPlanTestBase {
                 // What StatementPlanner.plan does when planning ends.
                 connectContext.getPreResolvedState().clear();
                 analyze(stmt);
-                Assertions.assertSame(declared, boundSources(stmt).get(0));
+                assertDeclared(declared, boundSources(stmt).get(0));
             }
             Assertions.assertEquals(List.of("lineitem", "lineitem"), metadata.refreshed);
         });
@@ -446,7 +456,7 @@ public class InsertSourceRefreshTest extends ConnectorPlanTestBase {
                         ctas.getCreateTableStmt());
                 analyze(ctas.getInsertStmt());
                 Assertions.assertEquals(List.of("lineitem"), metadata.refreshed);
-                Assertions.assertSame(declared, boundSources(ctas.getInsertStmt()).get(0));
+                assertDeclared(declared, boundSources(ctas.getInsertStmt()).get(0));
             } finally {
                 starRocksAssert.dropTable("ctas_from_ex_hive");
             }

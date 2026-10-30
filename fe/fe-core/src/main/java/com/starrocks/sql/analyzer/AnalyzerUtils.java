@@ -84,6 +84,7 @@ import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.QualifiedName;
+import com.starrocks.sql.ast.QueryPeriod;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RangePartitionDesc;
@@ -141,6 +142,7 @@ import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.iceberg.SnapshotRef;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -2517,6 +2519,28 @@ public class AnalyzerUtils {
             }
             return MetaUtils.getSessionAwareTable(session, null, tableName);
         });
+    }
+
+    /**
+     * Points the target relation of an UPDATE, DELETE or MERGE on an Iceberg branch at that branch, so the
+     * statement reads the rows it rewrites from the branch. The commit goes to the same branch. Like Iceberg, the
+     * branch is read and written with the table's current schema.
+     */
+    public static void setIcebergWriteBranch(TableRelation targetRelation, Table table, String branch) {
+        if (branch == null) {
+            return;
+        }
+        if (!(table instanceof IcebergTable icebergTable)) {
+            throw new SemanticException("Only an Iceberg table can be written on a branch");
+        }
+        SnapshotRef snapshotRef = icebergTable.getNativeTable().refs().get(branch);
+        if (snapshotRef == null) {
+            throw new SemanticException("Cannot find snapshot with reference name: %s", branch);
+        }
+        if (!snapshotRef.isBranch()) {
+            throw new SemanticException("%s is a tag, not a branch", branch);
+        }
+        targetRelation.setQueryPeriod(new QueryPeriod(QueryPeriod.PeriodType.VERSION, new StringLiteral(branch)));
     }
 
     public static TableRef normalizedTableRef(TableRef tableRef, ConnectContext context) {

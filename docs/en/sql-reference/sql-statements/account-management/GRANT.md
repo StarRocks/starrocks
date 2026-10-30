@@ -45,7 +45,7 @@ GRANT USAGE ON AI PROVIDER <provider_name> TO {ROLE <role_name> | USER <user_ide
 GRANT USAGE ON ALL AI PROVIDERS TO {ROLE <role_name> | USER <user_identity>} [WITH GRANT OPTION];
 ```
 
-AI FUNCTION uses an unqualified public builtin family name without a parameter signature. `USAGE ON ALL AI FUNCTIONS` covers current and future families; with `WITH GRANT OPTION`, it permits delegating usage on named or all families. It does not include provider usage. Provider names retain their exact spelling. See [AI privileges](../../sql-functions/ai-functions/ai_functions.mdx#ai-function-privileges).
+AI FUNCTION uses an unqualified public builtin family name without a parameter signature. `USAGE ON ALL AI FUNCTIONS` covers current and future families; with `WITH GRANT OPTION`, it permits delegating usage on named or all families. It does not include provider usage. Provider names retain their exact spelling. See [AI privileges](../../../administration/user_privs/authorization/privilege_item.md#ai-function-privileges).
 
 
 #### Resource group

@@ -24,6 +24,7 @@
 
 #include "base/string/slice.h"
 #include "base/testutil/parallel_test.h"
+#include "base/utility/defer_op.h"
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column_helper.h"
@@ -32,7 +33,9 @@
 #include "column/nullable_column.h"
 #include "column/struct_column.h"
 #include "column/variant_column.h"
+#include "common/config_json_flat_fwd.h"
 #include "gutil/casts.h"
+#include "testutil/column_test_helper.h"
 #include "types/type_descriptor.h"
 #include "types/variant.h"
 
@@ -133,10 +136,7 @@ PARALLEL_TEST(VariantEncoderTest, encode_array_with_variant_children) {
 }
 
 PARALLEL_TEST(VariantEncoderTest, encode_map_with_variant_values_and_empty_row) {
-    auto key_data = BinaryColumn::create();
-    key_data->append_datum(Datum(Slice("left")));
-    key_data->append_datum(Datum(Slice("right")));
-    key_data->append_datum(Datum(Slice("null_child")));
+    auto key_data = ColumnTestHelper::build_column<Slice>({"left", "right", "null_child"});
     auto key_nulls = NullColumn::create(3, DATUM_NOT_NULL);
     auto keys = NullableColumn::create(std::move(key_data), std::move(key_nulls));
     auto values = make_nullable_variant_column({std::string(R"({"a":1})"), std::string(R"({"b":2})"), std::nullopt});
@@ -148,9 +148,7 @@ PARALLEL_TEST(VariantEncoderTest, encode_map_with_variant_values_and_empty_row) 
 }
 
 PARALLEL_TEST(VariantEncoderTest, encode_map_with_varbinary_keys_and_variant_values) {
-    auto key_data = BinaryColumn::create();
-    key_data->append_datum(Datum(Slice("left")));
-    key_data->append_datum(Datum(Slice("right")));
+    auto key_data = ColumnTestHelper::build_column<Slice>({"left", "right"});
     auto key_nulls = NullColumn::create(2, DATUM_NOT_NULL);
     auto keys = NullableColumn::create(std::move(key_data), std::move(key_nulls));
     auto values = make_nullable_variant_column({std::string("1"), std::string("2")});
@@ -210,6 +208,23 @@ PARALLEL_TEST(VariantEncoderTest, encode_large_array_offsets) {
     ASSERT_TRUE(info.ok());
     ASSERT_EQ(300, info->num_elements);
     ASSERT_GE(info->offset_size, 2);
+}
+
+// encode_json_text_to_variant must honor config::json_max_parse_nesting_depth, the same cap parse_json
+// uses. With the cap lowered below the input depth, the otherwise valid JSON no longer parses and falls
+// back to VARIANT string encoding, proving this path reads the config rather than a fixed default.
+PARALLEL_TEST(VariantEncoderTest, encode_json_text_honors_nesting_depth_config) {
+    const int32_t saved = config::json_max_parse_nesting_depth;
+    config::json_max_parse_nesting_depth = 3;
+    DeferOp restore([&]() { config::json_max_parse_nesting_depth = saved; });
+
+    const std::string deep = "[[[[[1]]]]]"; // nesting depth 5, above the configured cap of 3
+    auto encoded = VariantEncoder::encode_json_text_to_variant(deep);
+    ASSERT_TRUE(encoded.ok());
+    auto json = encoded->to_json();
+    ASSERT_TRUE(json.ok());
+    // Stored as a JSON string (quoted), not parsed into a nested array.
+    EXPECT_EQ(R"("[[[[[1]]]]]")", json.value());
 }
 
 } // namespace starrocks

@@ -186,8 +186,14 @@ Maven プロジェクトの `pom.xml` ファイルに、以下の形式で Flink
 #### sink.max-retries
 
 - **必須**: いいえ
-- **デフォルト値**: 3
-- **説明**: システムが Stream Load ジョブの実行をリトライする回数。このパラメータは、`sink.version` を `V1` に設定した場合にのみ使用できます。有効な値: 0～10。
+- **デフォルト値**: 3 (Merge Commit が有効な場合は `0`)
+- **説明**: システムが Stream Load ジョブの実行をリトライする回数。このパラメータは、`sink.version` を `V1` に設定した場合、または Merge Commit が有効な場合に有効です。有効な値: 0～10。Merge Commit が有効な場合、このパラメータを明示的に設定しない限り (例: `'sink.max-retries' = '3'`)、コネクタは失敗したロードリクエストをリトライしません。リトライを有効にすると、コネクタは各ロードリクエストのデータをリクエストが成功するまでメモリに保持するため、メモリ使用量が増加します。Merge Commit は少なくとも 1 回のセマンティクスのみを保証するため、元のリクエストが実際には成功していた場合 (レスポンスが失われた場合など)、リトライされたリクエストによってデータが 2 回ロードされる可能性があります。
+
+#### sink.retry.interval-ms
+
+- **必須**: いいえ
+- **デフォルト値**: 10000
+- **説明**: Merge Commit が有効な場合に、失敗したロードリクエストをリトライする間隔。単位: ms。このパラメータは、`sink.max-retries` が `0` より大きい場合にのみ有効です。`sink.version` を `V1` に設定した場合は有効になりません。
 
 #### sink.connect.timeout-ms
 
@@ -422,6 +428,10 @@ Merge Commit を使用する際の重要な注意事項を以下に示します�
 
   Merge Commit は、少なくとも 1 回のセマンティクスのみを保証します。正確に 1 回のセマンティクスはサポートしていません。Merge Commit が有効になっている場合は、`sink.semantic` を `exactly-once` に設定しないでください。
 
+- **デフォルトではリトライしない**
+
+  Merge Commit が有効な場合、`sink.max-retries` のデフォルトは `0` です。そのため、一時的なエラー (StarRocks ノードのスケールインなど) で失敗したロードリクエストはリトライされず、シンクが失敗します。失敗したロードリクエストをリトライするには、`sink.max-retries` を明示的に設定します (例: `'sink.max-retries' = '3'`)。リトライの間隔は `sink.retry.interval-ms` で制御できます。
+
 - **主キーテーブルの順序付け**
 
   デフォルトでは、`sink.merge-commit.max-concurrent-requests` は `Integer.MAX_VALUE` です。これは、単一のシンクサブタスクが複数の Stream Load リクエストを同時に送信できることを意味します。これにより、順序が狂ったロードが発生する可能性があり、主キーテーブルでは問題になる可能性があります。順序どおりのロードを保証するには、`sink.merge-commit.max-concurrent-requests` を `0` に設定します。ただし、これによりスループットが低下します。または、条件付き更新を使用して、古いデータが新しいデータで上書きされるのを防ぐことができます。設定例については、[主キーテーブルの順序どおりのロード](#in-order-loading-for-primary-key-tables) を参照してください。
@@ -437,7 +447,7 @@ Merge Commit を使用する際の重要な注意事項を以下に示します�
 
   これら 2 つのパラメータは、異なるレイヤーで並行処理を制御するため、個別に調整する必要があります。
   - `sink.parallelism` は、Flink シンクサブタスクの数を制御します。各サブタスクは、データをバッファリングして StarRocks に送信します。Flink シンク operator が CPU またはメモリにバインドされている場合は、この値を増やします。Flink の operator ごとの CPU とメモリの使用量を監視して、より多くのサブタスクが必要かどうかを判断できます。
-  - `sink.properties.merge_commit_parallel` は、StarRocks が各 Merge Commit トランザクション用に作成するロードプランの並行処理の度合いを制御します。StarRocks がボトルネックになる場合は、この値を増やします。StarRocks のメトリクス [merge_commit_pending_total](../administration/management/monitoring/metrics.md#merge_commit_pending_total) (保留中の Merge Commit タスクの数) と [merge_commit_pending_bytes](../administration/management/monitoring/metrics.md#merge_commit_pending_bytes) (保留中のタスクが保持するバイト数) を監視して、StarRocks 側でより多くの並行処理が必要かどうかを判断できます。高い値が持続する場合は、ロードプランが受信データに追いついていないことを示します。
+  - `sink.properties.merge_commit_parallel` は、StarRocks が各 Merge Commit トランザクション用に作成するロードプランの並行処理の度合いを制御します。StarRocks がボトルネックになる場合は、この値を増やします。StarRocks のメトリクス [merge_commit_pending_total](../administration/management/monitoring/metric_details/i-p.md#merge_commit_pending_total) (保留中の Merge Commit タスクの数) と [merge_commit_pending_bytes](../administration/management/monitoring/metric_details/i-p.md#merge_commit_pending_bytes) (保留中のタスクが保持するバイト数) を監視して、StarRocks 側でより多くの並行処理が必要かどうかを判断できます。高い値が持続する場合は、ロードプランが受信データに追いついていないことを示します。
 
 - **`sink.merge-commit.chunk.size` と `sink.buffer-flush.max-bytes` の関係**:
   - `sink.merge-commit.chunk.size` は、個々の Stream Load リクエスト (チャンクごと) あたりの最大データサイズを制御します。チャンク内のデータがこのサイズに達すると、すぐにフラッシュされます。

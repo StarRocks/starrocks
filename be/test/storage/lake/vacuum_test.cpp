@@ -2277,6 +2277,104 @@ TEST_P(LakeVacuumTest, test_delete_tablets_shared_metadata_files) {
     }
 }
 
+// Deciding whether a bundle file goes with the deleted tablets reads its footer, which may come from a
+// read that mixed locally cached blocks of two writes while the object itself is intact. The drop hook
+// stands in for the cache drop: restoring the intact bundle proves the footer was read again, and
+// leaving the damage in place proves nothing is deleted on a bundle that stays bad.
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_delete_tablets_rereads_corrupted_bundle) {
+    ConfigResetGuard<bool> checksum_guard(&config::lake_enable_protobuf_file_checksum, true);
+    ConfigResetGuard<bool> clear_cache_guard(&config::lake_clear_corrupted_cache_meta, true);
+
+    const std::string segment = "0000000000f259e4_22222222-2222-2222-2222-2222222222a1.dat";
+    create_data_file(segment);
+    auto t720_v2 = json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 720,
+            "version": 2,
+            "rowsets": [
+                {
+                    "data_size": 4096,
+                    "segment_metas": [
+                        {
+                            "filename": "0000000000f259e4_22222222-2222-2222-2222-2222222222a1.dat"
+                        }
+                    ]
+                }
+            ]
+        }
+        )DEL");
+    std::map<int64_t, TabletMetadataPB> tablet_metas_v2;
+    tablet_metas_v2[720] = *t720_v2;
+    ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(tablet_metas_v2));
+
+    auto fs = FileSystem::Default();
+    auto bundle_path = _tablet_mgr->bundle_tablet_metadata_location(720, 2);
+    auto overwrite = [&](const std::string& content) {
+        ASSERT_OK(fs->delete_file(bundle_path));
+        ASSIGN_OR_ABORT(auto wf, fs->new_writable_file(bundle_path));
+        ASSERT_OK(wf->append(content));
+        ASSERT_OK(wf->close());
+    };
+    ASSIGN_OR_ABORT(auto rf, fs->new_random_access_file(bundle_path));
+    ASSIGN_OR_ABORT(auto intact_content, rf->read_all());
+    // The footer ends with [crc32][size]; flipping a byte of the stored crc fails the footer check.
+    std::string mixed_content = intact_content;
+    mixed_content[mixed_content.size() - sizeof(uint64_t) - sizeof(uint32_t)] ^= 0xFF;
+
+    bool restore_on_drop = true;
+    int cache_drops = 0;
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp clear_sync_point([]() {
+        SyncPoint::GetInstance()->ClearCallBack("TabletManager::corrupted_tablet_meta_handler");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    SyncPoint::GetInstance()->SetCallBack("TabletManager::corrupted_tablet_meta_handler", [&](void* arg) {
+        ++cache_drops;
+        if (restore_on_drop) {
+            overwrite(intact_content);
+        }
+        *(Status*)arg = Status::OK();
+    });
+    auto delete_tablet_720 = [&]() {
+        DeleteTabletRequest request;
+        DeleteTabletResponse response;
+        request.add_tablet_ids(720);
+        delete_tablets(_tablet_mgr.get(), request, &response);
+        EXPECT_TRUE(response.has_status());
+        return response.status().status_code();
+    };
+
+    {
+        // With lake_clear_corrupted_cache_meta off there is no cache drop and therefore no second read.
+        config::lake_clear_corrupted_cache_meta = false;
+        overwrite(mixed_content);
+        EXPECT_NE(0, delete_tablet_720());
+        EXPECT_EQ(0, cache_drops);
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(0, 2)));
+        EXPECT_TRUE(file_exist(segment));
+    }
+    {
+        // The damage is still there after the drop, so the second read fails and nothing is deleted.
+        config::lake_clear_corrupted_cache_meta = true;
+        restore_on_drop = false;
+        cache_drops = 0;
+        EXPECT_NE(0, delete_tablet_720());
+        EXPECT_EQ(1, cache_drops);
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(0, 2)));
+        EXPECT_TRUE(file_exist(segment));
+    }
+    {
+        // The damage is gone after the drop, so the second read succeeds and the tablet's files go.
+        restore_on_drop = true;
+        cache_drops = 0;
+        EXPECT_EQ(0, delete_tablet_720());
+        EXPECT_EQ(1, cache_drops);
+        EXPECT_FALSE(file_exist(tablet_metadata_filename(0, 2)));
+        EXPECT_FALSE(file_exist(segment));
+    }
+}
+
 // A split-shared segment's .vi is named by the recorded owner, so it is the SAME file for every
 // sibling tablet. It must follow the shared segment's deletion policy: kept while any sibling still
 // references the segment, deleted only once none do. Owner (710) differs from the sibling (711) to
@@ -3394,6 +3492,282 @@ TEST_P(LakeVacuumTest, test_vacuum_version_control) {
         EXPECT_TRUE(file_exist("00000000000159e4_a542395a-bff5-48a7-a3a7-2ed05691b582.dat"));
         EXPECT_TRUE(file_exist("0000000000011111_9ae981b3-7d4b-49e9-9723-d7f752686155.sst"));
         EXPECT_TRUE(file_exist("00000000000159e4_a542395a-bff5-48a7-a3a7-2ed05691b583.dat"));
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_vacuum_bundle_snapshot_references) {
+    const std::string prefix = "0000000000000100_00000000-0000-0000-0000-000000000001";
+    const std::string segment = prefix + ".dat";
+    const std::string vi = prefix + "_701_100.vi";
+    const std::string del = prefix + ".del";
+    const std::string delvec = prefix + ".delvec";
+    const std::string dcg = prefix + "_dcg.dat";
+    const std::string idg = prefix + ".idx";
+    const std::string sst = prefix + ".sst";
+    const std::vector<std::string> snapshot_files{segment, vi, del, delvec, dcg, idg, sst};
+    const std::string garbage = "0000000000000101_00000000-0000-0000-0000-000000000002.dat";
+
+    for (bool incremental : {false, true}) {
+        for (bool retain_snapshot : {false, true}) {
+            SCOPED_TRACE(testing::Message() << "incremental=" << incremental << " snapshot=" << retain_snapshot);
+            clear_and_init_test_dir();
+            _tablet_mgr->prune_metacache();
+            for (const auto& file : snapshot_files) {
+                create_data_file(file);
+            }
+            create_data_file(garbage);
+
+            for (int64_t version = 2; version <= 6; ++version) {
+                std::map<int64_t, TabletMetadataPB> metas;
+                for (int64_t tablet_id : {700, 701}) {
+                    auto& meta = metas[tablet_id];
+                    meta.set_id(tablet_id);
+                    meta.set_version(version);
+                    meta.set_commit_time(1000);
+                    meta.set_prev_garbage_version(version == 2 ? 0 : version - 1);
+                    meta.mutable_schema()->set_id(1);
+                    meta.mutable_schema()->set_keys_type(DUP_KEYS);
+                }
+                // Tablet 700 stops using its pieces before the snapshot at v4. Tablet 701
+                // still references the same physical files at v4 and removes its pieces at v5.
+                if (version == 3 || version == 5) {
+                    auto& meta = metas[version == 3 ? 700 : 701];
+                    auto* rowset = meta.add_compaction_inputs();
+                    rowset->set_version(2);
+                    rowset->set_data_size(64);
+                    auto* seg = rowset->add_segment_metas();
+                    seg->set_filename(segment);
+                    seg->set_bundle_file_offset(version == 3 ? 0 : 4096);
+                    seg->set_segment_vector_index_uid(701);
+                    seg->add_vector_index_ids(100);
+                    for (const auto& file : {del, delvec, dcg, idg, sst}) {
+                        auto* orphan = meta.add_orphan_files();
+                        orphan->set_name(file);
+                        orphan->set_version(2);
+                        orphan->set_shared(true);
+                        orphan->set_size(8);
+                    }
+                }
+                if (version == 3) {
+                    auto* orphan = metas[700].add_orphan_files();
+                    orphan->set_name(garbage);
+                    orphan->set_shared(true);
+                    orphan->set_version(2);
+                    orphan->set_size(7);
+                }
+                if (version == 4) {
+                    auto& meta = metas[701];
+                    auto* rowset = meta.add_rowsets();
+                    rowset->set_version(2);
+                    auto* seg = rowset->add_segment_metas();
+                    seg->set_filename(segment);
+                    seg->set_segment_vector_index_uid(701);
+                    seg->add_vector_index_ids(100);
+                    // A retained reference can predate the flags marking a file shared.
+                    rowset->add_del_files()->set_name(del);
+                    (*meta.mutable_delvec_meta()->mutable_version_to_file())[2].set_name(delvec);
+                    (*meta.mutable_dcg_meta()->mutable_dcgs())[0].add_column_files(dcg);
+                    (*meta.mutable_idg_meta()->mutable_idgs())[0].add_entries()->set_index_file(idg);
+                    meta.mutable_sstable_meta()->add_sstables()->set_filename(sst);
+                }
+                ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(metas));
+            }
+
+            VacuumRequest request;
+            request.set_min_retain_version(6);
+            request.set_grace_timestamp(4000000000);
+            request.set_min_active_txn_id(1000000);
+            request.set_delete_txn_log(false);
+            request.set_enable_file_bundling(true);
+            request.set_enable_shared_file_cleanup(true);
+            for (int64_t tablet_id : {700, 701}) {
+                auto* info = request.add_tablet_infos();
+                info->set_tablet_id(tablet_id);
+                info->set_min_version(2);
+            }
+            if (retain_snapshot) {
+                auto* snapshot = request.add_retain_snapshots();
+                snapshot->set_version(4);
+                snapshot->add_tablet_ids(700);
+                snapshot->add_tablet_ids(701);
+            }
+            if (incremental) {
+                request.set_max_versions_per_round(100);
+                // First discard the newer garbage metadata, then reclaim the older band.
+                // The snapshot must protect the bundle even after the v5 garbage is gone.
+                auto* state = request.mutable_vacuum_state();
+                state->set_to_delete_low(5);
+                state->set_to_delete_high(6);
+                state->set_pass_start_version(6);
+                VacuumResponse response;
+                vacuum(_tablet_mgr.get(), request, &response);
+                ASSERT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+                EXPECT_FALSE(file_exist(tablet_metadata_filename(0, 5)));
+                state->set_to_delete_low(2);
+                state->set_to_delete_high(5);
+            }
+            VacuumResponse response;
+            vacuum(_tablet_mgr.get(), request, &response);
+            ASSERT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+            for (const auto& file : snapshot_files) {
+                EXPECT_EQ(retain_snapshot, file_exist(file)) << file;
+            }
+            EXPECT_FALSE(file_exist(garbage));
+            EXPECT_EQ(retain_snapshot, file_exist(tablet_metadata_filename(0, 4)));
+            EXPECT_TRUE(file_exist(tablet_metadata_filename(0, 6)));
+        }
+    }
+}
+
+// The snapshot belongs to an older generation, absent from the current vacuum tablet set.
+TEST_P(LakeVacuumTest, test_vacuum_snapshot_tablets_and_failure_before_deletion) {
+    const std::string shared = "0000000000000100_00000000-0000-0000-0000-000000000001.dat";
+    const std::string ordinary = "0000000000000101_00000000-0000-0000-0000-000000000002.dat";
+    class AliasedLocationProvider : public FixedLocationProvider {
+    public:
+        explicit AliasedLocationProvider(std::string root) : FixedLocationProvider(std::move(root)) {}
+        std::string root_location(int64_t tablet_id) const override {
+            // Different URI spellings can address the same partition, as with StarOS tablet aliases.
+            return FixedLocationProvider::root_location(tablet_id) + (tablet_id == 600 ? "/." : "");
+        }
+    };
+    auto location_provider = std::make_shared<AliasedLocationProvider>(kTestDir);
+    TabletManager snapshot_tablet_mgr(location_provider, _primary_key_mgr.get(), 1024 * 1024);
+    for (bool incremental : {false, true}) {
+        // Success, missing snapshot, I/O failure, deadline expires during the snapshot read.
+        for (int failure = 0; failure < 4; ++failure) {
+            SCOPED_TRACE(testing::Message() << "incremental=" << incremental << " failure=" << failure);
+            clear_and_init_test_dir();
+            _tablet_mgr->prune_metacache();
+            snapshot_tablet_mgr.prune_metacache();
+            create_data_file(shared);
+            create_data_file(ordinary);
+            auto snapshot = std::make_shared<TabletMetadataPB>();
+            snapshot->set_id(600);
+            snapshot->set_version(4);
+            // The old reference predates the shared flag.
+            snapshot->add_rowsets()->add_segment_metas()->set_filename(shared);
+            if (failure != 1) {
+                ASSERT_OK(_tablet_mgr->put_tablet_metadata(snapshot));
+            }
+            for (int64_t tablet_id : {700, 701}) {
+                for (int64_t version : {3, 6}) {
+                    // The reshard child 701 has no version before 6.
+                    if (tablet_id == 701 && version == 3) continue;
+                    auto meta = std::make_shared<TabletMetadataPB>();
+                    meta->set_id(tablet_id);
+                    meta->set_version(version);
+                    meta->set_commit_time(1000);
+                    if (tablet_id == 700 && version == 6) meta->set_prev_garbage_version(3);
+                    if (tablet_id == 700 && version == 3) {
+                        auto* garbage = meta->add_orphan_files();
+                        garbage->set_name(shared);
+                        garbage->set_shared(true);
+                        garbage->set_version(2);
+                        garbage = meta->add_orphan_files();
+                        garbage->set_name(ordinary);
+                        garbage->set_version(2);
+                    }
+                    ASSERT_OK(_tablet_mgr->put_tablet_metadata(meta));
+                }
+            }
+            bool snapshot_read = false;
+            SyncPoint::GetInstance()->SetCallBack("vacuum:read_snapshot_metadata", [&](void* arg) {
+                snapshot_read = true;
+                if (failure == 2) {
+                    *static_cast<StatusOr<TabletMetadataPtr>*>(arg) = Status::IOError("snapshot unavailable");
+                }
+            });
+            SyncPoint::GetInstance()->SetCallBack("vacuum:check_deadline", [&](void* arg) {
+                *static_cast<int64_t*>(arg) = (failure == 3 && snapshot_read) ? 2000000 : 1;
+            });
+            SyncPoint::GetInstance()->EnableProcessing();
+            DeferOp cleanup([] {
+                SyncPoint::GetInstance()->DisableProcessing();
+                SyncPoint::GetInstance()->ClearAllCallBacks();
+            });
+            VacuumRequest request;
+            request.set_min_retain_version(6);
+            request.set_grace_timestamp(4000000000);
+            request.set_delete_txn_log(false);
+            request.set_enable_shared_file_cleanup(true);
+            for (int64_t tablet_id : {700, 701}) {
+                request.add_tablet_infos()->set_tablet_id(tablet_id);
+            }
+            auto* retained = request.add_retain_snapshots();
+            retained->set_version(4);
+            retained->add_tablet_ids(600);
+            // Deduplication is harmless even when FE sends repeated references.
+            retained->add_tablet_ids(600);
+            // A committed-but-not-visible version has no mandatory metadata read.
+            request.add_retain_snapshots()->set_version(7);
+            if (incremental) {
+                request.set_max_versions_per_round(100);
+                auto* state = request.mutable_vacuum_state();
+                state->set_to_delete_low(2);
+                state->set_to_delete_high(6);
+                state->set_pass_start_version(6);
+            }
+            VacuumResponse response;
+            vacuum(&snapshot_tablet_mgr, request, &response, 1000000);
+            ASSERT_TRUE(snapshot_read);
+            EXPECT_EQ(failure == 0, response.status().status_code() == 0);
+            EXPECT_TRUE(file_exist(shared));
+            EXPECT_EQ(failure != 0, file_exist(ordinary));
+            EXPECT_EQ(failure != 0, file_exist(tablet_metadata_filename(700, 3)));
+        }
+    }
+}
+
+TEST_P(LakeVacuumTest, test_vacuum_retained_initial_metadata_and_ordinary_file) {
+    const std::string file = "0000000000000100_00000000-0000-0000-0000-000000000001.dat";
+    for (bool incremental : {false, true}) {
+        clear_and_init_test_dir();
+        _tablet_mgr->prune_metacache();
+        create_data_file(file);
+        auto initial = std::make_shared<TabletMetadataPB>();
+        initial->set_id(700);
+        initial->set_version(1);
+        initial->add_rowsets()->add_segment_metas()->set_filename(file);
+        ASSERT_OK(_tablet_mgr->put_tablet_metadata(initial));
+        for (int64_t version : {2, 3}) {
+            std::map<int64_t, TabletMetadataPB> metas;
+            auto& meta = metas[700];
+            meta.set_id(700);
+            meta.set_version(version);
+            meta.set_commit_time(1000);
+            meta.set_prev_garbage_version(version == 3 ? 2 : 0);
+            meta.mutable_schema()->set_id(1);
+            meta.mutable_schema()->set_keys_type(DUP_KEYS);
+            if (version == 2) {
+                auto* orphan = meta.add_orphan_files();
+                orphan->set_name(file);
+                orphan->set_version(1);
+            }
+            ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(metas));
+        }
+        VacuumRequest request;
+        request.add_tablet_infos()->set_tablet_id(700);
+        request.set_min_retain_version(3);
+        request.set_grace_timestamp(4000000000);
+        request.set_delete_txn_log(false);
+        request.set_enable_file_bundling(true);
+        auto* snapshot = request.add_retain_snapshots();
+        snapshot->set_version(1);
+        snapshot->add_tablet_ids(700);
+        if (incremental) {
+            request.set_max_versions_per_round(100);
+            request.mutable_vacuum_state()->set_to_delete_low(1);
+            request.mutable_vacuum_state()->set_to_delete_high(3);
+            request.mutable_vacuum_state()->set_pass_start_version(3);
+        }
+        VacuumResponse response;
+        vacuum(_tablet_mgr.get(), request, &response);
+        ASSERT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+        EXPECT_TRUE(file_exist(file));
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(700, 1)));
+        EXPECT_FALSE(file_exist(tablet_metadata_filename(0, 2)));
     }
 }
 
@@ -4763,10 +5137,55 @@ TEST_P(LakeVacuumTest, test_incremental_grace_blocked) {
     ASSERT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
     // Nothing proposed; every version retained.
     EXPECT_GE(response.vacuum_state().to_delete_low(), response.vacuum_state().to_delete_high());
+    // The tablet anchored (read real versions) but every one is still within grace: this is a GENUINE
+    // grace block, so the FE must wait -- grace_blocked is set. (Contrast the never-anchored case below.)
+    EXPECT_TRUE(response.vacuum_state().grace_blocked());
     EXPECT_EQ(0, response.vacuumed_files());
     EXPECT_TRUE(file_exist(tablet_metadata_filename(30004, 2)));
     EXPECT_TRUE(file_exist(tablet_metadata_filename(30004, 3)));
     EXPECT_TRUE(file_exist(tablet_metadata_filename(30004, 4)));
+}
+
+// A never-anchored tablet -- its first version sits ABOVE the partition retain floor (a non-base index
+// added late, or a cross-generation tablet) -- has no metadata at or below the floor, so a fresh walk
+// anchors nothing. It is DRAINED, not grace-blocked: the round must still propose the OTHER tablets'
+// garbage and report grace_blocked=false. Regression for the bug where grace_blocked was derived from
+// nothing_to_delete, so a never-anchored tablet reported grace_blocked=true and livelocked the FE forever
+// (the pass never advances -> the sibling tablet's real garbage is orphaned below the raised floor).
+TEST_P(LakeVacuumTest, test_incremental_never_anchored_not_grace_blocked) {
+    // Tablet A: real garbage chain v2 -> v3 -> v4 below the retain floor, all older than the grace timestamp.
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        { "id": 30006, "version": 2, "prev_garbage_version": 0, "commit_time": 1002 })DEL")));
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        { "id": 30006, "version": 3, "prev_garbage_version": 2, "commit_time": 1003 })DEL")));
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        { "id": 30006, "version": 4, "prev_garbage_version": 3, "commit_time": 1004 })DEL")));
+    // Tablet B: never-anchored -- its only metadata (v5) sits ABOVE the retain floor 4, so v4 and below
+    // are all NotFound and the fresh walk anchors nothing.
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        { "id": 30007, "version": 5, "prev_garbage_version": 0, "commit_time": 1005 })DEL")));
+
+    VacuumRequest request;
+    VacuumResponse response;
+    request.set_partition_id(3000);
+    request.set_min_retain_version(4);
+    // Grace boundary above A's commit times -> A's versions below the floor are all deletable.
+    request.set_grace_timestamp(4000000000);
+    request.set_max_versions_per_round(100);
+    auto* a = request.add_tablet_infos();
+    a->set_tablet_id(30006);
+    a->set_min_version(1);
+    auto* b = request.add_tablet_infos();
+    b->set_tablet_id(30007);
+    b->set_min_version(1);
+    vacuum(_tablet_mgr.get(), request, &response);
+    ASSERT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+    const auto& state = response.vacuum_state();
+    // B is drained, not grace-blocked: it does not zero the round.
+    EXPECT_FALSE(state.grace_blocked());
+    // A's garbage below the retain floor is proposed; the high end is the floor.
+    EXPECT_LT(state.to_delete_low(), state.to_delete_high());
+    EXPECT_EQ(4, state.to_delete_high());
 }
 
 // End-to-end drain: a long chain under a small per-round budget takes several propose/commit rounds

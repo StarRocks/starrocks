@@ -258,12 +258,36 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 ### blacklist_backup_routing
 
 * **范围**：Session
-* **描述**：在 shared-data（存算分离）模式下，若某次扫描在规划中偏好的计算节点不在本查询当前可使用的计算节点范围内（例如节点宕机或出现在主机黑名单上），则规划器需另选备份计算节点。本变量控制在该候选集合中如何挑选备份节点。`RANDOM` 在候选集中均匀随机选取。`CIRCULAR` 在按 id 排好序的节点环上、从主节点起向后寻找第一个可用候选（确定性、与旧版行为类似）。哪些节点可作为备份还受 `skip_black_list` 影响：默认会排除位于主机黑名单上的节点；`skip_black_list` 为 `true` 时，位于黑名单的节点在集群中仍属可用时，也可能被选为备份。
+* **描述**：在 shared-data（存算分离）模式下，若某次扫描在规划中偏好的计算节点不在本查询当前可使用的计算节点范围内（例如节点宕机或出现在主机黑名单上），则规划器需另选备份计算节点。本变量控制在该候选集合中如何挑选备份节点。`RANDOM` 在候选集中均匀随机选取。`CIRCULAR` 在按 id 排好序的节点环上、从主节点起向后寻找第一个可用候选（确定性、与旧版行为类似）。`TABLET_HASH` 对 tablet 与各候选节点计算哈希（rendezvous hashing），选取哈希值最大的节点：不可用节点上的 tablet 会均匀分散到其余节点，而同一个 tablet 在不同查询中始终落到同一个备份节点，其数据只需缓存在这一个节点上。Colocate 扫描以 Colocation Group 和分桶代替 tablet 计算哈希，同一 Group 内各表的同一分桶会选中同一个备份节点。只要各 FE 看到的候选节点相同，它们为同一 tablet 选出的备份节点也相同。导入（例如 `INSERT`）写入的 tablet 所在计算节点不可用时，同样按本变量选择备份节点。哪些节点可作为备份还受 `skip_black_list` 影响：默认会排除位于主机黑名单上的节点；`skip_black_list` 为 `true` 时，位于黑名单的节点在集群中仍属可用时，也可能被选为备份。
 
-* **默认值**：`CIRCULAR`
+* **默认值**：`TABLET_HASH`
 * **类型**：String
-* **合法取值**：`CIRCULAR`、`RANDOM`
+* **合法取值**：`CIRCULAR`、`RANDOM`、`TABLET_HASH`
 * **引入版本**：-
+
+### broadcast_mem_exceeded_penalty_factor
+
+* **描述**: 设置广播 CPU、内存和网络成本的惩罚因子，在每个 BE/CN 的构建侧估算数据量超过广播内存阈值时生效。设置为 `1.0` 可禁用此惩罚。
+* **作用域**: Session, Global
+* **默认值**: `1000.0`
+* **数据类型**: Double
+* **有效值**: `[1.0, 1000000.0]` 范围内的有限数值。超出此范围的值、非数值、`NaN` 和无穷大均会被拒绝。
+
+支持通过 `SET`、`SET GLOBAL` 或语句级 `SET_VAR` Hint 设置。例如：
+
+```sql
+SET broadcast_mem_exceeded_penalty_factor = 10.0;
+SET GLOBAL broadcast_mem_exceeded_penalty_factor = 10.0;
+```
+
+### broadcast_mem_threshold
+
+* **描述**：设置构建侧预估大小阈值，超过此阈值时优化器会惩罚广播计划。此阈值适用于预估发送到每个 BE 的字节数。预估大小等于阈值时不会受到惩罚。此变量是优化器阈值，而非运行时内存限制。它独立于 `exec_mem_limit`；`broadcast_row_limit` 仍控制广播选择的行数检查。设置为 `0` 时，所有预估大小大于零的广播都会受到惩罚。
+* **范围**：Session、Global
+* **默认值**：`2147483648`（2 GiB）
+* **单位**：字节
+* **类型**：long
+* **合法取值**：[0, 9223372036854775807]
 
 ### catalog（3.2.4 及以后）
 
@@ -614,11 +638,23 @@ FROM test;
 * 默认值：false，表示不开启。
 * 引入版本：v2.5
 
+### enable_exchange_sink_buffer_flush
+
+* 描述：是否限制 Exchange Sink 在 Shuffle 时用于缓存待发送数据的内存。Exchange Sink 会为每个目标 Pipeline Driver 保留一个未填满的 Chunk，通常在 Chunk 填满后才发送；当该变量为 `true` 且一个 Driver 的这些 Chunk 占用的内存超过 BE 配置项 `exchange_sink_buffer_flush_threshold_bytes` 时，会立即发送。设置为 `false` 可在当前会话中恢复之前的行为。
+* 默认值：true
+* 引入版本：-
+
 ### enable_force_rule_based_mv_rewrite
 
 * 描述：在优化器的 RBO（rule-based optimization）阶段是否针对多表查询启用查询改写。启用此功能将提高查询改写的鲁棒性。但如果查询未命中物化视图，则会增加优化耗时。
 * 默认值：true
 * 引入版本：v3.3
+
+### enable_gather_fragment_child_affinity
+
+* 描述：是否将 Gather Fragment（`DataPartition = UNPARTITIONED` 的单实例结果 Fragment）调度到其子 Fragment 已使用的 BE 上，而不是通过全局轮询（round-robin）从所有 BE 中选择。在使用 `labels.location` 的存算一体集群中，开启后 Gather Fragment 不会被调度到查询其他部分未使用的 BE 上。但该参数本身并不保证标签隔离：如果查询的任一其他 Fragment 运行在标签范围外，Gather Fragment 也可能运行在该处。已知情况包括：扫描外部 Catalog 表（如 Hive 或 Iceberg）、`choose_execute_instances_mode` 不为 `LOCALITY`、`prefer_compute_node=true`，以及存在分桶裁剪的 Right/Full Bucket Shuffle Join。如果 Gather Fragment 没有子 Fragment 实例，则回退到轮询方式。
+* 默认值：false
+* 引入版本：v4.2
 
 ### enable_gin_filter
 
@@ -649,6 +685,12 @@ FROM test;
 * 默认值：false，表示不开启。
 * 引入版本：v3.1.4
 
+### enable_iceberg_eq_delete_runtime_filter_pruning
+
+* 描述：是否允许 Runtime Filter 跳过 Iceberg 表的 Equality Delete 文件。仅当表从未变更过分区规格（Partition Spec），且每个分区字段都是查询所读取的 INT、DATE 或 STRING 列的 identity 转换时生效。此时，Join 在这些列上生成的 Runtime Filter 会跳过被其过滤掉的分区的 Equality Delete 文件。设置为 `false` 时会应用所有 Equality Delete 文件，例如查询报错且错误信息中提到该变量时。
+* 默认值：true
+* 引入版本：v26.2
+
 ### enable_incremental_mv
 
 * **描述**: 会话变量，用于控制服务器是否会为使用增量刷新（incremental refresh）的物化视图规划并保留内存中的计划。当启用时，对于刷新方案为增量刷新的物化视图创建语句，系统会为视图查询构建逻辑和物理计划并设置会话的 `enableMVPlanner` 标志（`setMVPlanner(true)`）。禁用时，增量刷新物化视图的规划将被跳过。
@@ -659,7 +701,7 @@ FROM test;
 
 ### enable_insert_partial_update
 
-* **描述**：是否为主键表的 INSERT 语句启用部分更新（Partial Update）。当设置为 `true`（默认）时，如果 INSERT 语句只指定了部分列（少于表中所有非生成列），系统会执行部分更新，即仅更新指定列，并保留其他列的现有值。当设置为 `false` 时，系统会对未指定的列使用默认值，而不是保留已有值。此功能特别适用于对主键表的特定列进行更新，而不影响其他列的值。
+* **描述**：是否为主键表的 INSERT 语句启用部分更新（Partial Update）。当设置为 `true`（默认）时，如果 INSERT 语句只指定了部分列（少于表中所有非生成列），系统会执行部分更新，即仅更新指定列，并保留其他列的现有值。当设置为 `false` 时，系统会对未指定的列使用默认值，而不是保留已有值。此功能特别适用于对主键表的特定列进行更新，而不影响其他列的值。如果目标分区从未有任何事务提交过数据，就不存在需要保留的已有值，此时 INSERT 会作为普通插入执行，未指定的列填充默认值，跳过部分更新的处理。这只在未指定的列都能这样填充（可为空或有默认值，且不是 AUTO_INCREMENT 列）时生效，INSERT OVERWRITE 和显式事务（`BEGIN ... COMMIT`）内的 INSERT 不适用，仍按部分更新执行。如果有其他写入抢先提交到了这些分区，该 INSERT 会失败并提示重试，重试时会按部分更新执行。
 * **默认值**：true
 * **引入版本**：v3.3.20、v3.4.9、v3.5.8、v4.0.2
 
@@ -1350,7 +1392,12 @@ FROM test;
 
 ### paimon_reader_mode
 
-* 描述：控制 Paimon 表使用的 Reader。有效值为 `AUTO`、`JNI` 和 `NATIVE`（不区分大小写）。`AUTO` 表示由 StarRocks 自动选择合适的 Reader。`JNI` 始终使用 JNI Reader。`NATIVE` 使用 paimon-cpp 原生 Reader。注意 `paimon_force_jni_reader` 的优先级高于本变量：一旦其设置为 `true`，将始终使用 JNI Reader。
+* 描述：控制 Paimon 表使用的 Reader。有效值为 `AUTO`、`JNI` 和 `NATIVE`（不区分大小写）。
+
+  * `AUTO`：由 StarRocks 自动选择合适的读取模式。
+  * `JNI`：强制使用 Paimon Java Reader，通过 JNI 读取。
+  * `NATIVE`：兼容时使用 StarRocks 文件 Reader，否则要求使用兼容的 paimon-cpp Reader；无法支持时查询报错，不回退到 JNI。
+  * 设置 `paimon_force_jni_reader=true` 等价于选择 `JNI`，优先于本变量的设置。
 * 默认值：AUTO
 * 类型：String
 * 引入版本：v4.2
@@ -1510,7 +1557,7 @@ FROM test;
 
 ### query_queue_mem_used_pct_limit (global)
 
-* 描述：单个 BE 节点中内存使用百分比上限。仅在设置为大于 `0` 后生效。设置为 `0` 表示没有限制。
+* 描述：单个 BE 节点中内存使用百分比上限。仅在设置为大于 `0` 后生效。设置为 `0` 表示没有限制。在 Query Queue v1 下，它作用于集群中的每个 BE 和 CN 节点。在 Query Queue v2 下，任一存活节点达到该上限时，新查询会等待。详细信息，参见 [内存准入](../administration/management/resource_management/query_queues.md#内存准入)。
 * 默认值：`0`
 * 取值范围：[0, 1]
 
@@ -1533,6 +1580,18 @@ FROM test;
 * 描述：设置进行 Range 分区裁剪时，最多能使用的 IN 谓词的个数，默认值：100。如果超过该值，会扫描全部 tablet，降低查询性能。
 * 默认值：100
 * 引入版本：v3.0
+
+### range_scan_execution_mode
+
+* 描述：原生存算分离范围 Colocate 表的只读单表聚合实验执行模式。`colocate` 保留范围 Colocate 执行；`parallel` 将扫描的有效分布设为 ANY，通过 Hash/Gather Exchange 合并聚合结果，包括精确的 `COUNT DISTINCT`。取值不区分大小写，不支持 `auto`。
+* 作用域：Session
+* 默认值：`colocate`
+* 数据类型：String
+* 有效值：`colocate`、`parallel`
+
+非空并行扫描必须选中至少两个逻辑分区和两个真实 Tablet，所选计算资源中必须至少有两个可用 CN。使用 DISTINCT 修饰符的聚合目前仅支持 `COUNT DISTINCT`。必须启用 Pipeline 执行，且 `parallel_fragment_exec_instance_num = 1`。并行模式会增加网络及聚合状态传输开销，并可能增加非归属节点的远程读取；不保证加速或使用全部计算节点。分区及 Tablet 裁剪保持不变。
+
+并行模式不支持写入/刷新、JOIN、集合运算、CTE、子查询、窗口函数、Grouping Sets、特殊/历史/元数据/缓存统计扫描、采样或扫描 Hint、MV/Rollup 源替换、多个最终扫描、Query Cache、分阶段调度、预备物理分片扫描、单节点计划和非 Pipeline 执行。输入完全裁剪时保留普通空输入聚合语义。不支持的请求会明确报错，不会修改其他会话设置。
 
 ### resource_group
 

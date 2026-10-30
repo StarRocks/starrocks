@@ -436,6 +436,13 @@ message UploadSnapshotFilesResponsePB {
     repeated int64 failed_tablets = 2;
 }
 
+// Asks whether a node is still reachable while its upload_snapshot_files call is outstanding.
+message PingSnapshotNodeRequestPB {
+}
+
+message PingSnapshotNodeResponsePB {
+}
+
 message AbortCompactionRequest {
     optional int64 txn_id = 1;
 }
@@ -500,6 +507,23 @@ message VacuumStatePB {
     // metadata survives for every tablet throughout the pass. The two coincide when tablets are
     // version-synchronized (the normal case). In a VacuumResponse, set only on a fresh round.
     optional int64 pass_start_version = 4;
+    // Set in a VacuumResponse when to_delete_low/high are empty (0/0), to tell the FE WHY this node
+    // proposed nothing: true means a tablet is still within the grace window (garbage not yet eligible),
+    // so the whole partition round must WAIT (not complete, not advance the floor); false means the
+    // node's tablets are drained / never-anchored (chain bottom reached), so the FE may IGNORE this node
+    // and aggregate the other nodes' non-empty proposals instead of zeroing the round. Without this,
+    // any empty node zeroes the aggregate and completes the pass, orphaning another node's real backlog
+    // below the raised floor. Unset on a non-empty proposal and in a VacuumRequest.
+    optional bool grace_blocked = 5;
+}
+
+// Snapshot references within the physical partition of a vacuum request.
+message RetainSnapshotPB {
+    optional int64 version = 1;
+    // Tablet IDs from the snapshot, which may belong to an older reshard generation.
+    // Empty for version-only retention: shadow v1 or committed-but-not-visible versions.
+    // Retain their metadata and version intervals without scheduling a file-reference scan.
+    repeated int64 tablet_ids = 2;
 }
 
 message VacuumRequest {
@@ -530,7 +554,7 @@ message VacuumRequest {
     // (because vacuun request is send by <node, physical partition>)
     // All tablet metadata and their data files of these verisons should be retained and can not be
     // vaccummed.
-    repeated int64 retain_versions = 9;
+    repeated int64 retain_versions = 9; // Dual-written during rolling upgrades.
     // Whether enable shared file cleanup in vacuum.
     // This flag is used for both file-bundling tables and range-distribution tables.
     optional bool enable_shared_file_cleanup = 10;
@@ -562,6 +586,10 @@ message VacuumRequest {
     // band width stay bounded by max_versions_per_round. Unset / <= 0 (an old FE) falls back to
     // max_versions_per_round, preserving the previous behavior.
     optional int64 max_empty_walk_versions = 14;
+    // Replaces retain_versions. Protect the listed snapshot metadata and all
+    // its live file references before deleting anything. Versions with no
+    // tablets are fences only.
+    repeated RetainSnapshotPB retain_snapshots = 15;
 }
 
 message VacuumResponse {
@@ -731,4 +759,5 @@ service LakeService {
     // Placeholder for external cluster snapshot feature.
     rpc upload_snapshot_files(UploadSnapshotFilesRequestPB) returns (UploadSnapshotFilesResponsePB);
     rpc build_vector_index(BuildVectorIndexRequest) returns (BuildVectorIndexResponse);
+    rpc ping_snapshot_node(PingSnapshotNodeRequestPB) returns (PingSnapshotNodeResponsePB);
 }

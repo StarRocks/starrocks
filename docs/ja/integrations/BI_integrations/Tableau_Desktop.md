@@ -14,17 +14,17 @@ StarRocks Tableau JDBC Connector は、Tableau Desktop および Tableau Server 
 
 ### 主な機能
 
-- LDAP サポート： 安全な認証のためのパスワードプロンプト付きの LDAP ログインを可能にします。
-- 高い互換性： TDVT (Tableau Design Verification Tool) テストで 99.99% の互換性を達成。
+- LDAP サポート: 安全な認証のためのパスワードプロンプト付きの LDAP ログインを可能にします。
+- 高い互換性: TDVT (Tableau Design Verification Tool) テストで 99.99% の互換性を達成しており、失敗するのは軽微なケース 1 件のみです。
 
 ## 前提条件
 
-先に進む前に、以下の要件が満たされていることを確認してください：
+先に進む前に、以下の要件が満たされていることを確認してください。
 
-- Tableau バージョン： Tableau 2020.4 以降
+- Tableau バージョン: Tableau 2020.4 以降
 - StarRocks バージョン: v3.2 以降
 
-## Tableau Desktop 用 Connector のインストール
+## Tableau Desktop 用コネクタのインストール
 
 1. [MySQL JDBC Driver 8.0.33](https://downloads.mysql.com/archives/c-j/) をダウンロードします。
 2. ドライバファイルを以下のディレクトリに保存します（ディレクトリが存在しない場合は作成します）：
@@ -32,7 +32,7 @@ StarRocks Tableau JDBC Connector は、Tableau Desktop および Tableau Server 
    - macOS: `~/Library/Tableau/Drivers`
    - Windows: `C:\Program Files\Tableau\Drivers`
 
-3. [StarRocks Tableau JDBC Connector file](https://exchange.tableau.com/products/1079) をダウンロードします。
+3. [StarRocks Tableau JDBC Connector ファイル](https://exchange.tableau.com/products/1079) をダウンロードします。
 4. コネクタファイルを以下のディレクトリに保存します：
 
    - macOS: `~/Documents/My Tableau Repository/Connectors`
@@ -41,7 +41,7 @@ StarRocks Tableau JDBC Connector は、Tableau Desktop および Tableau Server 
 5. Tableau Desktop を起動します。
 6. **Connect** -> **To a Server** -> **StarRocks JDBC by CelerData** に移動します。
 
-## Tableau Server 用 Connector のインストール
+## Tableau Server 用コネクタのインストール
 
 1. [MySQL JDBC Driver 8.0.33](https://downloads.mysql.com/archives/c-j/) をダウンロードします。
 2. ドライバファイルを以下のディレクトリに保存します（ディレクトリが存在しない場合は作成します）：
@@ -51,7 +51,7 @@ StarRocks Tableau JDBC Connector は、Tableau Desktop および Tableau Server 
 
    :::info
 
-   Linux では、「Tableau」 ユーザがディレクトリにアクセスすることを許可する必要があります。
+   Linux では、"Tableau" ユーザーにディレクトリへのアクセスを許可する必要があります。
 
    以下の手順に従ってください：
 
@@ -60,11 +60,11 @@ StarRocks Tableau JDBC Connector は、Tableau Desktop および Tableau Server 
       ```Bash
       sudo mkdir -p /opt/tableau/tableau_driver/jdbc
 
-      # Replace <path_to_driver_file_name> with the absolute path of the driver file.
+      # <path_to_driver_file_name> をドライバファイルの絶対パスに置き換えてください。
       sudo cp /<path_to_driver_file_name>.jar /opt/tableau/tableau_driver/jdbc
       ```
   
-   2. Tableau "ユーザーにアクセス許可を与える。
+   2. "Tableau" ユーザーに権限を付与します。
 
       ```Bash
       # <driver_file_name> をドライバファイル名に置き換えてください。
@@ -73,7 +73,7 @@ StarRocks Tableau JDBC Connector は、Tableau Desktop および Tableau Server 
 
    :::
 
-3. [StarRocks Tableau JDBC Connector file](https://exchange.tableau.com/products/1079) をダウンロードします。
+3. [StarRocks Tableau JDBC Connector ファイル](https://exchange.tableau.com/products/1079) をダウンロードします。
 4. 各ノードの以下のディレクトリにコネクタファイルを保存します：
 
    - Linux: `/opt/tableau/connectors`
@@ -91,6 +91,6 @@ StarRocks Tableau JDBC Connector は、Tableau Desktop および Tableau Server 
 
    :::
 
-## Usage notes
+## 使用上の注意
 
 LDAP ログインのサポートが必要な場合は、設定中に **Advanced** タブの **Enable LDAP** スイッチにチェックを入れることができます。

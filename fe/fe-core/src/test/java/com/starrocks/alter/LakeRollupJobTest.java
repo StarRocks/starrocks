@@ -24,6 +24,7 @@ import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.NoAliveBackendException;
@@ -45,6 +46,7 @@ import com.starrocks.sql.ast.CreateSyncMVStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AlterReplicaTask;
+import com.starrocks.task.CreateReplicaTask;
 import com.starrocks.thrift.TAlterTabletReqV2;
 import com.starrocks.thrift.TTabletSchema;
 import com.starrocks.utframe.LockProbe;
@@ -65,7 +67,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Collectors;
 
 public class LakeRollupJobTest {
     private static final String DB = "db_for_lake_mv";
@@ -461,6 +465,65 @@ public class LakeRollupJobTest {
         Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, job.getJobState());
         Assertions.assertFalse(sendCalled.get(),
                 "sendAgentTaskAndWait must not be invoked when light_weight_tablet_creation is enabled");
+    }
+
+    /**
+     * With lake_enable_tablet_creation_optimization set, a rollup on a table without `file_bundling` created
+     * its tablets from one partition-shared version-1 object, named like the base index's one in the same
+     * partition path, and overwrote it. The config is retired: every rollup tablet gets its own version-1 metadata.
+     */
+    @Test
+    public void testRollupTabletsAlwaysGetPerTabletMetadata() throws Exception {
+        boolean savedOptimization = Config.lake_enable_tablet_creation_optimization;
+        Config.lake_enable_tablet_creation_optimization = true;
+        try {
+            starRocksAssert.withTable("CREATE TABLE base_table_no_bundling\n" +
+                    "(\n" +
+                    "    k1 date,\n" +
+                    "    k2 int,\n" +
+                    "    k3 int\n" +
+                    ")\n" +
+                    "PARTITION BY RANGE(k1)\n" +
+                    "(\n" +
+                    "    PARTITION p1 values [('2022-02-01'),('2022-02-16')),\n" +
+                    "    PARTITION p2 values [('2022-02-16'),('2022-03-01'))\n" +
+                    ")\n" +
+                    "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                    "PROPERTIES('file_bundling' = 'false', 'light_weight_tablet_creation' = 'false');");
+            OlapTable noBundling = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getDb(DB).getTable("base_table_no_bundling");
+            Assertions.assertFalse(noBundling.isFileBundling());
+            Assertions.assertFalse(noBundling.isRangeDistribution());
+
+            LakeRollupJob job = createJob("create materialized view mv_no_bundling as\n" +
+                    "select k2, k1 from base_table_no_bundling order by k2;");
+            List<CreateReplicaTask> sent = new ArrayList<>();
+            new MockUp<LakeRollupJob>() {
+                @Mock
+                public void sendAgentTaskAndWait(AgentBatchTask batchTask,
+                                                 com.starrocks.common.util.concurrent.MarkedCountDownLatch<Long, Long> latch,
+                                                 long timeoutSeconds) {
+                    batchTask.getAllTasks().forEach(task -> sent.add((CreateReplicaTask) task));
+                }
+            };
+
+            job.runPendingJob();
+            Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, job.getJobState());
+
+            Set<Long> rollupTabletIds = job.physicalPartitionIdToRollupIndex.values().stream()
+                    .flatMap(index -> index.getTablets().stream())
+                    .map(tablet -> tablet.getId())
+                    .collect(Collectors.toSet());
+            Assertions.assertEquals(6, rollupTabletIds.size());
+            Assertions.assertEquals(rollupTabletIds.size(), sent.size(), "every rollup tablet must get its own create task");
+            Assertions.assertEquals(rollupTabletIds,
+                    sent.stream().map(CreateReplicaTask::getTabletId).collect(Collectors.toSet()));
+            for (CreateReplicaTask task : sent) {
+                Assertions.assertFalse(task.toThrift().isEnable_tablet_creation_optimization());
+            }
+        } finally {
+            Config.lake_enable_tablet_creation_optimization = savedOptimization;
+        }
     }
 
     @Test

@@ -92,10 +92,15 @@ public class CachingRemoteFileIO implements RemoteFileIO {
         return getRemoteFiles(pathKey, true);
     }
 
+    /**
+     * @param useCache false lists the path from the file system itself, past this level and every level below, and
+     *                 caches nothing. It used to drop the cached entry and load through the cache, which a background
+     *                 refresh that listed the path before the drop could fill with what it listed.
+     */
     public Map<RemotePathKey, List<RemoteFileDesc>> getRemoteFiles(RemotePathKey pathKey, boolean useCache) {
         try {
             if (!useCache) {
-                invalidatePartition(pathKey);
+                return getRemoteFilesPastCache(pathKey);
             }
             return ImmutableMap.of(pathKey, cache.get(pathKey));
         } catch (UncheckedExecutionException e) {
@@ -103,6 +108,13 @@ public class CachingRemoteFileIO implements RemoteFileIO {
             throwIfInstanceOf(e.getCause(), StarRocksConnectorException.class);
             throw e;
         }
+    }
+
+    private Map<RemotePathKey, List<RemoteFileDesc>> getRemoteFilesPastCache(RemotePathKey pathKey) {
+        if (fileIO instanceof CachingRemoteFileIO cachingFileIO) {
+            return cachingFileIO.getRemoteFilesPastCache(pathKey);
+        }
+        return fileIO.getRemoteFiles(pathKey);
     }
 
     public List<RemoteFileDesc> loadRemoteFiles(RemotePathKey pathKey) {

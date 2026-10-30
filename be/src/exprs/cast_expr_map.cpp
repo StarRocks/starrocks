@@ -80,7 +80,12 @@ StatusOr<ColumnPtr> CastJsonToMap::evaluate_checked(ExprContext* context, Chunk*
     auto map_column = MapColumn::create(std::move(keys_column), std::move(values_column), std::move(offsets_column));
     map_column->remove_duplicated_keys();
     RETURN_IF_ERROR(map_column->unfold_const_children(_type));
-    return NullableColumn::create(std::move(map_column), std::move(null_column));
+    ColumnPtr res = NullableColumn::create(std::move(map_column), std::move(null_column));
+    // A constant source was viewed as its single row; spread the result back over every row of the chunk.
+    if (src_column->is_constant()) {
+        res = ConstColumn::create(std::move(res), src_column->size());
+    }
+    return res;
 }
 
 StatusOr<ColumnPtr> CastVariantToMap::evaluate_checked(ExprContext* context, Chunk* ptr) {
@@ -175,7 +180,12 @@ StatusOr<ColumnPtr> CastVariantToMap::evaluate_checked(ExprContext* context, Chu
     auto map_column = MapColumn::create(std::move(keys_column), std::move(values_column), std::move(offsets_column));
     map_column->remove_duplicated_keys();
     RETURN_IF_ERROR(map_column->unfold_const_children(_type));
-    return NullableColumn::create(std::move(map_column), std::move(null_column));
+    ColumnPtr res = NullableColumn::create(std::move(map_column), std::move(null_column));
+    // A constant source was viewed as its single row; spread the result back over every row of the chunk.
+    if (src_column->is_constant()) {
+        res = ConstColumn::create(std::move(res), src_column->size());
+    }
+    return res;
 }
 
 } // namespace starrocks

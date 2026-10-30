@@ -35,9 +35,8 @@ import java.util.TreeSet;
 /**
  * Semantic validation for the unified {@code AI PROVIDER} DDL. Validation is keyed off the declared
  * {@code TYPE} (embedding / rerank / chat): the common params (endpoint / model / api_key /
- * timeout_ms / protocol) apply to every type, and each type adds its own allowed keys. ALTER/DROP/SET DEFAULT
- * are type-agnostic (the provider is resolved by name), so they only need a name check — the manager
- * infers the type from the stored provider.
+ * timeout_ms / protocol) apply to every type, and each type adds its own allowed keys. ALTER resolves
+ * the stored provider by name to validate properties against its type. DROP/SET DEFAULT only need a name check.
  */
 public class AIProviderAnalyzer {
 
@@ -99,8 +98,11 @@ public class AIProviderAnalyzer {
             if (properties.isEmpty()) {
                 throw new SemanticException("ALTER AI PROVIDER requires at least one property in SET (...)");
             }
-            // Type-agnostic: we don't know the provider type at analyze time, so accept any known key
-            // from any type's allowlist; the manager merges and the value semantics are enforced below.
+            AIProvider provider = context.getGlobalStateMgr().getAIProviderMgr().getProvider(statement.getName());
+            if (provider != null) {
+                validateKnownKeys(properties, provider.getType());
+            }
+            // The manager handles missing providers, including ALTER IF EXISTS.
             rejectEmptyIfPresent(properties, AIProvider.PROPERTY_ENDPOINT);
             rejectEmptyIfPresent(properties, AIProvider.PROPERTY_MODEL);
             rejectEmptyIfPresent(properties, AIProvider.PROPERTY_PROTOCOL);

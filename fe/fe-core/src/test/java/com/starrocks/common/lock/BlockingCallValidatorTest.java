@@ -55,6 +55,7 @@ public class BlockingCallValidatorTest {
     @AfterEach
     public void tearDown() {
         Config.lock_blocking_call_validation_mode = savedMode;
+        LockInvariantViolations.restoreBlockingCallTestEscalation();
         Config.lock_invariant_violation_log_interval_ms = savedLogInterval;
         LockInvariantViolations.clearViolations();
         LockHoldDepth.reset();
@@ -182,6 +183,7 @@ public class BlockingCallValidatorTest {
     @Test
     public void testReportNamesTheCallerNotTheTransport() {
         Config.lock_blocking_call_validation_mode = "warn";
+        LockInvariantViolations.suspendBlockingCallTestEscalation();
         Locker locker = new Locker();
         locker.lockDatabase(INTERNAL_DB_ID, LockType.READ);
         try {
@@ -206,24 +208,33 @@ public class BlockingCallValidatorTest {
     // --------------- modes ---------------
 
     /**
-     * This rule is deliberately not escalated in CI yet: it is still collecting its violation set,
-     * and refusing violations would fail whichever tests happen to cover a site rather than the
-     * site itself.
-     * <p>
-     * The assertion is written against the property rather than against {@code WARN} so that the
-     * day someone sets it in {@code fe-core/pom.xml}, this test does not have to be edited to
-     * agree -- it already describes the wiring, not the current answer.
+     * The escalation follows its own property (on by default in {@code fe-core/pom.xml}). Written
+     * against the property so it also holds when a run passes {@code -Dlock.blocking.strict=false}.
      */
     @Test
     public void testTestJvmEscalationFollowsItsOwnProperty() {
         boolean strict = Boolean.getBoolean("starrocks.lock.blocking.strict.in.test");
         Assertions.assertSame(strict ? Mode.ERROR : Mode.WARN,
                 LockInvariantViolations.effectiveBlockingCallMode("warn"));
-        // Independent of the lock-target rule, which *is* escalated. Sharing one property would
-        // arm this one by accident.
-        Assertions.assertFalse(strict, "the blocking-call rule is not armed in CI yet; if this is now "
-                + "intentional, remove this assertion in the same change that sets the property, and say "
-                + "which sites were fixed to make it possible");
+    }
+
+    /**
+     * A test of the warn path can get {@code warn} back, and only for itself: the escalation is
+     * restored afterwards, and the lock-target rule is not touched by it.
+     */
+    @Test
+    public void testSuspendingTheEscalationIsScopedToTheBlockingCallRule() {
+        Mode lockTargetBefore = LockInvariantViolations.effectiveMode("warn");
+        LockInvariantViolations.suspendBlockingCallTestEscalation();
+        try {
+            Assertions.assertSame(Mode.WARN, LockInvariantViolations.effectiveBlockingCallMode("warn"));
+            Assertions.assertSame(lockTargetBefore, LockInvariantViolations.effectiveMode("warn"));
+        } finally {
+            LockInvariantViolations.restoreBlockingCallTestEscalation();
+        }
+        boolean strict = Boolean.getBoolean("starrocks.lock.blocking.strict.in.test");
+        Assertions.assertSame(strict ? Mode.ERROR : Mode.WARN,
+                LockInvariantViolations.effectiveBlockingCallMode("warn"));
     }
 
     @Test
@@ -240,6 +251,7 @@ public class BlockingCallValidatorTest {
     @Test
     public void testWarnModeCountsWithoutRefusing() {
         Config.lock_blocking_call_validation_mode = "warn";
+        LockInvariantViolations.suspendBlockingCallTestEscalation();
         Locker locker = new Locker();
         locker.lockDatabase(INTERNAL_DB_ID, LockType.READ);
         try {
@@ -294,6 +306,8 @@ public class BlockingCallValidatorTest {
      */
     @Test
     public void testBlockingCallIsRecordedAndClearedOnRelease() {
+        Config.lock_blocking_call_validation_mode = "warn";
+        LockInvariantViolations.suspendBlockingCallTestEscalation();
         long threadId = Thread.currentThread().getId();
         Assertions.assertNull(BlockingCallUnderLock.of(threadId), "nothing recorded outside a critical section");
 
@@ -317,6 +331,8 @@ public class BlockingCallValidatorTest {
 
     @Test
     public void testCatalogIsRecordedWhenTheTransportKnowsIt() {
+        Config.lock_blocking_call_validation_mode = "warn";
+        LockInvariantViolations.suspendBlockingCallTestEscalation();
         long threadId = Thread.currentThread().getId();
         Locker locker = new Locker();
         locker.lockDatabase(INTERNAL_DB_ID, LockType.READ);

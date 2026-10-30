@@ -77,6 +77,41 @@ import static org.mockito.Mockito.times;
 class StatementPlannerTest extends PlanTestBase {
 
     @Test
+    public void testGeometryPublicOutput() throws Exception {
+        String geometry = "ST_GeomFromText('POINT (1 2)', 'EPSG:3857')";
+        String column = "ST_GeomFromText(if(v1 IS NULL, NULL, 'POINT (1 2)'), 'EPSG:3857')";
+        for (String sql : List.of("select " + geometry, "select ST_GeomFromText(NULL, 'EPSG:3857')",
+                "select * from (select " + geometry + " g) t",
+                "with c as (select " + geometry + " g) select g from c",
+                "select " + geometry + " union all select NULL", "select " + column + " from t0",
+                "select g from (select " + column + " g from t0) t",
+                "with c as (select " + column + " g from t0) select g from c")) {
+            getFragmentPlan("explain " + sql);
+            for (String prefix : List.of("", "explain analyze ")) {
+                StatementBase stmt = UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(prefix + sql, connectContext);
+                try (PlannerMetaLocker locker = new PlannerMetaLocker(connectContext, stmt)) {
+                    SemanticException error = assertThrows(SemanticException.class,
+                            () -> StatementPlanner.analyzeStatement(stmt, connectContext, locker));
+                    assertTrue(error.getMessage().contains(
+                            "GEOMETRY query results are not supported; use ST_AsText or ST_AsBinary"), error.getMessage());
+                }
+            }
+        }
+        for (String sql : List.of("select ST_GeogFromText('POINT (1 2)')",
+                "select ST_AsText(g), ST_AsBinary(g), g IS NULL from (select " + geometry + " g) t",
+                "select ST_AsText((select " + geometry + "))",
+                "select ST_AsText(g) from (select " + geometry + " g union all select NULL) u",
+                "insert into blackhole() select " + geometry,
+                "create view scalar_geo_view as select " + geometry + " g",
+                "create table scalar_geo_ctas as select ST_AsText(" + geometry + ") g")) {
+            StatementBase stmt = UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sql, connectContext);
+            try (PlannerMetaLocker locker = new PlannerMetaLocker(connectContext, stmt)) {
+                StatementPlanner.analyzeStatement(stmt, connectContext, locker);
+            }
+        }
+    }
+
+    @Test
     public void testAuthorizationPrecedesAIProviderResolution() throws Exception {
         boolean oldBypassAuthorizerCheck = connectContext.isBypassAuthorizerCheck();
         connectContext.setBypassAuthorizerCheck(false);
@@ -84,7 +119,7 @@ class StatementPlannerTest extends PlanTestBase {
         try (MockedStatic<Authorizer> authorizer = mockStatic(Authorizer.class)) {
             authorizer.when(() -> Authorizer.check(Mockito.any(), Mockito.same(connectContext))).thenThrow(denied);
             StatementBase statement = UtFrameUtils.parseStmtWithNewParser(
-                    "select ai_custom_query('missing_authorization_order_provider', 'prompt')", connectContext);
+                    "select ai_complete('missing_authorization_order_provider', 'explicit-model', 'prompt')", connectContext);
 
             Assertions.assertSame(denied,
                     Assertions.assertThrows(RuntimeException.class,
@@ -96,28 +131,32 @@ class StatementPlannerTest extends PlanTestBase {
 
     @Test
     public void testDeferLock() throws Exception {
+        // Not deferred means analyzeStatement took the lock and left it to the caller: close every locker.
         {
             FeConstants.runningUnitTest = true;
             String sql = "insert into t0 select * from t0";
             StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            PlannerMetaLocker locker = new PlannerMetaLocker(connectContext, stmt);
-            assertTrue(StatementPlanner.analyzeStatement(stmt, connectContext, locker));
+            try (PlannerMetaLocker locker = new PlannerMetaLocker(connectContext, stmt)) {
+                assertTrue(StatementPlanner.analyzeStatement(stmt, connectContext, locker));
+            }
         }
 
         {
             FeConstants.runningUnitTest = false;
             String sql = "insert into t0 select * from t0";
             StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            PlannerMetaLocker locker = new PlannerMetaLocker(connectContext, stmt);
-            assertFalse(StatementPlanner.analyzeStatement(stmt, connectContext, locker));
+            try (PlannerMetaLocker locker = new PlannerMetaLocker(connectContext, stmt)) {
+                assertFalse(StatementPlanner.analyzeStatement(stmt, connectContext, locker));
+            }
         }
 
         {
             FeConstants.runningUnitTest = true;
             String sql = "submit task as insert into t0 select * from t0";
             StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            PlannerMetaLocker locker = new PlannerMetaLocker(connectContext, stmt);
-            assertTrue(StatementPlanner.analyzeStatement(stmt, connectContext, locker));
+            try (PlannerMetaLocker locker = new PlannerMetaLocker(connectContext, stmt)) {
+                assertTrue(StatementPlanner.analyzeStatement(stmt, connectContext, locker));
+            }
         }
     }
 
@@ -145,8 +184,10 @@ class StatementPlannerTest extends PlanTestBase {
                 }
             });
 
-            boolean deferred = StatementPlanner.analyzeStatement(stmt, connectContext, locker);
-            assertFalse(deferred);
+            // Not deferred: analyzeStatement leaves the lock it took to the caller.
+            try (PlannerMetaLocker ignored = locker) {
+                assertFalse(StatementPlanner.analyzeStatement(stmt, connectContext, locker));
+            }
 
             List<FileTableFunctionRelation> relations =
                     AnalyzerUtils.collectFileTableFunctionRelation(((InsertStmt) stmt).getQueryStatement());
@@ -540,6 +581,20 @@ class StatementPlannerTest extends PlanTestBase {
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(oldValue);
     }
 
+    /**
+     * collectOriginalOlapTables is for a caller that still holds the locker, as StatementPlanner does when it hands
+     * the snapshot to createQueryPlanWithReTry; copying without it trips snapshot_copy_without_lock.
+     */
+    private static Set<OlapTable> collectOriginalOlapTablesUnderLock(QueryStatement queryStmt,
+                                                                     PlannerMetaLocker plannerMetaLocker) {
+        StatementPlanner.lock(plannerMetaLocker);
+        try {
+            return StatementPlanner.collectOriginalOlapTables(connectContext, queryStmt, plannerMetaLocker);
+        } finally {
+            StatementPlanner.unLock(plannerMetaLocker);
+        }
+    }
+
     @Test
     public void testPlanExceptionWithoutSchemaChange() throws Exception {
         // Exception occurs in plan builder, schema is valid, exception should be re-thrown
@@ -549,6 +604,7 @@ class StatementPlannerTest extends PlanTestBase {
         QueryStatement queryStmt = (QueryStatement) stmt;
         Analyzer.analyze(queryStmt, connectContext);
         PlannerMetaLocker plannerMetaLocker = new PlannerMetaLocker(connectContext, queryStmt);
+        Set<OlapTable> originalOlapTables = collectOriginalOlapTablesUnderLock(queryStmt, plannerMetaLocker);
         try (MockedStatic<PlanFragmentBuilder> mockedPlanFragmentBuilder = mockStatic(PlanFragmentBuilder.class);
                 MockedStatic<OptimisticVersion> mockedOptimisticVersion =
                         mockStatic(OptimisticVersion.class)) {
@@ -567,15 +623,14 @@ class StatementPlannerTest extends PlanTestBase {
             RuntimeException thrownException = assertThrows(RuntimeException.class, () ->
                     StatementPlanner.createQueryPlanWithReTry(
                             queryStmt, connectContext, TResultSinkType.MYSQL_PROTOCAL,
-                            plannerMetaLocker, planStartTime));
+                            plannerMetaLocker, planStartTime, originalOlapTables));
 
             assertEquals("Test exception during ExecPlanBuild", thrownException.getMessage());
 
             // Verify that OptimisticVersion.validateTableUpdate was called in the catch block
-            Set<OlapTable> olapTables = StatementPlanner.collectOriginalOlapTables(connectContext, queryStmt);
-            if (!olapTables.isEmpty()) {
+            if (!originalOlapTables.isEmpty()) {
                 mockedOptimisticVersion.verify(() -> OptimisticVersion.validateTableUpdate(
-                        any(OlapTable.class), eq(planStartTime)), times(olapTables.size()));
+                        any(OlapTable.class), eq(planStartTime)), times(originalOlapTables.size()));
             }
         }
     }
@@ -591,7 +646,7 @@ class StatementPlannerTest extends PlanTestBase {
         PlannerMetaLocker plannerMetaLocker = new PlannerMetaLocker(connectContext, queryStmt);
 
         // Collect olap tables before mocking
-        Set<OlapTable> olapTables = StatementPlanner.collectOriginalOlapTables(connectContext, queryStmt);
+        Set<OlapTable> olapTables = collectOriginalOlapTablesUnderLock(queryStmt, plannerMetaLocker);
         int tableCount = olapTables.size();
         try (MockedStatic<PlanFragmentBuilder> mockedPlanFragmentBuilder = mockStatic(PlanFragmentBuilder.class);
                 MockedStatic<com.starrocks.sql.OptimisticVersion> mockedOptimisticVersion =
@@ -630,7 +685,7 @@ class StatementPlannerTest extends PlanTestBase {
             long planStartTime = OptimisticVersion.generate();
             ExecPlan result = StatementPlanner.createQueryPlanWithReTry(
                     queryStmt, connectContext, TResultSinkType.MYSQL_PROTOCAL,
-                    plannerMetaLocker, planStartTime);
+                    plannerMetaLocker, planStartTime, olapTables);
 
             // Verify that a plan was returned (retry succeeded)
             assertNotNull(result);

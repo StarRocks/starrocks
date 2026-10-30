@@ -165,20 +165,20 @@ TEST_F(IcebergSchemaEvolutionTest, TestStructAddSubfield) {
     schema.__set_fields(fields);
     ctx->format_scan_context.lake_schema = &schema;
 
-    TypeDescriptor id = TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT);
+    TypeDescriptor id = TYPE_BIGINT_DESC;
 
     TypeDescriptor col = TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT);
 
-    col.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+    col.children.emplace_back(TYPE_INT_DESC);
     col.field_names.emplace_back("a");
 
-    col.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+    col.children.emplace_back(TYPE_INT_DESC);
     col.field_names.emplace_back("b");
 
-    col.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+    col.children.emplace_back(TYPE_INT_DESC);
     col.field_names.emplace_back("c");
 
-    col.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+    col.children.emplace_back(TYPE_INT_DESC);
     col.field_names.emplace_back("d");
 
     Utils::SlotDesc slot_descs[] = {{"id", id}, {"col", col}, {""}};
@@ -206,6 +206,239 @@ TEST_F(IcebergSchemaEvolutionTest, TestStructAddSubfield) {
     ASSERT_EQ(1, chunk->num_rows());
 
     EXPECT_EQ("[1, {a:2,b:3,c:4,d:NULL}]", chunk->debug_row(0));
+}
+
+TEST_F(IcebergSchemaEvolutionTest, TestStructAddSubfieldWithInitialDefault) {
+    // A subfield the file lacks reads its Iceberg initial-default instead of NULL.
+    auto file = _create_file(add_struct_subfield_file_path);
+    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
+                                                    std::filesystem::file_size(add_struct_subfield_file_path));
+
+    // --------------init context---------------
+    auto ctx = _create_scan_context();
+    TIcebergSchema schema = TIcebergSchema{};
+
+    TIcebergSchemaField field_id{};
+    field_id.__set_field_id(1);
+    field_id.__set_name("id");
+
+    TIcebergSchemaField field_col{};
+    field_col.__set_field_id(2);
+    field_col.__set_name("col");
+
+    TIcebergSchemaField field_col_a{};
+    field_col_a.__set_field_id(3);
+    field_col_a.__set_name("a");
+
+    TIcebergSchemaField field_col_b{};
+    field_col_b.__set_field_id(4);
+    field_col_b.__set_name("b");
+
+    TIcebergSchemaField field_col_c{};
+    field_col_c.__set_field_id(5);
+    field_col_c.__set_name("c");
+
+    TIcebergSchemaField field_col_d{};
+    field_col_d.__set_field_id(6);
+    field_col_d.__set_name("d");
+    field_col_d.__set_initial_default("7");
+
+    std::vector<TIcebergSchemaField> subfields{field_col_a, field_col_b, field_col_c, field_col_d};
+    field_col.__set_children(subfields);
+
+    std::vector<TIcebergSchemaField> fields{field_id, field_col};
+    schema.__set_fields(fields);
+    ctx->format_scan_context.lake_schema = &schema;
+
+    TypeDescriptor id = TYPE_BIGINT_DESC;
+
+    TypeDescriptor col = TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT);
+
+    col.children.emplace_back(TYPE_INT_DESC);
+    col.field_names.emplace_back("a");
+
+    col.children.emplace_back(TYPE_INT_DESC);
+    col.field_names.emplace_back("b");
+
+    col.children.emplace_back(TYPE_INT_DESC);
+    col.field_names.emplace_back("c");
+
+    col.children.emplace_back(TYPE_INT_DESC);
+    col.field_names.emplace_back("d");
+
+    Utils::SlotDesc slot_descs[] = {{"id", id}, {"col", col}, {""}};
+
+    TupleDescriptor* tuple_desc = parquet::Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    Utils::make_column_info_vector(tuple_desc, &ctx->format_scan_context.materialized_columns);
+    ctx->slot_descs = tuple_desc->slots();
+    _set_scan_range(ctx, _create_scan_range(add_struct_subfield_file_path));
+    // --------------finish init context---------------
+
+    Status status = file_reader->init(&ctx->format_scan_context);
+    if (!status.ok()) {
+        std::cout << status.message() << std::endl;
+    }
+    ASSERT_TRUE(status.ok());
+
+    EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
+
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(id, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(col, true), chunk->num_columns());
+
+    status = file_reader->get_next(&chunk);
+    ASSERT_TRUE(status.ok());
+    ASSERT_EQ(1, chunk->num_rows());
+
+    EXPECT_EQ("[1, {a:2,b:3,c:4,d:7}]", chunk->debug_row(0));
+}
+
+TEST_F(IcebergSchemaEvolutionTest, TestStructOnlyMissingSubfieldWithInitialDefault) {
+    // Only a subfield the file lacks is used: an unused stored subfield gives the struct's levels, so the struct is
+    // not NULL and the subfield reads its initial-default.
+    auto file = _create_file(add_struct_subfield_file_path);
+    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
+                                                    std::filesystem::file_size(add_struct_subfield_file_path));
+
+    // --------------init context---------------
+    auto ctx = _create_scan_context();
+    TIcebergSchema schema = TIcebergSchema{};
+
+    TIcebergSchemaField field_id{};
+    field_id.__set_field_id(1);
+    field_id.__set_name("id");
+
+    TIcebergSchemaField field_col{};
+    field_col.__set_field_id(2);
+    field_col.__set_name("col");
+
+    TIcebergSchemaField field_col_d{};
+    field_col_d.__set_field_id(6);
+    field_col_d.__set_name("d");
+    field_col_d.__set_initial_default("7");
+
+    std::vector<TIcebergSchemaField> subfields{field_col_d};
+    field_col.__set_children(subfields);
+
+    std::vector<TIcebergSchemaField> fields{field_id, field_col};
+    schema.__set_fields(fields);
+    ctx->format_scan_context.lake_schema = &schema;
+
+    TypeDescriptor id = TYPE_BIGINT_DESC;
+
+    TypeDescriptor col = TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT);
+    col.children.emplace_back(TYPE_INT_DESC);
+    col.field_names.emplace_back("d");
+
+    Utils::SlotDesc slot_descs[] = {{"id", id}, {"col", col}, {""}};
+
+    TupleDescriptor* tuple_desc = parquet::Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    Utils::make_column_info_vector(tuple_desc, &ctx->format_scan_context.materialized_columns);
+    ctx->slot_descs = tuple_desc->slots();
+    _set_scan_range(ctx, _create_scan_range(add_struct_subfield_file_path));
+    // --------------finish init context---------------
+
+    Status status = file_reader->init(&ctx->format_scan_context);
+    if (!status.ok()) {
+        std::cout << status.message() << std::endl;
+    }
+    ASSERT_TRUE(status.ok());
+
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(id, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(col, true), chunk->num_columns());
+
+    status = file_reader->get_next(&chunk);
+    ASSERT_TRUE(status.ok());
+    ASSERT_EQ(1, chunk->num_rows());
+
+    EXPECT_EQ("[1, {d:7}]", chunk->debug_row(0));
+}
+
+TEST_F(IcebergSchemaEvolutionTest, TestStructAddSubfieldWithTimeInitialDefault) {
+    // A default the subfield type cannot parse (TIME) keeps reading NULL instead of failing the scan.
+    auto file = _create_file(add_struct_subfield_file_path);
+    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
+                                                    std::filesystem::file_size(add_struct_subfield_file_path));
+
+    // --------------init context---------------
+    auto ctx = _create_scan_context();
+    TIcebergSchema schema = TIcebergSchema{};
+
+    TIcebergSchemaField field_id{};
+    field_id.__set_field_id(1);
+    field_id.__set_name("id");
+
+    TIcebergSchemaField field_col{};
+    field_col.__set_field_id(2);
+    field_col.__set_name("col");
+
+    TIcebergSchemaField field_col_a{};
+    field_col_a.__set_field_id(3);
+    field_col_a.__set_name("a");
+
+    TIcebergSchemaField field_col_b{};
+    field_col_b.__set_field_id(4);
+    field_col_b.__set_name("b");
+
+    TIcebergSchemaField field_col_c{};
+    field_col_c.__set_field_id(5);
+    field_col_c.__set_name("c");
+
+    TIcebergSchemaField field_col_d{};
+    field_col_d.__set_field_id(6);
+    field_col_d.__set_name("d");
+    field_col_d.__set_initial_default("01:02:03");
+
+    std::vector<TIcebergSchemaField> subfields{field_col_a, field_col_b, field_col_c, field_col_d};
+    field_col.__set_children(subfields);
+
+    std::vector<TIcebergSchemaField> fields{field_id, field_col};
+    schema.__set_fields(fields);
+    ctx->format_scan_context.lake_schema = &schema;
+
+    TypeDescriptor id = TYPE_BIGINT_DESC;
+
+    TypeDescriptor col = TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT);
+
+    col.children.emplace_back(TYPE_INT_DESC);
+    col.field_names.emplace_back("a");
+
+    col.children.emplace_back(TYPE_INT_DESC);
+    col.field_names.emplace_back("b");
+
+    col.children.emplace_back(TYPE_INT_DESC);
+    col.field_names.emplace_back("c");
+
+    col.children.emplace_back(TYPE_TIME_DESC);
+    col.field_names.emplace_back("d");
+
+    Utils::SlotDesc slot_descs[] = {{"id", id}, {"col", col}, {""}};
+
+    TupleDescriptor* tuple_desc = parquet::Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    Utils::make_column_info_vector(tuple_desc, &ctx->format_scan_context.materialized_columns);
+    ctx->slot_descs = tuple_desc->slots();
+    _set_scan_range(ctx, _create_scan_range(add_struct_subfield_file_path));
+    // --------------finish init context---------------
+
+    Status status = file_reader->init(&ctx->format_scan_context);
+    if (!status.ok()) {
+        std::cout << status.message() << std::endl;
+    }
+    ASSERT_TRUE(status.ok());
+
+    EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
+
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(id, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(col, true), chunk->num_columns());
+
+    status = file_reader->get_next(&chunk);
+    ASSERT_TRUE(status.ok());
+    ASSERT_EQ(1, chunk->num_rows());
+
+    // TIME is stored as seconds: 01:02:03 -> 3723
+    EXPECT_EQ("[1, {a:2,b:3,c:4,d:3723}]", chunk->debug_row(0));
 }
 
 TEST_F(IcebergSchemaEvolutionTest, TestStructEvolutionPadNull) {
@@ -250,7 +483,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestStructEvolutionPadNull) {
 
     TypeDescriptor col = TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT);
 
-    col.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+    col.children.emplace_back(TYPE_INT_DESC);
     col.field_names.emplace_back("d");
 
     Utils::SlotDesc slot_descs[] = {{"col", col}, {""}};
@@ -276,7 +509,8 @@ TEST_F(IcebergSchemaEvolutionTest, TestStructEvolutionPadNull) {
     ASSERT_TRUE(status.ok());
     ASSERT_EQ(1, chunk->num_rows());
 
-    EXPECT_EQ("[NULL]", chunk->debug_row(0));
+    // col is stored and not null; only its subfield d was added later, so just d reads NULL.
+    EXPECT_EQ("[{d:NULL}]", chunk->debug_row(0));
 }
 
 TEST_F(IcebergSchemaEvolutionTest, TestStructDropSubfield) {
@@ -311,14 +545,14 @@ TEST_F(IcebergSchemaEvolutionTest, TestStructDropSubfield) {
     schema.__set_fields(fields);
     ctx->format_scan_context.lake_schema = &schema;
 
-    TypeDescriptor id = TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT);
+    TypeDescriptor id = TYPE_BIGINT_DESC;
 
     TypeDescriptor col = TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT);
 
-    col.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+    col.children.emplace_back(TYPE_INT_DESC);
     col.field_names.emplace_back("a");
 
-    col.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+    col.children.emplace_back(TYPE_INT_DESC);
     col.field_names.emplace_back("b");
 
     Utils::SlotDesc slot_descs[] = {{"id", id}, {"col", col}, {""}};
@@ -380,14 +614,14 @@ TEST_F(IcebergSchemaEvolutionTest, TestStructReorderSubfield) {
     schema.__set_fields(fields);
     ctx->format_scan_context.lake_schema = &schema;
 
-    TypeDescriptor id = TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT);
+    TypeDescriptor id = TYPE_BIGINT_DESC;
 
     TypeDescriptor col = TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT);
 
-    col.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+    col.children.emplace_back(TYPE_INT_DESC);
     col.field_names.emplace_back("b");
 
-    col.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+    col.children.emplace_back(TYPE_INT_DESC);
     col.field_names.emplace_back("a");
 
     Utils::SlotDesc slot_descs[] = {{"id", id}, {"col", col}, {""}};
@@ -457,20 +691,20 @@ TEST_F(IcebergSchemaEvolutionTest, TestStructRenameSubfield) {
     schema.__set_fields(fields);
     ctx->format_scan_context.lake_schema = &schema;
 
-    TypeDescriptor id = TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT);
+    TypeDescriptor id = TYPE_BIGINT_DESC;
 
     TypeDescriptor col = TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT);
 
-    col.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+    col.children.emplace_back(TYPE_INT_DESC);
     col.field_names.emplace_back("a_rename");
 
-    col.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+    col.children.emplace_back(TYPE_INT_DESC);
     col.field_names.emplace_back("b_rename");
 
-    col.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+    col.children.emplace_back(TYPE_INT_DESC);
     col.field_names.emplace_back("c_rename");
 
-    col.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+    col.children.emplace_back(TYPE_INT_DESC);
     col.field_names.emplace_back("d_rename");
 
     Utils::SlotDesc slot_descs[] = {{"id", id}, {"col", col}, {""}};
@@ -603,17 +837,17 @@ TEST_F(IcebergSchemaEvolutionTest, TestAddColumn) {
     schema.__set_fields(fields);
     ctx->format_scan_context.lake_schema = &schema;
 
-    TypeDescriptor id = TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT);
+    TypeDescriptor id = TYPE_BIGINT_DESC;
 
-    TypeDescriptor col = TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT);
+    TypeDescriptor col = TYPE_BIGINT_DESC;
 
-    TypeDescriptor new_conjunct = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+    TypeDescriptor new_conjunct = TYPE_INT_DESC;
 
     Utils::SlotDesc slot_descs[] = {{"id", id}, {"col", col}, {"new_conjunct", new_conjunct}, {""}};
 
     {
         Utils::SlotDesc min_max_slots[] = {
-                {"new_conjunct", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT), 2},
+                {"new_conjunct", TYPE_INT_DESC, 2},
                 {""},
         };
         ctx->min_max_tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, min_max_slots);
@@ -668,7 +902,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestDropColumn) {
     schema.__set_fields(fields);
     ctx->format_scan_context.lake_schema = &schema;
 
-    TypeDescriptor id = TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT);
+    TypeDescriptor id = TYPE_BIGINT_DESC;
 
     Utils::SlotDesc slot_descs[] = {{"id", id}, {""}};
 
@@ -713,7 +947,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestRenameColumn) {
     schema.__set_fields(fields);
     ctx->format_scan_context.lake_schema = &schema;
 
-    TypeDescriptor rename_id = TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT);
+    TypeDescriptor rename_id = TYPE_BIGINT_DESC;
 
     Utils::SlotDesc slot_descs[] = {{"rename_id", rename_id}, {""}};
 
@@ -771,10 +1005,10 @@ TEST_F(IcebergSchemaEvolutionTest, TestReorderColumn) {
 
     TypeDescriptor col = TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT);
 
-    col.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+    col.children.emplace_back(TYPE_INT_DESC);
     col.field_names.emplace_back("a");
 
-    TypeDescriptor id = TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT);
+    TypeDescriptor id = TYPE_BIGINT_DESC;
 
     Utils::SlotDesc slot_descs[] = {{"col", col}, {"id", id}, {""}};
 
@@ -829,7 +1063,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestWidenColumnType) {
 
     TypeDescriptor col = TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT);
 
-    col.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT));
+    col.children.emplace_back(TYPE_BIGINT_DESC);
     col.field_names.emplace_back("a");
 
     Utils::SlotDesc slot_descs[] = {{"col", col}, {""}};
@@ -887,9 +1121,9 @@ TEST_F(IcebergSchemaEvolutionTest, TestWithoutFieldId) {
     schema.__set_fields(fields);
     ctx->format_scan_context.lake_schema = &schema;
 
-    TypeDescriptor rename_c1 = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
-    TypeDescriptor c2 = TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT);
-    TypeDescriptor rename_c3 = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR);
+    TypeDescriptor rename_c1 = TYPE_INT_DESC;
+    TypeDescriptor c2 = TYPE_BIGINT_DESC;
+    TypeDescriptor rename_c3 = TYPE_VARCHAR_DESC;
 
     Utils::SlotDesc slot_descs[] = {{"rename_c1", rename_c1}, {"c2", c2}, {"rename_c3", rename_c3}, {""}};
 
@@ -949,11 +1183,11 @@ TEST_F(IcebergSchemaEvolutionTest, TestWithoutSubfield) {
         schema.__set_fields(fields);
         ctx->format_scan_context.lake_schema = &schema;
 
-        TypeDescriptor id = TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT);
+        TypeDescriptor id = TYPE_BIGINT_DESC;
 
         TypeDescriptor col = TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT);
 
-        col.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+        col.children.emplace_back(TYPE_INT_DESC);
         col.field_names.emplace_back("not_existed");
 
         Utils::SlotDesc slot_descs[] = {{"id", id}, {"col", col}, {""}};
@@ -980,7 +1214,8 @@ TEST_F(IcebergSchemaEvolutionTest, TestWithoutSubfield) {
         ASSERT_TRUE(status.ok());
         ASSERT_EQ(1, chunk->num_rows());
 
-        EXPECT_EQ("[1, NULL]", chunk->debug_row(0));
+        // The struct is stored and not null; only its subfield was added later, so just the subfield reads NULL.
+        EXPECT_EQ("[1, {not_existed:NULL}]", chunk->debug_row(0));
     }
 
     // has no valid column
@@ -1010,7 +1245,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestWithoutSubfield) {
 
         TypeDescriptor col = TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT);
 
-        col.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+        col.children.emplace_back(TYPE_INT_DESC);
         col.field_names.emplace_back("not_existed");
 
         Utils::SlotDesc slot_descs[] = {{"col", col}, {""}};
@@ -1035,7 +1270,8 @@ TEST_F(IcebergSchemaEvolutionTest, TestWithoutSubfield) {
         status = file_reader->get_next(&chunk);
         ASSERT_TRUE(status.ok());
         ASSERT_EQ(1, chunk->num_rows());
-        EXPECT_EQ("[NULL]", chunk->debug_row(0));
+        // The struct is stored and not null; only its subfield was added later, so just the subfield reads NULL.
+        EXPECT_EQ("[{not_existed:NULL}]", chunk->debug_row(0));
     }
 }
 
@@ -1050,11 +1286,11 @@ TEST_F(IcebergSchemaEvolutionTest, TestHiveWithoutSubfield) {
         // --------------init context---------------
         auto ctx = _create_scan_context();
 
-        TypeDescriptor id = TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT);
+        TypeDescriptor id = TYPE_BIGINT_DESC;
 
         TypeDescriptor col = TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT);
 
-        col.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+        col.children.emplace_back(TYPE_INT_DESC);
         col.field_names.emplace_back("not_existed");
 
         Utils::SlotDesc slot_descs[] = {{"id", id}, {"col", col}, {""}};
@@ -1094,7 +1330,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestHiveWithoutSubfield) {
         auto ctx = _create_scan_context();
         TypeDescriptor col = TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT);
 
-        col.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+        col.children.emplace_back(TYPE_INT_DESC);
         col.field_names.emplace_back("not_existed");
 
         Utils::SlotDesc slot_descs[] = {{"col", col}, {""}};
@@ -1166,14 +1402,14 @@ TEST_F(IcebergSchemaEvolutionTest, TestInnerStructWithoutSubfield) {
         schema.__set_fields(fields);
         ctx->format_scan_context.lake_schema = &schema;
 
-        TypeDescriptor id = TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT);
+        TypeDescriptor id = TYPE_BIGINT_DESC;
 
         TypeDescriptor col_struct = TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT);
-        col_struct.children.emplace_back(TypeDescriptor::from_logical_type(TYPE_INT));
+        col_struct.children.emplace_back(TYPE_INT_DESC);
         col_struct.field_names.emplace_back("age");
 
         TypeDescriptor col_detail = TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT);
-        col_detail.children.emplace_back(TypeDescriptor::from_logical_type(TYPE_INT));
+        col_detail.children.emplace_back(TYPE_INT_DESC);
         col_detail.field_names.emplace_back("not_existed");
 
         col_struct.children.emplace_back(col_detail);
@@ -1203,7 +1439,8 @@ TEST_F(IcebergSchemaEvolutionTest, TestInnerStructWithoutSubfield) {
         ASSERT_TRUE(status.ok());
         ASSERT_EQ(1, chunk->num_rows());
 
-        EXPECT_EQ("[1, {age:10,detail:NULL}]", chunk->debug_row(0));
+        // detail is stored and not null; only its subfield was added later.
+        EXPECT_EQ("[1, {age:10,detail:{not_existed:NULL}}]", chunk->debug_row(0));
     }
     {
         auto file = _create_file(struct_map_array_file_path);
@@ -1244,13 +1481,13 @@ TEST_F(IcebergSchemaEvolutionTest, TestInnerStructWithoutSubfield) {
         schema.__set_fields(fields);
         ctx->format_scan_context.lake_schema = &schema;
 
-        TypeDescriptor id = TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT);
+        TypeDescriptor id = TYPE_BIGINT_DESC;
 
         TypeDescriptor col_map = TypeDescriptor::from_logical_type(LogicalType::TYPE_MAP);
-        col_map.children.emplace_back(TypeDescriptor::from_logical_type(TYPE_INT));
+        col_map.children.emplace_back(TYPE_INT_DESC);
 
         TypeDescriptor col_map_value = TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT);
-        col_map_value.children.emplace_back(TypeDescriptor::from_logical_type(TYPE_INT));
+        col_map_value.children.emplace_back(TYPE_INT_DESC);
         col_map_value.field_names.emplace_back("not_existed");
 
         col_map.children.emplace_back(col_map_value);
@@ -1279,7 +1516,8 @@ TEST_F(IcebergSchemaEvolutionTest, TestInnerStructWithoutSubfield) {
         ASSERT_TRUE(status.ok());
         ASSERT_EQ(1, chunk->num_rows());
 
-        EXPECT_EQ("[1, {1:NULL}]", chunk->debug_row(0));
+        // The map value is stored and not null; only its subfield was added later.
+        EXPECT_EQ("[1, {1:{not_existed:NULL}}]", chunk->debug_row(0));
     }
 
     // test with hive
@@ -1290,14 +1528,14 @@ TEST_F(IcebergSchemaEvolutionTest, TestInnerStructWithoutSubfield) {
 
         // --------------init context---------------
         auto ctx = _create_scan_context();
-        TypeDescriptor id = TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT);
+        TypeDescriptor id = TYPE_BIGINT_DESC;
 
         TypeDescriptor col_struct = TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT);
-        col_struct.children.emplace_back(TypeDescriptor::from_logical_type(TYPE_INT));
+        col_struct.children.emplace_back(TYPE_INT_DESC);
         col_struct.field_names.emplace_back("age");
 
         TypeDescriptor col_detail = TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT);
-        col_detail.children.emplace_back(TypeDescriptor::from_logical_type(TYPE_INT));
+        col_detail.children.emplace_back(TYPE_INT_DESC);
         col_detail.field_names.emplace_back("not_existed");
 
         col_struct.children.emplace_back(col_detail);
@@ -1336,12 +1574,12 @@ TEST_F(IcebergSchemaEvolutionTest, TestInnerStructWithoutSubfield) {
 
         // --------------init context---------------
         auto ctx = _create_scan_context();
-        TypeDescriptor id = TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT);
+        TypeDescriptor id = TYPE_BIGINT_DESC;
 
         TypeDescriptor col_array = TypeDescriptor::from_logical_type(LogicalType::TYPE_ARRAY);
 
         TypeDescriptor col_array_struct = TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT);
-        col_array_struct.children.emplace_back(TypeDescriptor::from_logical_type(TYPE_INT));
+        col_array_struct.children.emplace_back(TYPE_INT_DESC);
         col_array_struct.field_names.emplace_back("not_existed");
 
         col_array.children.emplace_back(col_array_struct);

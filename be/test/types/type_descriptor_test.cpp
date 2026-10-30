@@ -17,6 +17,7 @@
 #include <tuple>
 
 #include "gtest/gtest.h"
+#include "testutil/type_test_helper.h"
 
 namespace starrocks {
 
@@ -759,14 +760,11 @@ TEST_F(TypeDescriptorTest, test_debug_string) {
 TEST_F(TypeDescriptorTest, test_promote_types) {
     std::vector<std::tuple<TypeDescriptor, TypeDescriptor, TypeDescriptor>> cases = {
             // input1, input2, output
-            {TypeDescriptor::from_logical_type(TYPE_INT), TypeDescriptor::from_logical_type(TYPE_BIGINT),
-             TypeDescriptor::from_logical_type(TYPE_BIGINT)},
+            {TYPE_INT_DESC, TYPE_BIGINT_DESC, TYPE_BIGINT_DESC},
 
-            {TypeDescriptor::from_logical_type(TYPE_FLOAT), TypeDescriptor::from_logical_type(TYPE_DOUBLE),
-             TypeDescriptor::from_logical_type(TYPE_DOUBLE)},
+            {TYPE_FLOAT_DESC, TYPE_DOUBLE_DESC, TYPE_DOUBLE_DESC},
 
-            {TypeDescriptor::from_logical_type(TYPE_FLOAT), TypeDescriptor::from_logical_type(TYPE_BIGINT),
-             TypeDescriptor::from_logical_type(TYPE_DOUBLE)},
+            {TYPE_FLOAT_DESC, TYPE_BIGINT_DESC, TYPE_DOUBLE_DESC},
 
             {TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 5, 2),
              TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 4, 3),
@@ -785,8 +783,7 @@ TEST_F(TypeDescriptorTest, test_promote_types) {
              TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 19, 2)},
 
             {TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 38, 38),
-             TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 38, 0),
-             TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH)},
+             TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 38, 0), TYPE_VARCHAR_DESC},
 
             {TypeDescriptor::create_varchar_type(10), TypeDescriptor::create_varchar_type(20),
              TypeDescriptor::create_varchar_type(20)},
@@ -797,8 +794,7 @@ TEST_F(TypeDescriptorTest, test_promote_types) {
             {TypeDescriptor::create_varbinary_type(10), TypeDescriptor::create_varbinary_type(20),
              TypeDescriptor::create_varbinary_type(20)},
 
-            {TypeDescriptor::from_logical_type(TYPE_JSON), TypeDescriptor::from_logical_type(TYPE_BIGINT),
-             TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH)}};
+            {TYPE_JSON_DESC, TYPE_BIGINT_DESC, TYPE_VARCHAR_DESC}};
     for (const auto& tuple : cases) {
         EXPECT_TRUE(TypeDescriptor::promote_types(std::get<0>(tuple), std::get<1>(tuple)) == std::get<2>(tuple));
     }
@@ -896,6 +892,38 @@ TEST_F(TypeDescriptorTest, test_create_variant_type) {
     TypeDescriptor variant_desc2 = TypeDescriptor::create_variant_type();
     ASSERT_EQ(variant_desc.type, variant_desc2.type);
     ASSERT_EQ(variant_desc.len, variant_desc2.len);
+}
+
+// The ObjectColumn-backed types are exactly the ones whose single row can hold an arbitrarily large
+// blob, and exactly the ones that cannot take part in a join, an order by or a group by. Asserting
+// the whole set keeps these four predicates from drifting apart the way they had before.
+TEST_F(TypeDescriptorTest, ObjectTypesAreHugeAndUnusableAsKeys) {
+    for (auto type : {TYPE_HLL, TYPE_OBJECT, TYPE_PERCENTILE, TYPE_JSON, TYPE_VARIANT}) {
+        auto desc = TypeDescriptor::from_logical_type(type);
+        EXPECT_TRUE(desc.is_huge_type()) << type;
+        EXPECT_FALSE(desc.support_join()) << type;
+        EXPECT_FALSE(desc.support_orderby()) << type;
+        EXPECT_FALSE(desc.support_groupby()) << type;
+    }
+
+    for (auto type : {TYPE_INT, TYPE_VARCHAR, TYPE_DATETIME}) {
+        auto desc = TypeDescriptor::from_logical_type(type);
+        EXPECT_FALSE(desc.is_huge_type()) << type;
+        EXPECT_TRUE(desc.support_join()) << type;
+        EXPECT_TRUE(desc.support_orderby()) << type;
+        EXPECT_TRUE(desc.support_groupby()) << type;
+    }
+
+    // MAP is joinable and groupable but has no ordering; the nested types otherwise delegate to
+    // their children, so an ARRAY<JSON> is no more usable as a key than a bare JSON.
+    auto map_of_int = TypeDescriptor::create_map_type(TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_INT));
+    EXPECT_TRUE(map_of_int.support_groupby());
+    EXPECT_FALSE(map_of_int.support_orderby());
+
+    auto array_of_json = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_JSON));
+    EXPECT_FALSE(array_of_json.support_join());
+    EXPECT_FALSE(array_of_json.support_orderby());
+    EXPECT_FALSE(array_of_json.support_groupby());
 }
 
 } // namespace starrocks

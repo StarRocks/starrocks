@@ -72,6 +72,8 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
 
 @TestMethodOrder(MethodName.class)
 public class SchemaChangeHandlerTest extends TestWithFeService {
@@ -1318,6 +1320,163 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
 
     private boolean hasAlterJobOf(SchemaChangeHandler handler, OlapTable table) {
         return handler.getAlterJobsV2().values().stream().anyMatch(job -> job.getTableId() == table.getId());
+    }
+
+    @Test
+    public void testModifyBloomFilterColumnToUnsupportedTypeIsRejected() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        for (String keys : new String[] {"DUPLICATE KEY(k)", "PRIMARY KEY(k)"}) {
+            for (boolean fast : new boolean[] {false, true}) {
+                for (String target : new String[] {"DOUBLE", "FLOAT", "TINYINT", "JSON"}) {
+                    String name = "bf_reject_" + keys.charAt(0) + (fast ? "_fast_" : "_slow_")
+                            + target.toLowerCase();
+                    createTable("CREATE TABLE test." + name + " (k BIGINT NOT NULL, x VARCHAR(16)) "
+                            + keys + " DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ("
+                            + "'replication_num'='1', 'bloom_filter_columns'='x', "
+                            + "'fast_schema_evolution'='" + fast + "')");
+                    OlapTable table = (OlapTable) db.getTable(name);
+                    AlterTableStmt stmt = (AlterTableStmt) parseAndAnalyzeStmt(
+                            "ALTER TABLE test." + name + " MODIFY COLUMN x " + target);
+                    DdlException e = Assertions.assertThrows(DdlException.class,
+                            () -> handler.process(stmt.getAlterClauseList(), db, table), name);
+                    Assertions.assertEquals("Invalid bloom filter column 'x': unsupported type " + target,
+                            e.getMessage());
+                    Assertions.assertEquals(PrimitiveType.VARCHAR, table.getColumn("x").getPrimitiveType());
+                    Assertions.assertTrue(table.getBfColumnNames().contains("x"));
+                    Assertions.assertEquals(OlapTableState.NORMAL, table.getState());
+                    Assertions.assertFalse(hasAlterJobOf(handler, table));
+                }
+            }
+        }
+    }
+
+    private OlapTable createBloomFilterTable(String name, String sourceType, boolean fast) throws Exception {
+        createTable("CREATE TABLE test." + name + " (k BIGINT NOT NULL, x " + sourceType + ", y INT) "
+                + "DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ("
+                + "'replication_num'='1', 'bloom_filter_columns'='x', "
+                + "'fast_schema_evolution'='" + fast + "')");
+        return (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTable(name);
+    }
+
+    @Test
+    public void testModifyBloomFilterColumnToSupportedTypeIsAccepted() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        String[][] types = { {"INT", "BIGINT"}, {"INT", "LARGEINT"}, {"INT", "VARCHAR(32)"},
+                {"VARCHAR(16)", "SMALLINT"}, {"VARCHAR(16)", "INT"}, {"VARCHAR(16)", "BIGINT"},
+                {"VARCHAR(16)", "LARGEINT"}, {"VARCHAR(16)", "DATE"}, {"DATE", "DATETIME"},
+                {"VARCHAR(16)", "DECIMAL(9,2)"}, {"VARCHAR(16)", "DECIMAL(18,2)"},
+                {"VARCHAR(16)", "DECIMAL(38,2)"}, {"VARCHAR(16)", "DECIMAL(76,2)"}};
+        for (int i = 0; i < types.length; i++) {
+            String name = "bf_accept_" + i;
+            OlapTable table = createBloomFilterTable(name, types[i][0], false);
+            PrimitiveType originalType = table.getColumn("x").getPrimitiveType();
+            Set<ColumnId> ids = table.getBfColumnIds();
+            int jobsBefore = handler.getAlterJobsV2().size();
+            AlterTableStmt stmt = (AlterTableStmt) parseAndAnalyzeStmt(
+                    "ALTER TABLE test." + name + " MODIFY COLUMN x " + types[i][1]);
+            Assertions.assertNotNull(handler.analyzeAndCreateJob(stmt.getAlterClauseList(), db, table), name);
+            Assertions.assertEquals(jobsBefore, handler.getAlterJobsV2().size(), name);
+            Assertions.assertEquals(originalType, table.getColumn("x").getPrimitiveType(), name);
+            Assertions.assertEquals(ids, table.getBfColumnIds(), name);
+            Assertions.assertEquals(OlapTableState.NORMAL, table.getState(), name);
+        }
+    }
+
+    @Test
+    public void testBloomFilterTypeChangeUsesFinalColumns() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        OlapTable table = createBloomFilterTable("bf_remove_bundled", "INT", false);
+        Map<Long, AlterJobV2> jobsBefore = new HashMap<>(handler.getAlterJobsV2());
+        try {
+            AlterTableStmt bundled = (AlterTableStmt) parseAndAnalyzeStmt(
+                    "ALTER TABLE test.bf_remove_bundled MODIFY COLUMN x DOUBLE "
+                            + "PROPERTIES ('bloom_filter_columns'='')");
+            Assertions.assertNotNull(handler.analyzeAndCreateJob(bundled.getAlterClauseList(), db, table));
+            Assertions.assertEquals(IntegerType.INT, table.getColumn("x").getType());
+            Assertions.assertTrue(table.getBfColumnNames().contains("x"));
+            handler.process(bundled.getAlterClauseList(), db, table);
+            waitAlterJobDone(handler.getAlterJobsV2());
+            Assertions.assertEquals(PrimitiveType.DOUBLE, table.getColumn("x").getPrimitiveType());
+            Assertions.assertTrue(table.getBfColumnIds() == null || table.getBfColumnIds().isEmpty());
+            Assertions.assertEquals(OlapTableState.NORMAL, table.getState());
+
+            OlapTable separate = createBloomFilterTable("bf_remove_separate", "INT", false);
+            AlterTableStmt remove = (AlterTableStmt) parseAndAnalyzeStmt(
+                    "ALTER TABLE test.bf_remove_separate SET ('bloom_filter_columns'='')");
+            handler.process(remove.getAlterClauseList(), db, separate);
+            waitAlterJobDone(handler.getAlterJobsV2());
+            Assertions.assertTrue(separate.getBfColumnIds() == null || separate.getBfColumnIds().isEmpty());
+            AlterTableStmt convert = (AlterTableStmt) parseAndAnalyzeStmt(
+                    "ALTER TABLE test.bf_remove_separate MODIFY COLUMN x DOUBLE");
+            Assertions.assertNotNull(handler.analyzeAndCreateJob(convert.getAlterClauseList(), db, separate));
+        } finally {
+            handler.getAlterJobsV2().keySet().removeIf(id -> !jobsBefore.containsKey(id));
+        }
+    }
+
+    @Test
+    public void testBloomFilterTypeChangeMatchesColumnIdsCaseInsensitively() throws Exception {
+        OlapTable table = createBloomFilterTable("bf_case_reject", "VARCHAR(16)", true);
+        Set<ColumnId> ids = new TreeSet<>(ColumnId.CASE_INSENSITIVE_ORDER);
+        ids.add(ColumnId.create("X"));
+        table.setBloomFilterInfo(ids, table.getBfFpp());
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        AlterTableStmt stmt = (AlterTableStmt) parseAndAnalyzeStmt(
+                "ALTER TABLE test.bf_case_reject MODIFY COLUMN x DOUBLE");
+        DdlException e = Assertions.assertThrows(DdlException.class,
+                () -> handler.process(stmt.getAlterClauseList(), db, table));
+        Assertions.assertEquals("Invalid bloom filter column 'x': unsupported type DOUBLE", e.getMessage());
+        Assertions.assertFalse(hasAlterJobOf(handler, table));
+    }
+
+    @Test
+    public void testUnchangedLegacyBloomFilterColumnDoesNotBlockAlter() throws Exception {
+        createTable("CREATE TABLE test.bf_legacy (k BIGINT NOT NULL, x DOUBLE) DUPLICATE KEY(k) "
+                + "DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num'='1', "
+                + "'fast_schema_evolution'='false')");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) db.getTable("bf_legacy");
+        table.setBloomFilterInfo(Set.of(table.getColumn("x").getColumnId()), 0.05);
+        SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        AlterTableStmt stmt = (AlterTableStmt) parseAndAnalyzeStmt(
+                "ALTER TABLE test.bf_legacy ADD COLUMN y INT");
+        Assertions.assertNotNull(handler.analyzeAndCreateJob(stmt.getAlterClauseList(), db, table));
+        Assertions.assertEquals(PrimitiveType.DOUBLE, table.getColumn("x").getPrimitiveType());
+    }
+
+    @Test
+    public void testIncompatibleBloomFilterTypeChangeKeepsItsOwnMessage() throws Exception {
+        OlapTable table = createBloomFilterTable("bf_date_incompat", "DATE", true);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        AlterTableStmt stmt = (AlterTableStmt) parseAndAnalyzeStmt(
+                "ALTER TABLE test.bf_date_incompat MODIFY COLUMN x DOUBLE");
+        DdlException e = Assertions.assertThrows(DdlException.class,
+                () -> handler.process(stmt.getAlterClauseList(), db, table));
+        Assertions.assertFalse(e.getMessage().startsWith("Invalid bloom filter column"), e.getMessage());
+        Assertions.assertEquals(PrimitiveType.DATE, table.getColumn("x").getPrimitiveType());
+        Assertions.assertFalse(hasAlterJobOf(handler, table));
+        Assertions.assertEquals(OlapTableState.NORMAL, table.getState());
+    }
+
+    @Test
+    public void testNgramBloomFilterWithoutPlainBloomFilterKeepsExistingAlterBehavior() throws Exception {
+        createTable("CREATE TABLE test.ngram_only_bf (k BIGINT NOT NULL, x VARCHAR(16), "
+                + "INDEX ix_x (x) USING NGRAMBF ('gram_num'='4', 'bloom_filter_fpp'='0.05')) "
+                + "DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 "
+                + "PROPERTIES ('replication_num'='1', 'fast_schema_evolution'='false')");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) db.getTable("ngram_only_bf");
+        Assertions.assertNull(table.getBfColumnIds());
+        SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        AlterTableStmt stmt = (AlterTableStmt) parseAndAnalyzeStmt(
+                "ALTER TABLE test.ngram_only_bf MODIFY COLUMN x VARCHAR(32)");
+        Assertions.assertNotNull(handler.analyzeAndCreateJob(stmt.getAlterClauseList(), db, table));
+        Assertions.assertEquals(16, ((ScalarType) table.getColumn("x").getType()).getLength());
     }
 
     private void assertBitmapModifyRejected(OlapTable table, String alterClauses, String columnName) throws Exception {

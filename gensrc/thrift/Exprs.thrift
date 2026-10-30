@@ -261,8 +261,8 @@ struct TExprNode {
   // Set by the FE when SQLMode contains STRUCT_CAST_BY_NAME.
   59: optional bool cast_struct_by_name
 
-  // Identifies the endpoint configuration owned by the enclosing AI project.
-  60: optional string ai_model_config_id
+  // Identifies the provider in the enclosing AI project's ai_provider_mapping.
+  60: optional string ai_provider_id
 
   // Only explicit CAST(x AS CHAR(N)) truncates. Absent/false preserves assignment cast semantics.
   61: optional bool cast_char_truncate

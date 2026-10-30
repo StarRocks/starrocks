@@ -79,6 +79,7 @@ import com.starrocks.common.util.RangeUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.WriteQuorum;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
+import com.starrocks.common.util.concurrent.lock.SnapshotCopyValidator;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.StorageInfo;
@@ -111,7 +112,6 @@ import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.PCellWithName;
 import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.common.PRangeCell;
-import com.starrocks.sql.optimizer.rule.mv.MVUtils;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.sql.optimizer.statistics.IMinMaxStatsMgr;
 import com.starrocks.system.SystemInfoService;
@@ -315,6 +315,10 @@ public class OlapTable extends Table {
     // It's not persisted but resolved in QueryAnalyzer, so only exists if it's in the context of query
     public volatile Long dbId;
 
+    // Not persisted. True on the private object copyOnlyForQuery fills, so copying it again is known not to
+    // read a published table -- see SnapshotCopyValidator for why this is a mark and not a metastore lookup.
+    private boolean planningSnapshot = false;
+
     public OlapTable() {
         this(TableType.OLAP);
     }
@@ -395,6 +399,8 @@ public class OlapTable extends Table {
     // Only Copy necessary metadata for query.
     // We don't do deep copy, because which is very expensive;
     public void copyOnlyForQuery(OlapTable olapTable) {
+        SnapshotCopyValidator.validateCopySource(this);
+        olapTable.planningSnapshot = true;
         olapTable.id = this.id;
         olapTable.name = this.name;
         olapTable.type = this.type;
@@ -472,6 +478,11 @@ public class OlapTable extends Table {
         }
         olapTable.dbId = this.dbId;
         olapTable.maxColUniqueId = new AtomicInteger(this.maxColUniqueId.get());
+    }
+
+    /** Whether this object is a private planning copy made by {@link #copyOnlyForQuery}, not a published table. */
+    public boolean isPlanningSnapshot() {
+        return planningSnapshot;
     }
 
     public void addDoubleWritePartition(long sourcePartitionId, long tempPartitionId) {
@@ -1307,12 +1318,17 @@ public class OlapTable extends Table {
      * - For random distribution, if mutable bucket num is not set, we will set it with a deduced value.
      */
     public void inferDistribution(DistributionInfo info) throws DdlException {
+        inferDistribution(info, getDefaultReplicationNum());
+    }
+
+    public void inferDistribution(DistributionInfo info, short replicationNum) throws DdlException {
         if (info.getType() == DistributionInfo.DistributionInfoType.HASH) {
             // infer bucket num
             if (info.getBucketNum() == 0) {
                 int numBucket = CatalogUtils.calAvgBucketNumOfRecentPartitions(this,
                         FeConstants.DEFAULT_INFER_BUCKET_NUM_RECENT_PARTITION_NUM,
-                        Config.enable_auto_tablet_distribution);
+                        Config.enable_auto_tablet_distribution,
+                        replicationNum);
                 info.setBucketNum(numBucket);
             }
         } else if (info.getType() == DistributionInfo.DistributionInfoType.RANDOM) {
@@ -1321,7 +1337,7 @@ public class OlapTable extends Table {
             if (numBucket > 0) {
                 info.setBucketNum((int) numBucket);
             } else if (info.getBucketNum() == 0) {
-                numBucket = CatalogUtils.calPhysicalPartitionBucketNum(isLightWeightTabletCreation());
+                numBucket = CatalogUtils.calPhysicalPartitionBucketNum(this, replicationNum);
                 info.setBucketNum((int) numBucket);
             }
         } else if (info.getType() == DistributionInfo.DistributionInfoType.RANGE) {
@@ -1473,9 +1489,26 @@ public class OlapTable extends Table {
     }
 
     /**
+     * Drop a partition. A force drop with a positive `retentionPeriod` (seconds) is still non-recoverable but
+     * keeps the partition's tablets for that period, see `dropPartitionWithRetention`. With 0 the table's own
+     * force drop applies: the tablets go on the next recycle bin pass (MaterializedView keeps them for a
+     * while, see its override).
+     */
+    public void dropPartition(long dbId, String partitionName, boolean isForceDrop, long retentionPeriod) {
+        if (isForceDrop && retentionPeriod > 0) {
+            dropPartitionWithRetention(dbId, partitionName, retentionPeriod);
+        } else {
+            dropPartition(dbId, partitionName, isForceDrop);
+        }
+    }
+
+    /**
      *  Try to retain the partition for a while to avoid tablet missing errors.
      *  This method is used in `insert overwrite`, `mv rewrite` etc. scenarios,
      *  where we don't want to delete data immediately
+     *
+     *  It is always a force drop: the partition cannot be recovered, only the erase of its tablets waits
+     *  for `partitionRetentionPeriod` seconds.
      *
      *  This method is not thread safe. The caller should ensure that this method is called under lock.
      */
@@ -1494,8 +1527,9 @@ public class OlapTable extends Table {
 
             removePartitionFromInnerState(partition);
         } else {
-            // if `partitionRetentionPeriod` is not valid, fallback to drop partition forcefully
-            dropPartition(dbId, partitionName, true);
+            // if `partitionRetentionPeriod` is not valid, fallback to drop partition forcefully.
+            // Call the private variant: MaterializedView overrides the public one to call back here.
+            dropPartition(dbId, partitionName, true, false);
         }
     }
 
@@ -2441,6 +2475,16 @@ public class OlapTable extends Table {
         return tableProperty != null && tableProperty.isSetEnableStatisticCollectOnFirstLoad();
     }
 
+    public boolean enableStatisticAutoCollect() {
+        return tableProperty == null || tableProperty.enableStatisticAutoCollect();
+    }
+
+    public void setEnableStatisticAutoCollect(boolean enable) {
+        tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_AUTO_COLLECT,
+                Boolean.toString(enable));
+        tableProperty.buildEnableStatisticAutoCollect();
+    }
+
     public void setEnableStatisticCollectOnFirstLoad(boolean enable) {
         tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD,
                 Boolean.valueOf(enable).toString());
@@ -3078,41 +3122,105 @@ public class OlapTable extends Table {
         if (indexMetaIdToMeta.size() <= 1) {
             return;
         }
-        TableName tableName = new TableName(null, getName());
-        ConnectContext session = ConnectContext.buildInner();
-        Optional<SelectAnalyzer.SlotRefTableNameCleaner> visitorOpt = Optional.empty();
         for (MaterializedIndexMeta indexMeta : indexMetaIdToMeta.values()) {
             if (indexMeta.getIndexMetaId() == baseIndexMetaId) {
                 continue;
             }
-            List<Column> columns = indexMeta.getSchema();
-            // Note: Add this try-catch block to avoid the failure of analyzing rollup index meta since this
-            // method will be called in replay method.
-            // And the failure of analyzing rollup index meta will only affect the associated synchronized mvs and
-            // will not affect the whole system.
-            try {
-                for (Column column : columns) {
-                    Expr definedExpr = column.getDefineExpr();
-                    if (definedExpr == null) {
-                        continue;
-                    }
-                    if (visitorOpt.isEmpty()) {
-                        SelectAnalyzer.SlotRefTableNameCleaner visitor = MVUtils.buildSlotRefTableNameCleaner(
-                                session, this, tableName);
-                        visitorOpt = Optional.of(visitor);
-                    }
-                    Preconditions.checkArgument(visitorOpt.isPresent(), "visitor should not be null");
-                    definedExpr.accept(visitorOpt.get(), null);
-                    ExpressionAnalyzer.analyzeExpression(definedExpr, new AnalyzeState(),
-                            new Scope(RelationId.anonymous(),
-                                    new RelationFields(this.getBaseSchema().stream()
-                                            .map(col -> new Field(col.getName(), col.getType(),
-                                                    tableName, null))
-                                            .collect(Collectors.toList()))), session);
+            if (indexMeta.getSyncMvDefinition() != null) {
+                try {
+                    analyzeRollupIndexMeta(indexMeta);
+                } catch (SemanticException e) {
+                    // Only authoritative catalog reload failures are fatal at image startup.
+                    // The shared analyzer also serves detached live/replay job validation.
+                    throw new SyncMaterializedViewRecoveryException(getName(), indexMeta.getIndexMetaId(), e);
                 }
-            } catch (Exception e) {
-                LOG.warn("Analyze rollup index meta failed, index id: {}, table:{}", indexMeta.getIndexMetaId(), getName(), e);
+            } else {
+                try {
+                    analyzeRollupIndexMeta(indexMeta);
+                } catch (Exception e) {
+                    LOG.warn("Analyze rollup index meta failed, index id: {}, table:{}",
+                            indexMeta.getIndexMetaId(), getName(), e);
+                }
             }
+        }
+    }
+
+    /** Strictly recover and analyze a particular rollup against the registered base schema. */
+    public void analyzeRollupIndexMeta(MaterializedIndexMeta indexMeta) {
+        analyzeRollupIndexMeta(indexMeta, null);
+    }
+
+    /** Analyze detached metadata against a proposed source schema without changing the catalog. */
+    public void analyzeRollupIndexMeta(MaterializedIndexMeta indexMeta, List<Column> sourceSchema) {
+        try {
+            if (indexMeta.getSyncMvDefinition() != null) {
+                indexMeta.setWhereClause(indexMeta.getSyncMvDefinition().restore(indexMeta.getSchema()));
+            }
+            TableName tableName = new TableName(null, getName());
+            ConnectContext session = ConnectContext.buildInner();
+            if (sourceSchema == null) {
+                sourceSchema = getBaseSchema();
+                String indexName = getIndexNameByMetaId(indexMeta.getIndexMetaId());
+                // Original/visible indexes must keep the visible base's bindings while ALTER shadows coexist.
+                // Only a registered ALTER target with a durable definition uses the registered base-shadow schema.
+                // Legacy recovery keeps its original visible-base scope.
+                if (indexMeta.getSyncMvDefinition() != null && indexName != null &&
+                        !Column.removeNamePrefix(indexName).equals(indexName)) {
+                    String baseIndexName = getIndexNameByMetaId(baseIndexMetaId);
+                    for (Map.Entry<Long, MaterializedIndexMeta> entry : indexMetaIdToMeta.entrySet()) {
+                        String name = getIndexNameByMetaId(entry.getKey());
+                        if (name != null && !name.equals(baseIndexName) &&
+                                Column.removeNamePrefix(name).equalsIgnoreCase(baseIndexName)) {
+                            sourceSchema = entry.getValue().getSchema();
+                            break;
+                        }
+                    }
+                }
+            }
+            // Do not use fullSchema: unrelated derived MV columns cannot establish source provenance.
+            Set<String> sourceColumnNames = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+            for (Column column : sourceSchema) {
+                sourceColumnNames.add(Column.removeNamePrefix(column.getName()));
+            }
+            Scope scope = new Scope(RelationId.anonymous(), new RelationFields(sourceSchema.stream()
+                    .map(column -> new Field(Column.removeNamePrefix(column.getName()), column.getType(), tableName, null))
+                    .collect(Collectors.toList())));
+            SelectAnalyzer.SlotRefTableNameCleaner cleaner =
+                    new SelectAnalyzer.SlotRefTableNameCleaner(scope, session);
+            for (Column column : indexMeta.getSchema()) {
+                Expr expr = column.getDefineExpr();
+                if (expr == null) {
+                    if (indexMeta.getSyncMvDefinition() != null &&
+                            !sourceColumnNames.contains(Column.removeNamePrefix(column.getName()))) {
+                        throw new SemanticException("Synchronous MV source column %s is not in base schema", column.getName());
+                    }
+                    continue;
+                }
+                expr.accept(cleaner, null);
+                ExpressionAnalyzer.analyzeExpression(expr, new AnalyzeState(), scope, session);
+                if (indexMeta.getSyncMvDefinition() != null) {
+                    AnalyzerUtils.verifyNoAggregateFunctions(expr, "Synchronous MV per-row definition");
+                    if (column.getAggStateDesc() != null &&
+                            !column.getAggStateDesc().equals(expr.getType().getAggStateDesc())) {
+                        throw new SemanticException("Synchronous MV aggregate state for column %s "
+                                + "does not match its definition", column.getName());
+                    }
+                }
+            }
+            Expr where = indexMeta.getWhereClause();
+            if (where != null) {
+                where.accept(cleaner, null);
+                ExpressionAnalyzer.analyzeExpression(where, new AnalyzeState(), scope, session);
+                if (indexMeta.getSyncMvDefinition() != null) {
+                    AnalyzerUtils.verifyNoAggregateFunctions(where, "Synchronous MV WHERE");
+                }
+                if (!where.getType().isBoolean()) {
+                    throw new SemanticException("Synchronous MV WHERE expression must be BOOLEAN");
+                }
+            }
+        } catch (Exception e) {
+            throw new SemanticException("Failed to analyze rollup index " + indexMeta.getIndexMetaId() +
+                    " on table " + getName() + ": " + e.getMessage(), e);
         }
     }
 
@@ -3272,6 +3380,10 @@ public class OlapTable extends Table {
         if (isSetEnableStatisticCollectOnFirstLoad()) {
             properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD,
                     Boolean.toString(enableStatisticCollectOnFirstLoad()));
+        }
+
+        if (!enableStatisticAutoCollect()) {
+            properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_AUTO_COLLECT, "false");
         }
 
         // base compaction forbidden time ranges

@@ -436,6 +436,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 存算分离集群中保留历史数据版本的时间范围。在此时间范围内的历史数据版本不会在 Compactions 后通过 AutoVacuum 自动清理。您需要将此值设置得大于最大查询时间，以避免正在运行的查询访问的数据在查询完成之前被删除。从 v3.3.0、v3.2.5 和 v3.1.10 开始，默认值已从 `5` 更改为 `30`。
 - 引入版本: v3.1.0
 
+### `lake_autovacuum_max_versions_per_round`
+
+- 默认值: 500
+- 类型: Long
+- 单位: -
+- 是否可变: Yes
+- 描述: 存算分离集群中增量（分批、可续传）AutoVacuum 的每轮工作量上限：单轮 AutoVacuum 针对一个分区最多可提交并提议的元数据版本数。增量协议恒为开启、无法关闭——legacy 单次遍历路径无法在其之后安全续删（会停在分批轮次留下的链空洞处，漏掉其下的垃圾），因此没有回退。该值仅限制每轮的工作量，从而让积压的大量历史版本在多轮中逐步清理，而不是反复在单次 RPC 中超时。小于 `100` 的取值会被上调为 `100`（每轮预算过小会导致清理积压需要过多轮次）。该参数不改变 tablet 到节点的路由。
+- 引入版本: v4.1.0
+
 ### `lake_autovacuum_parallel_partitions`
 
 - 默认值: 8
@@ -462,6 +471,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: Yes
 - 描述: 如果分区在此时间范围内没有更新（加载、DELETE 或 Compactions），系统将不会对此分区执行 AutoVacuum。
 - 引入版本: v3.1.0
+
+### `lake_vacuum_reset_partition_ids`
+
+- 默认值: （空）
+- 类型: String
+- 单位: -
+- 是否可变: Yes
+- 描述: 存算分离集群中增量 AutoVacuum 卡死时的恢复手段：以分号分隔的物理分区 ID 列表（格式 `id1;id2`），列出的分区其增量 vacuum 状态将被强制重置。AutoVacuum 守护线程下次处理到列表中的分区时，会丢弃其进行中的 proposal、续跑游标和 tablet 代次（但保留已回收的 retain floor，使新一轮不会重新读取已删除的版本），跳过当前轮，并在下一轮开始一次干净的 pass。每个 ID 只消费一次——守护线程在重置后立即将其从列表中移除——因此卡死的 pass 只被推动一次，而非每轮都重置。该项仅在当前服务的 Leader FE 上生效：`ADMIN SET FRONTEND CONFIG` 会将取值广播到所有 FE，而每个 FE 在成为 Leader 的那一刻会丢弃继承到的取值，因此在 failover 前不久下发的请求会丢失，需要对新 Leader 重新下发。正常运行时请保持为空。
+- 引入版本: v26.2.0
 
 ### `lake_compaction_allow_partial_success`
 
@@ -638,7 +656,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: -
 - 是否可变: Yes
-- 描述: FE starmgr 模块中 grpc 服务器使用的最大工作线程数。
+- 描述: FE starmgr 模块中 gRPC 服务端处理请求的最大线程数。线程池常驻线程数与 CPU 核数相同，只有当所有线程都在忙时才会创建新线程，新增的线程空闲 60 秒后自动退出。忙碌的线程数达到该上限后，新的请求会进入队列等待。有效值为大于等于 1 的整数，`fe.conf` 和 `ADMIN SET FRONTEND CONFIG` 都会拒绝 0 或负数。
 - 引入版本: v4.0.0, v3.5.8
 
 ### `starmgr_grpc_timeout_seconds`
@@ -649,6 +667,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: Yes
 - 描述:
 - 引入版本: -
+
+### `star_client_get_shard_info_batch_size`
+
+- 默认值: 1024
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: 存算分离集群中，FE 需要一次性确定大量 tablet 所在的计算节点时（例如为大表规划查询或导入、AutoVacuum 清理分区、FE 删除 tablet），单次向 StarMgr 查询的 tablet 数量上限。超出该数量时，FE 会将查询拆分为多次请求依次发送，每次最多包含该数量的 tablet。StarMgr 处理每次请求时都持有 tablet 元数据锁，期间 StarMgr 的元数据变更以及 Follower FE 上的 StarMgr 元数据回放都会被阻塞。如果一次请求就查询大表的全部 tablet，阻塞可能长达数秒。调小该值可以缩短每次阻塞的时间，代价是请求次数增加。小于 `1` 的值按 `1` 处理。
+- 引入版本: v4.2.0
 
 ### `lake_scheduler_enable_colocate_group_sample`
 
@@ -803,7 +830,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: boolean
 - 单位: -
 - 是否可变: Yes
-- 描述: 启用后，StarRocks 在存算分离模式下优化云原生表和物化视图的 tablet 创建，通过为物理分区下的所有 tablet 创建单个共享 tablet 元数据，而不是为每个 tablet 创建不同的元数据。这减少了表创建、rollup 和 schema 变更作业期间创建的 tablet 任务和元数据/文件数量。优化仅适用于云原生表/物化视图，并与 `file_bundling` 结合（后者重用相同的优化逻辑）。注意：schema 变更和 rollup 作业明确禁用使用 `file_bundling` 的表的优化，以避免使用相同名称的文件被覆盖。Range 分布的表不使用该优化：这类表的每个 tablet 都有自己的键范围，元数据始终按 tablet 单独创建。谨慎启用——它改变了创建的 tablet 元数据的粒度，并可能影响副本创建和文件命名行为。
+- 描述: 已废弃，设置后不生效。保留该参数只是为了让 **fe.conf** 中已有的配置以及针对该参数的 `ADMIN SET FRONTEND CONFIG` 语句不会报错。存算分离模式下，云原生表或物化视图在创建分区时如何写入初始 tablet 元数据，仅由表属性 `file_bundling` 决定：开启 `file_bundling` 时，同一物理分区下的所有 tablet 共用一份 tablet 元数据（Range 分布的表除外，这类表的每个 tablet 都有各自的键范围）；未开启时，每个 tablet 各写一份。rollup 和 schema 变更作业始终为每个 tablet 单独写入元数据。如果开启了表属性 `light_weight_tablet_creation`，以上两种情况在创建时都不写入初始 tablet 元数据。此前，开启该参数后，未开启 `file_bundling` 的表也会使用共享的 tablet 元数据，这类表上的 rollup 或 schema 变更作业可能覆盖同一分区中原有索引的 tablet 元数据。该参数开启期间创建的分区仍可正常读取。
 - 引入版本: v3.3.1, v3.4.0, v3.5.0
 
 ### `lake_create_tablet_max_retries`
@@ -945,6 +972,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 被 security integration 认证链拒绝的凭据记住多久，使得反复重试同一个错误口令的客户端不会每次都产生一次 LDAP bind——正是这种重试会把 Active Directory 的 `badPwdCount` 推向账号锁定。缓存的 key 包含凭据的哈希，因此把口令改对后立即生效，不必等 TTL 过期；由目录本身不可用导致的失败不会被缓存。设为 `0` 表示关闭。
 - 引入版本: v4.2, v4.1.6
 
+### `authentication_group_case_insensitive`
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 登录得到的组名与 `GRANT ... TO EXTERNAL GROUP` 或 `permitted_groups` 中仅大小写不同的条目是否算匹配。默认开启，因为 LDAP 的 `cn` 在目录里本就不区分大小写，用另一种大小写写的 GRANT 不应该静默失效。如果组背后的身份系统把大小写不同的组当作不同的组（例如从 JWT claim 读到的组），请设为 `false`，这样 `Admins` 和 `admins` 仍是两个组。只影响比较：组名按到达时的原样存储和显示，交给 Apache Ranger 时也不改写。
+- 引入版本: v4.2
+
 ### `authentication_ldap_case_insensitive`
 
 - 默认值: false
@@ -953,6 +989,42 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: Yes
 - 描述: StarRocks 侧匹配 LDAP/AD 用户名时是否放宽为忽略大小写。设置为 `true` 时：登录名与使用 `AUTHENTICATION_LDAP_SIMPLE` 创建的用户仅大小写不同时仍能匹配到该用户，从而保证其 per-user DN 和已授予的 Role 生效；通过 LDAP Security Integration 认证成功的登录，其会话身份取自目录中记录的用户名，而不是客户端键入的写法。由于该项同时放宽了登录可匹配到的用户范围、并改变 `current_user()` 与 `SHOW PROCESSLIST` 的返回值，默认关闭。使用原生密码、JWT 或 OAuth2 认证的用户不受影响。如果存在两个仅大小写不同、且均使用 `AUTHENTICATION_LDAP_SIMPLE` 创建的用户，同时匹配到二者的登录会被拒绝，而不会任选其一。组名的大小写匹配与该项无关，独立生效。
 - 引入版本: v4.2.0
+
+### `jwks_cache_ttl_seconds`
+
+- 默认值: 600
+- 类型: Int
+- 单位: 秒
+- 是否可变: Yes
+- 描述: 每个 JWKS URL 对应的公钥集（JWK Set）缓存生命期。HTTP Bearer 每个请求都要做一次完整认证，因此缓存公钥集，而不是每次都去 IdP 拉取。
+- 引入版本: v4.2
+
+### `jwks_cache_refresh_ahead_seconds`
+
+- 默认值: 300
+- 类型: Int
+- 单位: 秒
+- 是否可变: Yes
+- 描述: 在缓存的 JWKS 过期前多少秒于后台提前刷新，以减少缓存未命中。必须小于 `jwks_cache_ttl_seconds`。默认值取的是 TTL 的一半，这样一次刷新失败后还剩半个 TTL 可以重试；注意它是绝对秒数而非比例，调整 TTL 时需要一并调整。
+- 引入版本: v4.2
+
+### `jwks_cache_outage_ttl_seconds`
+
+- 默认值: 3600
+- 类型: Int
+- 单位: 秒
+- 是否可变: Yes
+- 描述: IdP 不可达时，最多继续使用已过期的陈旧 JWKS 多长时间，以便已签发的 token 仍能验签。
+- 引入版本: v4.2
+
+### `jwks_cache_refresh_rate_limit_seconds`
+
+- 默认值: 30
+- 类型: Int
+- 单位: 秒
+- 是否可变: Yes
+- 描述: 未知 key ID（`kid`）触发强制刷新 JWKS 的最小时间间隔，用于防止 kid flooding。
+- 引入版本: v4.2
 
 ### `authentication_ldap_simple_bind_base_dn`
 

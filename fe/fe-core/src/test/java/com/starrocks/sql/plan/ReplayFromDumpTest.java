@@ -348,7 +348,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Assertions.assertTrue(replayPair.second.contains("  |  <slot 40> : CAST(15: id_smallint AS INT)\n" +
                         "  |  <slot 41> : CAST(23: id_date AS DATETIME)\n" +
                         "  |  \n" +
-                        "  6:OlapScanNode\n" +
+                        "  8:OlapScanNode\n" +
                         "     TABLE: external_es_table_without_null"),
                 replayPair.second);
     }
@@ -857,6 +857,9 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpInfo);
         SessionVariable sessionVariable = queryDumpInfo.getSessionVariable();
         sessionVariable.setEnableCBOViewBasedMvRewrite(true);
+        // The dump's session variables replace the test context's, so its default 1s MV rewrite budget applies:
+        // trying 14 view-based MVs can exceed it on a loaded CI host, and the rule then gives up without the MV.
+        sessionVariable.setOptimizerMaterializedViewTimeLimitMillis(120 * 1000);
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(dumpInfo, sessionVariable);
         Assertions.assertTrue(replayPair.second.contains("mv_LEAF_ACC_CUBE_SHADOW_VIEW_fb70da80"), replayPair.second);
         sessionVariable.setEnableCBOViewBasedMvRewrite(false);

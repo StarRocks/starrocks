@@ -83,6 +83,7 @@ public:
     METRICS_DEFINE_THREAD_POOL(cloud_native_pk_index_memtable_flush);
     METRICS_DEFINE_THREAD_POOL(lake_partial_update);
     METRICS_DEFINE_THREAD_POOL(automatic_partition);
+    METRICS_DEFINE_THREAD_POOL(load_sink_close);
 
     METRIC_DEFINE_INT_COUNTER(exec_runtime_memory_size, MetricUnit::BYTES);
 

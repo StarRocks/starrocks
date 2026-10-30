@@ -22,16 +22,22 @@ import com.starrocks.metric.Metric;
 import com.starrocks.metric.PrometheusMetricVisitor;
 import com.starrocks.qe.scheduler.slot.BaseSlotManager;
 import com.starrocks.qe.scheduler.slot.DefaultSlotSelectionStrategy;
+import com.starrocks.qe.scheduler.slot.MemoryAdmissionGate;
 import com.starrocks.qe.scheduler.slot.ResourceUsageMonitor;
 import com.starrocks.qe.scheduler.slot.SlotManager;
 import com.starrocks.qe.scheduler.slot.SlotTracker;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.system.ComputeNode;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
 public class WarehouseMetricEntityTest {
+    private static final long GB = 1024L * 1024 * 1024;
+
     @Test
     public void testBasic() {
         ResourceUsageMonitor resourceUsageMonitor = new ResourceUsageMonitor();
@@ -42,7 +48,7 @@ public class WarehouseMetricEntityTest {
         WarehouseMetricEntity entity = new WarehouseMetricEntity(slotTracker);
 
         List<Metric> metrics = entity.getMetrics();
-        Assertions.assertEquals(9, metrics.size());
+        Assertions.assertEquals(10, metrics.size());
         Assertions.assertEquals(entity.getWarehouseId(), WarehouseManager.DEFAULT_WAREHOUSE_ID);
         Assertions.assertEquals(entity.getWarehouseName(), "");
 
@@ -59,6 +65,45 @@ public class WarehouseMetricEntityTest {
                 "sr_warehouse_query_queue{field=\"max_required_slots\"} 0\n" +
                 "sr_warehouse_query_queue{field=\"sum_required_slots\"} 0\n" +
                 "sr_warehouse_query_queue{field=\"remain_slots\"} 0\n" +
-                "sr_warehouse_query_queue{field=\"max_slots\"} 0"));
+                "sr_warehouse_query_queue{field=\"max_slots\"} 0\n" +
+                "sr_warehouse_query_queue{field=\"max_node_mem_used_pct\"} 0.0"));
+    }
+
+    /**
+     * One alive node of 20 GB that has just reported {@code memUsedBytes}, as the only node of the warehouse.
+     */
+    private static ComputeNode useNode(long memUsedBytes) {
+        ComputeNode node = new ComputeNode(1, "127.0.0.1", 9050);
+        node.setAlive(true);
+        node.setMemLimitBytes(20 * GB);
+        node.updateResourceUsage(0, memUsedBytes, 0);
+        new MockUp<MemoryAdmissionGate>() {
+            @Mock
+            List<ComputeNode> getWarehouseNodes(long warehouseId) {
+                return List.of(node);
+            }
+        };
+        return node;
+    }
+
+    @Test
+    public void testMaxNodeMemUsedPctMetric() {
+        ComputeNode node = useNode(4 * GB);
+
+        ResourceUsageMonitor resourceUsageMonitor = new ResourceUsageMonitor();
+        BaseSlotManager slotManager = new SlotManager(resourceUsageMonitor);
+        SlotTracker slotTracker = new SlotTracker(slotManager, ImmutableList.of(new DefaultSlotSelectionStrategy(
+                () -> false, (groupId) -> false)));
+        WarehouseMetricEntity entity = new WarehouseMetricEntity(slotTracker);
+
+        // Reported whether or not a limit is set to act on it.
+        Assertions.assertEquals(0.2, entity.maxNodeMemUsedPct.getValue(), 1e-9);
+
+        node.updateResourceUsage(0, 12 * GB, 0);
+        Assertions.assertEquals(0.6, entity.maxNodeMemUsedPct.getValue(), 1e-9);
+
+        // A node that is no longer alive does not take part.
+        node.setAlive(false);
+        Assertions.assertEquals(0.0, entity.maxNodeMemUsedPct.getValue(), 0);
     }
 }

@@ -1053,19 +1053,39 @@ public class StarOSAgent {
         }
     }
 
+    /**
+     * Resolves the nodes of {@code shardIds} with one getShardInfo call per batch of at most
+     * {@link Config#star_client_get_shard_info_batch_size} shards. StarMgr builds the reply of one call under its
+     * ShardManager lock, so a whole-table list would block StarMgr writes and the follower's journal replay for
+     * seconds; the lock is released between batches.
+     *
+     * <p>If the first batch fails, throws as a single call would. If a later batch fails, stops there and returns
+     * the shards resolved so far: the callers look up a shard missing from the result on its own. Later batches are
+     * not tried, because a failed call may already have waited for the read timeout.
+     */
     public Map<Long, List<Long>> getAllNodeIdsByShards(List<Long> shardIds, long workerGroupId)
             throws StarRocksException {
-        try {
-            List<ShardInfo> shardInfos = getShardInfo(shardIds, workerGroupId);
-            Map<Long, List<Long>> result = new HashMap<>();
+        int batchSize = Math.max(1, Config.star_client_get_shard_info_batch_size);
+        Map<Long, List<Long>> result = new HashMap<>();
+        for (int start = 0; start < shardIds.size(); start += batchSize) {
+            List<Long> batch = shardIds.subList(start, Math.min(start + batchSize, shardIds.size()));
+            List<ShardInfo> shardInfos;
+            try {
+                shardInfos = getShardInfo(batch, workerGroupId);
+            } catch (StarClientException e) {
+                if (start == 0) {
+                    throw new StarRocksException(e);
+                }
+                LOG.warn("Failed to get shard info of {} out of {} shards, return the {} shards resolved so far. "
+                        + "error: {}", shardIds.size() - start, shardIds.size(), result.size(), e.getMessage());
+                break;
+            }
             for (ShardInfo shardInfo : shardInfos) {
                 List<Long> nodeIds = getAllNodeIdsByShard(shardInfo);
                 result.put(shardInfo.getShardId(), nodeIds);
             }
-            return result;
-        } catch (StarClientException e) {
-            throw new StarRocksException(e);
         }
+        return result;
     }
 
     private List<Long> getAllNodeIdsByShard(ShardInfo shardInfo) {

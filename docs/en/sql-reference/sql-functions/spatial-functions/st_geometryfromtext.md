@@ -21,6 +21,8 @@ VARCHAR ST_GeometryFromText(VARCHAR wkt)
 
 For the native signature, `crs` must be a non-empty string literal. There is no default CRS and no implicit coordinate conversion or reprojection. The function supports all seven 2D OGC geometry families, `EMPTY`, and empty children. Invalid WKT returns `NULL`; a `NULL` WKT returns `NULL`.
 
+Native `GEOGRAPHY` and `GEOMETRY` values cannot be nested in `ARRAY`, `MAP`, or `STRUCT`. Analysis rejects these types even when an outer expression returns a scalar or the geo value is `NULL`.
+
 ## Examples
 
 ```Plain Text

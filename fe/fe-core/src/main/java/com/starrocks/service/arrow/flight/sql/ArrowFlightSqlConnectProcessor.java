@@ -47,6 +47,7 @@ import org.apache.thrift.TException;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 
@@ -148,6 +149,8 @@ public class ArrowFlightSqlConnectProcessor extends ConnectProcessor {
         // Only handle query，so no need to dispatch
         ctx.setCommand(MysqlCommand.COM_QUERY);
         ctx.setStartTime();
+        // Set by an INSERT that reads Hive for itself only, see InsertAnalyzer; this context outlives the statement.
+        ctx.setUseConnectorMetadataCache(Optional.empty());
         ctx.setResourceGroup(null);
         ctx.resetErrorCode();
 

@@ -218,6 +218,10 @@ bool LakeMetaHelper::_is_valid_type(const ParquetField* parquet_field, const TIc
                 break;
             }
         }
+        // No used subfield is in the file: the reader reads a stored one for the struct's levels.
+        if (!has_valid_child && ColumnReaderFactory::find_struct_level_source(*parquet_field) != nullptr) {
+            has_valid_child = true;
+        }
     }
 
     return has_valid_child;

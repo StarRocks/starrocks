@@ -363,11 +363,47 @@ struct TEsScanRange {
   4: required i32 shard_id
 }
 
+// NOTE: must be declared BEFORE any struct that holds it by value. Thrift emits C++ structs in
+// declaration order, so TIcebergDeleteFile below would otherwise reference an incomplete type.
+// Encryption metadata for Parquet Modular Encryption (PME).
+// Iceberg Standard/PME key management: the per-file DEK lives in the data file's
+// Iceberg key_metadata (StandardKeyMetadata). Its confidentiality rests on Iceberg
+// encrypting the manifest that carries it, so no KMS call happens per file.
+// On write: FE signals algorithm + key length only; BE generates a fresh per-file DEK.
+// On read: FE reads the DEK out of key_metadata and passes it to BE.
+struct TParquetEncryptionInfo {
+    // Raw Data Encryption Key (DEK) bytes, used as the Parquet footer/file key.
+    // Read path only; FE never sends key material on the write path.
+    1: optional binary file_dek
+    // Parquet cipher wire name: "AES_GCM_V1" or "AES_GCM_CTR_V1". FE maps the
+    // Iceberg EncryptionAlgorithm (AES_GCM / AES_GCM_CTR) to these; AES_CTR has no
+    // PME equivalent and is rejected at planning.
+    2: optional string encryption_algorithm
+    // Serialized Iceberg key metadata. Unused by BE on both paths; reserved so the
+    // ordinal is not recycled.
+    3: optional binary key_metadata
+    // AAD prefix bound to the file (per Parquet Modular Encryption). Required to
+    // construct matching FileEncryptionProperties (write) / FileDecryptionProperties (read).
+    4: optional binary aad_prefix
+    // DEK length in bytes for the write path: 16, 24 or 32. Comes from the Iceberg
+    // table property encryption.data-key-length, resolved by FE because it is the only side that can
+    // see the table. BE validates it and never defaults it: choosing a length here could write a key
+    // weaker than the table's policy, so encryption enabled with this field unset is an error.
+    5: optional i32 dek_length
+}
+
 struct TIcebergDeleteFile {
     1: optional string full_path
     2: optional Descriptors.THdfsFileFormat file_format
     3: optional Types.TIcebergFileContent file_content
     4: optional i64 length
+    // Parquet Modular Encryption material for this delete file. A position-delete file in an
+    // encrypted table is itself encrypted and carries its OWN per-file key, so it cannot reuse
+    // the data file's key in THdfsScanRange.parquet_encryption_info (field 46).
+    5: optional TParquetEncryptionInfo parquet_encryption_info
+    // Set for a position delete file whose every row references the data file of this scan
+    // range, so the BE reads only its pos column.
+    6: optional bool references_only_data_file
 }
 
 struct TPaimonDeletionFile {
@@ -522,6 +558,10 @@ struct THdfsScanRange {
 
     // split info serialized by org.apache.paimon.table.source.DataSplit.serialize
     45: optional binary paimon_split_info_binary
+
+    // Parquet encryption info for encrypted Iceberg files. 44 and 45 are taken above, so this
+    // uses 46. Never reuse an ordinal: it corrupts the wire format between mixed-version FE/BE.
+    46: optional TParquetEncryptionInfo parquet_encryption_info
 }
 
 struct TBinlogScanRange {
@@ -1617,26 +1657,30 @@ struct TLookUpNode {
   1: optional map<Types.TTupleId, Descriptors.TRowPositionDescriptor> row_pos_descs;
 }
 
-struct TAIEndpointConfig {
-  1: optional string endpoint
-  2: optional string model
-  3: optional string provider
-  4: optional string api_key
-  5: optional i64 timeout_ms
-  6: optional i32 dimensions
+enum TAIProviderType {
+  EMBEDDING = 0,
+  CHAT = 1,
+  RERANK = 2
 }
 
-struct TAIModelConfiguration {
-  1: optional TAIEndpointConfig chat
-  2: optional TAIEndpointConfig embedding
-  // Missing source is accepted only for legacy SYSTEM configurations.
-  3: optional Types.TAIModelSource source
+enum TAIProviderProtocol {
+  OPENAI = 0,
+  ANTHROPIC = 1,
+  COHERE = 2
+}
+
+struct TAIProvider {
+  1: optional string id
+  2: optional string name
+  3: optional TAIProviderType type
+  4: optional TAIProviderProtocol protocol
+  5: optional map<string, string> params
 }
 
 struct TAIProjectNode {
   1: optional map<Types.TSlotId, Exprs.TExpr> slot_map
   2: optional map<Types.TSlotId, Exprs.TExpr> common_slot_map
-  3: optional map<string, TAIModelConfiguration> ai_model_configs
+  3: optional map<string, TAIProvider> ai_provider_mapping
 }
 
 // Extension point for TPlanNode. DO NOT MODIFY: do not add fields here, and do
@@ -1724,7 +1768,7 @@ struct TPlanNode {
   71: optional TStreamJoinNode stream_join_node;
   72: optional TStreamAggregationNode stream_agg_node;
 
-  81: optional TSelectNode select_node; 
+  81: optional TSelectNode select_node;
   82: optional TFetchNode fetch_node;
   83: optional TLookUpNode look_up_node;
   // Scan node for benchmark

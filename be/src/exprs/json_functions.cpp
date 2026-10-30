@@ -469,7 +469,21 @@ static StatusOr<ColumnPtr> _extract_from_flat_json(FunctionContext* context, con
     }
 
     if (config::enable_lazy_dynamic_flat_json) {
-        return _extract_with_hyper<TargetType>(state, path, json_column);
+        ASSIGN_OR_RETURN(auto result, _extract_with_hyper<TargetType>(state, path, json_column));
+        // Only a JSON root is rebuilt by merging; a scalar root is never built and stays NULL.
+        constexpr bool rebuilds_json_root = TargetType == TYPE_JSON || TargetType == TYPE_UNKNOWN;
+        if (rebuilds_json_root && state->flat_path.empty() && result->is_nullable()) {
+            // The root is the document itself, NULL exactly where the input row is. The merger marks an object
+            // with no flat values NULL, but here it is a document that none of the read paths occur in.
+            const auto& data = down_cast<const NullableColumn*>(result.get())->data_column();
+            if (columns[0]->is_nullable()) {
+                // a copy: the input column belongs to the chunk, and the result may be mutated in place
+                return NullableColumn::create(
+                        data, down_cast<const NullableColumn*>(columns[0].get())->null_column()->clone());
+            }
+            return NullableColumn::create(data, NullColumn::create(data->size(), 0));
+        }
+        return result;
     } else {
         return _extract_with_cast<TargetType>(context, state, path, json_column);
     }

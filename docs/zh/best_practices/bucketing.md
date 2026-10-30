@@ -31,7 +31,7 @@ description: "Field guide to choosing between hash bucketing and random bucketin
 
 ### 要求
 - 必须预先选择一个稳定、均匀、高基数的键。基数通常应是 BE 节点数量的 1000 倍，以防止哈希桶之间的数据倾斜。
-- 初始选择合适的桶大小，理想情况下在 1 到 10 GB 之间。
+- 初始选择合适的桶大小，理想情况下在 1 到 10 GB 之间。v4.1 及以后版本的存算分离集群已支持大容量 Tablet，桶大小建议在 10 GB 到 50 GB 之间，最大不超过 100 GB。
 
 ### 优势
 - 查询局部性 – 选择性过滤器和连接触达更少的 tablet。

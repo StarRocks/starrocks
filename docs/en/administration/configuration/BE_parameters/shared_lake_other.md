@@ -149,15 +149,6 @@ This topic introduces the following types of BE configurations:
 - Description: Whether to write tablet metadata and transaction log files of a shared-data cluster with an Adler-32 checksum, so that corruption of these files can be detected when they are read. Regardless of this item, readers always detect and verify the checksum automatically when it is present; this item only controls the write format. Set it to `false` only while the cluster may still be downgraded to a version that predates the checksummed format. During a rolling upgrade or a downgrade, an earlier BE or CN uses the legacy reader and cannot parse files written in the new format.
 - Introduced in: v4.2
 
-### lake_enable_tablet_location_handoff
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether the nodes that write a load's data hand the storage location of their tablets over to the node that coordinates the load, in a shared-data cluster. For a table with `file_bundling` enabled, the coordinating node writes one combined transaction log per partition, and it usually owns no tablet of most partitions. When this item is `true`, the nodes that own the tablets return the storage location of one tablet per partition together with their transaction logs, and the coordinating node writes the combined transaction log without requesting the location from StarMgr; the requests avoided are counted in `lake_tablet_location_handoff_hits_total`. When it is `false`, the coordinating node requests the location from StarMgr once per such partition per load, which is counted in `starrocks_be_staros_shard_info_fallback_total`. The returned location includes the credentials of the storage volume.
-- Introduced in: -
-
 ### lake_pk_compaction_max_input_rowsets
 
 - Default: 500
@@ -167,13 +158,22 @@ This topic introduces the following types of BE configurations:
 - Description: The maximum number of input rowsets allowed in a Primary Key table compaction task in a shared-data cluster. The default value of this parameter is changed from `5` to `1000` since v3.2.4 and v3.1.10, and to `500` since v3.3.1 and v3.2.9. After the Sized-tiered Compaction policy is enabled for Primary Key tables (by setting `enable_pk_size_tiered_compaction_strategy` to `true`), StarRocks does not need to limit the number of rowsets for each compaction to reduce write amplification. Therefore, the default value of this parameter is increased.
 - Introduced in: v3.1.8, v3.2.3
 
+### lake_pk_compaction_base_enable_delete_trigger
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether a Primary Key tablet in a shared-data cluster switches from cumulative compaction to base compaction on its own when its deletes reach `lake_pk_compaction_base_delete_ratio_threshold` or `lake_pk_compaction_base_delete_rows_threshold`. It is disabled by default because `lake_pk_compaction_base_delete_rows_threshold` is an absolute count: on a large table whose existing rows keep being updated or deleted, a tablet reaches it again soon after each base compaction, and each base compaction rewrites up to `update_compaction_ratio_threshold` (0.5 by default) of the tablet's data. A manual `ALTER TABLE ... COMPACT` runs base compaction regardless of this item.
+- Introduced in: v4.1.6, v26.2.1
+
 ### lake_pk_compaction_base_delete_ratio_threshold
 
 - Default: 0.5
 - Type: Double
 - Unit: -
 - Is mutable: Yes
-- Description: One of two triggers that switch a Primary Key tablet in a shared-data cluster from cumulative compaction (size-tiered small-file merges) to base compaction, which rewrites the delete-bearing rowsets (the ones with the most deleted rows first) to drop deleted rows and shrink their delete vectors. Base compaction runs when the tablet's aggregate delete ratio (`sum(num_dels) / sum(num_rows)` across rowsets) reaches this value, when its absolute delete-row count reaches `lake_pk_compaction_base_delete_rows_threshold`, or when a manual `ALTER TABLE ... COMPACT` forces a base compaction. Set both thresholds high enough to disable the automatic triggers.
+- Description: One of two triggers that switch a Primary Key tablet in a shared-data cluster from cumulative compaction (size-tiered small-file merges) to base compaction, which rewrites the delete-bearing rowsets (the ones with the most deleted rows first) to drop deleted rows and shrink their delete vectors. When `lake_pk_compaction_base_enable_delete_trigger` is `true`, base compaction runs when the tablet's aggregate delete ratio (`sum(num_dels) / sum(num_rows)` across rowsets) reaches this value or when its absolute delete-row count reaches `lake_pk_compaction_base_delete_rows_threshold`. A manual `ALTER TABLE ... COMPACT` forces a base compaction regardless of these items.
 - Introduced in: v4.2
 
 ### lake_pk_compaction_base_delete_rows_threshold
@@ -182,7 +182,7 @@ This topic introduces the following types of BE configurations:
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: One of two triggers for Primary Key base compaction in a shared-data cluster (see `lake_pk_compaction_base_delete_ratio_threshold`). Base compaction runs when a tablet's absolute delete-row count (`sum(num_dels)` across rowsets) reaches this value. This absolute-count trigger complements the ratio trigger: on hot update/delete tables the delete vectors bloat and space is wasted while the aggregate delete ratio stays low (diluted by many mostly-live rowsets), so the ratio trigger alone would not fire. Raise it to make base compaction less frequent, or lower it to reclaim delete vectors sooner.
+- Description: One of two triggers for Primary Key base compaction in a shared-data cluster (see `lake_pk_compaction_base_delete_ratio_threshold`). When `lake_pk_compaction_base_enable_delete_trigger` is `true`, base compaction runs when a tablet's absolute delete-row count (`sum(num_dels)` across rowsets) reaches this value. This absolute-count trigger complements the ratio trigger: on hot update/delete tables the delete vectors bloat and space is wasted while the aggregate delete ratio stays low (diluted by many mostly-live rowsets), so the ratio trigger alone would not fire. Raise it to make base compaction less frequent, or lower it to reclaim delete vectors sooner.
 - Introduced in: v4.2
 
 ### enable_lake_pk_compaction_score_gate
@@ -239,6 +239,15 @@ This topic introduces the following types of BE configurations:
 - Description: An override of the Primary Key compaction score gate. When a below-threshold level's total bytes exceed `ratio * largest_rowset_bytes * size_tiered_level_multiple` (that is, `ratio` times the natural next-tier promotion target), compaction is forced to bound long-tail mid-tier accumulation. The default `2.0` tolerates twice the natural promotion threshold before forcing a merge. Set to `0` to disable this override, so that there is no size cap.
 - Introduced in: v4.2
 
+### lake_pk_partial_update_use_segment_cache
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether a Primary Key table publish in a shared-data cluster reads the base segments it needs through the segment metadata cache instead of opening each of them from scratch. This covers both row-mode partial updates and condition updates, which re-read old values from the same segments. Opening a segment parses its footer and builds one column reader per column of the tablet schema, so on a wide table a frequent partial-update stream repeats that cost on every publish for the same base segments. Reading through the cache lets a later publish reuse an already-opened segment. Tables containing JSON, ARRAY, MAP, or STRUCT columns, or columns enabled in `zstd_compression_columns`, use the original open path because their nested metadata or compression dictionaries are not covered by the column-count estimate. Such tables continue to bypass the cache when dictionary writing is disabled, because existing segments can still contain dictionaries. The cache is only used while the tablet's base segments fit in `lake_metadata_cache_limit` and each segment's estimated size fits in one cache shard; otherwise, filling the cache would evict entries as fast as it adds them, so the original behavior is used instead. The tablet's whole set is the relevant one because successive publishes read different subsets of it. Set this item to `false` to always open the segments from scratch.
+- Introduced in: v4.2
+
 ### enable_lake_prepared_split_pre_refinement
 
 - Default: true
@@ -282,6 +291,15 @@ This topic introduces the following types of BE configurations:
 - Is mutable: Yes
 - Description: Sub-chunk granularity for `RowsMapperIterator` pipelined reads of `.lcrm` files during light Primary Key compaction publish in a shared-data cluster. Each output segment is split into `ceil(segment_bytes / lake_rows_mapper_sub_chunk_bytes)` sub-chunks pipelined independently. Smaller values raise the achievable parallelism for few-but-large output segments at the cost of more range reads and an extra memcpy on consume. Defaults to 4 MiB to align with the starcache disk-tier block size.
 
+### lake_shard_info_cache_ttl_sec
+
+- Default: 60
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: How long a BE or CN in a shared-data cluster keeps the storage location of a tablet it does not own, so that touching the tablet again within this time does not request the location from StarMgr. A node keeps two kinds of locations. The first kind is what it requested from StarMgr, counted in `starrocks_be_staros_shard_info_fallback_total`, when it read or wrote the files of a tablet assigned to another node, for example when several nodes write the same tablet in one load, or when a vacuum reads the metadata of every tablet in a partition; lookups answered by them are counted in `staros_shard_info_fallback_cache_hits_total`. The second kind is what the nodes that own the tablets hand over to the node that coordinates a load into a table with `file_bundling` enabled, together with their transaction logs, so that the coordinating node writes the combined transaction log of each partition without requesting the location; lookups answered by them are counted in `lake_tablet_location_handoff_hits_total`. The node that owns a tablet receives storage volume updates pushed by StarMgr, while a kept location picks them up only after it expires, so this item also bounds how long such a node can keep using outdated storage volume settings, such as rotated credentials. The kept locations include the credentials of the storage volume. `0` disables both kinds: nothing is handed over or kept, and every such lookup requests the location from StarMgr.
+- Introduced in: -
+
 ### lake_vacuum_enable_task_timeout
 
 - Default: true
@@ -323,6 +341,33 @@ This topic introduces the following types of BE configurations:
 - Unit: Bytes
 - Is mutable: Yes
 - Description: The largest gap between two required Parquet ranges that the Paimon native reader still merges into one read. A larger value trades read amplification for fewer requests. The default matches `io_coalesce_read_max_distance_size` used by the StarRocks native Parquet reader; paimon-cpp's own default is far smaller and produces many small requests on object storage.
+- Introduced in: -
+
+### primary_key_index_memory_high_percent
+
+- Default: 75
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The level to which a background thread periodically shrinks the primary key index cache in a shared-data cluster, expressed as a percentage of the cache capacity. The cache capacity equals the memory limit for updates (see `update_memory_limit_percent`). When the cache holds more than this percentage, the least recently used primary key indexes that are not in use are evicted until the cache is within this percentage. Indexes in use are never evicted. Set it to a value lower than `primary_key_index_memory_urgent_percent`.
+- Introduced in: -
+
+### primary_key_index_memory_middle_percent
+
+- Default: 50
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The level, expressed as a percentage of the cache capacity, to which the primary key index cache is shrunk when a publish of a Primary Key table in a shared-data cluster fails because it exceeds the memory limit. The primary key indexes that are not in use are evicted until the cache is within this percentage, which frees memory for the retried publish. Set it to a value lower than `primary_key_index_memory_high_percent`.
+- Introduced in: -
+
+### primary_key_index_memory_urgent_percent
+
+- Default: 85
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The upper limit of the primary key index cache in a shared-data cluster, expressed as a percentage of the cache capacity. It is checked after every publish that does not fail because it exceeds the memory limit: when the cache holds more than this percentage, the least recently used primary key indexes that are not in use are evicted until the cache is within this percentage. It is a backstop for when the cache grows faster than the background thread brings it down to `primary_key_index_memory_high_percent`, so set it to a value higher than that item.
 - Introduced in: -
 
 ### s3_multipart_equal_part_size
@@ -596,6 +641,15 @@ This topic introduces the following types of BE configurations:
 - Is mutable: No
 - Description: Whether to use a unified Data Cache instance to manage data caching for both internal catalog and external catalog in a shared-data cluster.
 - Introduced in: v3.4.0
+
+### external_table_clear_corrupted_cache_data
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to allow the system to clear the corrupted data cache of external table files (for example, Hive and Iceberg tables). When a scan fails to decode a file whose content was read from the data cache, the system drops the cached blocks it read, so that the next read of the file recovers from the remote storage. For Parquet files, if no row has been returned yet, the system first reads the file again bypassing the data cache, and drops the cached blocks only if this read succeeds. This item does not affect the internal tables of shared-data clusters, which are controlled by `lake_clear_corrupted_cache_data`.
+- Introduced in: -
 
 ### jdbc_connection_idle_timeout_ms
 

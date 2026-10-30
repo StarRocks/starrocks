@@ -27,30 +27,21 @@ Tolerance is an area-based Visvalingam–Whyatt parameter related to the square 
 
 With `true`, both shared and exterior boundaries may simplify. With `false`, only shared internal edges simplify; exterior boundaries, gaps and unfilled hole boundaries retain their original edges. A hole filled by another coverage member is a shared internal boundary.
 
-Inputs must be POLYGON or MULTIPOLYGON with the same planar GEOMETRY CRS descriptor. Nonempty polygon interiors must not overlap, and shared edges must have matching vertices. Gaps are allowed (`gapWidth = 0`); mismatched subdivisions, T-junctions, duplicate nonempty polygons, invalid rings or holes are errors. No repair, union or automatic noding is performed. GEOGRAPHY, POINT, LINESTRING, GEOMETRYCOLLECTION and Z/M are unsupported. UNKNOWN/MIXED storage dimension metadata is accepted only when the actual computed values pass XY validation.
+Inputs must be POLYGON or MULTIPOLYGON with the same planar GEOMETRY CRS descriptor. Nonempty polygon interiors must not overlap, and shared edges must have matching vertices. Gaps are allowed (`gapWidth = 0`). The function does not check that the input is a valid coverage. For invalid input, the output may contain artifacts and is not guaranteed to be a valid coverage. No repair, union or automatic noding is performed. GEOGRAPHY, POINT, LINESTRING, GEOMETRYCOLLECTION and Z/M are unsupported. UNKNOWN/MIXED storage dimension metadata is accepted only when the actual computed values pass XY validation.
 
 ## Result and errors
 
-Returns native XY WKB GEOMETRY with the input CRS and one output per input row. POLYGON/MULTIPOLYGON family, component order, holes, ring winding, contacts, junctions and shared boundaries are preserved. A single-member MULTIPOLYGON remains MULTIPOLYGON. Row mapping is positional; identical inputs are not deduplicated.
+Returns native XY WKB GEOMETRY with the input CRS and one output per input row. For valid coverages, POLYGON/MULTIPOLYGON family, component order, holes, ring winding, contacts, junctions and shared boundaries are preserved. A single-member MULTIPOLYGON remains MULTIPOLYGON. Row mapping is positional; identical inputs are not deduplicated.
 
 - NULL geometry returns NULL at its original position and is excluded from the coverage.
 - Typed POLYGON/MULTIPOLYGON EMPTY preserves its family and position.
 - NULL tolerance or explicit NULL boundary returns NULL for every row without running the coverage kernel. Type and plan-constant checks still apply.
-- Zero tolerance validates inputs and coverage, then returns the original WKB bytes, including repeated closing coordinates.
-- Invalid parameters are rejected even for all-NULL/all-EMPTY or empty input. Invalid coverage, malformed WKB, unsupported descriptors/dimensions and exceeded limits fail the partition before its output is published.
+- Zero tolerance retains structural input checks and returns the original WKB bytes, including repeated closing coordinates.
+- Invalid parameters are rejected even for all-NULL/all-EMPTY or empty input. Malformed WKB, structurally invalid rings, unsupported descriptors/dimensions and exceeded limits fail the partition before its output is published.
 
-## Resource limits
+## Resource management
 
-The coverage kernel applies the following fixed internal bounds to each partition. These are not BE configuration options:
-
-| Resource | Bound | Includes |
-| --- | ---: | --- |
-| Rows | 10000 | All rows, including NULL and EMPTY. |
-| Vertices | 1000000 | Original WKB coordinate positions, including closures and repetitions. |
-| Input bytes | 67108864 | Input WKB bytes, including typed EMPTY. |
-| Working bytes | 268435456 | Kernel-owned input WKB, models, indices, scratch, mapping and output storage in bytes. |
-
-The standard window operator first materializes a complete partition under StarRocks query memory accounting. The function then checks rows, vertices and input WKB limits while admitting data to the kernel, before decoding and simplifying the coverage. The working limit covers kernel-owned allocations; it excludes the window operator's input buffers, fixed function state and independently owned output columns, which remain subject to the query memory limit. Exceeding an internal bound returns an error without truncation or partial partition results. A 100 million charged-work-unit bound can reject complex topology below the size limits. Cancellation follows the standard window lifecycle and is also checked in kernel loops and output, and around bounded library operations; no fixed cancellation latency or execution time is promised.
+The window operator and coverage kernel use StarRocks query memory accounting and the query memory limit. Cancellation and memory checks run during input admission, kernel loops and output. Native WKB structural bounds and integer-range checks still apply. Errors do not publish partial partition results. No fixed cancellation latency or execution time is promised.
 
 ## Examples
 

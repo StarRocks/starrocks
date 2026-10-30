@@ -2940,88 +2940,6 @@ Status ImmutableIndex::_get_in_shard(size_t shard_idx, size_t n, const Slice* ke
     }
 }
 
-Status ImmutableIndex::_check_not_exist_in_fixlen_shard(size_t shard_idx, size_t n, const Slice* keys,
-                                                        const KeysInfo& keys_info,
-                                                        std::unique_ptr<ImmutableIndexShard>* shard) const {
-    const auto& shard_info = _shards[shard_idx];
-    uint8_t candidate_idxes[kBucketSizeMax];
-    for (size_t i = 0; i < keys_info.size(); i++) {
-        IndexHash h(keys_info.key_infos[i].second);
-        auto pageid = h.page() % shard_info.npage;
-        auto bucketid = h.bucket() % shard_info.nbucket;
-        auto& bucket_info = (*shard)->bucket(pageid, bucketid);
-        uint8_t* bucket_pos = (*shard)->pack_in_page(bucket_info.pageid, bucket_info.packid);
-        auto nele = bucket_info.size;
-        auto key_idx = keys_info.key_infos[i].first;
-        auto ncandidates = get_matched_tag_idxes(bucket_pos, nele, h.tag(), candidate_idxes);
-        const auto* fixed_key_probe = (const uint8_t*)keys[key_idx].data;
-        auto kv_pos = bucket_pos + pad(nele, kPackSize);
-        for (size_t candidate_idx = 0; candidate_idx < ncandidates; candidate_idx++) {
-            auto idx = candidate_idxes[candidate_idx];
-            auto candidate_kv = kv_pos + (shard_info.key_size + shard_info.value_size) * idx;
-            if (strings::memeq(candidate_kv, fixed_key_probe, shard_info.key_size)) {
-                return Status::AlreadyExist("key already exists in immutable index");
-            }
-        }
-    }
-    return Status::OK();
-}
-
-Status ImmutableIndex::_check_not_exist_in_varlen_shard(size_t shard_idx, size_t n, const Slice* keys,
-                                                        const KeysInfo& keys_info,
-                                                        std::unique_ptr<ImmutableIndexShard>* shard) const {
-    const auto& shard_info = _shards[shard_idx];
-    DCHECK(shard_info.key_size == 0);
-    uint8_t candidate_idxes[kBucketSizeMax];
-    for (size_t i = 0; i < keys_info.size(); i++) {
-        IndexHash h(keys_info.key_infos[i].second);
-        auto pageid = h.page() % shard_info.npage;
-        auto bucketid = h.bucket() % shard_info.nbucket;
-        auto& bucket_info = (*shard)->bucket(pageid, bucketid);
-        uint8_t* bucket_pos = (*shard)->pack_in_page(bucket_info.pageid, bucket_info.packid);
-        auto nele = bucket_info.size;
-        auto key_idx = keys_info.key_infos[i].first;
-        auto ncandidates = get_matched_tag_idxes(bucket_pos, nele, h.tag(), candidate_idxes);
-        const auto* key_probe = reinterpret_cast<const uint8_t*>(keys[key_idx].data);
-        auto offset_pos = bucket_pos + pad(nele, kPackSize);
-        for (size_t candidate_idx = 0; candidate_idx < ncandidates; candidate_idx++) {
-            auto idx = candidate_idxes[candidate_idx];
-            auto kv_offset = UNALIGNED_LOAD16(offset_pos + sizeof(uint16_t) * idx);
-            auto kv_size = UNALIGNED_LOAD16(offset_pos + sizeof(uint16_t) * (idx + 1)) - kv_offset;
-            auto candidate_kv = bucket_pos + kv_offset;
-            if (keys[key_idx].size == kv_size - shard_info.value_size &&
-                strings::memeq(candidate_kv, key_probe, kv_size - shard_info.value_size)) {
-                return Status::AlreadyExist("key already exists in immutable index");
-            }
-        }
-    }
-    return Status::OK();
-}
-
-Status ImmutableIndex::_check_not_exist_in_shard(size_t shard_idx, size_t n, const Slice* keys,
-                                                 const KeysInfo& keys_info) const {
-    const auto& shard_info = _shards[shard_idx];
-    if (shard_info.size == 0 || keys_info.size() == 0) {
-        return Status::OK();
-    }
-    std::unique_ptr<ImmutableIndexShard> shard =
-            std::make_unique<ImmutableIndexShard>(shard_info.npage, shard_info.page_size);
-    if (shard_info.uncompressed_size == 0) {
-        RETURN_ERROR_IF_FALSE(shard->npage() * shard_info.page_size == shard_info.bytes, "illegal shard size");
-    } else {
-        RETURN_ERROR_IF_FALSE(shard->npage() * shard_info.page_size == shard_info.uncompressed_size,
-                              "illegal shard size");
-    }
-    RETURN_IF_ERROR(_file->read_at_fully(shard_info.offset, shard->data(), shard_info.bytes));
-    RETURN_IF_ERROR(shard->decompress_pages(_compression_type, shard_info.npage, shard_info.uncompressed_size,
-                                            shard_info.bytes, shard_info.page_off));
-    if (shard_info.key_size != 0) {
-        return _check_not_exist_in_fixlen_shard(shard_idx, n, keys, keys_info, &shard);
-    } else {
-        return _check_not_exist_in_varlen_shard(shard_idx, n, keys, keys_info, &shard);
-    }
-}
-
 static void split_keys_info_by_shard(std::vector<KeyInfo>& keys_info, std::vector<KeysInfo>& keys_info_by_shards) {
     uint32_t shard_bits = log2(keys_info_by_shards.size());
     for (const auto& key_info : keys_info) {
@@ -3162,25 +3080,25 @@ Status ImmutableIndex::get(size_t n, const Slice* keys, KeysInfo& keys_info, Ind
 }
 
 Status ImmutableIndex::check_not_exist(size_t n, const Slice* keys) {
-    for (const auto& [key_size, shard_info] : _shard_info_by_length) {
-        const auto [shard_off, nshard] = shard_info;
-        uint32_t shard_bits = log2(nshard);
-        std::vector<KeysInfo> keys_info_by_shard(nshard);
+    std::vector<IndexValue> values(n);
+    for (const auto& [key_size, _] : _shard_info_by_length) {
+        KeysInfo keys_info;
         for (size_t i = 0; i < n; i++) {
-            // A fixed-size shard (key_size != 0) stores keys of exactly |key_size| bytes and
-            // compares them with a raw memcmp of |key_size| bytes, so probing a key of a different
-            // length would read past the key buffer and could report a false "already exist"; skip
-            // those. The var-len shard (key_size == 0) verifies the full key length itself, so any
-            // key is safe to probe there.
+            // Fixed-size shards compare exactly |key_size| bytes. Only probe matching lengths
+            // there; the variable-length shard checks the full key length itself.
             if (key_size != 0 && keys[i].size != key_size) {
                 continue;
             }
-            IndexHash h(key_index_hash(keys[i].data, keys[i].size));
-            auto shard = h.shard(shard_bits);
-            keys_info_by_shard[shard].key_infos.emplace_back(i, h.hash);
+            keys_info.key_infos.emplace_back(i, key_index_hash(keys[i].data, keys[i].size));
         }
-        for (size_t i = 0; i < nshard; i++) {
-            RETURN_IF_ERROR(_check_not_exist_in_shard(shard_off + i, n, keys, keys_info_by_shard[i]));
+        if (keys_info.key_infos.empty()) {
+            continue;
+        }
+        KeysInfo found_keys_info;
+        RETURN_IF_ERROR(get(n, keys, keys_info, values.data(), &found_keys_info, key_size));
+        // A tombstone is still an existing key, even though its value is NullIndexValue.
+        if (!found_keys_info.key_infos.empty()) {
+            return Status::AlreadyExist("key already exists in immutable index");
         }
     }
     return Status::OK();
@@ -4136,17 +4054,19 @@ Status PersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue* va
 
 Status PersistentIndex::insert(size_t n, const Slice* keys, const IndexValue* values, bool check_l1) {
     RETURN_IF_ERROR(_l0->insert(n, keys, values));
-    if (!_l1_vec.empty()) {
-        int end_idx = _has_l1 ? 1 : 0;
-        for (int i = _l1_vec.size() - 1; i >= end_idx; i--) {
-            RETURN_IF_ERROR(_l1_vec[i]->check_not_exist(n, keys));
+    if (!config::skip_pindex_l1_l2_check_in_insert) {
+        if (!_l1_vec.empty()) {
+            int end_idx = _has_l1 ? 1 : 0;
+            for (int i = _l1_vec.size() - 1; i >= end_idx; i--) {
+                RETURN_IF_ERROR(_l1_vec[i]->check_not_exist(n, keys));
+            }
         }
-    }
-    if (_has_l1 && check_l1) {
-        RETURN_IF_ERROR(_l1_vec[0]->check_not_exist(n, keys));
-    }
-    for (int i = _l2_vec.size() - 1; i >= 0; i--) {
-        RETURN_IF_ERROR(_l2_vec[i]->check_not_exist(n, keys));
+        if (_has_l1 && check_l1) {
+            RETURN_IF_ERROR(_l1_vec[0]->check_not_exist(n, keys));
+        }
+        for (int i = _l2_vec.size() - 1; i >= 0; i--) {
+            RETURN_IF_ERROR(_l2_vec[i]->check_not_exist(n, keys));
+        }
     }
     std::vector<std::pair<int64_t, int64_t>> add_usage_and_size(kFixedMaxKeySize + 1,
                                                                 std::pair<int64_t, int64_t>(0, 0));

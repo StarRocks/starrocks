@@ -114,8 +114,7 @@ TEST(HashJoinBuildChunkSlicerTest, NoBuildChunks) {
 // limits. A ConstColumn reports more rows than the limit without allocating them.
 TEST(HashJoinBuildChunkSlicerTest, RejectBuildChunkOverCapacity) {
     const uint64_t capacity_limit = Column::MAX_CAPACITY_LIMIT;
-    auto value = BinaryColumn::create();
-    value->append("x");
+    auto value = ColumnTestHelper::build_column<Slice>({"x"});
     Chunk::SlotHashMap slot_map{{0, 0}};
     auto build_chunk =
             std::make_shared<Chunk>(Columns{ConstColumn::create(std::move(value), capacity_limit + 1)}, slot_map);
@@ -128,9 +127,7 @@ TEST(HashJoinBuildChunkSlicerTest, RejectBuildChunkOverCapacity) {
 // A hash join with column_view_concat_* enabled keeps its non-key VARCHAR build columns as ColumnView, whose
 // capacity_limit_reached() used to throw.
 TEST(HashJoinBuildChunkSlicerTest, AcceptColumnViewBuildChunk) {
-    auto src = BinaryColumn::create();
-    src->append("a");
-    src->append("b");
+    auto src = ColumnTestHelper::build_column<Slice>({"a", "b"});
     auto view = ColumnView::create(BinaryColumn::create(), 0, -1);
     view->append_default();
     view->append(*src, 0, src->size());

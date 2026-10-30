@@ -75,6 +75,7 @@ import com.starrocks.common.Status;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.qe.scheduler.DefaultSharedDataWorkerProvider;
+import com.starrocks.lake.qe.scheduler.SkipBlacklistSharedDataWorkerProvider;
 import com.starrocks.load.Load;
 import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.qe.ConnectContext;
@@ -237,7 +238,7 @@ public class OlapTableSink extends DataSink {
         tSink.setTxn_id(txnId);
         tSink.setNull_expr_in_auto_increment(nullExprInAutoIncrement);
         tSink.setMiss_auto_increment_column(missAutoIncrementColumn);
-        tSink.setAuto_increment_slot_id(autoIncrementSlotId);
+        tSink.setAuto_increment_slot_id(autoIncrementSlotIdForWrite());
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         TransactionState explicitTxnState = globalTransactionMgr.reserveExplicitTransactionLayout(
                 txnId, dbId, dstTable.getId());
@@ -551,6 +552,20 @@ public class OlapTableSink extends DataSink {
 
     public void setTargetWriteIndexId(Long targetWriteIndexId) {
         this.targetWriteIndexId = targetWriteIndexId;
+    }
+
+    // A write that persists only a target index which does not store the AUTO_INCREMENT column must not fill it:
+    // filling would allocate ids from the table's counter and discard them.
+    private int autoIncrementSlotIdForWrite() {
+        if (autoIncrementSlotId == -1 || targetWriteIndexId == null) {
+            return autoIncrementSlotId;
+        }
+        String columnName = tupleDescriptor.getSlot(autoIncrementSlotId).getColumn().getName();
+        MaterializedIndexMeta indexMeta = dstTable.getIndexMetaByMetaId(targetWriteIndexId);
+        if (indexMeta != null && indexMeta.getSchema().stream().noneMatch(c -> c.getName().equalsIgnoreCase(columnName))) {
+            return -1;
+        }
+        return autoIncrementSlotId;
     }
 
     public void complete(String mergeCondition) throws StarRocksException {
@@ -925,6 +940,9 @@ public class OlapTableSink extends DataSink {
                 }
 
                 Expr whereClause = indexMeta.getWhereClause().clone();
+                if (indexMeta.getSyncMvDefinition() != null) {
+                    whereClause = ExprUtils.rewriteStructFieldSlotRefs(whereClause);
+                }
                 List<SlotRef> slots = Lists.newArrayList();
                 whereClause.collect(SlotRef.class, slots);
 
@@ -1600,7 +1618,16 @@ public class OlapTableSink extends DataSink {
         // Double-check the tablet location backend alive info
         if (RunMode.isSharedDataMode()) {
             // NOTE: shared-nothing workerProvider.allowUsingBackupNode() == false, so don't bother to create it
-            WorkerProvider.Factory workerProviderFactory = new DefaultSharedDataWorkerProvider.Factory();
+            // Pick the provider as the scan does (CoordinatorPreprocessor): the session's routing policy, and with
+            // skip_black_list a blocklisted but alive node stays usable. A load without a session uses the defaults.
+            ConnectContext context = ConnectContext.get();
+            SessionVariable sessionVariable = context != null ? context.getSessionVariable() : null;
+            SessionVariableConstants.BlacklistBackupRoutingPolicy backupRoutingPolicy = sessionVariable != null
+                    ? sessionVariable.getBlacklistBackupRoutingPolicy()
+                    : SessionVariableConstants.BlacklistBackupRoutingPolicy.getDefault();
+            WorkerProvider.Factory workerProviderFactory = sessionVariable != null && sessionVariable.isSkipBlackList()
+                    ? new SkipBlacklistSharedDataWorkerProvider.Factory(backupRoutingPolicy)
+                    : new DefaultSharedDataWorkerProvider.Factory(backupRoutingPolicy);
             WorkerProvider workerProvider = workerProviderFactory.captureAvailableWorkers(
                     GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(), false, 0,
                     SessionVariableConstants.ComputationFragmentSchedulingPolicy.ALL_NODES, computeResource);
@@ -1610,7 +1637,8 @@ public class OlapTableSink extends DataSink {
                     List<Long> nodeIds = location.getNode_ids();
                     for (long id : nodeIds) {
                         if (!workerProvider.isDataNodeAvailable(id)) {
-                            long backupId = workerProvider.selectBackupWorker(id);
+                            // The tablet is the affinity key, the same key the scan uses, so both agree on the backup.
+                            long backupId = workerProvider.selectBackupWorker(id, location.getTablet_id());
                             if (backupId == -1) {
                                 // error out
                                 workerProvider.reportWorkerNotFoundException();

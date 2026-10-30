@@ -22,7 +22,16 @@ Apache Ranger 提供以下核心模块：
 - 通过 Ranger 创建 Access policy、Masking policy、Row-level filter policy。
 - 支持 Ranger 审计日志。
 - 暂不支持 Kerberos 认证的 Ranger Server。
+- 暂不支持由 JavaScript 求值的 Ranger 策略条件，例如 `expression` 条件和 tag 策略的 `accessed-after-expiry` 条件，详见下方说明。
 - 同一个 Apache Ranger 中可以注册多个 StarRocks Service 管理不同 StarRocks 集群的权限。
+
+:::note
+
+StarRocks FE 运行在 JDK 17 及以上版本，其中不带 JavaScript 引擎。Ranger 无法对 JavaScript 条件求值时，会把该条件当作满足，并在每次求值时打印 `failed to evaluate condition '<condition>': script engine not found`。例如，带 `expression` 条件的允许项会不检查表达式而直接放行。因此，不要在作用于 StarRocks 的策略中使用这类条件。
+
+FE 加载策略时还会打印 `failed to initialize condition 'accessed-after-expiry'`。它来自 Ranger Admin 默认为 service 关联的 tag service 中的 `EXPIRES_ON` 策略。只要没有资源带 `EXPIRES_ON` 标签，这条日志就没有影响。带该标签的资源在过期日期之前也会被拒绝访问。
+
+:::
 
 本文介绍 StarRocks 与 Apache Ranger 集成后的权限控制方式以及集成过程。关于如何在 Ranger 上创建权限策略来管理数据安全，参见 [Apache Ranger 官网](https://ranger.apache.org/)。
 
@@ -108,12 +117,22 @@ StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
 
    :::
 
+   如需通过 Ranger 授予视图和物化视图的 SELECT 权限，.json 文件中 `view` 和 `materialized_view` 两个资源的 `accessTypeRestrictions` 必须包含 `"select"`。如果没有，请先添加，再在下一步中添加或更新 service definition。
+
 2. 使用 Ranger 的管理员账户运行以下命令，添加 StarRocks Service。
 
    ```Bash
    curl -u <ranger_adminuser>:<ranger_adminpwd> \
    -X POST -H "Accept: application/json" \
    -H "Content-Type: application/json" http://<ranger-ip>:<ranger-port>/service/plugins/definitions -d@ranger-servicedef-starrocks.json
+   ```
+
+   如果 Ranger 中已经注册过 StarRocks 的 service definition（例如升级 StarRocks 时），请改为更新，而不是重新添加：
+
+   ```Bash
+   curl -u <ranger_adminuser>:<ranger_adminpwd> \
+   -X PUT -H "Accept: application/json" \
+   -H "Content-Type: application/json" http://<ranger-ip>:<ranger-port>/service/public/v2/api/servicedef/name/starrocks -d@ranger-servicedef-starrocks.json
    ```
 
 3. 登录 Ranger 界面 `http://<ranger-ip>:<ranger-host>/login.jsp`。可以看到界面上出现了 STARROCKS 服务。

@@ -22,6 +22,7 @@
 #include "formats/parquet/file_reader.h"
 #include "fs/fs.h"
 #include "runtime/descriptor_helper.h"
+#include "testutil/type_test_helper.h"
 
 namespace starrocks::parquet {
 
@@ -158,52 +159,51 @@ private:
                 schema.converted_type == tparquet::ConvertedType::INT_8 ||
                 schema.converted_type == tparquet::ConvertedType::INT_16 ||
                 schema.converted_type == tparquet::ConvertedType::INT_32) {
-                return TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+                return TYPE_INT_DESC;
             } else if (schema.converted_type == tparquet::ConvertedType::UINT_64 ||
                        schema.converted_type == tparquet::ConvertedType::INT_64) {
-                return TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT);
+                return TYPE_BIGINT_DESC;
             } else if (schema.converted_type == tparquet::ConvertedType::UTF8) {
-                return TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR);
+                return TYPE_VARCHAR_DESC;
             } else if (schema.converted_type == tparquet::ConvertedType::DATE) {
-                return TypeDescriptor::from_logical_type(LogicalType::TYPE_DATE);
+                return TYPE_DATE_DESC;
             } else if (schema.converted_type == tparquet::ConvertedType::TIME_MILLIS ||
                        schema.converted_type == tparquet::ConvertedType::TIME_MICROS ||
                        schema.converted_type == tparquet::ConvertedType::INTERVAL) {
-                return TypeDescriptor::from_logical_type(LogicalType::TYPE_TIME);
+                return TYPE_TIME_DESC;
             } else if (schema.converted_type == tparquet::ConvertedType::TIMESTAMP_MILLIS ||
                        schema.converted_type == tparquet::ConvertedType::TIMESTAMP_MICROS) {
-                return TypeDescriptor::from_logical_type(LogicalType::TYPE_DATETIME);
+                return TYPE_DATETIME_DESC;
             } else if (schema.converted_type == tparquet::ConvertedType::DECIMAL) {
                 if (schema.precision > TypeDescriptor::MAX_PRECISION || schema.scale > TypeDescriptor::MAX_SCALE) {
                     return Status::InternalError(fmt::format("Not supported decimal, precision: {}, scale: {}",
                                                              schema.precision, schema.scale));
                 }
-                return TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL128, -1, schema.precision,
-                                                         schema.scale);
+                return TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL128, schema.precision, schema.scale);
             } else if (schema.converted_type == tparquet::ConvertedType::ENUM) {
-                return TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR);
+                return TYPE_VARCHAR_DESC;
             } else if (schema.converted_type == tparquet::ConvertedType::JSON) {
-                return TypeDescriptor::from_logical_type(LogicalType::TYPE_JSON);
+                return TYPE_JSON_DESC;
             } else if (schema.converted_type == tparquet::ConvertedType::BSON) {
-                return TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR);
+                return TYPE_VARCHAR_DESC;
             }
         } else if (schema.__isset.type) {
             if (schema.type == tparquet::Type::BOOLEAN) {
-                return TypeDescriptor::from_logical_type(LogicalType::TYPE_BOOLEAN);
+                return TYPE_BOOLEAN_DESC;
             } else if (schema.type == tparquet::Type::FIXED_LEN_BYTE_ARRAY) {
-                return TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR);
+                return TYPE_VARCHAR_DESC;
             } else if (schema.type == tparquet::Type::INT32) {
-                return TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+                return TYPE_INT_DESC;
             } else if (schema.type == tparquet::Type::INT64) {
-                return TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT);
+                return TYPE_BIGINT_DESC;
             } else if (schema.type == tparquet::Type::INT96) {
-                return TypeDescriptor::from_logical_type(LogicalType::TYPE_DATETIME);
+                return TYPE_DATETIME_DESC;
             } else if (schema.type == tparquet::Type::BYTE_ARRAY) {
-                return TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR);
+                return TYPE_VARCHAR_DESC;
             } else if (schema.type == tparquet::Type::DOUBLE) {
-                return TypeDescriptor::from_logical_type(LogicalType::TYPE_DOUBLE);
+                return TYPE_DOUBLE_DESC;
             } else if (schema.type == tparquet::Type::FLOAT) {
-                return TypeDescriptor::from_logical_type(LogicalType::TYPE_FLOAT);
+                return TYPE_FLOAT_DESC;
             }
         }
         return Status::InternalError(fmt::format("Has unsupported type {}", schema.name));

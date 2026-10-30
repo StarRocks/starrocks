@@ -24,6 +24,7 @@ sr api lib in this module
 """
 import base64
 import bz2
+import contextlib
 import copy
 import datetime
 import json
@@ -786,6 +787,53 @@ class StarrocksSQLApiLib(object):
         res = self.execute_sql(sql)
         tools.assert_true(res["status"], "create hadoop iceberg catalog failed: %s" % res.get("msg"))
 
+    def assert_paimon_reader(self, query, table, expected):
+        """Assert one reader and reject empty scans or mixed routes."""
+        self.assert_paimon_readers(query, table, expected)
+
+    def assert_paimon_readers(self, query, table, expected, reasons=""):
+        """Assert the complete reader set and optional positive selection-reason counters."""
+        counters = {"native": "paimonNativeReaderReadNum", "jni": "jniReaderReadNum",
+                    "starrocks": "starRocksNativeReaderReadNum"}
+        readers = {reader.strip() for reader in expected.split(",")}
+        if not readers or not readers <= counters.keys():
+            raise ValueError("expected readers must be native, jni, or starrocks")
+        result = self.execute_sql("TRACE VALUES EXTERNAL " + query, True)
+        if not result["status"]:
+            raise AssertionError("Paimon reader trace failed: %s" % result.get("msg"))
+        trace = "\n".join(str(value) for row in result["result"] for value in row)
+        prefix = "Paimon.metadata.reader.%s." % table
+        for reader, counter in counters.items():
+            values = re.findall(re.escape(prefix + counter) + r"\s*:\s*(\d+)", trace)
+            if not values or any((int(value) > 0) != (reader in readers) for value in values):
+                raise AssertionError("expected %s readers for %s; trace:\n%s" % (expected, table, trace))
+        for reason in filter(None, (item.strip() for item in reasons.split(","))):
+            values = re.findall(re.escape(prefix + "selectionReason." + reason) + r"\s*:\s*(\d+)", trace)
+            if not values or any(int(value) <= 0 for value in values):
+                raise AssertionError("expected %s reason for %s; trace:\n%s" % (reason, table, trace))
+
+    def assert_paimon_native_profile(self, query):
+        """Verify an executed paimon-cpp scan, using the existing BE profile section."""
+        settings = self.execute_sql("SELECT @@enable_profile, @@enable_async_profile", True)
+        if not settings["status"]:
+            raise AssertionError("cannot read profile settings")
+        enabled, asynchronous = settings["result"][0]
+        try:
+            for sql in ("SET enable_profile = true", "SET enable_async_profile = false", query):
+                result = self.execute_sql(sql, True)
+                if not result["status"]:
+                    raise AssertionError("Paimon profile query failed: %s" % result.get("msg"))
+            query_id = self.execute_sql("SELECT last_query_id()", True)["result"][0][0]
+            result = self.execute_sql("SELECT get_query_profile('%s')" % query_id, True)
+            if not result["status"]:
+                raise AssertionError("cannot read Paimon query profile")
+            profile = "\n".join(str(value) for row in result["result"] for value in row)
+            if not re.search(r"^\s*-\s*PaimonNativeReader:", profile, re.MULTILINE):
+                raise AssertionError("executed query has no PaimonNativeReader profile section")
+        finally:
+            self.execute_sql("SET enable_profile = %s" % str(enabled).lower(), True)
+            self.execute_sql("SET enable_async_profile = %s" % str(asynchronous).lower(), True)
+
     def create_database_and_table(self, catalog_name, database_name, table_name, table_sql_path=None,
                                   tolerate_exist=False):
         """
@@ -938,7 +986,8 @@ class StarrocksSQLApiLib(object):
     )
     def conn_execute_sql(self, conn, sql):
         try:
-            with conn.cursor() as cursor:
+            # trino's dbapi cursor is not a context manager
+            with contextlib.closing(conn.cursor()) as cursor:
                 if sql.endswith(";"):
                     sql = sql[:-1]
                 cursor.execute(sql)

@@ -15,9 +15,13 @@
 package com.starrocks.service;
 
 import com.google.common.collect.Lists;
+import com.starrocks.authentication.AuthCredentialKind;
+import com.starrocks.authentication.AuthCredentials;
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationHandler;
+import com.starrocks.authentication.JWTAuthenticationProvider;
 import com.starrocks.authentication.LDAPAuthProvider;
+import com.starrocks.authentication.MockTokenUtils;
 import com.starrocks.authentication.SecurityIntegration;
 import com.starrocks.authentication.SimpleLDAPSecurityIntegration;
 import com.starrocks.authorization.AccessDeniedException;
@@ -68,6 +72,8 @@ import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TAuthenticateParams;
 import com.starrocks.thrift.TBatchGetTableSchemaRequest;
 import com.starrocks.thrift.TBatchGetTableSchemaResponse;
+import com.starrocks.thrift.TBeginRemoteTxnRequest;
+import com.starrocks.thrift.TBeginRemoteTxnResponse;
 import com.starrocks.thrift.TColumnDef;
 import com.starrocks.thrift.TCreatePartitionRequest;
 import com.starrocks.thrift.TCreatePartitionResult;
@@ -285,8 +291,8 @@ public class FrontendServiceImplTest {
         FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
 
         try (MockedStatic<AuthenticationHandler> mocked = mockStatic(AuthenticationHandler.class)) {
-            mocked.when(() -> AuthenticationHandler.authenticateWithClearPassword(
-                            any(ConnectContext.class), any(), any(), any()))
+            mocked.when(() -> AuthenticationHandler.authenticate(
+                            any(ConnectContext.class), any(AuthCredentials.class)))
                     .thenReturn(UserIdentity.ROOT);
 
             TFeResult result = impl.checkAuth(buildAuthParams(null));
@@ -300,8 +306,8 @@ public class FrontendServiceImplTest {
 
         try (MockedStatic<AuthenticationHandler> mockedAuth = mockStatic(AuthenticationHandler.class);
                 MockedStatic<Authorizer> mockedAuthz = mockStatic(Authorizer.class)) {
-            mockedAuth.when(() -> AuthenticationHandler.authenticateWithClearPassword(
-                            any(ConnectContext.class), any(), any(), any()))
+            mockedAuth.when(() -> AuthenticationHandler.authenticate(
+                            any(ConnectContext.class), any(AuthCredentials.class)))
                     .thenReturn(UserIdentity.ROOT);
             // checkSystemAction is void; default mock = no-op (i.e. authorized)
 
@@ -318,8 +324,8 @@ public class FrontendServiceImplTest {
 
         try (MockedStatic<AuthenticationHandler> mockedAuth = mockStatic(AuthenticationHandler.class);
                 MockedStatic<Authorizer> mockedAuthz = mockStatic(Authorizer.class)) {
-            mockedAuth.when(() -> AuthenticationHandler.authenticateWithClearPassword(
-                            any(ConnectContext.class), any(), any(), any()))
+            mockedAuth.when(() -> AuthenticationHandler.authenticate(
+                            any(ConnectContext.class), any(AuthCredentials.class)))
                     .thenReturn(UserIdentity.ROOT);
             mockedAuthz.when(() -> Authorizer.checkSystemAction(any(ConnectContext.class), eq(PrivilegeType.OPERATE)))
                     .thenThrow(new AccessDeniedException("internal denial reason — operator only"));
@@ -340,8 +346,8 @@ public class FrontendServiceImplTest {
 
         try (MockedStatic<AuthenticationHandler> mockedAuth = mockStatic(AuthenticationHandler.class);
                 MockedStatic<Authorizer> mockedAuthz = mockStatic(Authorizer.class)) {
-            mockedAuth.when(() -> AuthenticationHandler.authenticateWithClearPassword(
-                            any(ConnectContext.class), any(), any(), any()))
+            mockedAuth.when(() -> AuthenticationHandler.authenticate(
+                            any(ConnectContext.class), any(AuthCredentials.class)))
                     .thenReturn(UserIdentity.ROOT);
 
             TFeResult result = impl.checkAuth(buildAuthParams(TPrivilegeRequirement.NODE));
@@ -357,8 +363,8 @@ public class FrontendServiceImplTest {
 
         try (MockedStatic<AuthenticationHandler> mockedAuth = mockStatic(AuthenticationHandler.class);
                 MockedStatic<Authorizer> mockedAuthz = mockStatic(Authorizer.class)) {
-            mockedAuth.when(() -> AuthenticationHandler.authenticateWithClearPassword(
-                            any(ConnectContext.class), any(), any(), any()))
+            mockedAuth.when(() -> AuthenticationHandler.authenticate(
+                            any(ConnectContext.class), any(AuthCredentials.class)))
                     .thenReturn(UserIdentity.ROOT);
             mockedAuthz.when(() -> Authorizer.checkSystemAction(any(ConnectContext.class), eq(PrivilegeType.NODE)))
                     .thenThrow(new AccessDeniedException("denied"));
@@ -373,8 +379,8 @@ public class FrontendServiceImplTest {
         FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
 
         try (MockedStatic<AuthenticationHandler> mocked = mockStatic(AuthenticationHandler.class)) {
-            mocked.when(() -> AuthenticationHandler.authenticateWithClearPassword(
-                            any(ConnectContext.class), any(), any(), any()))
+            mocked.when(() -> AuthenticationHandler.authenticate(
+                            any(ConnectContext.class), any(AuthCredentials.class)))
                     .thenThrow(new AuthenticationException("wrong password"));
 
             TFeResult result = impl.checkAuth(buildAuthParams(TPrivilegeRequirement.OPERATE));
@@ -396,8 +402,8 @@ public class FrontendServiceImplTest {
         Mockito.doReturn(null).when(spy).getRequired_privilege();
 
         try (MockedStatic<AuthenticationHandler> mocked = mockStatic(AuthenticationHandler.class)) {
-            mocked.when(() -> AuthenticationHandler.authenticateWithClearPassword(
-                            any(ConnectContext.class), any(), any(), any()))
+            mocked.when(() -> AuthenticationHandler.authenticate(
+                            any(ConnectContext.class), any(AuthCredentials.class)))
                     .thenReturn(UserIdentity.ROOT);
 
             TFeResult result = impl.checkAuth(spy);
@@ -414,8 +420,8 @@ public class FrontendServiceImplTest {
         org.apache.logging.log4j.core.config.Configurator.setLevel(
                 FrontendServiceImpl.class.getName(), org.apache.logging.log4j.Level.DEBUG);
         try (MockedStatic<AuthenticationHandler> mocked = mockStatic(AuthenticationHandler.class)) {
-            mocked.when(() -> AuthenticationHandler.authenticateWithClearPassword(
-                            any(ConnectContext.class), any(), any(), any()))
+            mocked.when(() -> AuthenticationHandler.authenticate(
+                            any(ConnectContext.class), any(AuthCredentials.class)))
                     .thenReturn(UserIdentity.ROOT);
             TAuthenticateParams params = new TAuthenticateParams();
             params.setUser("ut_user");
@@ -2750,8 +2756,8 @@ public class FrontendServiceImplTest {
 
         try (MockedStatic<AuthenticationHandler> mockedAuth = mockStatic(AuthenticationHandler.class);
                 MockedStatic<Authorizer> mockedAuthz = mockStatic(Authorizer.class)) {
-            mockedAuth.when(() -> AuthenticationHandler.authenticateWithClearPassword(
-                            any(ConnectContext.class), any(), any(), any()))
+            mockedAuth.when(() -> AuthenticationHandler.authenticate(
+                            any(ConnectContext.class), any(AuthCredentials.class)))
                     .thenAnswer(invocation -> {
                         ConnectContext authContext = invocation.getArgument(0);
                         // Stand in for the real handler, which resolves groups and the roles they map to.
@@ -2774,5 +2780,454 @@ public class FrontendServiceImplTest {
         Assertions.assertNotNull(authorizedContext.get(), "the INSERT check must run");
         Assertions.assertSame(authenticatedContext.get(), authorizedContext.get());
         Assertions.assertEquals(groupDerivedRoles, authorizedContext.get().getCurrentRoleIds());
+    }
+
+    private void withJwtSecurityIntegration(String name) {
+        GlobalStateMgr.getCurrentState().setJwkMgr(new MockTokenUtils.MockJwkMgr());
+        Map<String, String> properties = new HashMap<>();
+        properties.put(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY, AuthPlugin.Server.AUTHENTICATION_JWT.name());
+        properties.put(JWTAuthenticationProvider.JWT_JWKS_URL, "jwks.json");
+        properties.put(JWTAuthenticationProvider.JWT_PRINCIPAL_FIELD, "preferred_username");
+        properties.put(JWTAuthenticationProvider.JWT_REQUIRED_ISSUER, "http://localhost:38080/realms/master");
+        GlobalStateMgr.getCurrentState().getAuthenticationMgr().replayCreateSecurityIntegration(name, properties);
+        Config.authentication_chain = new String[] {"native", name};
+    }
+
+    @Test
+    public void testLoadTxnBeginRoutesABearerTokenByAuthType() throws Exception {
+        // TC-L3-48-01: auth_type="bearer" means "passwd carries a token": the FE routes it through
+        // the issuer-based chain instead of treating it as a password for `user`.
+        String siName = "jwt_corp_txn_bearer";
+        String[] savedAuthChain = Config.authentication_chain;
+        withJwtSecurityIntegration(siName);
+        try (MockedStatic<Authorizer> mockedAuthz = mockStatic(Authorizer.class)) {
+            FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+            TLoadTxnBeginRequest request = new TLoadTxnBeginRequest();
+            request.setLabel(UUID.randomUUID().toString());
+            request.setDb("test");
+            request.setTbl("site_access_auto");
+            request.setUser("harbor");
+            request.setPasswd(new MockTokenUtils().generateTestOIDCToken(3600 * 1000));
+            request.setAuth_type("bearer");
+            request.setUser_ip("10.1.2.3");
+            TLoadTxnBeginResult begun = impl.loadTxnBegin(request);
+            Assertions.assertEquals(TStatusCode.OK, begun.getStatus().getStatus_code(), String.valueOf(begun.getStatus()));
+            // Release the transaction: the per-BE stream load limit counts every open one, and other
+            // tests in this class begin theirs against the same limit.
+            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().abortTransaction(
+                    GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getId(), begun.getTxnId(),
+                    "test cleanup");
+
+            // The same bytes without the auth_type are a password login for `harbor`, which fails: the
+            // field is what selects the path, not the shape of the secret.
+            request.unsetAuth_type();
+            request.setLabel(UUID.randomUUID().toString());
+            Assertions.assertNotEquals(TStatusCode.OK, impl.loadTxnBegin(request).getStatus().getStatus_code());
+        } finally {
+            Config.authentication_chain = savedAuthChain;
+            GlobalStateMgr.getCurrentState().getAuthenticationMgr().replayDropSecurityIntegration(siName);
+        }
+    }
+
+    @Test
+    public void testBearerStreamLoadIsRecordedUnderTheTokenUser() throws Exception {
+        // A BE forwarding a Bearer stream load sends an empty `user`: the principal is in the
+        // token. Both the load task and the pipeline put stage must carry the user the token
+        // authenticated as, or SHOW STREAM LOAD shows no user and user-scoped resource groups
+        // never match.
+        String siName = "jwt_corp_load_user";
+        String[] savedAuthChain = Config.authentication_chain;
+        boolean savedPipelineStreamLoad = Config.enable_pipeline_stream_load;
+        withJwtSecurityIntegration(siName);
+        long txnId = -1;
+        try (MockedStatic<Authorizer> mockedAuthz = mockStatic(Authorizer.class)) {
+            FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+            String token = new MockTokenUtils().generateTestOIDCToken(3600 * 1000);
+            TLoadTxnBeginRequest begin = new TLoadTxnBeginRequest();
+            begin.setLabel(UUID.randomUUID().toString());
+            begin.setDb("test");
+            begin.setTbl("site_access_auto");
+            begin.setUser("");
+            begin.setPasswd(token);
+            begin.setAuth_type("bearer");
+            begin.setUser_ip("10.1.2.3");
+            TLoadTxnBeginResult begun = impl.loadTxnBegin(begin);
+            Assertions.assertEquals(TStatusCode.OK, begun.getStatus().getStatus_code(),
+                    String.valueOf(begun.getStatus()));
+            txnId = begun.getTxnId();
+            Assertions.assertEquals("harbor", GlobalStateMgr.getCurrentState().getStreamLoadMgr()
+                    .getTaskByLabel(begin.getLabel()).getUser());
+
+            // The put stage: authenticating the token set the context's user; the pipeline branch
+            // must not overwrite it with the empty declared one. Planning itself may fail here.
+            Config.enable_pipeline_stream_load = true;
+            TStreamLoadPutRequest put = new TStreamLoadPutRequest();
+            put.setDb("test");
+            put.setTbl("site_access_auto");
+            put.setUser("");
+            put.setPasswd(token);
+            put.setAuth_type("bearer");
+            put.setUser_ip("10.1.2.3");
+            put.setTxnId(txnId);
+            put.setBackend_id(10001);
+            put.setFileType(TFileType.FILE_STREAM);
+            ConnectContext context = new ConnectContext();
+            context.setQualifiedUser("harbor");
+            try {
+                impl.streamLoadPutImpl(context, put);
+            } catch (Exception e) {
+                // Only the user set before planning matters.
+            }
+            Assertions.assertEquals("harbor", context.getQualifiedUser());
+        } finally {
+            Config.enable_pipeline_stream_load = savedPipelineStreamLoad;
+            if (txnId != -1) {
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().abortTransaction(
+                        GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getId(),
+                        txnId, "test cleanup");
+            }
+            Config.authentication_chain = savedAuthChain;
+            GlobalStateMgr.getCurrentState().getAuthenticationMgr()
+                    .replayDropSecurityIntegration(siName);
+        }
+    }
+
+    @Test
+    public void testStreamLoadPutRecoversASecurityIntegrationUser() throws Exception {
+        // TC-L3-48-04: a security-integration user is not in the native table, so the put stage cannot
+        // look the identity up; it has to authenticate the credential again. The request then fails on
+        // its column mapping exactly like root's does - which is the proof it got past authentication.
+        String siName = "ldap_corp_put";
+        String[] savedAuthChain = Config.authentication_chain;
+        AtomicInteger bindCount = withLdapSecurityIntegration(siName, "ldap_password");
+        try (MockedStatic<Authorizer> mockedAuthz = mockStatic(Authorizer.class)) {
+            FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+            TStreamLoadPutRequest request = new TStreamLoadPutRequest();
+            request.setDb("test");
+            request.setTbl("site_access_hour");
+            request.setUser("ldap_user");
+            request.setPasswd("ldap_password");
+            request.setUser_ip("10.1.2.3");
+            request.setTxnId(1024);
+            request.setColumnSeparator(",");
+            request.setFileType(TFileType.FILE_STREAM);
+            request.setColumns("col1,event_day=str_to_date(col1)");
+
+            TStatus status = impl.streamLoadPut(request).getStatus();
+            Assertions.assertEquals(TStatusCode.ANALYSIS_ERROR, status.getStatus_code(), String.valueOf(status));
+            Assertions.assertTrue(status.getError_msgs().get(0).contains("str_to_date"), String.valueOf(status));
+            Assertions.assertEquals(1, bindCount.get(), "the identity was recovered by authenticating the credential");
+        } finally {
+            dropLdapSecurityIntegration(siName, savedAuthChain);
+        }
+    }
+
+    /**
+     * TC-L3-48-08 / AC-16: every load RPC that carries a credential routes it by `auth_type` the same
+     * way - unset and "basic" read `passwd` as a password for `user`, "bearer" reads it as a token.
+     * Seven entry points, one table, so an eighth added without the switch goes red.
+     */
+    @Test
+    public void testEveryLoadEntryPointRoutesTheCredentialByAuthType() throws Exception {
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        java.util.concurrent.atomic.AtomicReference<AuthCredentials> seen = new java.util.concurrent.atomic.AtomicReference<>();
+        try (MockedStatic<AuthenticationHandler> mocked = mockStatic(AuthenticationHandler.class);
+                MockedStatic<Authorizer> ignoredAuthz = mockStatic(Authorizer.class)) {
+            mocked.when(() -> AuthenticationHandler.authenticate(any(ConnectContext.class), any(AuthCredentials.class)))
+                    .thenAnswer(invocation -> {
+                        seen.set(invocation.getArgument(1));
+                        ConnectContext ctx = invocation.getArgument(0);
+                        ctx.setCurrentUserIdentity(UserIdentity.ROOT);
+                        ctx.setQualifiedUser("root");
+                        return UserIdentity.ROOT;
+                    });
+
+            java.util.Map<String, java.util.function.Consumer<String>> entryPoints = new java.util.LinkedHashMap<>();
+            entryPoints.put("checkAuth", authType -> {
+                TAuthenticateParams p = new TAuthenticateParams();
+                p.setUser("u");
+                p.setPasswd("secret");
+                p.setHost("10.1.2.3");
+                if (authType != null) {
+                    p.setAuth_type(authType);
+                }
+                try {
+                    impl.checkAuth(p);
+                } catch (TException e) {
+                    throw new RuntimeException(e);
+                }
+            });
+            entryPoints.put("loadTxnBegin", authType -> {
+                TLoadTxnBeginRequest r = new TLoadTxnBeginRequest();
+                r.setLabel(UUID.randomUUID().toString());
+                r.setDb("test");
+                r.setTbl("site_access_auto");
+                r.setUser("u");
+                r.setPasswd("secret");
+                r.setUser_ip("10.1.2.3");
+                if (authType != null) {
+                    r.setAuth_type(authType);
+                }
+                try {
+                    TLoadTxnBeginResult begun = impl.loadTxnBegin(r);
+                    if (begun.getStatus().getStatus_code() == TStatusCode.OK) {
+                        // release it: the per-BE stream load limit counts open transactions
+                        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().abortTransaction(
+                                GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getId(),
+                                begun.getTxnId(), "test cleanup");
+                    }
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
+            });
+            entryPoints.put("streamLoadPut", authType -> {
+                TStreamLoadPutRequest r = new TStreamLoadPutRequest();
+                r.setDb("test");
+                r.setTbl("site_access_hour");
+                r.setUser("u");
+                r.setPasswd("secret");
+                r.setUser_ip("10.1.2.3");
+                r.setTxnId(-1);
+                r.setFileType(TFileType.FILE_STREAM);
+                if (authType != null) {
+                    r.setAuth_type(authType);
+                }
+                impl.streamLoadPut(r);
+            });
+            entryPoints.put("loadTxnCommit", authType -> {
+                TLoadTxnCommitRequest r = new TLoadTxnCommitRequest();
+                r.setDb("test");
+                r.setTbl("site_access_hour");
+                r.setUser("u");
+                r.setPasswd("secret");
+                r.setUser_ip("10.1.2.3");
+                r.setTxnId(-1);
+                if (authType != null) {
+                    r.setAuth_type(authType);
+                }
+                try {
+                    impl.loadTxnCommit(r);
+                } catch (TException e) {
+                    throw new RuntimeException(e);
+                }
+            });
+            entryPoints.put("loadTxnPrepare", authType -> {
+                TLoadTxnCommitRequest r = new TLoadTxnCommitRequest();
+                r.setDb("test");
+                r.setTbl("site_access_hour");
+                r.setUser("u");
+                r.setPasswd("secret");
+                r.setUser_ip("10.1.2.3");
+                r.setTxnId(-1);
+                if (authType != null) {
+                    r.setAuth_type(authType);
+                }
+                try {
+                    impl.loadTxnPrepare(r);
+                } catch (TException e) {
+                    throw new RuntimeException(e);
+                }
+            });
+            entryPoints.put("loadTxnRollback", authType -> {
+                TLoadTxnRollbackRequest r = new TLoadTxnRollbackRequest();
+                r.setDb("test");
+                r.setTbl("site_access_hour");
+                r.setUser("u");
+                r.setPasswd("secret");
+                r.setUser_ip("10.1.2.3");
+                r.setTxnId(-1);
+                if (authType != null) {
+                    r.setAuth_type(authType);
+                }
+                try {
+                    impl.loadTxnRollback(r);
+                } catch (TException e) {
+                    throw new RuntimeException(e);
+                }
+            });
+            entryPoints.put("requestMergeCommit", authType -> {
+                TMergeCommitRequest r = new TMergeCommitRequest();
+                r.setDb("test");
+                r.setTbl("site_access_hour");
+                r.setUser("u");
+                r.setPasswd("secret");
+                r.setUser_ip("10.1.2.3");
+                r.setBackend_id(10001);
+                r.setBackend_host("127.0.0.1");
+                r.setParams(new java.util.HashMap<>());
+                if (authType != null) {
+                    r.setAuth_type(authType);
+                }
+                try {
+                    impl.requestMergeCommit(r);
+                } catch (TException e) {
+                    throw new RuntimeException(e);
+                }
+            });
+
+            for (java.util.Map.Entry<String, java.util.function.Consumer<String>> ep : entryPoints.entrySet()) {
+                for (String authType : new String[] {null, "basic", "bearer"}) {
+                    seen.set(null);
+                    ep.getValue().accept(authType);
+                    AuthCredentials cred = seen.get();
+                    Assertions.assertNotNull(cred, ep.getKey() + " with auth_type=" + authType + " never authenticated");
+                    boolean bearer = "bearer".equals(authType);
+                    Assertions.assertEquals(bearer ? AuthCredentialKind.BEARER_TOKEN : AuthCredentialKind.PLAIN_PASSWORD,
+                            cred.kind(), ep.getKey() + " with auth_type=" + authType);
+                    Assertions.assertEquals(bearer ? null : "u", cred.userDeclared(), ep.getKey() + ": declared user");
+                    Assertions.assertEquals("secret", new String(cred.rawSecret(), java.nio.charset.StandardCharsets.UTF_8),
+                            ep.getKey() + ": the secret bytes are passed through untouched");
+                }
+            }
+        }
+    }
+
+    @Test
+    public void testATokenSentWithoutAuthTypeIsJustAWrongPassword() throws Exception {
+        // TC-L3-410-03: what an old FE, or a BE that predates the field, makes of a Bearer token: it
+        // arrives as `passwd` with no auth_type, so it is checked as the password of `user` and fails.
+        // Documented upgrade behaviour - a 401, never an accidental login.
+        String siName = "jwt_corp_compat";
+        String[] savedAuthChain = Config.authentication_chain;
+        withJwtSecurityIntegration(siName);
+        try {
+            FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+            TLoadTxnBeginRequest request = new TLoadTxnBeginRequest();
+            request.setLabel(UUID.randomUUID().toString());
+            request.setDb("test");
+            request.setTbl("site_access_auto");
+            request.setUser("harbor");
+            request.setPasswd(new MockTokenUtils().generateTestOIDCToken(3600 * 1000));
+            request.setUser_ip("10.1.2.3");
+            TLoadTxnBeginResult result = impl.loadTxnBegin(request);
+            Assertions.assertNotEquals(TStatusCode.OK, result.getStatus().getStatus_code(), String.valueOf(result.getStatus()));
+            Assertions.assertTrue(String.valueOf(result.getStatus().getError_msgs()).contains("Access denied"),
+                    String.valueOf(result.getStatus()));
+        } finally {
+            Config.authentication_chain = savedAuthChain;
+            GlobalStateMgr.getCurrentState().getAuthenticationMgr().replayDropSecurityIntegration(siName);
+        }
+    }
+
+    @Test
+    public void testStreamLoadPutFallsBackToTheDeclaredNameWhenTheCredentialFails() throws Exception {
+        // The put stage re-authenticates a user the native table does not know. When that fails it must not
+        // fail the request on its own - loadTxnBegin is the gate - but the identity it falls back to is only
+        // the declared name: an unauthenticated user gets no roles, in particular no group-derived ones.
+        FrontendServiceImpl impl = spy(new FrontendServiceImpl(exeEnv));
+        AtomicReference<ConnectContext> planned = new AtomicReference<>();
+        Mockito.doAnswer(invocation -> {
+            planned.set(invocation.getArgument(0));
+            return null;
+        }).when(impl).streamLoadPutImpl(any(ConnectContext.class), any(TStreamLoadPutRequest.class));
+        AtomicInteger attempts = new AtomicInteger();
+        try (MockedStatic<AuthenticationHandler> mockedAuth = mockStatic(AuthenticationHandler.class)) {
+            mockedAuth.when(() -> AuthenticationHandler.authenticate(any(ConnectContext.class), any(AuthCredentials.class)))
+                    .thenAnswer(invocation -> {
+                        attempts.incrementAndGet();
+                        throw new AuthenticationException("Access denied");
+                    });
+            TStreamLoadPutRequest request = new TStreamLoadPutRequest();
+            request.setDb("test");
+            request.setTbl("site_access_hour");
+            request.setUser("ghost_user");
+            request.setPasswd("wrong_password");
+            request.setUser_ip("10.1.2.3");
+            request.setTxnId(1024);
+            request.setFileType(TFileType.FILE_STREAM);
+            impl.streamLoadPut(request);
+        }
+
+        Assertions.assertEquals(1, attempts.get(), "the put stage must try the credential before falling back");
+        ConnectContext context = planned.get();
+        Assertions.assertNotNull(context, "the request goes on to planning");
+        Assertions.assertEquals(UserIdentity.createAnalyzedUserIdentWithIp("ghost_user", "10.1.2.3"),
+                context.getCurrentUserIdentity());
+        Assertions.assertTrue(context.getCurrentRoleIds().isEmpty(), String.valueOf(context.getCurrentRoleIds()));
+    }
+
+    @Test
+    public void testExternalTableCheckAuthorizesOnTheAuthenticatedContext() throws Exception {
+        // beginRemoteTxn of a StarRocks external table: the source cluster sends "user@host". The host part is
+        // stripped before authenticating, and INSERT is checked on the very context authentication filled in,
+        // so a security-integration user whose INSERT comes from a group mapping is accepted.
+        boolean savedCheck = Config.enable_starrocks_external_table_auth_check;
+        Config.enable_starrocks_external_table_auth_check = true;
+        UserIdentity ephemeralUser = UserIdentity.createEphemeralUserIdent("ldap_user", "10.1.2.3");
+        Set<Long> groupDerivedRoles = Set.of(1234L);
+        AtomicReference<AuthCredentials> seen = new AtomicReference<>();
+        AtomicReference<ConnectContext> authenticatedContext = new AtomicReference<>();
+        List<ConnectContext> authorizedContexts = new ArrayList<>();
+        try (MockedStatic<AuthenticationHandler> mockedAuth = mockStatic(AuthenticationHandler.class);
+                MockedStatic<Authorizer> mockedAuthz = mockStatic(Authorizer.class)) {
+            mockedAuth.when(() -> AuthenticationHandler.authenticate(any(ConnectContext.class), any(AuthCredentials.class)))
+                    .thenAnswer(invocation -> {
+                        ConnectContext authContext = invocation.getArgument(0);
+                        authContext.setCurrentUserIdentity(ephemeralUser);
+                        authContext.setCurrentRoleIds(groupDerivedRoles);
+                        seen.set(invocation.getArgument(1));
+                        authenticatedContext.set(authContext);
+                        return ephemeralUser;
+                    });
+            mockedAuthz.when(() -> Authorizer.checkTableAction(any(ConnectContext.class), any(String.class),
+                            any(String.class), eq(PrivilegeType.INSERT)))
+                    .thenAnswer(invocation -> {
+                        authorizedContexts.add(invocation.getArgument(0));
+                        return null;
+                    });
+
+            TAuthenticateParams params = new TAuthenticateParams();
+            params.setUser("ldap_user@10.1.2.3");
+            params.setPasswd("ldap_password");
+            params.setHost("10.1.2.3");
+            params.setDb_name("test");
+            params.setTable_names(List.of("site_access_hour", "site_access_auto"));
+            TStatus status = FrontendServiceImpl.checkAuthAndExternalTablePriv(params);
+            Assertions.assertEquals(TStatusCode.OK, status.getStatus_code(), String.valueOf(status));
+        } finally {
+            Config.enable_starrocks_external_table_auth_check = savedCheck;
+        }
+
+        AuthCredentials cred = seen.get();
+        Assertions.assertEquals("ldap_user", cred.userDeclared(), "the @host suffix is not part of the user name");
+        Assertions.assertEquals(AuthCredentialKind.PLAIN_PASSWORD, cred.kind());
+        Assertions.assertEquals("ldap_password", new String(cred.rawSecret(), java.nio.charset.StandardCharsets.UTF_8));
+        Assertions.assertEquals(2, authorizedContexts.size(), "INSERT is checked on every table");
+        for (ConnectContext authorized : authorizedContexts) {
+            Assertions.assertSame(authenticatedContext.get(), authorized);
+            Assertions.assertEquals(groupDerivedRoles, authorized.getCurrentRoleIds());
+        }
+    }
+
+    @Test
+    public void testExternalTableCheckRefusesAWrongPassword() throws Exception {
+        // The real chain this time: root with its real (empty) password is let through, the same user with a
+        // wrong password is refused, and beginRemoteTxn stops there instead of opening a transaction.
+        boolean savedCheck = Config.enable_starrocks_external_table_auth_check;
+        Config.enable_starrocks_external_table_auth_check = true;
+        try {
+            TAuthenticateParams params = new TAuthenticateParams();
+            params.setUser("root@127.0.0.1");
+            params.setPasswd("");
+            params.setHost("127.0.0.1");
+            params.setDb_name("test");
+            params.setTable_names(List.of("site_access_hour"));
+            TStatus accepted = FrontendServiceImpl.checkAuthAndExternalTablePriv(params);
+            Assertions.assertEquals(TStatusCode.OK, accepted.getStatus_code(), String.valueOf(accepted));
+
+            params.setPasswd("wrong_password");
+            TStatus refused = FrontendServiceImpl.checkAuthAndExternalTablePriv(params);
+            Assertions.assertEquals(TStatusCode.NOT_AUTHORIZED, refused.getStatus_code(), String.valueOf(refused));
+            Assertions.assertTrue(refused.getError_msgs().contains("Please check that your user or password is correct"),
+                    String.valueOf(refused));
+
+            TBeginRemoteTxnRequest request = new TBeginRemoteTxnRequest();
+            request.setAuth_info(params);
+            TBeginRemoteTxnResponse response = new FrontendServiceImpl(exeEnv).beginRemoteTxn(request);
+            Assertions.assertEquals(TStatusCode.NOT_AUTHORIZED, response.getStatus().getStatus_code(),
+                    String.valueOf(response.getStatus()));
+        } finally {
+            Config.enable_starrocks_external_table_auth_check = savedCheck;
+        }
     }
 }

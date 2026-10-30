@@ -68,6 +68,14 @@ public class OnlineOptimizeJobV2Test extends DDLTestBase {
     @BeforeAll
     public static void beforeAll() {
         DDLTestBase.beforeAll();
+        // The cases drive optimize jobs by hand. A running scheduler can pick a job up between process() and
+        // spyPreviousTxnFinished() and run its pending step on the original, which shares tmpPartitionIds with
+        // the spy, so its failure cancels the job and drops the spy's temp partitions.
+        try {
+            UtFrameUtils.stopBackgroundSchemaChangeHandler(60000);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
         UtFrameUtils.setUpForPersistTest();
     }
 
@@ -465,7 +473,8 @@ public class OnlineOptimizeJobV2Test extends DDLTestBase {
     }
 
     private OnlineOptimizeJobV2 spyPreviousTxnFinished(OnlineOptimizeJobV2 job) throws AnalysisException {
-        // Detach the job from schema change handler to prevent background scheduler from changing state
+        // The test drives the spy from here on, so the handler must not hold the original. Detaching alone does
+        // not keep the scheduler away from it, which is why beforeAll() stops the scheduler.
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
         schemaChangeHandler.getAlterJobsV2().remove(job.getJobId());
 
@@ -556,6 +565,77 @@ public class OnlineOptimizeJobV2Test extends DDLTestBase {
         Assertions.assertEquals(JobState.FINISHED, retained.getJobState());
         assertPruned(retained);
         Assertions.assertEquals(List.of(2, 2, 0, 0), partitionListSizes(finishedEntry));
+        Assertions.assertEquals(catalogSnapshot(table), catalogSnapshot(followerTable));
+    }
+
+    @Test
+    public void testFollowerReplayOfFinishedJobKeepsLiveTabletsUnmarked() throws Exception {
+        OlapTable table = createPartitionedTable("t_online_optimize_follower_force_delete");
+        // The follower starts from the catalog as it was before the optimize.
+        UtFrameUtils.PseudoImage initialImage = saveMetastore();
+        OnlineOptimizeJobV2 job = submitOptimize(table);
+        runToRunning(job);
+        runToFinished(job);
+
+        LocalMetastore followerMetastore = loadMetastore(initialImage);
+        OlapTable followerTable = tableIn(followerMetastore, table);
+        SchemaChangeHandler followerHandler = new SchemaChangeHandler();
+        OnlineOptimizeJobV2 finishedEntry =
+                (OnlineOptimizeJobV2) replayUpToFinalEntry(followerMetastore, followerHandler, job.getJobId(), 2);
+        // The swaps already made the temp partitions of the entry the live partitions of the table.
+        Assertions.assertEquals(new HashSet<>(finishedEntry.getTmpPartitionIds()),
+                partitionIds(followerTable.getPartitions()));
+        List<Long> liveTabletIds = tabletIds(followerTable.getPartitions());
+        assertInInvertedIndex(liveTabletIds);
+        assertNotMarkedForceDelete(liveTabletIds);
+
+        replayOn(followerMetastore, followerHandler, finishedEntry);
+
+        assertNotMarkedForceDelete(liveTabletIds);
+        Assertions.assertEquals(catalogSnapshot(table), catalogSnapshot(followerTable));
+    }
+
+    @Test
+    public void testCancelAfterPartialSwapKeepsSwappedPartitionUnmarked() throws Exception {
+        OlapTable table = createPartitionedTable("t_online_optimize_cancel_partial_swap");
+        // The follower starts from the catalog as it was before the optimize.
+        UtFrameUtils.PseudoImage initialImage = saveMetastore();
+        OnlineOptimizeJobV2 job = submitOptimize(table);
+        runToRunning(job);
+        // The round that swaps in the first partition also starts the double write and rewrite of the second one;
+        // stop there, so that one partition is swapped in and the other one is still temp.
+        long deadlineMs = System.currentTimeMillis() + 60_000L;
+        while (table.getTempPartitions().size() == 2) {
+            Assertions.assertTrue(System.currentTimeMillis() < deadlineMs, "job is still " + job.getJobState());
+            job.run();
+            Thread.sleep(100);
+        }
+        Assertions.assertEquals(JobState.RUNNING, job.getJobState(), job.errMsg);
+        Assertions.assertEquals(1, table.getTempPartitions().size());
+        Assertions.assertEquals(1, table.getDoubleWritePartitions().size());
+        List<Long> liveTabletIds = tabletIds(table.getPartitions());
+        List<Long> tempTabletIds = tabletIds(table.getTempPartitions());
+        assertNotMarkedForceDelete(liveTabletIds);
+
+        Assertions.assertTrue(job.cancel("cancel"));
+
+        Assertions.assertEquals(JobState.CANCELLED, job.getJobState());
+        assertInInvertedIndex(liveTabletIds);
+        assertNotMarkedForceDelete(liveTabletIds);
+        Assertions.assertTrue(table.getDoubleWritePartitions().isEmpty());
+        assertTempPartitionsDropped(table, tempTabletIds);
+
+        LocalMetastore followerMetastore = loadMetastore(initialImage);
+        OlapTable followerTable = tableIn(followerMetastore, table);
+        SchemaChangeHandler followerHandler = new SchemaChangeHandler();
+        OnlineOptimizeJobV2 cancelledEntry =
+                (OnlineOptimizeJobV2) replayUpToFinalEntry(followerMetastore, followerHandler, job.getJobId(), 1);
+        Assertions.assertEquals(JobState.CANCELLED, cancelledEntry.getJobState());
+
+        replayOn(followerMetastore, followerHandler, cancelledEntry);
+
+        assertNotMarkedForceDelete(liveTabletIds);
+        assertTempPartitionsDropped(followerTable, tempTabletIds);
         Assertions.assertEquals(catalogSnapshot(table), catalogSnapshot(followerTable));
     }
 
@@ -813,6 +893,14 @@ public class OnlineOptimizeJobV2Test extends DDLTestBase {
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         for (long tabletId : tabletIds) {
             Assertions.assertNotNull(invertedIndex.getTabletMeta(tabletId), "tablet " + tabletId);
+        }
+    }
+
+    private static void assertNotMarkedForceDelete(List<Long> tabletIds) {
+        Assertions.assertFalse(tabletIds.isEmpty());
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+        for (long tabletId : tabletIds) {
+            Assertions.assertFalse(invertedIndex.getForceDeleteTablets().containsKey(tabletId), "tablet " + tabletId);
         }
     }
 

@@ -699,6 +699,11 @@ void* StorageEngine::_update_cache_evict_thread_callback(void* arg) {
             continue;
         }
 
+#if defined(USE_STAROS) && !defined(BE_TEST)
+        StorageEnv::GetInstance()->lake_primary_key_manager()->evict_cache(
+                config::primary_key_index_memory_high_percent);
+#endif
+
         // Check config valid
         int64_t memory_urgent_level = config::memory_urgent_level;
         int64_t memory_high_level = config::memory_high_level;
@@ -709,9 +714,6 @@ void* StorageEngine::_update_cache_evict_thread_callback(void* arg) {
             continue;
         }
         _update_manager->evict_cache(memory_urgent_level, memory_high_level);
-#if defined(USE_STAROS) && !defined(BE_TEST)
-        StorageEnv::GetInstance()->lake_primary_key_manager()->evict_cache(memory_urgent_level, memory_high_level);
-#endif
     }
     return nullptr;
 }

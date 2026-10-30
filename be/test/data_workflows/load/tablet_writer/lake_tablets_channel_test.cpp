@@ -1512,8 +1512,8 @@ TEST_F(LakeTabletsChannelShardInfoHandoffTest, test_eos_hands_over_one_shard_inf
     EXPECT_EQ((std::set<int64_t>{10, 11}), partitions);
 }
 
-TEST_F(LakeTabletsChannelShardInfoHandoffTest, test_no_shard_info_when_handoff_disabled) {
-    SCOPED_UPDATE(bool, config::lake_enable_tablet_location_handoff, false);
+TEST_F(LakeTabletsChannelShardInfoHandoffTest, test_no_shard_info_when_shard_info_cache_disabled) {
+    SCOPED_UPDATE(int64_t, config::lake_shard_info_cache_ttl_sec, 0);
     auto response = write_and_finish();
     ASSERT_EQ(TStatusCode::OK, response.status().status_code());
     ASSERT_EQ(4, response.lake_tablet_data().txn_logs_size());

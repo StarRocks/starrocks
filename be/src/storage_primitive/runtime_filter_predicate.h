@@ -50,6 +50,8 @@ protected:
 
     RuntimeFilterProbeDescriptor* _rf_desc;
     const RuntimeFilter* _rf = nullptr;
+    // whether _rf passes every row, see RuntimeFilter::is_pass_all; computed once, since it compares the bounds.
+    bool _pass_all = false;
     ColumnId _column_id;
     // Holds hash_values plus the bucket-aware scratch vectors, reused across chunks.  Each
     // HdfsScanner/OlapChunkSource gets its own RuntimeFilterPredicate instances

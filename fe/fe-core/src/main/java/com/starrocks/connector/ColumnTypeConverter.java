@@ -865,6 +865,11 @@ public class ColumnTypeConverter {
     }
 
     public static Type fromIcebergType(org.apache.iceberg.types.Type icebergType) {
+        Type type = convertIcebergType(icebergType);
+        return type.hasNestedGeoType() ? UnknownType.UNKNOWN_TYPE : type;
+    }
+
+    private static Type convertIcebergType(org.apache.iceberg.types.Type icebergType) {
         if (icebergType == null) {
             return NullType.NULL;
         }
@@ -940,6 +945,10 @@ public class ColumnTypeConverter {
                 return com.starrocks.type.DateType.TIME;
             case VARIANT:
                 return VariantType.VARIANT;
+            case UNKNOWN:
+                // Iceberg v3 `unknown`: always null and never stored in data files, so it reads as NULL.
+                // A concrete type keeps an enclosing struct/list/map readable.
+                return NullType.NULL;
             case GEOGRAPHY:
                 Types.GeographyType geography = (Types.GeographyType) icebergType;
                 if ((geography.crs() == null || geography.crs().equals("OGC:CRS84"))

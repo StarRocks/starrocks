@@ -25,7 +25,9 @@ import com.starrocks.common.util.SqlUtils;
 import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.scheduler.ExecuteOption;
 import com.starrocks.scheduler.TaskRun;
+import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.scheduler.persist.TaskRunStatus;
+import com.starrocks.sql.common.PListCell;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.thrift.TGetTasksParams;
 import com.starrocks.thrift.TResultBatch;
@@ -160,7 +162,8 @@ public class TaskRunHistoryTable {
     }
 
     /**
-     * Normalize the task run status, remove unnecessary properties
+     * Normalize the task run status, remove unnecessary properties and shrink the list partition values that a
+     * batched refresh carries in every task run.
      * @param status
      */
     private void removeUnnecessaryProperties(TaskRunStatus status) {
@@ -169,12 +172,18 @@ public class TaskRunHistoryTable {
             removeUnnecessaryProperties(status.getProperties());
         }
         // remove unnecessary properties in mvTaskRunExtraMessage
-        if (status.getMvTaskRunExtraMessage() != null) {
-            ExecuteOption executeOption = status.getMvTaskRunExtraMessage().getExecuteOption();
+        MVTaskRunExtraMessage extraMessage = status.getMvTaskRunExtraMessage();
+        if (extraMessage != null) {
+            ExecuteOption executeOption = extraMessage.getExecuteOption();
             if (executeOption != null) {
                 removeUnnecessaryProperties(executeOption.getTaskRunProperties());
             }
+            extraMessage.setNextPartitionValues(shrinkPartitionValues(extraMessage.getNextPartitionValues()));
         }
+    }
+
+    private static String shrinkPartitionValues(String partitionValues) {
+        return PListCell.shrinkBatchForDisplay(partitionValues, Config.max_mv_task_run_meta_message_values_length);
     }
 
     /**
@@ -201,6 +210,7 @@ public class TaskRunHistoryTable {
                 iterator.remove();
             }
         }
+        properties.computeIfPresent(TaskRun.PARTITION_VALUES, (key, values) -> shrinkPartitionValues(values));
     }
 
     /**

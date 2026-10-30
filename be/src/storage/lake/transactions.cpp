@@ -18,6 +18,8 @@
 #include "base/debug/trace.h"
 #include "base/utility/defer_op.h"
 #include "common/config_lake_fwd.h"
+#include "common/config_primary_key_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/lake_types.pb.h"
@@ -154,6 +156,13 @@ StatusOr<std::vector<TxnLogVector>> load_txn_log(TabletManager* tablet_mgr, std:
                     return txn_log.status();
                 }
             }
+            // A statement writes txn logs only for the tablets it loads, so a load id without a log is expected.
+            // A tablet without any log is not: FE commits a partition only after all of its tablets finished
+            // loading. Report it like a missing single txn log rather than let the caller apply no statement.
+            if (txn_logs.empty()) {
+                return Status::NotFound(fmt::format("no txn log of tablet {} for any of the {} load ids of txn {}",
+                                                    tablet_id, txn_info.load_ids_size(), txn_info.txn_id()));
+            }
             continue;
         } else if (!txn_info.combined_txn_log()) {
             auto log_path = tablet_mgr->txn_log_location(tablet_id, txn_info.txn_id());
@@ -273,10 +282,11 @@ static StatusOr<MutableTxnLogPtr> make_shadow_rewrite_schema_change_log(TabletMa
     return schema_change_log;
 }
 
-StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const PublishTabletInfo& tablet_info,
-                                            int64_t base_version, int64_t new_version, std::span<const TxnInfoPB> txns,
-                                            bool skip_write_tablet_metadata, int64_t fe_built_version,
-                                            InitialMetadataOrder base_version_order) {
+static StatusOr<TabletMetadataPtr> do_publish_version(TabletManager* tablet_mgr, const PublishTabletInfo& tablet_info,
+                                                      int64_t base_version, int64_t new_version,
+                                                      std::span<const TxnInfoPB> txns, bool skip_write_tablet_metadata,
+                                                      int64_t fe_built_version,
+                                                      InitialMetadataOrder base_version_order) {
     if (txns.size() == 1 && (txns[0].txn_id() == EMPTY_TXNLOG_TXNID || txns[0].txn_type() == TXN_TABLET_RESHARD)) {
         LOG(INFO) << "publish version tablet_info: " << tablet_info << ", txn: " << txns[0].DebugString()
                   << ", base_version: " << base_version << ", new_version: " << new_version;
@@ -688,6 +698,26 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
     return new_metadata;
 }
 
+StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const PublishTabletInfo& tablet_info,
+                                            int64_t base_version, int64_t new_version, std::span<const TxnInfoPB> txns,
+                                            bool skip_write_tablet_metadata, int64_t fe_built_version,
+                                            InitialMetadataOrder base_version_order) {
+    auto res = do_publish_version(tablet_mgr, tablet_info, base_version, new_version, txns, skip_write_tablet_metadata,
+                                  fe_built_version, base_version_order);
+    // A primary key publish fails with MemoryLimitExceeded when it runs past the update memory limit. Its failed
+    // applier has already dropped this tablet's index from the cache; shrink the indexes other tablets keep so
+    // that the retry has memory to load into. Any other publish only checks the urgent level: the background
+    // evict thread does the regular trimming to primary_key_index_memory_high_percent, and this is the backstop
+    // for when the cache grows past the urgent level before that thread runs. Like that thread, it is part of
+    // the automatic eviction that enable_auto_evict_update_cache turns off.
+    if (res.status().is_mem_limit_exceeded()) {
+        tablet_mgr->primary_key_mgr()->evict_cache(config::primary_key_index_memory_middle_percent);
+    } else if (config::enable_auto_evict_update_cache) {
+        tablet_mgr->primary_key_mgr()->evict_cache(config::primary_key_index_memory_urgent_percent);
+    }
+    return res;
+}
+
 Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, std::span<const TxnInfoPB> txn_infos,
                            const int64_t* log_versions) {
     auto files_to_delete = std::vector<std::string>{};
@@ -705,8 +735,15 @@ Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, std::sp
             auto txn_id = txn_infos[i].txn_id();
             auto log_version = log_versions[i];
             auto expected_count = txn_infos[i].load_ids_size();
-            ASSIGN_OR_RETURN(auto txn_logs_vector, load_txn_log(tablet_mgr, {tablet_id}, txn_infos[i]));
-            auto& txn_logs = txn_logs_vector[0];
+            auto txn_logs_or = load_txn_log(tablet_mgr, {tablet_id}, txn_infos[i]);
+            // NotFound means no per-load_id file is left, the fully consumed case of the shortfall below.
+            if (!txn_logs_or.ok() && !txn_logs_or.status().is_not_found()) {
+                return txn_logs_or.status();
+            }
+            TxnLogVector txn_logs;
+            if (txn_logs_or.ok()) {
+                txn_logs = std::move(txn_logs_or.value()[0]);
+            }
 
             if (static_cast<int>(txn_logs.size()) < expected_count) {
                 // load_txn_log silently skips per-load_id files that are NotFound, so any

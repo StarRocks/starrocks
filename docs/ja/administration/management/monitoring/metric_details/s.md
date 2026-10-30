@@ -96,6 +96,18 @@ description: "Alphabetical s"
 - 単位: -
 - 説明: `/proc/net/snmp`によって返されるメトリクス。
 
+## `staros_shard_info_fallback_cache_entries`
+
+- 単位: カウント
+- タイプ: 瞬時値
+- 説明: 共有データモード専用。この BE が StarMgr に問い合わせた後に保持している、自身の所有していない tablet のストレージロケーションの数 (BE 設定項目 `lake_shard_info_cache_ttl_sec` を参照)。これらのエントリは `lake_tablet_location_handoff_entries` で数えられるエントリと 16 MiB の LRU キャッシュを共有します。エントリは TTL が切れるまで使用され、キャッシュに空きが必要なときに追い出されるため、この値はまだ使用できるエントリ数ではなく、キャッシュの使用状況を表します。
+
+## `staros_shard_info_fallback_cache_hits_total`
+
+- 単位: カウント
+- タイプ: 累積
+- 説明: 共有データモード専用。この BE が、自身の所有していない tablet のストレージロケーションを、以前に StarMgr に問い合わせて保持していたロケーション (BE 設定項目 `lake_shard_info_cache_ttl_sec` を参照) で解決し、再度問い合わせなかった回数。1 回の増加は StarMgr への GetShard RPC を 1 回省いたことを意味します。`starrocks_be_staros_shard_info_fallback_total` と合わせると、キャッシュのヒット率は `hits / (hits + fallback)` です。
+
 ## `starrocks_be_build_info`
 
 - 単位: -
@@ -182,6 +194,18 @@ description: "Alphabetical s"
 - タイプ: 累積値
 - 説明: スキャン時に flat JSON サブカラム値の型変換に費やした累積時間。
 
+## `starrocks_be_flat_json_compaction_mixed_inputs_total`
+
+- 単位: カウント
+- タイプ: 累積値
+- 説明: 入力セグメントの一部がフラット JSON、残りが完全な JSON である JSON 列を、コンパクションがフラット JSON セグメントのレイアウト（すべてのサブカラムを JSON 型）で読み取った回数。`enable_compaction_flat_json_mixed_inputs` を参照してください。
+
+## `starrocks_be_flat_json_compaction_plain_fallback_total`
+
+- 単位: カウント
+- タイプ: 累積値
+- 説明: バッファ済みの入力が `compaction_memory_limit_per_worker` の 8 分の 1（同時に書き込まれる JSON 列で等分）を超えたが、書き出しに使える単一のフラットレイアウトがなかったため、出力を完全な JSON として書き出したフラット JSON コンパクションの回数。
+
 ## `starrocks_be_flat_json_compaction_schema_change_total`
 
 - 単位: カウント
@@ -192,7 +216,7 @@ description: "Alphabetical s"
 
 - 単位: カウント
 - タイプ: 累積値
-- 説明: `starrocks_be_flat_json_compaction_total` に計上されるフラット JSON コンパクションのうち、出力セグメント全体をバッファせず入力を受け取り次第書き出した回数。バッファ済みの入力が `compaction_memory_limit_per_worker` の 8 分の 1 を超え、そのすべてが同じフラットレイアウトを持つ場合に発生します。
+- 説明: `starrocks_be_flat_json_compaction_total` に計上されるフラット JSON コンパクションのうち、出力セグメント全体をバッファせず入力を受け取り次第書き出した回数。バッファ済みの入力が `compaction_memory_limit_per_worker` の 8 分の 1（同時に書き込まれる JSON 列で等分）を超え、そのすべてが同じフラットレイアウトを持つ場合に発生します。
 
 ## `starrocks_be_flat_json_compaction_total`
 
@@ -353,7 +377,7 @@ description: "Alphabetical s"
 
 - 単位: カウント
 - タイプ: 累積
-- 説明: 共有データモード専用。BE の StarOSWorker が、ローカルキャッシュに必要な shard 情報が存在しない（クエリ／コンパクション／lake 操作がその shard を参照する前に、FE から当該 BE へ shard がプッシュされていない）ために、starmgr に対して実際に発行した RPC（`g_starlet->get_shard_info()`）の総数。starlet の ready チェックが通過し、RPC が実際にディスパッチされた場合のみカウントされます。starlet が未 ready のタイムアウトは含まれません。正常時はほぼゼロに近い値となることが期待されます。継続的または増加傾向のレートは、FE 側のタスク／ノード選択がまだ shard を保持していない BE に処理をスケジュールしている、あるいは FE 側からの shard プッシュの伝搬が遅延していることを示す強いシグナルです。推奨アラート: BE ごとの 5 分間ウィンドウでのレートが高い場合。`file_bundling` が有効なテーブルへのロードを調整するノードでは、これらの RPC の大半が tablet ストレージロケーションの引き渡しによって省かれ、その回数は `lake_tablet_location_handoff_hits_total` に計上されます。引き渡しのヒット率は `hits / (hits + fallback)` です。
+- 説明: 共有データモード専用。BE の StarOSWorker が、ローカルキャッシュに必要な shard 情報が存在しない（クエリ／コンパクション／lake 操作がその shard を参照する前に、FE から当該 BE へ shard がプッシュされていない）ために、starmgr に対して実際に発行した RPC（`g_starlet->get_shard_info()`）の総数。starlet の ready チェックが通過し、RPC が実際にディスパッチされた場合のみカウントされます。starlet が未 ready のタイムアウトは含まれません。正常時はほぼゼロに近い値となることが期待されます。継続的または増加傾向のレートは、FE 側のタスク／ノード選択がまだ shard を保持していない BE に処理をスケジュールしている、あるいは FE 側からの shard プッシュの伝搬が遅延していることを示す強いシグナルです。推奨アラート: BE ごとの 5 分間ウィンドウでのレートが高い場合。`file_bundling` が有効なテーブルへのロードを調整するノードでは、これらの RPC の大半が tablet ストレージロケーションの引き渡しによって省かれ、その回数は `lake_tablet_location_handoff_hits_total` に計上されます。引き渡しのヒット率は `hits / (hits + fallback)` です。どのノードでも、`lake_shard_info_cache_ttl_sec` 以内に同じ tablet を再び参照した場合は、最初の RPC の後に保持したロケーションで応答し、その回数は `staros_shard_info_fallback_cache_hits_total` に計上されます。
 
 ## `starrocks_be_staros_shard_info_fallback_failed_total`
 

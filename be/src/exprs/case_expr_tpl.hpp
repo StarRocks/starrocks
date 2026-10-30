@@ -58,26 +58,26 @@ namespace starrocks {
  *  equivalence in vectorization, benefit SIMD-optimization from no-case evaluation.
  */
 
-template <LogicalType WhenType, LogicalType ResultType>
+// Everything in a CASE expression that depends only on the result type: the searched form
+// (CASE WHEN cond THEN ...), ELSE handling, selective evaluation and debug/JIT naming.
+// VectorizedCaseExpr<WhenType, ResultType> is instantiated for every WHEN x result type pair
+// (~620 instantiations across case_expr_g{1,2,3}.cpp); keeping these members here compiles them
+// once per result type instead of once per pair.
+template <LogicalType ResultType>
 #ifdef STARROCKS_JIT_ENABLE
-class VectorizedCaseExpr final : public Expr,
-                                 public JITCodegenNode
+class VectorizedCaseExprBase : public Expr,
+                               public JITCodegenNode
 #else
-class VectorizedCaseExpr final : public Expr
+class VectorizedCaseExprBase : public Expr
 #endif
 {
 public:
-    explicit VectorizedCaseExpr(const TExprNode& node)
+    explicit VectorizedCaseExprBase(const TExprNode& node)
             : Expr(node), _has_case_expr(node.case_expr.has_case_expr), _has_else_expr(node.case_expr.has_else_expr) {}
 
     // Result types built row by row through the generic Column::append() instead of
-    // ColumnBuilder/ColumnViewer + the SIMD multi-selector. VARIANT is not a collection but shares that
-    // path because it has no ColumnBuilder specialization.
-    static constexpr bool kRowWiseAppendResult = lt_is_collection<ResultType> || ResultType == TYPE_VARIANT;
-
-    ~VectorizedCaseExpr() override = default;
-
-    Expr* clone(ObjectPool* pool) const override { return pool->add(new VectorizedCaseExpr(*this)); }
+    // ColumnBuilder/ColumnViewer + the SIMD multi-selector. See lt_is_row_wise_append.
+    static constexpr bool kRowWiseAppendResult = lt_is_row_wise_append<ResultType>;
 
     Status open(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) override {
         RETURN_IF_ERROR(Expr::open(state, context, scope));
@@ -91,15 +91,6 @@ public:
     }
 
 #ifdef STARROCKS_JIT_ENABLE
-    bool is_compilable(RuntimeState* state) const override {
-        if (_has_case_expr) {
-            return state->can_jit_expr(CompilableExprType::CASE) && IRHelper::support_jit(WhenType) &&
-                   IRHelper::support_jit(ResultType);
-        } else {
-            return state->can_jit_expr(CompilableExprType::CASE) && IRHelper::support_jit(ResultType);
-        }
-    }
-
     // It considers the proportion of valuable children, rather than the total score, so it can't depend on an
     // expensive branch. The magic values are resulted from experiments.
     JitScore compute_jit_score(RuntimeState* state) const override {
@@ -135,106 +126,6 @@ public:
             return {expr_num, expr_num};
         }
         return {0, expr_num};
-    }
-
-    StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override {
-        if constexpr (lt_is_decimal<WhenType> || lt_is_decimal<ResultType>) {
-            // TODO(yueyang): Implement case...when in LLVM IR.
-            return Status::NotSupported("JIT of case..when..else...end not support");
-        } else if constexpr (lt_is_number<WhenType> && lt_is_number<ResultType>) {
-            auto& b = jit_ctx->builder;
-            auto* head = b.GetInsertBlock();
-            auto* join = llvm::BasicBlock::Create(head->getContext(), "join_block", head->getParent());
-            LLVMDatum result(b);
-            llvm::Value* res = b.CreateAlloca(IRHelper::logical_to_ir_type(b, ResultType).value(), nullptr, "retVal");
-            llvm::Value* res_null = b.CreateAlloca(b.getInt8Ty(), nullptr, "retValNull");
-
-            auto* else_block = llvm::BasicBlock::Create(head->getContext(), "else_block", head->getParent());
-            if (_has_case_expr) {
-                LLVMDatum datum_0(b);
-                for (size_t i = 0; i + 1 < _children.size(); i += (1 + (i > 0))) { // 0, 1, 3, 5 ,,,
-                    auto* then = llvm::BasicBlock::Create(head->getContext(), "then_" + std::to_string(i),
-                                                          head->getParent());
-                    auto* next = llvm::BasicBlock::Create(head->getContext(), "next_" + std::to_string(i),
-                                                          head->getParent());
-                    ASSIGN_OR_RETURN(auto datum_i, ExprJITCodegen::generate_ir(context, _children[i], jit_ctx))
-                    if (i == 0) { // if caseExpr is null, go to else
-                        datum_0 = datum_i;
-                        llvm::Value* is_null = nullptr;
-                        if (_children[i]->is_nullable()) {
-                            is_null = b.CreateICmpEQ(datum_i.null_flag, llvm::ConstantInt::get(b.getInt8Ty(), 1));
-                        } else {
-                            is_null = llvm::ConstantInt::get(b.getInt1Ty(), 0);
-                        }
-                        b.CreateCondBr(is_null, then, next);
-                        b.SetInsertPoint(then);
-                        b.CreateBr(else_block);
-                    } else { // if (whenExpr !=null & caseExpr = whenExpr), store the result
-                        llvm::Value* cmp_eq = nullptr;
-                        if constexpr (lt_is_float<WhenType>) {
-                            cmp_eq = b.CreateFCmpOEQ(datum_0.value, datum_i.value);
-                        } else {
-                            cmp_eq = b.CreateICmpEQ(datum_0.value, datum_i.value);
-                        }
-                        if (_children[i]->is_nullable()) {
-                            auto* not_null =
-                                    b.CreateICmpEQ(datum_i.null_flag, llvm::ConstantInt::get(b.getInt8Ty(), 0));
-                            b.CreateCondBr(b.CreateAnd(not_null, cmp_eq), then, next);
-                        } else {
-                            b.CreateCondBr(cmp_eq, then, next);
-                        }
-                        b.SetInsertPoint(then);
-                        ASSIGN_OR_RETURN(auto datum_i_1,
-                                         ExprJITCodegen::generate_ir(context, _children[i + 1], jit_ctx))
-                        b.CreateStore(datum_i_1.value, res);
-                        b.CreateStore(datum_i_1.null_flag, res_null);
-                        b.CreateBr(join);
-                    }
-                    b.SetInsertPoint(next);
-                }
-            } else {
-                for (size_t i = 0; i + 1 < _children.size(); i += 2) {
-                    auto* then = llvm::BasicBlock::Create(head->getContext(), "then_" + std::to_string(i),
-                                                          head->getParent());
-                    auto* next = llvm::BasicBlock::Create(head->getContext(), "next_" + std::to_string(i),
-                                                          head->getParent());
-                    ASSIGN_OR_RETURN(auto datum_i, ExprJITCodegen::generate_ir(context, _children[i], jit_ctx))
-                    auto* is_true = IRHelper::bool_to_cond(b, datum_i.value);
-                    if (_children[i]->is_nullable()) {
-                        auto* not_null = b.CreateICmpEQ(datum_i.null_flag, llvm::ConstantInt::get(b.getInt8Ty(), 0));
-                        b.CreateCondBr(b.CreateAnd(not_null, is_true), then, next);
-                    } else {
-                        b.CreateCondBr(is_true, then, next);
-                    }
-                    b.SetInsertPoint(then);
-
-                    ASSIGN_OR_RETURN(auto datum_i_1, ExprJITCodegen::generate_ir(context, _children[i + 1], jit_ctx))
-                    b.CreateStore(datum_i_1.value, res);
-                    b.CreateStore(datum_i_1.null_flag, res_null);
-                    b.CreateBr(join);
-                    b.SetInsertPoint(next);
-                }
-            }
-            b.CreateBr(else_block);
-            b.SetInsertPoint(else_block);
-            LLVMDatum else_val;
-            if (_has_else_expr) {
-                ASSIGN_OR_RETURN(else_val, ExprJITCodegen::generate_ir(context, _children.back(), jit_ctx))
-            } else {
-                ASSIGN_OR_RETURN(else_val.value, IRHelper::create_ir_number(b, ResultType, 0))
-                else_val.null_flag = llvm::ConstantInt::get(b.getInt8Ty(), 1);
-            }
-            b.CreateStore(else_val.value, res);
-            b.CreateStore(else_val.null_flag, res_null);
-
-            b.CreateBr(join);
-            b.SetInsertPoint(join);
-            result.value = b.CreateLoad(IRHelper::logical_to_ir_type(b, ResultType).value(), res);
-            result.null_flag = b.CreateLoad(b.getInt8Ty(), res_null);
-            return result;
-        } else {
-            return Status::NotSupported("JIT of case..when..else...end not support");
-        }
     }
 
     std::string jit_func_name_impl(RuntimeState* state) const override {
@@ -290,173 +181,7 @@ public:
         return out.str();
     }
 
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* chunk) override {
-        if (_has_case_expr) {
-            return evaluate_case(context, chunk);
-        } else {
-            return evaluate_no_case(context, chunk);
-        }
-    }
-
-private:
-    // CASE 1:
-    //   CASE sex
-    //       WHEN '1' THEN 'man'
-    //       WHEN '2' THEN 'woman'
-    //   ELSE 'other' END
-    //
-    //   If `CASE` is null, return `ELSE`
-    //   If ALL `WHEN` is null, return `ELSE`
-    //   If `CASE` equals `WHEN`, return `THEN`
-    //   If `CASE` can't match ANY `WHEN`, return `ELSE`
-    //
-    // CASE 2:
-    //   CASE sex
-    //       WHEN '1' THEN 'man'
-    //       WHEN '2' THEN 'woman'
-    //
-    //   If `CASE` is null, return NULL
-    //   If ALL `WHEN` is null, return NULL
-    //   If `CASE` equals `WHEN`, return `THEN`
-    //   If `CASE` can't match ANY `WHEN`, return NULL
-    StatusOr<ColumnPtr> evaluate_case(ExprContext* context, Chunk* chunk) {
-        ColumnPtr else_column = nullptr;
-        if (!_has_else_expr) {
-            else_column = ColumnHelper::create_const_null_column(chunk != nullptr ? chunk->num_rows() : 1);
-        } else {
-            ASSIGN_OR_RETURN(else_column, _children[_children.size() - 1]->evaluate_checked(context, chunk));
-        }
-
-        ASSIGN_OR_RETURN(ColumnPtr case_column, _children[0]->evaluate_checked(context, chunk));
-        if (ColumnHelper::count_nulls(case_column) == case_column->size()) {
-            return Column::mutate(std::move(else_column));
-        }
-
-        int loop_end = _children.size() - 1;
-
-        Columns when_columns;
-        when_columns.reserve(loop_end);
-
-        Columns then_columns;
-        then_columns.reserve(loop_end);
-
-        for (int i = 1; i < loop_end; i += 2) {
-            ASSIGN_OR_RETURN(ColumnPtr when_column, _children[i]->evaluate_checked(context, chunk));
-
-            // skip if all null
-            if (ColumnHelper::count_nulls(when_column) == when_column->size()) {
-                continue;
-            }
-
-            ASSIGN_OR_RETURN(ColumnPtr then_column, _children[i + 1]->evaluate_checked(context, chunk));
-
-            when_columns.emplace_back(when_column);
-            then_columns.emplace_back(then_column);
-        }
-
-        if (when_columns.empty()) {
-            return Column::mutate(std::move(else_column));
-        }
-        then_columns.emplace_back(else_column);
-        size_t size = when_columns[0]->size();
-        if constexpr (lt_is_collection<ResultType> || lt_is_collection<WhenType> || ResultType == TYPE_VARIANT) {
-            // construct result column
-            bool res_nullable = false;
-            for (const auto& col : then_columns) {
-                if (col->is_nullable() || col->only_null()) {
-                    res_nullable = true;
-                }
-            }
-            MutableColumnPtr res = ColumnHelper::create_column(this->type(), res_nullable);
-
-            for (auto& then_column : then_columns) {
-                then_column = ColumnHelper::unpack_and_duplicate_const_column(size, then_column);
-            }
-            for (auto& when_column : when_columns) {
-                when_column = ColumnHelper::unpack_and_duplicate_const_column(size, when_column);
-            }
-            case_column = ColumnHelper::unpack_and_duplicate_const_column(size, case_column);
-
-            // then_columns.size >= when_columns.size as else_column maybe exist.
-            auto when_num = when_columns.size();
-            const NullColumn* case_nulls = nullptr;
-            if (case_column->is_nullable()) {
-                case_nulls = down_cast<const NullableColumn*>(case_column.get())->null_column_raw_ptr();
-            }
-            auto case_data = ColumnHelper::get_data_column(case_column.get());
-
-            for (auto row = 0; row < size; ++row) {
-                int i = 0;
-                while ((i < when_num) && ((case_nulls != nullptr && case_nulls->immutable_data()[row]) ||
-                                          !when_columns[i]->equals(row, *case_data, row))) {
-                    ++i;
-                }
-                if (then_columns[i]->is_null(row)) {
-                    res->append_nulls(1);
-                } else {
-                    res->append(*then_columns[i], row, 1);
-                }
-            }
-
-            return res;
-        } else {
-            std::vector<ColumnViewer<WhenType>> when_viewers;
-            when_viewers.reserve(loop_end);
-
-            std::vector<ColumnViewer<ResultType>> then_viewers;
-            then_viewers.reserve(loop_end);
-            for (auto& col : when_columns) {
-                when_viewers.emplace_back(col);
-            }
-            for (auto& col : then_columns) {
-                then_viewers.emplace_back(col);
-            }
-            when_columns.emplace_back(case_column);
-
-            bool when_columns_has_null = false;
-            for (ColumnPtr& column : when_columns) {
-                when_columns_has_null |= column->has_null();
-            }
-            ColumnViewer<WhenType> case_viewer(case_column);
-            then_viewers.emplace_back(else_column);
-
-            ColumnBuilder<ResultType> builder(size, this->type().precision, this->type().scale);
-
-            size_t view_size = when_viewers.size();
-            if (!when_columns_has_null) {
-                for (int row = 0; row < size; ++row) {
-                    int i = 0;
-                    while ((i < view_size) && (when_viewers[i].value(row) != case_viewer.value(row))) {
-                        i += 1;
-                    }
-                    if (!then_viewers[i].is_null(row)) {
-                        builder.append(then_viewers[i].value(row));
-                    } else {
-                        builder.append_null();
-                    }
-                }
-            } else {
-                for (int row = 0; row < size; ++row) {
-                    int i = view_size;
-                    if (!case_viewer.is_null(row)) {
-                        i = 0;
-                        while ((i < view_size) &&
-                               (when_viewers[i].is_null(row) || when_viewers[i].value(row) != case_viewer.value(row))) {
-                            i += 1;
-                        }
-                    }
-                    if (!then_viewers[i].is_null(row)) {
-                        builder.append(then_viewers[i].value(row));
-                    } else {
-                        builder.append_null();
-                    }
-                }
-            }
-
-            return builder.build(ColumnHelper::is_all_const(when_columns) && ColumnHelper::is_all_const(then_columns));
-        }
-    }
-
+protected:
     // CASE 1:
     //    CASE WHEN sex = '1' THEN 'man'
     //         WHEN sex = '2' THEN 'woman'
@@ -821,9 +546,304 @@ private:
         return then_expr->evaluate_checked(context, sub_chunk.get());
     }
 
-private:
     const bool _has_case_expr;
     const bool _has_else_expr;
+};
+
+// The parts that depend on the WHEN type: the simple form (CASE x WHEN v THEN ...) and JIT codegen.
+template <LogicalType WhenType, LogicalType ResultType>
+class VectorizedCaseExpr final : public VectorizedCaseExprBase<ResultType> {
+    using Base = VectorizedCaseExprBase<ResultType>;
+    using Base::_children;
+    using Base::_has_case_expr;
+    using Base::_has_else_expr;
+    using Base::kRowWiseAppendResult;
+    using Base::evaluate_no_case;
+
+public:
+    explicit VectorizedCaseExpr(const TExprNode& node) : Base(node) {}
+
+    ~VectorizedCaseExpr() override = default;
+
+    Expr* clone(ObjectPool* pool) const override { return pool->add(new VectorizedCaseExpr(*this)); }
+
+#ifdef STARROCKS_JIT_ENABLE
+    bool is_compilable(RuntimeState* state) const override {
+        if (_has_case_expr) {
+            return state->can_jit_expr(CompilableExprType::CASE) && IRHelper::support_jit(WhenType) &&
+                   IRHelper::support_jit(ResultType);
+        } else {
+            return state->can_jit_expr(CompilableExprType::CASE) && IRHelper::support_jit(ResultType);
+        }
+    }
+
+    StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override {
+        if constexpr (lt_is_decimal<WhenType> || lt_is_decimal<ResultType>) {
+            // TODO(yueyang): Implement case...when in LLVM IR.
+            return Status::NotSupported("JIT of case..when..else...end not support");
+        } else if constexpr (lt_is_number<WhenType> && lt_is_number<ResultType>) {
+            auto& b = jit_ctx->builder;
+            auto* head = b.GetInsertBlock();
+            auto* join = llvm::BasicBlock::Create(head->getContext(), "join_block", head->getParent());
+            LLVMDatum result(b);
+            llvm::Value* res = b.CreateAlloca(IRHelper::logical_to_ir_type(b, ResultType).value(), nullptr, "retVal");
+            llvm::Value* res_null = b.CreateAlloca(b.getInt8Ty(), nullptr, "retValNull");
+
+            auto* else_block = llvm::BasicBlock::Create(head->getContext(), "else_block", head->getParent());
+            if (_has_case_expr) {
+                LLVMDatum datum_0(b);
+                for (size_t i = 0; i + 1 < _children.size(); i += (1 + (i > 0))) { // 0, 1, 3, 5 ,,,
+                    auto* then = llvm::BasicBlock::Create(head->getContext(), "then_" + std::to_string(i),
+                                                          head->getParent());
+                    auto* next = llvm::BasicBlock::Create(head->getContext(), "next_" + std::to_string(i),
+                                                          head->getParent());
+                    ASSIGN_OR_RETURN(auto datum_i, ExprJITCodegen::generate_ir(context, _children[i], jit_ctx))
+                    if (i == 0) { // if caseExpr is null, go to else
+                        datum_0 = datum_i;
+                        llvm::Value* is_null = nullptr;
+                        if (_children[i]->is_nullable()) {
+                            is_null = b.CreateICmpEQ(datum_i.null_flag, llvm::ConstantInt::get(b.getInt8Ty(), 1));
+                        } else {
+                            is_null = llvm::ConstantInt::get(b.getInt1Ty(), 0);
+                        }
+                        b.CreateCondBr(is_null, then, next);
+                        b.SetInsertPoint(then);
+                        b.CreateBr(else_block);
+                    } else { // if (whenExpr !=null & caseExpr = whenExpr), store the result
+                        llvm::Value* cmp_eq = nullptr;
+                        if constexpr (lt_is_float<WhenType>) {
+                            cmp_eq = b.CreateFCmpOEQ(datum_0.value, datum_i.value);
+                        } else {
+                            cmp_eq = b.CreateICmpEQ(datum_0.value, datum_i.value);
+                        }
+                        if (_children[i]->is_nullable()) {
+                            auto* not_null =
+                                    b.CreateICmpEQ(datum_i.null_flag, llvm::ConstantInt::get(b.getInt8Ty(), 0));
+                            b.CreateCondBr(b.CreateAnd(not_null, cmp_eq), then, next);
+                        } else {
+                            b.CreateCondBr(cmp_eq, then, next);
+                        }
+                        b.SetInsertPoint(then);
+                        ASSIGN_OR_RETURN(auto datum_i_1,
+                                         ExprJITCodegen::generate_ir(context, _children[i + 1], jit_ctx))
+                        b.CreateStore(datum_i_1.value, res);
+                        b.CreateStore(datum_i_1.null_flag, res_null);
+                        b.CreateBr(join);
+                    }
+                    b.SetInsertPoint(next);
+                }
+            } else {
+                for (size_t i = 0; i + 1 < _children.size(); i += 2) {
+                    auto* then = llvm::BasicBlock::Create(head->getContext(), "then_" + std::to_string(i),
+                                                          head->getParent());
+                    auto* next = llvm::BasicBlock::Create(head->getContext(), "next_" + std::to_string(i),
+                                                          head->getParent());
+                    ASSIGN_OR_RETURN(auto datum_i, ExprJITCodegen::generate_ir(context, _children[i], jit_ctx))
+                    auto* is_true = IRHelper::bool_to_cond(b, datum_i.value);
+                    if (_children[i]->is_nullable()) {
+                        auto* not_null = b.CreateICmpEQ(datum_i.null_flag, llvm::ConstantInt::get(b.getInt8Ty(), 0));
+                        b.CreateCondBr(b.CreateAnd(not_null, is_true), then, next);
+                    } else {
+                        b.CreateCondBr(is_true, then, next);
+                    }
+                    b.SetInsertPoint(then);
+
+                    ASSIGN_OR_RETURN(auto datum_i_1, ExprJITCodegen::generate_ir(context, _children[i + 1], jit_ctx))
+                    b.CreateStore(datum_i_1.value, res);
+                    b.CreateStore(datum_i_1.null_flag, res_null);
+                    b.CreateBr(join);
+                    b.SetInsertPoint(next);
+                }
+            }
+            b.CreateBr(else_block);
+            b.SetInsertPoint(else_block);
+            LLVMDatum else_val;
+            if (_has_else_expr) {
+                ASSIGN_OR_RETURN(else_val, ExprJITCodegen::generate_ir(context, _children.back(), jit_ctx))
+            } else {
+                ASSIGN_OR_RETURN(else_val.value, IRHelper::create_ir_number(b, ResultType, 0))
+                else_val.null_flag = llvm::ConstantInt::get(b.getInt8Ty(), 1);
+            }
+            b.CreateStore(else_val.value, res);
+            b.CreateStore(else_val.null_flag, res_null);
+
+            b.CreateBr(join);
+            b.SetInsertPoint(join);
+            result.value = b.CreateLoad(IRHelper::logical_to_ir_type(b, ResultType).value(), res);
+            result.null_flag = b.CreateLoad(b.getInt8Ty(), res_null);
+            return result;
+        } else {
+            return Status::NotSupported("JIT of case..when..else...end not support");
+        }
+    }
+#endif
+
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* chunk) override {
+        if (_has_case_expr) {
+            return evaluate_case(context, chunk);
+        } else {
+            return evaluate_no_case(context, chunk);
+        }
+    }
+
+private:
+    // CASE 1:
+    //   CASE sex
+    //       WHEN '1' THEN 'man'
+    //       WHEN '2' THEN 'woman'
+    //   ELSE 'other' END
+    //
+    //   If `CASE` is null, return `ELSE`
+    //   If ALL `WHEN` is null, return `ELSE`
+    //   If `CASE` equals `WHEN`, return `THEN`
+    //   If `CASE` can't match ANY `WHEN`, return `ELSE`
+    //
+    // CASE 2:
+    //   CASE sex
+    //       WHEN '1' THEN 'man'
+    //       WHEN '2' THEN 'woman'
+    //
+    //   If `CASE` is null, return NULL
+    //   If ALL `WHEN` is null, return NULL
+    //   If `CASE` equals `WHEN`, return `THEN`
+    //   If `CASE` can't match ANY `WHEN`, return NULL
+    StatusOr<ColumnPtr> evaluate_case(ExprContext* context, Chunk* chunk) {
+        ColumnPtr else_column = nullptr;
+        if (!_has_else_expr) {
+            else_column = ColumnHelper::create_const_null_column(chunk != nullptr ? chunk->num_rows() : 1);
+        } else {
+            ASSIGN_OR_RETURN(else_column, _children[_children.size() - 1]->evaluate_checked(context, chunk));
+        }
+
+        ASSIGN_OR_RETURN(ColumnPtr case_column, _children[0]->evaluate_checked(context, chunk));
+        if (ColumnHelper::count_nulls(case_column) == case_column->size()) {
+            return Column::mutate(std::move(else_column));
+        }
+
+        int loop_end = _children.size() - 1;
+
+        Columns when_columns;
+        when_columns.reserve(loop_end);
+
+        Columns then_columns;
+        then_columns.reserve(loop_end);
+
+        for (int i = 1; i < loop_end; i += 2) {
+            ASSIGN_OR_RETURN(ColumnPtr when_column, _children[i]->evaluate_checked(context, chunk));
+
+            // skip if all null
+            if (ColumnHelper::count_nulls(when_column) == when_column->size()) {
+                continue;
+            }
+
+            ASSIGN_OR_RETURN(ColumnPtr then_column, _children[i + 1]->evaluate_checked(context, chunk));
+
+            when_columns.emplace_back(when_column);
+            then_columns.emplace_back(then_column);
+        }
+
+        if (when_columns.empty()) {
+            return Column::mutate(std::move(else_column));
+        }
+        then_columns.emplace_back(else_column);
+        size_t size = when_columns[0]->size();
+        if constexpr (kRowWiseAppendResult || lt_is_row_wise_append<WhenType>) {
+            // construct result column
+            bool res_nullable = false;
+            for (const auto& col : then_columns) {
+                if (col->is_nullable() || col->only_null()) {
+                    res_nullable = true;
+                }
+            }
+            MutableColumnPtr res = ColumnHelper::create_column(this->type(), res_nullable);
+
+            for (auto& then_column : then_columns) {
+                then_column = ColumnHelper::unpack_and_duplicate_const_column(size, then_column);
+            }
+            for (auto& when_column : when_columns) {
+                when_column = ColumnHelper::unpack_and_duplicate_const_column(size, when_column);
+            }
+            case_column = ColumnHelper::unpack_and_duplicate_const_column(size, case_column);
+
+            // then_columns.size >= when_columns.size as else_column maybe exist.
+            auto when_num = when_columns.size();
+            const NullColumn* case_nulls = nullptr;
+            if (case_column->is_nullable()) {
+                case_nulls = down_cast<const NullableColumn*>(case_column.get())->null_column_raw_ptr();
+            }
+            auto case_data = ColumnHelper::get_data_column(case_column.get());
+
+            for (auto row = 0; row < size; ++row) {
+                int i = 0;
+                while ((i < when_num) && ((case_nulls != nullptr && case_nulls->immutable_data()[row]) ||
+                                          !when_columns[i]->equals(row, *case_data, row))) {
+                    ++i;
+                }
+                if (then_columns[i]->is_null(row)) {
+                    res->append_nulls(1);
+                } else {
+                    res->append(*then_columns[i], row, 1);
+                }
+            }
+
+            return res;
+        } else {
+            std::vector<ColumnViewer<WhenType>> when_viewers;
+            when_viewers.reserve(loop_end);
+
+            std::vector<ColumnViewer<ResultType>> then_viewers;
+            then_viewers.reserve(loop_end);
+            for (auto& col : when_columns) {
+                when_viewers.emplace_back(col);
+            }
+            for (auto& col : then_columns) {
+                then_viewers.emplace_back(col);
+            }
+            when_columns.emplace_back(case_column);
+
+            bool when_columns_has_null = false;
+            for (ColumnPtr& column : when_columns) {
+                when_columns_has_null |= column->has_null();
+            }
+            ColumnViewer<WhenType> case_viewer(case_column);
+            then_viewers.emplace_back(else_column);
+
+            ColumnBuilder<ResultType> builder(size, this->type().precision, this->type().scale);
+
+            size_t view_size = when_viewers.size();
+            if (!when_columns_has_null) {
+                for (int row = 0; row < size; ++row) {
+                    int i = 0;
+                    while ((i < view_size) && (when_viewers[i].value(row) != case_viewer.value(row))) {
+                        i += 1;
+                    }
+                    if (!then_viewers[i].is_null(row)) {
+                        builder.append(then_viewers[i].value(row));
+                    } else {
+                        builder.append_null();
+                    }
+                }
+            } else {
+                for (int row = 0; row < size; ++row) {
+                    int i = view_size;
+                    if (!case_viewer.is_null(row)) {
+                        i = 0;
+                        while ((i < view_size) &&
+                               (when_viewers[i].is_null(row) || when_viewers[i].value(row) != case_viewer.value(row))) {
+                            i += 1;
+                        }
+                    }
+                    if (!then_viewers[i].is_null(row)) {
+                        builder.append(then_viewers[i].value(row));
+                    } else {
+                        builder.append_null();
+                    }
+                }
+            }
+
+            return builder.build(ColumnHelper::is_all_const(when_columns) && ColumnHelper::is_all_const(then_columns));
+        }
+    }
 };
 
 #define CASE_WHEN_RESULT_TYPE(WHEN_TYPE, RESULT_TYPE)                \
@@ -852,6 +872,7 @@ private:
         CASE_WHEN_RESULT_TYPE(TYPE_DECIMAL128, RESULT_TYPE);                              \
         CASE_WHEN_RESULT_TYPE(TYPE_DECIMAL256, RESULT_TYPE);                              \
         CASE_WHEN_RESULT_TYPE(TYPE_JSON, RESULT_TYPE);                                    \
+        CASE_WHEN_RESULT_TYPE(TYPE_VARIANT, RESULT_TYPE);                                 \
         CASE_WHEN_RESULT_TYPE(TYPE_ARRAY, RESULT_TYPE);                                   \
         CASE_WHEN_RESULT_TYPE(TYPE_MAP, RESULT_TYPE);                                     \
         CASE_WHEN_RESULT_TYPE(TYPE_STRUCT, RESULT_TYPE);                                  \

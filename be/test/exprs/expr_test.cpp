@@ -89,6 +89,13 @@ TEST(ExprTest, GeoTypesDoNotRequireLiteralNode) {
     }
 }
 
+TEST(ExprTest, FileTypeDoesNotRequireLiteralNode) {
+    SimpleExpr expr{TypeDescriptor(TYPE_FILE)};
+    EXPECT_EQ(TYPE_FILE, expr.type().type);
+    EXPECT_FALSE(expr.is_slotref());
+    EXPECT_FALSE(expr.is_cast_expr());
+}
+
 TEST(ExprTest, EvaluateConstCachesResult) {
     SimpleExpr expr{TypeDescriptor(TYPE_INT)};
     RuntimeState state;

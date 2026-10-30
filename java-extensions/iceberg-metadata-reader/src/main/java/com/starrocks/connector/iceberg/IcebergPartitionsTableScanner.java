@@ -15,7 +15,6 @@
 package com.starrocks.connector.iceberg;
 
 import com.google.common.collect.ImmutableList;
-import com.starrocks.connector.share.iceberg.IcebergPartitionUtils;
 import com.starrocks.jni.connector.ColumnValue;
 import org.apache.iceberg.ContentFile;
 import org.apache.iceberg.FileContent;
@@ -23,17 +22,10 @@ import org.apache.iceberg.ManifestContent;
 import org.apache.iceberg.ManifestFile;
 import org.apache.iceberg.ManifestFiles;
 import org.apache.iceberg.PartitionData;
-import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
-import org.apache.iceberg.Schema;
-import org.apache.iceberg.data.GenericRecord;
 import org.apache.iceberg.io.CloseableIterator;
-import org.apache.iceberg.types.Type;
-import org.apache.iceberg.types.Types;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -46,11 +38,9 @@ public class IcebergPartitionsTableScanner extends AbstractIcebergMetadataScanne
     private final String manifestBean;
     private ManifestFile manifestFile;
     private CloseableIterator<? extends ContentFile<?>> reader;
-    private List<PartitionField> partitionFields;
     private Long lastUpdateTime;
     private Integer spedId;
-    private Schema schema;
-    private GenericRecord reusedRecord;
+    private IcebergPartitionValueReader partitionValueReader;
 
     public IcebergPartitionsTableScanner(int fetchSize, Map<String, String> params) {
         super(fetchSize, params);
@@ -60,12 +50,10 @@ public class IcebergPartitionsTableScanner extends AbstractIcebergMetadataScanne
     @Override
     public void doOpen() {
         this.manifestFile = deserializeFromBase64(manifestBean);
-        this.schema = table.schema();
         this.spedId = manifestFile.partitionSpecId();
         this.lastUpdateTime = table.snapshot(manifestFile.snapshotId()) != null ?
                 table.snapshot(manifestFile.snapshotId()).timestampMillis() : null;
-        this.partitionFields = IcebergPartitionUtils.getAllPartitionFields(table);
-        this.reusedRecord = GenericRecord.create(getResultType());
+        this.partitionValueReader = new IcebergPartitionValueReader(table);
     }
 
     @Override
@@ -94,8 +82,7 @@ public class IcebergPartitionsTableScanner extends AbstractIcebergMetadataScanne
         if (reader != null) {
             reader.close();
         }
-        reusedRecord = null;
-
+        partitionValueReader = null;
     }
 
     @Override
@@ -114,23 +101,11 @@ public class IcebergPartitionsTableScanner extends AbstractIcebergMetadataScanne
         }
     }
 
-    private Types.StructType getResultType() {
-        List<Types.NestedField> fields = new ArrayList<>();
-        for (PartitionField partitionField : partitionFields) {
-            int id = partitionField.fieldId();
-            String name = partitionField.name();
-            Type type = partitionField.transform().getResultType(schema.findType(partitionField.sourceId()));
-            Types.NestedField nestedField = Types.NestedField.optional(id, name, type);
-            fields.add(nestedField);
-        }
-        return Types.StructType.of(fields);
-    }
-
     private Object get(String columnName, ContentFile<?> file) {
         FileContent content = file.content();
         switch (columnName) {
             case "partition_value":
-                return getPartitionValues((PartitionData) file.partition());
+                return partitionValueReader.read((PartitionData) file.partition());
             case "spec_id":
                 return spedId;
             case "record_count":
@@ -152,31 +127,5 @@ public class IcebergPartitionsTableScanner extends AbstractIcebergMetadataScanne
             default:
                 throw new IllegalArgumentException("Unrecognized column name " + columnName);
         }
-    }
-
-    private Object getPartitionValues(PartitionData partitionData) {
-        List<Types.NestedField> fileFields = partitionData.getPartitionType().fields();
-        Map<Integer, Integer> fieldIdToPos = new HashMap<>();
-        for (int i = 0; i < fileFields.size(); i++) {
-            fieldIdToPos.put(fileFields.get(i).fieldId(), i);
-        }
-
-        for (PartitionField partitionField : partitionFields) {
-            Integer fieldId = partitionField.fieldId();
-            String name = partitionField.name();
-            if (fieldIdToPos.containsKey(fieldId)) {
-                int pos = fieldIdToPos.get(fieldId);
-                Type fieldType = partitionData.getType(pos);
-                Object partitionValue = partitionData.get(pos);
-                if (partitionValue != null && partitionField.transform().isIdentity()
-                        && Types.TimestampType.withZone().equals(fieldType)) {
-                    partitionValue = ((long) partitionValue) / 1000;
-                }
-                reusedRecord.setField(name, partitionValue);
-            } else {
-                reusedRecord.setField(name, null);
-            }
-        }
-        return reusedRecord;
     }
 }

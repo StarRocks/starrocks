@@ -39,33 +39,40 @@ jobs:
       (!startsWith(github.head_ref, github.base_ref) || !contains(github.head_ref, '-sync-'))
     name: SYNC CHECKER
     outputs:
-      BACKPORT_SOURCE_PR: ${{ steps.backport_assign.outputs.ORI_PR }}
+      BACKPORT_SOURCE_PR: ${{ steps.backport_source.outputs.ORI_PR }}
     steps:
       - run: echo "Normal PR."
 
-      - name: backport assign
-        id: backport_assign
+      - name: backport source
+        id: backport_source
         if: startsWith(github.head_ref, 'mergify/bp/') && github.event.action == 'opened'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ github.event.number }}
           REPO: ${{ github.repository }}
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
           ORI_PR=$(echo "${PR_TITLE}" | grep -oP '\(backport #\K\d+' | tail -n 1)
           author=$(gh pr view ${ORI_PR} -R ${REPO} --json author -q '.author.login')
           if [[ ! "${author}" =~ "mergify" ]]; then
-            # REST "Add assignees to an issue", not `gh pr edit`: the latter also
-            # queries Projects (classic), which GitHub has sunset -- on a runner with
-            # an older gh it fails with "GraphQL: Projects (classic) is being
-            # deprecated" and the `|| true` swallowed it, so nothing got assigned.
-            # The body is passed as JSON (--input -) so the array does not depend on
-            # gh's `key[]=` sugar, which not every gh version supports.
-            echo "{\"assignees\":[\"${author}\"]}" \
-              | gh api -X POST "repos/${REPO}/issues/${PR_NUMBER}/assignees" --input - --silent \
-              || echo "::warning::failed to assign ${author} to #${PR_NUMBER}"
             echo "ORI_PR=${ORI_PR}" >> $GITHUB_OUTPUT
           fi
+
+  # Assign the backport to the owner of its main PR. The owner is not always the
+  # author (CD->SR sync PRs are opened by a bot), so the logic is in ci-tool.
+  backport-assign:
+    needs: sync-checker
+    if: needs.sync-checker.outputs.BACKPORT_SOURCE_PR != ''
+    runs-on: [self-hosted, quick]
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      REPO: ${{ github.repository }}
+      PR_NUMBER: ${{ github.event.number }}
+      SOURCE_PR: ${{ needs.sync-checker.outputs.BACKPORT_SOURCE_PR }}
+    steps:
+      - name: backport assign
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && (git pull || true)
+          python3 lib/backport_assign.py
 
   title-check:
     runs-on: ubuntu-latest
@@ -145,7 +152,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        version: ["4.1", "4.0", "3.5", "3.4", "3.3"]
+        version: ["4.2", "4.1", "4.0", "3.5"]
     steps:
       - name: add ${{ matrix.version }} label
         if: contains(toJson(github.event.pull_request.body), format('[x] {0}', matrix.version))

@@ -38,6 +38,9 @@ public class HeartbeatFlags {
         if ("beta".equalsIgnoreCase(GlobalVariable.defaultRowsetType)) {
             heartbeatFlags |= HeartbeatServiceConstants.IS_SET_DEFAULT_ROWSET_TO_BETA_BIT;
         }
+        // LeaderImpl.finishTask ignores the finish report of an ALTER task that answers another job, so backends can
+        // run queued ALTER tasks however long they waited.
+        heartbeatFlags |= HeartbeatServiceConstants.IS_ALTER_FINISH_MATCHED_BY_JOB_ID_BIT;
 
         return heartbeatFlags;
     }

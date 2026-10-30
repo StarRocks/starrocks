@@ -149,19 +149,21 @@ public class StatisticsExecutorTest extends PlanTestBase {
             @Mock
             public List<TStatisticData> executeStatisticDQL(ConnectContext context, String sql) {
                 Assertions.assertEquals(
-                        "SELECT cast(8 as INT), column_name, sum(row_count), cast(sum(data_size) as bigint), " +
+                        "SELECT cast(21 as INT), column_name, sum(row_count), cast(sum(data_size) as bigint), " +
                                 "hll_union_agg(ndv), sum(null_count),  " +
                                 "cast(max(cast(nullif(max, '') as string)) as string), " +
                                 "cast(min(cast(nullif(min, '') as string)) as string), " +
-                                "max(update_time) FROM (SELECT *, row_number() " +
+                                "max(update_time), cast(count(distinct partition_name) as bigint), " +
+                                "cast(sum(hll_cardinality(ndv)) as bigint) FROM (SELECT *, row_number() " +
                                 "over ( partition by partition_name, column_name order by update_time desc) as rn " +
                                 "FROM external_column_statistics WHERE " + tableUUIDPredicate +
                                 " and column_name in (\"c2\")) dedup_t WHERE rn = 1 GROUP BY column_name UNION ALL " +
-                                "SELECT cast(8 as INT), column_name, sum(row_count), cast(sum(data_size) as bigint), " +
+                                "SELECT cast(21 as INT), column_name, sum(row_count), cast(sum(data_size) as bigint), " +
                                 "hll_union_agg(ndv), sum(null_count),  " +
                                 "cast(max(cast(nullif(max, '') as bigint)) as string), " +
                                 "cast(min(cast(nullif(min, '') as bigint)) as string), " +
-                                "max(update_time) FROM (SELECT *, row_number() " +
+                                "max(update_time), cast(count(distinct partition_name) as bigint), " +
+                                "cast(sum(hll_cardinality(ndv)) as bigint) FROM (SELECT *, row_number() " +
                                 "over ( partition by partition_name, column_name order by update_time desc) as rn " +
                                 "FROM external_column_statistics WHERE " + tableUUIDPredicate +
                                 " and column_name in (\"c1\")) dedup_t WHERE rn = 1 GROUP BY column_name", sql);
@@ -174,6 +176,51 @@ public class StatisticsExecutorTest extends PlanTestBase {
                 "t1");
         StatisticExecutor statisticExecutor = new StatisticExecutor();
         statisticExecutor.queryStatisticSync(context, tableUUID, table, ImmutableList.of("c1", "c2"));
+    }
+
+    @Test
+    public void testFallsBackWhenABackendCannotSerializeTheCoverageCounts() {
+        // A backend that predates the result shape fills nothing in and leaves the version unset, which
+        // reaches the frontend as an unreadable result rather than an empty one. Treating that as "no
+        // statistics" would send the optimizer back to connector metadata for every external table until
+        // the last backend is restarted, so the query is re-asked in the shape that backend does know.
+        StatisticExecutor.resetExternalQueryShapeProbe();
+        List<String> askedFor = Lists.newArrayList();
+        new MockUp<StatisticExecutor>() {
+            @Mock
+            public List<TStatisticData> executeStatisticDQL(ConnectContext context, String sql) {
+                askedFor.add(sql);
+                if (sql.contains("count(distinct partition_name)")) {
+                    throw new StatisticExecutor.UnsupportedStatisticsVersionException(0);
+                }
+                return Lists.newArrayList(new TStatisticData());
+            }
+        };
+
+        try {
+            String tableUUID = connectContext.getGlobalStateMgr().getMetadataMgr()
+                    .getTable(connectContext, "hive0", "partitioned_db", "t1").getUUID();
+            Table table = connectContext.getGlobalStateMgr().getMetadataMgr()
+                    .getTable(connectContext, "hive0", "partitioned_db", "t1");
+            ConnectContext context = StatisticUtils.buildConnectContext();
+            StatisticExecutor statisticExecutor = new StatisticExecutor();
+
+            List<TStatisticData> result =
+                    statisticExecutor.queryStatisticSync(context, tableUUID, table, ImmutableList.of("c1"));
+
+            Assertions.assertEquals(1, result.size());
+            Assertions.assertEquals(2, askedFor.size());
+            Assertions.assertTrue(askedFor.get(0).contains("count(distinct partition_name)"));
+            Assertions.assertFalse(askedFor.get(1).contains("count(distinct partition_name)"));
+
+            // The rejection is remembered, so the next load does not pay for a query it knows will fail.
+            askedFor.clear();
+            statisticExecutor.queryStatisticSync(context, tableUUID, table, ImmutableList.of("c1"));
+            Assertions.assertEquals(1, askedFor.size());
+            Assertions.assertFalse(askedFor.get(0).contains("count(distinct partition_name)"));
+        } finally {
+            StatisticExecutor.resetExternalQueryShapeProbe();
+        }
     }
 
     public static StatementBase parseSql(String originStmt) {

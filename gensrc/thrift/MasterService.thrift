@@ -98,6 +98,9 @@ struct TFinishTaskRequest {
     // Placeholder for external cluster snapshot feature.
     20: optional Types.TClusterSnapshotPartitionSpec cluster_snapshot_partition_spec
     21: optional AgentService.TRestoreTabletResult restore_tablet_result
+    // For an ALTER task: the job_id of the request this report answers, so the FE can ignore the report of a
+    // stale copy left by another job that used the same signature.
+    22: optional i64 alter_job_id
 }
 
 struct TTablet {

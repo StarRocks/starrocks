@@ -28,6 +28,7 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.tvr.TvrTableSnapshot;
+import com.starrocks.connector.statistics.ConnectorTableColumnStats;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
@@ -37,13 +38,19 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.Group;
 import com.starrocks.sql.optimizer.GroupExpression;
+import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.OptimizerFactory;
+import com.starrocks.sql.optimizer.UKFKConstraintsCollector;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.LogicalProperty;
+import com.starrocks.sql.optimizer.dump.DumpInfo;
+import com.starrocks.sql.optimizer.dump.MockDumpInfo;
+import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.optimizer.operator.AggType;
+import com.starrocks.sql.optimizer.operator.UKFKConstraints;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
@@ -51,6 +58,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalKuduScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -354,6 +362,72 @@ public class StatisticsCalculatorTest {
                 getColumnStatistic(partitionColumn).getMaxValue(), 0.001);
         Assertions.assertTrue(optimizerContext.isObtainedFromInternalStatistics());
         optimizerContext.setObtainedFromInternalStatistics(false);
+    }
+
+    @Test
+    public void testLogicalIcebergTableScanCapturesAnalyzedStatsToDump() {
+        // A query dump records the per-column ANALYZE row counts and the iceberg format version of an external table
+        // planned from ANALYZE statistics, so replay can reproduce the scan row count and V3-only rewrites.
+        Table icebergTable = connectContext.getGlobalStateMgr().getMetadataMgr()
+                .getTable(connectContext, "iceberg0", "partitioned_db", "t1");
+        Map<ColumnRefOperator, Column> refToColumn = Maps.newHashMap();
+        Map<Column, ColumnRefOperator> columnToRef = Maps.newHashMap();
+        List<Column> columns = icebergTable.getColumns();
+        for (int i = 0; i < columns.size(); i++) {
+            ColumnRefOperator ref = new ColumnRefOperator(i, columns.get(i).getType(), columns.get(i).getName(), true);
+            refToColumn.put(ref, columns.get(i));
+            columnToRef.put(columns.get(i), ref);
+        }
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Statistics getTableStatisticsFromInternalStatistics(Table table, Map<ColumnRefOperator,
+                    Column> cols) {
+                Statistics.Builder builder = Statistics.builder();
+                cols.keySet().forEach(col -> builder.addColumnStatistic(col, new ColumnStatistic(0, 100, 0.0, 5.0, 100)));
+                return builder.setOutputRowCount(100).build();
+            }
+        };
+        String analyzed = columns.get(0).getName();
+        new MockUp<CachedStatisticStorage>() {
+            @Mock
+            public List<ConnectorTableColumnStats> getConnectorTableStatistics(Table table, List<String> cols) {
+                return cols.stream().map(c -> c.equals(analyzed)
+                        ? new ConnectorTableColumnStats(new ColumnStatistic(0, 100, 0.0, 5.0, 100), 3612L, "")
+                        : ConnectorTableColumnStats.unknown()).collect(Collectors.toList());
+            }
+        };
+
+        DumpInfo previous = connectContext.getDumpInfo();
+        try {
+            QueryDumpInfo dumpInfo = new QueryDumpInfo(connectContext);
+            // the analyzer registers every table of a dumped query
+            dumpInfo.addTable("partitioned_db", icebergTable);
+            connectContext.setDumpInfo(dumpInfo);
+            estimateIcebergScan(icebergTable, refToColumn, columnToRef);
+            Assertions.assertEquals(Map.of("partitioned_db.t1", Map.of(analyzed, 3612L)),
+                    dumpInfo.getExternalColumnRowCountMap());
+            Assertions.assertEquals(1, dumpInfo.getExternalTableFormatVersionMap().size());
+
+            // a dump info that does not keep these sections, and no dump at all, plan the same way
+            connectContext.setDumpInfo(new MockDumpInfo());
+            estimateIcebergScan(icebergTable, refToColumn, columnToRef);
+            connectContext.setDumpInfo(null);
+            estimateIcebergScan(icebergTable, refToColumn, columnToRef);
+        } finally {
+            connectContext.setDumpInfo(previous);
+            optimizerContext.setObtainedFromInternalStatistics(false);
+        }
+    }
+
+    private void estimateIcebergScan(Table icebergTable, Map<ColumnRefOperator, Column> refToColumn,
+                                     Map<Column, ColumnRefOperator> columnToRef) {
+        LogicalIcebergScanOperator scan = new LogicalIcebergScanOperator(icebergTable, refToColumn, columnToRef, -1,
+                null, TvrTableSnapshot.empty());
+        GroupExpression groupExpression = new GroupExpression(scan, Lists.newArrayList());
+        groupExpression.setGroup(new Group(0));
+        ExpressionContext expressionContext = new ExpressionContext(groupExpression);
+        new StatisticsCalculator(expressionContext, columnRefFactory, optimizerContext).estimatorStats();
+        Assertions.assertEquals(100, expressionContext.getStatistics().getOutputRowCount(), 0.001);
     }
 
     @Test
@@ -1125,6 +1199,247 @@ public class StatisticsCalculatorTest {
                 "With unknown stats, inner-side null fraction (" + innerValStat.getNullsFraction()
                         + ") should reflect outer key null fraction (" + outerKeyNullFraction
                         + ") for " + outerJoin);
+    }
+
+    /**
+     * Statistics borrowed for an unknown key only price the join: the key of an outer join's preserved side keeps its
+     * unknown statistics in the output, because unmatched rows keep values outside the lender's domain. Here l.k is
+     * all 100 (unknown) and r.k is all 1 (NDV 1); the row count equals the full-statistics estimate L * R / 1.
+     */
+    @Test
+    public void testOuterJoinPreservedKeyDoesNotKeepBorrowedStatistics() {
+        final var lk = columnRefFactory.create("lk", IntegerType.BIGINT, true);
+        final var rk = columnRefFactory.create("rk", IntegerType.BIGINT, true);
+        final var unknownGroup = new Group(0);
+        unknownGroup.setStatistics(Statistics.builder().setOutputRowCount(1000)
+                .addColumnStatistics(ImmutableMap.of(lk, ColumnStatistic.unknown())).build());
+        unknownGroup.setLogicalProperty(new LogicalProperty(new ColumnRefSet(Lists.newArrayList(lk))));
+        final var knownGroup = new Group(1);
+        knownGroup.setStatistics(Statistics.builder().setOutputRowCount(1000)
+                .addColumnStatistics(ImmutableMap.of(rk, new ColumnStatistic(1, 1, 0, 8, 1))).build());
+        knownGroup.setLogicalProperty(new LogicalProperty(new ColumnRefSet(Lists.newArrayList(rk))));
+
+        // l LEFT JOIN r and r RIGHT JOIN l: l.k is preserved and stays unknown
+        for (boolean unknownOnLeft : new boolean[] {true, false}) {
+            JoinOperator joinType = unknownOnLeft ? JoinOperator.LEFT_OUTER_JOIN : JoinOperator.RIGHT_OUTER_JOIN;
+            var groupExpr = new GroupExpression(new LogicalJoinOperator(joinType,
+                    new BinaryPredicateOperator(BinaryType.EQ, lk, rk)), unknownOnLeft ?
+                    Lists.newArrayList(unknownGroup, knownGroup) : Lists.newArrayList(knownGroup, unknownGroup));
+            groupExpr.setGroup(new Group(2));
+            var ctx = new ExpressionContext(groupExpr);
+            new StatisticsCalculator(ctx, columnRefFactory, optimizerContext).estimatorStats();
+            Assertions.assertEquals(1000000, ctx.getStatistics().getOutputRowCount(), 1, joinType.toString());
+            Assertions.assertTrue(ctx.getStatistics().getColumnStatistic(lk).isUnknown(), joinType.toString());
+        }
+
+        // inner join: every output l.k matches an r.k, so the borrowed statistics stay
+        var groupExpr = new GroupExpression(new LogicalJoinOperator(JoinOperator.INNER_JOIN,
+                new BinaryPredicateOperator(BinaryType.EQ, lk, rk)), Lists.newArrayList(unknownGroup, knownGroup));
+        groupExpr.setGroup(new Group(2));
+        var ctx = new ExpressionContext(groupExpr);
+        new StatisticsCalculator(ctx, columnRefFactory, optimizerContext).estimatorStats();
+        ColumnStatistic innerKey = ctx.getStatistics().getColumnStatistic(lk);
+        Assertions.assertFalse(innerKey.isUnknown());
+        Assertions.assertEquals(1, innerKey.getMaxValue(), 0);
+        Assertions.assertEquals(1, innerKey.getDistinctValuesCount(), 0);
+    }
+
+    /**
+     * An equi-join key unknown on one side only borrows the known side's statistics, so a many-to-many join is
+     * estimated as L * R / ndv(known) instead of max(L, R). Keys unknown on both sides keep the old fallback.
+     */
+    @Test
+    public void testInnerJoinKeyUnknownOnOneSideBorrowsKnownSide() {
+        final var leftKey = columnRefFactory.create("left_key", IntegerType.BIGINT, true);
+        final var rightKey = columnRefFactory.create("right_key", IntegerType.BIGINT, true);
+        final var rightKey2 = columnRefFactory.create("right_key2", IntegerType.BIGINT, true);
+
+        final var leftGroup = new Group(0);
+        leftGroup.setStatistics(Statistics.builder().setOutputRowCount(10000)
+                .addColumnStatistics(ImmutableMap.of(leftKey, ColumnStatistic.unknown())).build());
+        leftGroup.setLogicalProperty(new LogicalProperty(new ColumnRefSet(Lists.newArrayList(leftKey))));
+
+        final var rightGroup = new Group(1);
+        rightGroup.setStatistics(Statistics.builder().setOutputRowCount(5000)
+                .addColumnStatistics(ImmutableMap.of(
+                        rightKey, new ColumnStatistic(1, 100, 0, 8, 100),
+                        rightKey2, ColumnStatistic.unknown())).build());
+        rightGroup.setLogicalProperty(new LogicalProperty(new ColumnRefSet(Lists.newArrayList(rightKey, rightKey2))));
+
+        // one side known: 10000 * 5000 / 100
+        var groupExpr = new GroupExpression(new LogicalJoinOperator(JoinOperator.INNER_JOIN,
+                new BinaryPredicateOperator(BinaryType.EQ, leftKey, rightKey)), Lists.newArrayList(leftGroup, rightGroup));
+        groupExpr.setGroup(new Group(2));
+        var ctx = new ExpressionContext(groupExpr);
+        new StatisticsCalculator(ctx, columnRefFactory, optimizerContext).estimatorStats();
+        Assertions.assertEquals(500000, ctx.getStatistics().getOutputRowCount(), 1);
+        Assertions.assertFalse(ctx.getStatistics().getColumnStatistic(leftKey).isUnknown());
+
+        // both sides unknown: max(L, R)
+        groupExpr = new GroupExpression(new LogicalJoinOperator(JoinOperator.INNER_JOIN,
+                new BinaryPredicateOperator(BinaryType.EQ, leftKey, rightKey2)), Lists.newArrayList(leftGroup, rightGroup));
+        groupExpr.setGroup(new Group(2));
+        ctx = new ExpressionContext(groupExpr);
+        new StatisticsCalculator(ctx, columnRefFactory, optimizerContext).estimatorStats();
+        Assertions.assertEquals(10000, ctx.getStatistics().getOutputRowCount(), 1);
+    }
+
+    private Statistics estimateJoin(JoinOperator joinType, ScalarOperator onPredicate, Group leftGroup,
+                                    Group rightGroup) {
+        GroupExpression groupExpr = new GroupExpression(new LogicalJoinOperator(joinType, onPredicate),
+                Lists.newArrayList(leftGroup, rightGroup));
+        groupExpr.setGroup(new Group(2));
+        ExpressionContext ctx = new ExpressionContext(groupExpr);
+        new StatisticsCalculator(ctx, columnRefFactory, optimizerContext).estimatorStats();
+        return ctx.getStatistics();
+    }
+
+    private static Group joinChild(int id, double rowCount, Map<ColumnRefOperator, ColumnStatistic> columns) {
+        Group group = new Group(id);
+        group.setStatistics(Statistics.builder().setOutputRowCount(rowCount).addColumnStatistics(columns).build());
+        group.setLogicalProperty(new LogicalProperty(new ColumnRefSet(Lists.newArrayList(columns.keySet()))));
+        return group;
+    }
+
+    /**
+     * The unknown side's row count may itself be a guess (e.g. a dimension filtered on an unknown column with the
+     * default selectivity). Borrowing the known side's NDV must then not push the estimate below the unknown-stats
+     * fallback max(L, R): 1e6 * 1e4 / 1e5 = 1e5 would be lower, so the estimate stays at 1e6.
+     */
+    @Test
+    public void testBorrowedJoinEstimateNeverBelowUnknownFallback() {
+        final var factKey = columnRefFactory.create("fact_key", IntegerType.BIGINT, true);
+        final var dimKey = columnRefFactory.create("dim_key", IntegerType.BIGINT, true);
+        Group fact = joinChild(0, 1_000_000, ImmutableMap.of(factKey, new ColumnStatistic(1, 100000, 0, 8, 100000)));
+        Group dim = joinChild(1, 10_000, ImmutableMap.of(dimKey, ColumnStatistic.unknown()));
+
+        Statistics stats = estimateJoin(JoinOperator.INNER_JOIN,
+                new BinaryPredicateOperator(BinaryType.EQ, factKey, dimKey), fact, dim);
+        Assertions.assertEquals(1_000_000, stats.getOutputRowCount(), 1);
+        // the column statistics are still the borrowed ones
+        Assertions.assertFalse(stats.getColumnStatistic(dimKey).isUnknown());
+
+        // dimension on the left side, same answer
+        stats = estimateJoin(JoinOperator.INNER_JOIN,
+                new BinaryPredicateOperator(BinaryType.EQ, dimKey, factKey), dim, fact);
+        Assertions.assertEquals(1_000_000, stats.getOutputRowCount(), 1);
+    }
+
+    /**
+     * One unknown column equated to two known columns borrows the smaller NDV (the larger estimate) whatever the
+     * predicate order. With NDV 100 borrowed, the driving predicate is the one against NDV 1000:
+     * 10000 * 5000 / 1000 = 50000, damped by 0.9 for the second predicate = 45000.
+     */
+    @Test
+    public void testBorrowFromSeveralKnownColumnsIsOrderIndependent() {
+        final var leftKey = columnRefFactory.create("left_key", IntegerType.BIGINT, true);
+        final var rightNdv100 = columnRefFactory.create("right_ndv100", IntegerType.BIGINT, true);
+        final var rightNdv1000 = columnRefFactory.create("right_ndv1000", IntegerType.BIGINT, true);
+        Group left = joinChild(0, 10000, ImmutableMap.of(leftKey, ColumnStatistic.unknown()));
+        Group right = joinChild(1, 5000, ImmutableMap.of(
+                rightNdv100, new ColumnStatistic(1, 100, 0, 8, 100),
+                rightNdv1000, new ColumnStatistic(1, 1000, 0, 8, 1000)));
+
+        BinaryPredicateOperator eq100 = new BinaryPredicateOperator(BinaryType.EQ, leftKey, rightNdv100);
+        BinaryPredicateOperator eq1000 = new BinaryPredicateOperator(BinaryType.EQ, leftKey, rightNdv1000);
+        Statistics first = estimateJoin(JoinOperator.INNER_JOIN,
+                new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND, eq100, eq1000), left, right);
+        Statistics second = estimateJoin(JoinOperator.INNER_JOIN,
+                new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND, eq1000, eq100), left, right);
+        Assertions.assertEquals(first.getOutputRowCount(), second.getOutputRowCount(), 1e-6);
+        Assertions.assertEquals(first.getColumnStatistic(leftKey).getDistinctValuesCount(),
+                second.getColumnStatistic(leftKey).getDistinctValuesCount(), 1e-6);
+        Assertions.assertEquals(45000, first.getOutputRowCount(), 1);
+        Assertions.assertEquals(100, first.getColumnStatistic(leftKey).getDistinctValuesCount(), 0);
+    }
+
+    /**
+     * LEFT JOIN whose left (preserved) key is unknown: the inner part is L * R / ndv(known) = 500000, the output
+     * keeps it since it is above L. Every left row is expected to match and the left key's null fraction is unknown,
+     * so the right side's columns get no null fraction.
+     */
+    @Test
+    public void testLeftJoinUnknownLeftKeyBorrowsKnownSide() {
+        final var leftKey = columnRefFactory.create("left_key", IntegerType.BIGINT, true);
+        final var rightKey = columnRefFactory.create("right_key", IntegerType.BIGINT, true);
+        final var rightVal = columnRefFactory.create("right_val", IntegerType.BIGINT, true);
+        Group left = joinChild(0, 10000, ImmutableMap.of(leftKey, ColumnStatistic.unknown()));
+        Group right = joinChild(1, 5000, ImmutableMap.of(
+                rightKey, new ColumnStatistic(1, 100, 0, 8, 100),
+                rightVal, new ColumnStatistic(1, 5000, 0, 8, 5000)));
+
+        Statistics stats = estimateJoin(JoinOperator.LEFT_OUTER_JOIN,
+                new BinaryPredicateOperator(BinaryType.EQ, leftKey, rightKey), left, right);
+        Assertions.assertEquals(500000, stats.getOutputRowCount(), 1);
+        Assertions.assertEquals(0, stats.getColumnStatistic(rightVal).getNullsFraction(), 0);
+    }
+
+    /**
+     * When the UK/FK estimate wins, it must still carry the statistics the unknown FK key borrowed, or the joins above
+     * see the key as unknown again. fact.fk (unknown, 10000 rows) = dim.uk (NDV 100, 1000 rows): the NDV estimate is
+     * 10000 * 1000 / 100 = 100000, the UK/FK estimate 10000 wins, and fact.fk keeps the borrowed NDV 100.
+     */
+    @Test
+    public void testUKFKEstimateKeepsBorrowedKeyStatistics() {
+        final var fk = columnRefFactory.create("fk", IntegerType.BIGINT, true);
+        final var uk = columnRefFactory.create("uk", IntegerType.BIGINT, true);
+        OptExpression fact = new OptExpression(new LogicalValuesOperator(List.of(fk)));
+        fact.setLogicalProperty(new LogicalProperty(new ColumnRefSet(List.of(fk))));
+        fact.setStatistics(Statistics.builder().setOutputRowCount(10000)
+                .addColumnStatistics(ImmutableMap.of(fk, ColumnStatistic.unknown())).build());
+        OptExpression dim = new OptExpression(new LogicalValuesOperator(List.of(uk)));
+        dim.setLogicalProperty(new LogicalProperty(new ColumnRefSet(List.of(uk))));
+        dim.setStatistics(Statistics.builder().setOutputRowCount(1000)
+                .addColumnStatistics(ImmutableMap.of(uk, new ColumnStatistic(1, 100, 0, 8, 100))).build());
+        BinaryPredicateOperator predicate = new BinaryPredicateOperator(BinaryType.EQ, fk, uk);
+        OptExpression join = OptExpression.create(new LogicalJoinOperator(JoinOperator.INNER_JOIN, predicate), fact, dim);
+        UKFKConstraints constraints = new UKFKConstraints();
+        constraints.setJoinProperty(new UKFKConstraints.JoinProperty(predicate, null, null, uk, fk, false));
+        join.setConstraints(constraints);
+        new MockUp<UKFKConstraintsCollector>() {
+            @Mock
+            public void collectColumnConstraints(OptExpression root) {
+            }
+        };
+
+        boolean ukfk = connectContext.getSessionVariable().isEnableUKFKOpt();
+        connectContext.getSessionVariable().setEnableUKFKOpt(true);
+        try {
+            ExpressionContext ctx = new ExpressionContext(join);
+            new StatisticsCalculator(ctx, columnRefFactory, optimizerContext).estimatorStats();
+            Assertions.assertEquals(10000, ctx.getStatistics().getOutputRowCount(), 1);
+            ColumnStatistic fkStat = ctx.getStatistics().getColumnStatistic(fk);
+            Assertions.assertFalse(fkStat.isUnknown());
+            Assertions.assertEquals(100, fkStat.getDistinctValuesCount(), 0);
+        } finally {
+            connectContext.getSessionVariable().setEnableUKFKOpt(ukfk);
+        }
+    }
+
+    /**
+     * Two keys, one known on both sides (ndv 50) and one unknown on the left (borrows ndv 100 from the right): the
+     * borrowed key now takes part in the estimate instead of the whole join falling back to max(L, R) = 10000. The
+     * borrowed key drives: 10000 * 5000 / 100 = 500000, damped by 0.9 for the second key = 450000.
+     */
+    @Test
+    public void testTwoKeysOneKnownOneUnknown() {
+        final var leftUnknown = columnRefFactory.create("left_unknown", IntegerType.BIGINT, true);
+        final var leftKnown = columnRefFactory.create("left_known", IntegerType.BIGINT, true);
+        final var rightA = columnRefFactory.create("right_a", IntegerType.BIGINT, true);
+        final var rightB = columnRefFactory.create("right_b", IntegerType.BIGINT, true);
+        Group left = joinChild(0, 10000, ImmutableMap.of(
+                leftUnknown, ColumnStatistic.unknown(),
+                leftKnown, new ColumnStatistic(1, 50, 0, 8, 50)));
+        Group right = joinChild(1, 5000, ImmutableMap.of(
+                rightA, new ColumnStatistic(1, 100, 0, 8, 100),
+                rightB, new ColumnStatistic(1, 50, 0, 8, 50)));
+
+        Statistics stats = estimateJoin(JoinOperator.INNER_JOIN,
+                new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND,
+                        new BinaryPredicateOperator(BinaryType.EQ, leftUnknown, rightA),
+                        new BinaryPredicateOperator(BinaryType.EQ, leftKnown, rightB)), left, right);
+        Assertions.assertEquals(450000, stats.getOutputRowCount(), 1);
+        Assertions.assertEquals(100, stats.getColumnStatistic(leftUnknown).getDistinctValuesCount(), 0);
     }
 
     /**

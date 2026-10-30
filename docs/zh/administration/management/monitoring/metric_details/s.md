@@ -122,6 +122,18 @@ description: "Alphabetical s"
 - 单位: -
 - 描述: `/proc/net/snmp` 返回的指标。
 
+## `staros_shard_info_fallback_cache_entries`
+
+- 单位：计数
+- 类型：瞬时值
+- 描述：仅存算分离模式。该 BE 向 StarMgr 查询后保留下来的、不归自己持有的 tablet 的存储位置数量（参见 BE 配置项 `lake_shard_info_cache_ttl_sec`）。这些条目与 `lake_tablet_location_handoff_entries` 统计的条目共用一个 16 MiB 的 LRU 缓存：条目在 TTL 到期前可用，缓存空间不足时会被淘汰，因此该值反映的是缓存占用，而不是仍可用的条目数。
+
+## `staros_shard_info_fallback_cache_hits_total`
+
+- 单位：计数
+- 类型：累积
+- 描述：仅存算分离模式。对于不归自己持有的 tablet，该 BE 直接使用此前向 StarMgr 查询后保留的存储位置（参见 BE 配置项 `lake_shard_info_cache_ttl_sec`），而没有再次查询的次数。每加一表示省掉一次 StarMgr GetShard RPC。结合 `starrocks_be_staros_shard_info_fallback_total`，缓存的命中率为 `hits / (hits + fallback)`。
+
 ## `starrocks_be_build_info`
 
 - 单位：-
@@ -208,6 +220,18 @@ description: "Alphabetical s"
 - 类型: 累积值
 - 描述: 扫描时对 flat JSON 子列值进行类型转换的累计耗时。
 
+## `starrocks_be_flat_json_compaction_mixed_inputs_total`
+
+- 单位: 计数
+- 类型: 累积值
+- 描述: Compaction 读取一个 JSON 列时，输入 segment 中一部分为 Flat JSON、一部分为完整 JSON，因而按 Flat JSON segment 的布局读取（所有子列为 JSON 类型）的次数。参见 `enable_compaction_flat_json_mixed_inputs`。
+
+## `starrocks_be_flat_json_compaction_plain_fallback_total`
+
+- 单位: 计数
+- 类型: 累积值
+- 描述: flat JSON compaction 中，已缓存的输入超过 `compaction_memory_limit_per_worker` 的八分之一（由一起写入的各 JSON 列平分）、但没有统一的扁平布局可用，因而将输出以完整 JSON 写出的次数。
+
 ## `starrocks_be_flat_json_compaction_schema_change_total`
 
 - 单位: 计数
@@ -218,7 +242,7 @@ description: "Alphabetical s"
 
 - 单位: 计数
 - 类型: 累积值
-- 描述: 在 `starrocks_be_flat_json_compaction_total` 计入的 flat JSON compaction 中，边读边写、不再缓存整个输出 segment 的次数。当已缓存的输入超过 `compaction_memory_limit_per_worker` 的八分之一且全部具有相同的扁平布局时触发。
+- 描述: 在 `starrocks_be_flat_json_compaction_total` 计入的 flat JSON compaction 中，边读边写、不再缓存整个输出 segment 的次数。当已缓存的输入超过 `compaction_memory_limit_per_worker` 的八分之一（由一起写入的各 JSON 列平分）且全部具有相同的扁平布局时触发。
 
 ## `starrocks_be_flat_json_compaction_total`
 
@@ -379,7 +403,7 @@ description: "Alphabetical s"
 
 - 单位：计数
 - 类型：累积
-- 描述：仅存算分离模式。BE 的 StarOSWorker 因本地缓存中没有所需的 shard 信息（即 FE 在查询 / 合并 / lake 操作引用该 shard 之前尚未将其推送到该 BE）而实际向 starmgr 发起的 RPC（`g_starlet->get_shard_info()`）总次数。仅在 starlet 就绪检查通过且 RPC 实际发出后才计入；starlet 尚未就绪的超时不包含在内。正常情况下该值应接近零。持续或上升的速率是一个强烈信号，表明 FE 端的任务或节点选择正把任务调度到尚未拥有该 shard 的 BE，或者 FE 端的 shard 推送存在滞后。建议告警：单个 BE 在 5 分钟窗口内的速率过高。在负责向开启了 `file_bundling` 的表导入数据的协调节点上，这类 RPC 大多会被 tablet 存储位置交接省掉，省掉的次数计入 `lake_tablet_location_handoff_hits_total`；交接的命中率为 `hits / (hits + fallback)`。
+- 描述：仅存算分离模式。BE 的 StarOSWorker 因本地缓存中没有所需的 shard 信息（即 FE 在查询 / 合并 / lake 操作引用该 shard 之前尚未将其推送到该 BE）而实际向 starmgr 发起的 RPC（`g_starlet->get_shard_info()`）总次数。仅在 starlet 就绪检查通过且 RPC 实际发出后才计入；starlet 尚未就绪的超时不包含在内。正常情况下该值应接近零。持续或上升的速率是一个强烈信号，表明 FE 端的任务或节点选择正把任务调度到尚未拥有该 shard 的 BE，或者 FE 端的 shard 推送存在滞后。建议告警：单个 BE 在 5 分钟窗口内的速率过高。在负责向开启了 `file_bundling` 的表导入数据的协调节点上，这类 RPC 大多会被 tablet 存储位置交接省掉，省掉的次数计入 `lake_tablet_location_handoff_hits_total`；交接的命中率为 `hits / (hits + fallback)`。在任何节点上，`lake_shard_info_cache_ttl_sec` 时间内对同一个 tablet 的重复查询，都会直接使用第一次 RPC 后保留的存储位置，这些查询计入 `staros_shard_info_fallback_cache_hits_total`。
 
 ## `starrocks_be_staros_shard_info_fallback_failed_total`
 

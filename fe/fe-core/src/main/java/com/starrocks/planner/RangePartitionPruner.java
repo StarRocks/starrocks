@@ -106,6 +106,11 @@ public class RangePartitionPruner implements PartitionPruner {
             } catch (IllegalArgumentException e) {
                 result = Lists.newArrayList();
             }
+            // Nothing constrains this column, so its NULLs qualify too, and they sort below the MIN
+            // just pushed. A leading column needs nothing: the first partition already starts at MIN.
+            if (columnIdx > 0 && keyColumn.isAllowNull()) {
+                addPartitionJustBelow(rangeMap, minKey, result);
+            }
             minKey.popColumn();
             maxKey.popColumn();
             return result;
@@ -145,6 +150,7 @@ public class RangePartitionPruner implements PartitionPruner {
             int pushMinCount = 0;
             int pushMaxCount = 0;
             int lastColumnId = partitionColumns.size() - 1;
+            boolean nextColumnNullsBelowMin = false;
             if (lowerBound != null) {
                 minKey.pushColumn(filter.getLowerBound(isConvertToDate), keyColumn.getPrimitiveType());
                 pushMinCount++;
@@ -153,6 +159,8 @@ public class RangePartitionPruner implements PartitionPruner {
                     Type type = TypeFactory.createType(column.getPrimitiveType());
                     minKey.pushColumn(LiteralExprFactory.createInfinity(type, false), column.getPrimitiveType());
                     pushMinCount++;
+                    // `col >= v` admits (v, NULL), which sorts below the (v, MIN) just pushed.
+                    nextColumnNullsBelowMin = column.isAllowNull();
                 }
             } else {
                 Type type = TypeFactory.createType(keyColumn.getPrimitiveType());
@@ -182,6 +190,9 @@ public class RangePartitionPruner implements PartitionPruner {
                         Range.range(minKey, lowerType, maxKey, upperType)).asMapOfRanges().values());
             } catch (IllegalArgumentException e) {
                 result = Lists.newArrayList();
+            }
+            if (nextColumnNullsBelowMin) {
+                addPartitionJustBelow(rangeMap, minKey, result);
             }
 
             for (; pushMinCount > 0; pushMinCount--) {
@@ -242,14 +253,36 @@ public class RangePartitionPruner implements PartitionPruner {
                 return Lists.newArrayList(
                         rangeMap.subRangeMap(Range.closed(globalMin, globalMin)).asMapOfRanges().values());
             }
-            // Everything below the boundary, of which only the last entry can hold the NULLs: the
-            // ranges are disjoint and ascending, so that is the one covering the key immediately
-            // below it. Keeping the rest would be sound but would scan partitions that cannot match.
-            Collection<Long> below =
-                    rangeMap.subRangeMap(Range.closedOpen(globalMin, boundary)).asMapOfRanges().values();
-            return below.isEmpty() ? Lists.newArrayList() : Lists.newArrayList(Iterables.getLast(below));
         } catch (IllegalArgumentException e) {
             return Lists.newArrayList();
+        }
+        List<Long> result = Lists.newArrayList();
+        addPartitionJustBelow(rangeMap, boundary, result);
+        return result;
+    }
+
+    // The same placement matters wherever a lookup key ends in a MIN that stands for "any value of
+    // this column", NULL included: `a = 5` on RANGE(a, b) is looked up from (5, MIN), and (5, NULL)
+    // sits just below it. Add the partition covering the keys immediately below `key`. The ranges are
+    // disjoint and ascending, so that is the last one starting below it; keeping the rest would be
+    // sound but would scan partitions that cannot match. Nothing lies below the global minimum.
+    private void addPartitionJustBelow(RangeMap<PartitionKey, Long> rangeMap, PartitionKey key,
+                                       List<Long> result) throws AnalysisException {
+        PartitionKey globalMin = PartitionKey.createInfinityPartitionKey(partitionColumns, false);
+        try {
+            if (key.compareTo(globalMin) <= 0) {
+                return;
+            }
+            Collection<Long> below =
+                    rangeMap.subRangeMap(Range.closedOpen(globalMin, key)).asMapOfRanges().values();
+            if (!below.isEmpty()) {
+                Long last = Iterables.getLast(below);
+                if (!result.contains(last)) {
+                    result.add(last);
+                }
+            }
+        } catch (IllegalArgumentException e) {
+            // An empty or inverted range has nothing below it to add.
         }
     }
 

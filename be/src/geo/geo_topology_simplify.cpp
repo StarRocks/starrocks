@@ -15,8 +15,9 @@
 #include "geo/geo_topology_simplify.h"
 
 #include <algorithm>
-#include <bit>
+#include <cassert>
 #include <cmath>
+#include <limits>
 #include <map>
 #include <numeric>
 #include <set>
@@ -28,6 +29,7 @@
 #include <boost/geometry/index/rtree.hpp>
 #include <boost/multiprecision/cpp_int.hpp>
 
+#include "geo/geo_exact_arithmetic.h"
 #include "geo/wkb.h"
 
 namespace starrocks {
@@ -52,23 +54,16 @@ struct ExactPoint {
 };
 
 Integer scaled(double value) {
-    const uint64_t bits = std::bit_cast<uint64_t>(value);
-    const uint64_t exponent = (bits >> 52) & 0x7ff;
-    Integer result = bits & ((uint64_t{1} << 52) - 1);
-    if (exponent != 0) {
-        result += uint64_t{1} << 52;
-        result <<= exponent - 1;
-    }
-    return bits >> 63 ? -result : result;
+    return geo_exact::scaled_binary64<Integer>(value);
 }
 ExactPoint exact(WkbCoordinate p) {
     return {scaled(p.x), scaled(p.y)};
 }
 Integer orientation(const ExactPoint& a, const ExactPoint& b, const ExactPoint& c) {
-    return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+    return geo_exact::orientation(a.x, a.y, b.x, b.y, c.x, c.y);
 }
 int sign(const Integer& value) {
-    return (value > 0) - (value < 0);
+    return geo_exact::sign(value);
 }
 bool less(WkbCoordinate a, WkbCoordinate b) {
     return a.x < b.x || (a.x == b.x && a.y < b.y);
@@ -79,31 +74,18 @@ struct Stop {
 };
 class Budget {
 public:
-    Budget(size_t limit, const std::function<Status()>& checkpoint, size_t used = 0)
-            : _limit(limit), _checkpoint(checkpoint), _used(used) {
-        check();
-    }
+    explicit Budget(size_t limit, size_t used = 0) : _limit(limit), _used(used) {}
     void charge(size_t count = 1) {
         if (_used > _limit || count > _limit - _used) {
             throw Stop{Status::InvalidArgument("ST_SimplifyPreserveTopology exceeds work limit")};
         }
         _used += count;
-        if (_used - _last_check >= 128) check();
-    }
-    void check() {
-        _last_check = _used;
-        if (_checkpoint) {
-            Status result = _checkpoint();
-            if (!result.ok()) throw Stop{std::move(result)};
-        }
     }
     size_t used() const { return _used; }
 
 private:
     size_t _limit;
-    const std::function<Status()>& _checkpoint;
     size_t _used;
-    size_t _last_check = 0;
 };
 
 enum class PathKind { POINT, LINE, RING };
@@ -200,7 +182,6 @@ struct Index {
     std::vector<size_t> counts;
     Tree tree;
     void rebuild(const std::vector<Path>& paths, const Retained& kept, Budget& budget) {
-        budget.check();
         edges.clear();
         tree.clear();
         counts.assign(paths.size(), 0);
@@ -219,19 +200,82 @@ struct Index {
             auto s = segment(edges[i], paths);
             tree.insert({bounds(s.raw_a, s.raw_b), i});
         }
-        budget.check();
+    }
+    static constexpr size_t none = std::numeric_limits<size_t>::max();
+    struct Links {
+        size_t previous;
+        size_t next;
+    };
+    std::vector<Links> links;
+    std::vector<size_t> offsets, outgoing, first, last;
+    std::vector<Item> items;
+
+    size_t first_edge() const { return edges.empty() ? none : 0; }
+    size_t next_edge(size_t id) const {
+        return links.empty() ? (id + 1 < edges.size() ? id + 1 : none) : links[id].next;
+    }
+    void initialize_updates(const std::vector<Path>& paths) {
+        size_t vertices = 0;
+        for (const auto& path : paths) vertices += path.points.size();
+        offsets.resize(paths.size() + 1, 0);
+        for (size_t i = 0; i < paths.size(); ++i) offsets[i + 1] = offsets[i] + paths[i].points.size();
+        outgoing.assign(vertices, none);
+        first.assign(paths.size(), none);
+        last.assign(paths.size(), none);
+        links.resize(edges.size());
+        items.resize(edges.size());
+        for (size_t id = 0; id < edges.size(); ++id) {
+            const auto& edge = edges[id];
+            links[id] = {id == 0 ? none : id - 1, id + 1 < edges.size() ? id + 1 : none};
+            outgoing[offsets[edge.path] + edge.a] = id;
+            if (first[edge.path] == none) first[edge.path] = id;
+            last[edge.path] = id;
+        }
+        for (const auto& item : tree) items[item.second] = item;
+    }
+    void replace(size_t path, uint32_t a, uint32_t b, uint32_t c, const std::vector<Path>& paths) {
+        if (links.empty()) initialize_updates(paths);
+        const size_t left = outgoing[offsets[path] + a], right = outgoing[offsets[path] + b];
+        const size_t id = left != none ? left : right;
+        // Use the saved value before changing endpoints; equal boxes still have distinct IDs.
+        for (size_t old : {left, right}) {
+            if (old == none) continue;
+            [[maybe_unused]] const auto removed = tree.remove(items[old]);
+            assert(removed == 1);
+        }
+        if (left != none && right != none) {
+            assert(links[left].next == right);
+            const size_t next = links[right].next;
+            links[left].next = next;
+            if (next != none) links[next].previous = left;
+            links[right] = {none, none};
+            if (last[path] == right) last[path] = left;
+            --counts[path];
+        }
+        edges[id].a = a;
+        edges[id].b = c;
+        outgoing[offsets[path] + a] = id;
+        outgoing[offsets[path] + b] = none;
+        items[id] = {bounds((*paths[path].raw)[a], (*paths[path].raw)[c]), id};
+        tree.insert(items[id]);
     }
     std::vector<Item> query(const Box& box, Budget& budget) const {
-        // Charge a conservative leaf-scan bound, including an empty result.
-        budget.charge(edges.size());
+        // Charge live leaves, including an empty result, rather than inactive slots.
+        budget.charge(tree.size());
         std::vector<Item> result;
         tree.query(bgi::intersects(box), std::back_inserter(result));
         return result;
     }
     bool adjacent(const Edge& a, const Edge& b, const std::vector<Path>& paths) const {
         if (a.path != b.path) return false;
-        const auto lo = std::min(a.order, b.order), hi = std::max(a.order, b.order);
-        return hi == lo + 1 || (paths[a.path].closed && lo == 0 && hi + 1 == counts[a.path]);
+        if (links.empty()) {
+            const auto lo = std::min(a.order, b.order), hi = std::max(a.order, b.order);
+            return hi == lo + 1 || (paths[a.path].closed && lo == 0 && hi + 1 == counts[a.path]);
+        }
+        const size_t x = outgoing[offsets[a.path] + a.a], y = outgoing[offsets[b.path] + b.a];
+        return links[x].next == y || links[y].next == x ||
+               (paths[a.path].closed &&
+                ((x == first[a.path] && y == last[a.path]) || (y == first[a.path] && x == last[a.path])));
     }
 };
 
@@ -326,7 +370,7 @@ void validate_paths(const std::vector<Path>& paths, const Retained& kept, const 
             throw Stop{Status::InvalidArgument("ST_SimplifyPreserveTopology LINESTRING is degenerate")};
         }
     }
-    for (size_t i = 0; i < index.edges.size(); ++i) {
+    for (size_t i = index.first_edge(); i != Index::none; i = index.next_edge(i)) {
         const auto& a = index.edges[i];
         auto sa = segment(a, paths);
         for (const auto& item : index.query(bounds(sa.raw_a, sa.raw_b), budget)) {
@@ -399,7 +443,6 @@ void validate_paths(const std::vector<Path>& paths, const Retained& kept, const 
             }
         }
     }
-    budget.check();
 }
 
 bool within_distance(const ExactPoint& p, const ExactPoint& a, const ExactPoint& c, const Integer& tolerance2,
@@ -463,7 +506,6 @@ void append_paths(const WkbGeometry& geometry, int group, int& next_polygon, int
             throw Stop{Status::InvalidArgument("ST_SimplifyPreserveTopology exceeds coordinate limit")};
         }
         coordinates += raw.size();
-        budget.check();
         Path path;
         path.raw = &raw;
         path.kind = kind;
@@ -580,9 +622,8 @@ struct PreparedGeoTopologySimplify::Impl {
     // ring/contact incidence graph is a forest (a cycle is rejected immediately),
     // hence has O(rings) nodes/links, not a quadratic allocation of all contacts.
     // No all-pairs contact matrix or tolerance-dependent result cache is kept.
-    // Standard allocator bytes are charged by BE memory hooks; checkpoints run
-    // before bounded allocation groups and through charged loops. Work units
-    // bound these loops, not wall-clock time or Boost internals' instruction count.
+    // Standard allocator bytes are charged by BE memory hooks. Work units bound
+    // these loops, not wall-clock time or Boost internals' instruction count.
     std::string wkb;
     WkbGeometry geometry;
     std::vector<Path> paths;
@@ -594,10 +635,10 @@ struct PreparedGeoTopologySimplify::Impl {
 PreparedGeoTopologySimplify::PreparedGeoTopologySimplify(std::unique_ptr<Impl> impl) : _impl(std::move(impl)) {}
 PreparedGeoTopologySimplify::~PreparedGeoTopologySimplify() = default;
 
-StatusOr<std::unique_ptr<PreparedGeoTopologySimplify>> PreparedGeoTopologySimplify::prepare(
-        Slice wkb, const std::function<Status()>& checkpoint, size_t work_limit) {
+StatusOr<std::unique_ptr<PreparedGeoTopologySimplify>> PreparedGeoTopologySimplify::prepare(Slice wkb,
+                                                                                            size_t work_limit) {
     try {
-        Budget budget(std::min(work_limit, kGeoTopologySimplifyMaxWork), checkpoint);
+        Budget budget(std::min(work_limit, kGeoTopologySimplifyMaxWork));
         budget.charge(wkb.size);
         if (wkb.size > kGeoTopologySimplifyMaxBytes) {
             return Status::InvalidArgument("ST_SimplifyPreserveTopology input exceeds 256 KiB");
@@ -607,7 +648,6 @@ StatusOr<std::unique_ptr<PreparedGeoTopologySimplify>> PreparedGeoTopologySimpli
         RETURN_IF_ERROR(WkbCodec::parse_wkb_bounded(
                 wkb, &impl->geometry, kGeoTopologySimplifyMaxCoordinates + kGeoTopologySimplifyMaxComponents,
                 kCartesian));
-        budget.check();
         impl->wkb.assign(wkb.data, wkb.size);
         impl->work_limit = std::min(work_limit, kGeoTopologySimplifyMaxWork);
         size_t components = 0, coordinates = 0;
@@ -624,7 +664,6 @@ StatusOr<std::unique_ptr<PreparedGeoTopologySimplify>> PreparedGeoTopologySimpli
             }
         }
         impl->preparation_work = budget.used();
-        budget.check();
         return std::unique_ptr<PreparedGeoTopologySimplify>(new PreparedGeoTopologySimplify(std::move(impl)));
     } catch (const Stop& stop) {
         return stop.status;
@@ -635,10 +674,9 @@ StatusOr<std::unique_ptr<PreparedGeoTopologySimplify>> PreparedGeoTopologySimpli
     }
 }
 
-StatusOr<std::string> PreparedGeoTopologySimplify::simplify(double tolerance,
-                                                            const std::function<Status()>& checkpoint) const {
+StatusOr<std::string> PreparedGeoTopologySimplify::simplify(double tolerance) const {
     try {
-        Budget budget(_impl->work_limit, checkpoint, _impl->preparation_work);
+        Budget budget(_impl->work_limit, _impl->preparation_work);
         if (!std::isfinite(tolerance) || tolerance < 0) {
             return Status::InvalidArgument("ST_SimplifyPreserveTopology requires a finite nonnegative tolerance");
         }
@@ -663,9 +701,10 @@ StatusOr<std::string> PreparedGeoTopologySimplify::simplify(double tolerance,
                 for (size_t j = 1; j + 1 < retained[i].size();) {
                     budget.charge();
                     if (path.closed && retained[i].size() <= 4) break;
+                    const auto a = retained[i][j - 1], b = retained[i][j], c = retained[i][j + 1];
                     if (removable(_impl->paths, index, retained, areas, i, j, tolerance2, distance_shift, budget)) {
                         changed = true;
-                        index.rebuild(_impl->paths, retained, budget);
+                        index.replace(i, a, b, c, _impl->paths);
                     } else {
                         ++j;
                     }
@@ -680,7 +719,6 @@ StatusOr<std::string> PreparedGeoTopologySimplify::simplify(double tolerance,
         reconstruct(output, paths, retained, next);
         std::string wkb;
         RETURN_IF_ERROR(WkbCodec::to_wkb(output, &wkb, kCartesian));
-        budget.check();
         return wkb;
     } catch (const Stop& stop) {
         return stop.status;

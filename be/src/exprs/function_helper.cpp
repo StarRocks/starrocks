@@ -18,6 +18,7 @@
 #include <fmt/format.h>
 
 #include <stdexcept>
+#include <type_traits>
 
 #include "base/simd/multi_version.h"
 #include "column/array_column.h"
@@ -33,11 +34,14 @@ struct ColumnBuilder {
         if constexpr (lt_is_decimal<Type>) {
             return RunTimeColumnType<Type>::create(type_desc.precision, type_desc.scale);
         } else if constexpr (lt_is_collection<Type>) {
+            // Built recursively from type_desc.children by the caller; unreachable here.
             throw std::runtime_error(fmt::format("Unsupported collection type {}", Type));
             return nullptr;
         } else if constexpr (Type == TYPE_UNKNOWN || Type == TYPE_BINARY || Type == TYPE_DECIMAL) {
             throw std::runtime_error(fmt::format("Unsupported column type {}", Type));
             return nullptr;
+        } else if constexpr (std::is_constructible_v<RunTimeColumnType<Type>, const TypeDescriptor&, size_t>) {
+            return RunTimeColumnType<Type>::create(type_desc, 0);
         } else {
             return RunTimeColumnType<Type>::create();
         }

@@ -23,6 +23,7 @@ import com.starrocks.catalog.TabletRange;
 import com.starrocks.common.Config;
 import com.starrocks.common.ConfigRefreshDaemon;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
@@ -57,6 +58,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
@@ -956,6 +958,82 @@ public class PublishVersionDaemonTest {
     }
 
     @Test
+    public void testSingleTransactionBatchBacksOffBeforeStartingPublish() {
+        long original = Config.lake_publish_version_retry_interval_ms;
+        try {
+            Config.lake_publish_version_retry_interval_ms = 60_000;
+            PartitionCommitInfo partition = new PartitionCommitInfo(100L, 2, 0);
+            TransactionState state = stateWith(1L, 10L, partition);
+            List<TransactionStateBatch> batches = Lists.newArrayList(
+                    new TransactionStateBatch(Lists.newArrayList(state)));
+            AtomicInteger publishCalls = new AtomicInteger();
+            PublishVersionDaemon daemon = new PublishVersionDaemon() {
+                @Override
+                CompletableFuture<Void> publishLakeTransactionAsync(TransactionState txnState) {
+                    Assertions.assertSame(state, txnState);
+                    publishCalls.incrementAndGet();
+                    partition.markPublishFailed(System.currentTimeMillis());
+                    return CompletableFuture.completedFuture(null);
+                }
+            };
+
+            daemon.publishVersionForLakeTableBatch(batches);
+            Assertions.assertEquals(1, publishCalls.get());
+            for (int tick = 0; tick < 100; tick++) {
+                daemon.publishVersionForLakeTableBatch(batches);
+            }
+            Assertions.assertEquals(1, publishCalls.get(), "back-off must skip the transaction publish entrypoint");
+            Assertions.assertTrue(daemon.publishingLakeTransactionsBatchTableId.isEmpty());
+
+            partition.markPublishFailed(System.currentTimeMillis() - 60_000);
+            daemon.publishVersionForLakeTableBatch(batches);
+            Assertions.assertEquals(2, publishCalls.get(), "publish must resume after back-off expires");
+
+            partition.markPublishSucceeded(System.currentTimeMillis());
+            daemon.publishVersionForLakeTableBatch(batches);
+            Assertions.assertEquals(3, publishCalls.get(), "published partitions must still allow finishing the transaction");
+        } finally {
+            Config.lake_publish_version_retry_interval_ms = original;
+        }
+    }
+
+    @Test
+    public void testSingleMultiTableTransactionPublishesWhenAnyPartitionIsReady() {
+        long original = Config.lake_publish_version_retry_interval_ms;
+        try {
+            Config.lake_publish_version_retry_interval_ms = 60_000;
+            PartitionCommitInfo failed = new PartitionCommitInfo(100L, 2, 0);
+            failed.markPublishFailed(System.currentTimeMillis());
+            PartitionCommitInfo ready = new PartitionCommitInfo(200L, 2, 0);
+            TransactionState state = txnOn(1L, 10L, 20L);
+            state.putIdToTableCommitInfo(10L, stateWith(1L, 10L, failed).getTableCommitInfo(10L));
+            state.putIdToTableCommitInfo(20L, stateWith(1L, 20L, ready).getTableCommitInfo(20L));
+            List<TransactionStateBatch> batches = Lists.newArrayList(
+                    new TransactionStateBatch(Lists.newArrayList(state)));
+            AtomicInteger publishCalls = new AtomicInteger();
+            PublishVersionDaemon daemon = new PublishVersionDaemon() {
+                @Override
+                CompletableFuture<Void> publishLakeTransactionAsync(TransactionState txnState) {
+                    publishCalls.incrementAndGet();
+                    return CompletableFuture.completedFuture(null);
+                }
+            };
+
+            daemon.publishVersionForLakeTableBatch(batches);
+            Assertions.assertEquals(1, publishCalls.get(), "a ready partition in another table must still publish");
+            ready.markPublishSucceeded(System.currentTimeMillis());
+            daemon.publishVersionForLakeTableBatch(batches);
+            Assertions.assertEquals(1, publishCalls.get(), "an already published partition must not bypass back-off");
+            ready.markPublishFailed(System.currentTimeMillis());
+            daemon.publishVersionForLakeTableBatch(batches);
+            Assertions.assertEquals(1, publishCalls.get(), "back-off must cover every table in a single transaction");
+            Assertions.assertTrue(daemon.publishingLakeTransactionsBatchTableId.isEmpty());
+        } finally {
+            Config.lake_publish_version_retry_interval_ms = original;
+        }
+    }
+
+    @Test
     public void testRecordPublishFailureArmsBackoffAndThrottlesTheReport() {
         PartitionCommitInfo a = new PartitionCommitInfo(200L, 2, 0);
         PartitionCommitInfo b = new PartitionCommitInfo(200L, 3, 0);
@@ -1005,5 +1083,42 @@ public class PublishVersionDaemonTest {
         Assertions.assertFalse(PublishVersionDaemon.batchHasPublishablePartition(states, t2 + 999));
         // Once A's back-off elapses the batch runs again.
         Assertions.assertTrue(PublishVersionDaemon.batchHasPublishablePartition(states, t2 + 1000));
+    }
+
+    private static TransactionState txnOn(long txnId, Long... tableIds) {
+        return new TransactionState(1L, Lists.newArrayList(tableIds), txnId, "in_flight_" + txnId,
+                UUIDUtil.genTUniqueId(), TransactionState.LoadJobSourceType.FRONTEND,
+                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, "fe"), -1, 60 * 1000L);
+    }
+
+    @Test
+    public void testDropInFlightBatchesAndTransactions() {
+        TransactionStateBatch onTable10 =
+                new TransactionStateBatch(Lists.newArrayList(txnOn(1L, 10L), txnOn(2L, 10L)));
+        TransactionStateBatch onTable20 = new TransactionStateBatch(Lists.newArrayList(txnOn(3L, 20L)));
+        TransactionStateBatch onTables30And40 = new TransactionStateBatch(Lists.newArrayList(txnOn(4L, 30L, 40L)));
+        List<TransactionStateBatch> batches = Lists.newArrayList(onTable10, onTable20, onTables30And40);
+
+        // nothing in flight: the very same list comes back
+        Assertions.assertSame(batches,
+                PublishVersionDaemon.dropInFlightBatches(batches, Sets.newHashSet(), Sets.newHashSet()));
+
+        // a table in flight drops every batch touching it, a multi-table batch included, and only those
+        List<TransactionStateBatch> kept =
+                PublishVersionDaemon.dropInFlightBatches(batches, Sets.newHashSet(), Sets.newHashSet(10L, 40L));
+        Assertions.assertEquals(Lists.newArrayList(onTable20), kept);
+
+        // a transaction in flight (the marker of the non-batch path) drops its whole batch, never a part of it
+        kept = PublishVersionDaemon.dropInFlightBatches(batches, Sets.newHashSet(2L), Sets.newHashSet());
+        Assertions.assertEquals(Lists.newArrayList(onTable20, onTables30And40), kept);
+
+        // the non-batch path filters transaction by transaction
+        List<TransactionState> states = Lists.newArrayList(txnOn(5L, 10L), txnOn(6L, 20L), txnOn(7L, 30L));
+        Assertions.assertSame(states,
+                PublishVersionDaemon.dropInFlightTransactions(states, Sets.newHashSet(), Sets.newHashSet()));
+        List<TransactionState> keptStates =
+                PublishVersionDaemon.dropInFlightTransactions(states, Sets.newHashSet(7L), Sets.newHashSet(10L));
+        Assertions.assertEquals(1, keptStates.size());
+        Assertions.assertEquals(6L, keptStates.get(0).getTransactionId());
     }
 }

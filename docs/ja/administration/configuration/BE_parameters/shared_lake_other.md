@@ -149,15 +149,6 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: 共有データクラスタの Tablet メタデータおよびトランザクションログファイルを、Adler-32 チェックサム付きで書き込むかどうか。これにより、これらのファイルの破損を読み取り時に検出できます。この項目の設定にかかわらず、読み取り側はチェックサムが存在する場合は常に自動的に検出して検証します。この項目は書き込み形式のみを制御します。クラスタが、チェックサム形式に対応していないバージョンへダウングレードされる可能性がある場合にのみ、この項目を `false` に設定してください。ローリングアップグレードまたはダウングレードの期間中、古い BE または CN は旧来のリーダーを使用するため、新形式で書き込まれたファイルを解析できません。
 - 導入バージョン: v4.2
 
-### lake_enable_tablet_location_handoff
-
-- デフォルト: true
-- タイプ: Boolean
-- 単位: -
-- 変更可能: はい
-- 説明: 共有データクラスタで、ロードのデータを書き込むノードが、所有する tablet のストレージロケーションをそのロードを調整するノードに引き渡すかどうか。`file_bundling` が有効なテーブルでは、調整ノードがパーティションごとに 1 つの combined txn log を書き込みますが、通常は大部分のパーティションの tablet を所有していません。`true` の場合、tablet を所有するノードはトランザクションログと一緒にパーティションごとに 1 つの tablet のストレージロケーションを返し、調整ノードは StarMgr に問い合わせることなく combined txn log を書き込みます。省かれた問い合わせは `lake_tablet_location_handoff_hits_total` に計上されます。`false` の場合、調整ノードはロードごとに、tablet を所有していないパーティションごとに StarMgr へロケーションを問い合わせ、その回数は `starrocks_be_staros_shard_info_fallback_total` に計上されます。返されるロケーションにはストレージボリュームの認証情報が含まれます。
-- 導入バージョン: -
-
 ### lake_pk_compaction_max_input_rowsets
 
 - デフォルト: 500
@@ -167,13 +158,22 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: 共有データクラスタでの主キーテーブルコンパクションタスクで許可される最大入力 rowset 数。このパラメータのデフォルト値は v3.2.4 および v3.1.10 以降 `5` から `1000` に、v3.3.1 および v3.2.9 以降 `500` に変更されました。主キーテーブルのためのサイズ階層型コンパクションポリシーが有効になった後 (`enable_pk_size_tiered_compaction_strategy` を `true` に設定することで)、StarRocks は各コンパクションの rowset 数を制限して書き込み増幅を減らす必要がなくなります。したがって、このパラメータのデフォルト値は増加しました。
 - 導入バージョン: v3.1.8, v3.2.3
 
+### lake_pk_compaction_base_enable_delete_trigger
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: 共有データクラスタで、主キーテーブルの tablet の削除量が `lake_pk_compaction_base_delete_ratio_threshold` または `lake_pk_compaction_base_delete_rows_threshold` に達したときに、累積コンパクションからベースコンパクションへ自動的に切り替えるかどうか。`lake_pk_compaction_base_delete_rows_threshold` は絶対行数であるため、デフォルトでは無効です。既存の行が継続的に更新または削除される大きなテーブルでは、tablet はベースコンパクションのたびにすぐ再びこの値に達し、各ベースコンパクションは tablet のデータのうち最大 `update_compaction_ratio_threshold` (デフォルト 0.5) の割合を書き換えます。手動の `ALTER TABLE ... COMPACT` は、この項目の設定に関係なくベースコンパクションを実行します。
+- 導入バージョン: v4.1.6, v26.2.1
+
 ### lake_pk_compaction_base_delete_ratio_threshold
 
 - デフォルト: 0.5
 - タイプ: Double
 - 単位: -
 - 変更可能: はい
-- 説明: 共有データクラスタで、主キーテーブルの tablet を累積コンパクション (サイズ階層型の小ファイルマージ) からベースコンパクションに切り替える 2 つのトリガーの 1 つ。ベースコンパクションは削除を含む rowset を (削除行数の多いものから優先して) 書き換え、削除された行を物理的に除去して delete vector を縮小します。tablet の集約削除率 (各 rowset の `sum(num_dels) / sum(num_rows)`) がこの値に達したとき、絶対削除行数が `lake_pk_compaction_base_delete_rows_threshold` に達したとき、または手動の `ALTER TABLE ... COMPACT` がベースコンパクションを強制したときに実行されます。両方のしきい値を十分大きく設定すると自動トリガーを無効化できます。
+- 説明: 共有データクラスタで、主キーテーブルの tablet を累積コンパクション (サイズ階層型の小ファイルマージ) からベースコンパクションに切り替える 2 つのトリガーの 1 つ。ベースコンパクションは削除を含む rowset を (削除行数の多いものから優先して) 書き換え、削除された行を物理的に除去して delete vector を縮小します。`lake_pk_compaction_base_enable_delete_trigger` が `true` の場合、tablet の集約削除率 (各 rowset の `sum(num_dels) / sum(num_rows)`) がこの値に達したとき、または絶対削除行数が `lake_pk_compaction_base_delete_rows_threshold` に達したときに実行されます。手動の `ALTER TABLE ... COMPACT` は、これらの設定に関係なくベースコンパクションを強制します。
 - 導入バージョン: v4.2
 
 ### lake_pk_compaction_base_delete_rows_threshold
@@ -182,7 +182,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Int
 - 単位: -
 - 変更可能: はい
-- 説明: 共有データクラスタでの主キーテーブルのベースコンパクションの 2 つのトリガーの 1 つ (`lake_pk_compaction_base_delete_ratio_threshold` を参照)。tablet の絶対削除行数 (各 rowset の `sum(num_dels)`) がこの値に達したときにベースコンパクションが実行されます。この絶対数トリガーは比率トリガーを補完します。高頻度の更新/削除テーブルでは、delete vector が肥大化して領域が無駄になる一方、集約削除率は多数のほぼ生存している rowset によって希釈されて低いままになるため、比率トリガーだけでは発火しません。この値を大きくするとベースコンパクションの頻度が下がり、小さくすると delete vector をより早く回収できます。
+- 説明: 共有データクラスタでの主キーテーブルのベースコンパクションの 2 つのトリガーの 1 つ (`lake_pk_compaction_base_delete_ratio_threshold` を参照)。`lake_pk_compaction_base_enable_delete_trigger` が `true` の場合、tablet の絶対削除行数 (各 rowset の `sum(num_dels)`) がこの値に達したときにベースコンパクションが実行されます。この絶対数トリガーは比率トリガーを補完します。高頻度の更新/削除テーブルでは、delete vector が肥大化して領域が無駄になる一方、集約削除率は多数のほぼ生存している rowset によって希釈されて低いままになるため、比率トリガーだけでは発火しません。この値を大きくするとベースコンパクションの頻度が下がり、小さくすると delete vector をより早く回収できます。
 - 導入バージョン: v4.2
 
 ### enable_lake_pk_compaction_score_gate
@@ -239,6 +239,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: 主キーテーブルのコンパクションスコアゲートの例外条件の一つ。しきい値を下回る層の合計バイト数が `ratio * largest_rowset_bytes * size_tiered_level_multiple` (つまり自然な次階層への昇格目標の `ratio` 倍) を超えると、長期的な中間層の蓄積を抑えるためにコンパクションが強制されます。デフォルトの `2.0` は、強制マージの前に自然な昇格しきい値の 2 倍まで許容することを意味します。`0` に設定するとこの例外が無効になり、サイズの上限がなくなります。
 - 導入バージョン: v4.2
 
+### lake_pk_partial_update_use_segment_cache
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: 共有データクラスタの主キーテーブルの publish が、必要な基底セグメントを毎回開き直す代わりに、セグメントメタデータキャッシュ経由で読み取るかどうか。行モードの部分更新と条件更新の両方が対象で、どちらも同じセグメントから古い値を読み直します。セグメントを開くにはフッターを解析し、テーブルスキーマの列ごとにカラムリーダーを構築する必要があるため、列数の多いテーブルでは、高頻度の部分更新が publish のたびに同じ基底セグメントに対してこのコストを繰り返し支払うことになります。キャッシュ経由で読み取ると、後続の publish が既に開かれたセグメントを再利用できます。JSON、ARRAY、MAP、STRUCT 列、または `zstd_compression_columns` で有効にした列を含むテーブルでは、列数に基づく推定がネストされたメタデータや圧縮辞書を考慮していないため、従来のオープン経路を使用します。既存のセグメントに辞書が残る可能性があるため、辞書の書き込みを無効にしても、これらのテーブルはキャッシュを使用しません。キャッシュは、その tablet の基底セグメントが `lake_metadata_cache_limit` に収まり、各セグメントの推定サイズが 1 つのキャッシュシャードの容量を超えない場合にのみ使用されます。1 回の publish 単位ではなく tablet 全体で判断するのは、連続する publish がそのうちの異なる部分集合を読み取るためです。それを超える場合、キャッシュへの追加は追加と同じ速さで既存のエントリを追い出すことになるため、従来の動作に戻ります。この項目を `false` に設定すると、常にセグメントを開き直します。
+- 導入バージョン: v4.2
+
 ### enable_lake_prepared_split_pre_refinement
 
 - デフォルト: true
@@ -282,6 +291,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 変更可能: はい
 - 説明: 共有データクラスタでの主キーテーブル軽量コンパクション publish 時、`RowsMapperIterator` のパイプライン化された `.lcrm` 読み取りにおける sub-chunk の粒度。各出力 segment は `ceil(segment_bytes / lake_rows_mapper_sub_chunk_bytes)` 個の sub-chunk に分割され、独立してパイプライン化されます。値を小さくするほど、少数の大きな出力 segment で達成可能な並列度が上がりますが、その代わりに範囲読み取りが増え、consume 時に追加の memcpy が発生します。デフォルトは 4 MiB で、starcache のディスク層 block サイズと一致させています。
 
+### lake_shard_info_cache_ttl_sec
+
+- デフォルト: 60
+- タイプ: Int
+- 単位: 秒
+- 変更可能: はい
+- 説明: 共有データクラスタで、BE または CN が自身の所有していない tablet のストレージロケーションを保持する時間。保持している間に同じ tablet に再びアクセスしても、StarMgr への問い合わせは発生しません。ノードが保持するロケーションは 2 種類あります。1 つ目は、ノード自身が StarMgr に問い合わせて得たものです。他のノードに割り当てられた tablet のファイルを読み書きするときに問い合わせが発生し、その回数は `starrocks_be_staros_shard_info_fallback_total` に計上されます。たとえば、1 回のロードで複数のノードが同じ tablet に書き込む場合や、Vacuum がパーティション内のすべての tablet のメタデータを読み取る場合です。このロケーションで応答した回数は `staros_shard_info_fallback_cache_hits_total` に計上されます。2 つ目は、tablet を所有するノードから引き渡されたものです。`file_bundling` が有効なテーブルへのロードでは、所有ノードがトランザクションログとともにロケーションを返し、ロードを調整するノードはそれを使って各パーティションの combined txn log を問い合わせなしで書き込みます。このロケーションで応答した回数は `lake_tablet_location_handoff_hits_total` に計上されます。tablet を所有するノードには StarMgr からストレージボリュームの更新がプッシュされますが、保持されたロケーションは期限が切れるまで更新されません。そのため、この項目は、こうしたノードが古いストレージボリューム設定 (ローテーション済みの認証情報など) を使い続ける最長時間も決めます。保持されるロケーションにはストレージボリュームの認証情報が含まれます。`0` に設定すると 2 種類とも無効になり、引き渡しも保持も行われず、毎回 StarMgr に問い合わせます。
+- 導入バージョン: -
+
 ### lake_vacuum_enable_task_timeout
 
 - デフォルト: true
@@ -314,6 +332,33 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 単位: Bytes
 - 変更可能: Yes
 - 説明: Paimon native reader が 2 つの必要な Parquet 読み取り範囲を 1 回の読み取りに統合する際に許容する最大の間隔。値を大きくするとリクエスト数は減りますが読み取りの増幅が大きくなります。デフォルト値は StarRocks ネイティブ Parquet reader が使用する `io_coalesce_read_max_distance_size` と同じです。paimon-cpp 自体のデフォルト値はこれよりはるかに小さく、オブジェクトストレージ上で多数の小さなリクエストを発生させます。
+- 導入バージョン: -
+
+### primary_key_index_memory_high_percent
+
+- デフォルト: 75
+- タイプ: Int
+- 単位: -
+- 変更可能: Yes
+- 説明: 共有データクラスタで、バックグラウンドスレッドが主キーインデックスキャッシュを定期的に縮小する目標値で、キャッシュ容量に対するパーセンテージで指定します。キャッシュ容量は更新関連のメモリの上限と同じです（`update_memory_limit_percent` を参照）。使用量がこの割合を超えている場合は、使用中でない主キーインデックスを最も長く使われていないものから順に追い出し、この割合以内に収めます。使用中の主キーインデックスは追い出されません。`primary_key_index_memory_urgent_percent` より小さい値を設定してください。
+- 導入バージョン: -
+
+### primary_key_index_memory_middle_percent
+
+- デフォルト: 50
+- タイプ: Int
+- 単位: -
+- 変更可能: Yes
+- 説明: 共有データクラスタで主キーテーブルの Publish がメモリ制限を超えて失敗した場合に、主キーインデックスキャッシュを縮小する目標値で、キャッシュ容量に対するパーセンテージで指定します。使用中でない主キーインデックスを追い出して使用量をこの割合以内に収め、再試行される Publish のためにメモリを確保します。`primary_key_index_memory_high_percent` より小さい値を設定してください。
+- 導入バージョン: -
+
+### primary_key_index_memory_urgent_percent
+
+- デフォルト: 85
+- タイプ: Int
+- 単位: -
+- 変更可能: Yes
+- 説明: 共有データクラスタにおける主キーインデックスキャッシュの使用量の上限で、キャッシュ容量に対するパーセンテージで指定します。各 Publish の終了時（メモリ制限超過で失敗した場合を除く）に確認され、使用量がこの割合を超えている場合は、使用中でない主キーインデックスを最も長く使われていないものから順に追い出し、この割合以内に収めます。バックグラウンドスレッドが `primary_key_index_memory_high_percent` まで縮小するよりも速くキャッシュが増えた場合の歯止めとなるため、その値より大きい値を設定してください。
 - 導入バージョン: -
 
 ### s3_multipart_equal_part_size
@@ -587,6 +632,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 変更可能: いいえ
 - 説明: 共有データクラスタで、internal catalog と external catalog のデータキャッシュを統一された Data Cache インスタンスで管理するかどうか。
 - 導入バージョン: v3.4.0
+
+### external_table_clear_corrupted_cache_data
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: 外部テーブルのファイル（例: Hive テーブル、Iceberg テーブル）の破損したデータキャッシュをシステムがクリアすることを許可するかどうか。データキャッシュから読み取った内容のデコードに失敗した場合、システムは読み取ったキャッシュブロックを削除し、次回の読み取りではリモートストレージから読み直します。Parquet ファイルでまだ行が返されていない場合、システムはまずデータキャッシュをバイパスしてファイルを再読み取りし、それが成功した場合にのみキャッシュブロックを削除します。この項目は共有データクラスタの内部テーブルには影響しません。内部テーブルは `lake_clear_corrupted_cache_data` で制御されます。
+- 導入バージョン: -
 
 ### jdbc_connection_idle_timeout_ms
 

@@ -1106,8 +1106,17 @@ public class ExplainAnalyzer {
         appendMetric(uniqueMetrics, nodeInfo, "PhySegmentsCount");
         appendMetric(uniqueMetrics, nodeInfo, "PhyRowsetsCount");
         appendMetric(uniqueMetrics, nodeInfo, "TotalColumnsDataPageCount");
+        appendMetric(uniqueMetrics, nodeInfo, "SegmentInit");
         appendMetric(uniqueMetrics, nodeInfo, "ColumnIteratorInit");
         appendMetric(uniqueMetrics, nodeInfo, "BitmapIndexIteratorInit");
+        appendMetric(uniqueMetrics, nodeInfo, "SegmentInitPrepare");
+        appendMetric(uniqueMetrics, nodeInfo, "RowidRangeFilter");
+        appendMetric(uniqueMetrics, nodeInfo, "PrecomputedRangeFilter");
+        appendMetric(uniqueMetrics, nodeInfo, "TabletRangeFilter");
+        appendMetric(uniqueMetrics, nodeInfo, "DelVectorApply");
+        appendMetric(uniqueMetrics, nodeInfo, "SegmentInitFinalize");
+        appendMetric(uniqueMetrics, nodeInfo, "RewritePredicates");
+        appendMetric(uniqueMetrics, nodeInfo, "InitContext");
         appendMetric(uniqueMetrics, nodeInfo, "FlatJsonInit");
         appendMetric(uniqueMetrics, nodeInfo, "FlatJsonMerge");
         popIndent();
@@ -1777,7 +1786,10 @@ public class ExplainAnalyzer {
                 "CachedPagesNum", "BlockFetch", "BlockFetchCount", "BlockSeek", "BlockSeekCount", "DecompressTime",
                 "TabletCount", "SegmentsReadCount", "RowsetsReadCount", "PhySegmentsCount", "PhyRowsetsCount",
                 "TotalColumnsDataPageCount",
-                "ColumnIteratorInit", "BitmapIndexIteratorInit", "FlatJsonInit", "FlatJsonMerge",
+                "SegmentInit", "ColumnIteratorInit", "BitmapIndexIteratorInit", "FlatJsonInit", "FlatJsonMerge",
+                "SegmentInitPrepare", "RowidRangeFilter", "PrecomputedRangeFilter", "TabletRangeFilter",
+                "DelVectorApply", "SegmentInitFinalize",
+                "RewritePredicates", "InitContext", "SegmentZoneMapFilter",
                 "IOTaskExecTime", "IOTaskWaitTime", "SubmitTaskCount", "SubmitTaskTime", "PrepareChunkSourceTime",
                 "MorselsCount", "PeakIOTasks", "PeakScanTaskQueueSize", "PeakChunkBufferMemoryUsage",
                 "PeakChunkBufferSize", "ChunkBufferCapacity", "DefaultChunkBufferCapacity",

@@ -22,7 +22,16 @@ In addition to the native RBAC privilege system, StarRocks v3.1.9 also supports 
 - Creates access policies, masking policies, and row-level filter policies through Apache Ranger.
 - Ranger audit logs.
 - **Ranger Servers that use Kerberos for authentication are not supported.**
+- **Ranger policy conditions that are evaluated by JavaScript are not supported**, such as the `expression` condition and the `accessed-after-expiry` condition of tag-based policies. See the note below.
 - You can register multiple StarRocks Services in the same Apache Ranger service to manage privileges in different StarRocks clusters.
+
+:::note
+
+StarRocks FE runs on JDK 17 or later, which does not include a JavaScript engine. When Ranger cannot evaluate a JavaScript condition, it treats the condition as satisfied and logs `failed to evaluate condition '<condition>': script engine not found` each time. For example, an allow item with an `expression` condition then grants access without checking the expression. Do not use these conditions in the policies that apply to StarRocks.
+
+When it loads policies, the FE also logs `failed to initialize condition 'accessed-after-expiry'`. This comes from the `EXPIRES_ON` policy of the tag service that Ranger Admin links to a service by default. The message has no effect as long as no resource has the `EXPIRES_ON` tag. Access to a resource with this tag is denied even before its expiry date.
+
+:::
 
 This topic describes the permission control methods and integration process of StarRocks and Apache Ranger. For information on how to create security policies on Ranger to manage data security, see the [Apache Ranger official website](https://ranger.apache.org/).
 
@@ -113,12 +122,22 @@ This step configures the StarRocks Service on Ranger so that users can perform a
 
    :::
 
+   To grant SELECT on views and materialized views through Ranger, the `accessTypeRestrictions` of the `view` and `materialized_view` resources in the .json file must include `"select"`. If they do not, add it before you add or update the service definition in the next step.
+
 2. Add StarRocks Service by running the following command as a Ranger administrator.
 
    ```Bash
    curl -u <ranger_adminuser>:<ranger_adminpwd> \
    -X POST -H "Accept: application/json" \
    -H "Content-Type: application/json" http://<ranger-ip>:<ranger-port>/service/plugins/definitions -d@ranger-servicedef-starrocks.json
+   ```
+
+   If the StarRocks service definition is already registered in Ranger, for example when you upgrade StarRocks, update it instead of adding it again:
+
+   ```Bash
+   curl -u <ranger_adminuser>:<ranger_adminpwd> \
+   -X PUT -H "Accept: application/json" \
+   -H "Content-Type: application/json" http://<ranger-ip>:<ranger-port>/service/public/v2/api/servicedef/name/starrocks -d@ranger-servicedef-starrocks.json
    ```
 
 3. Access `http://<ranger-ip>:<ranger-host>/login.jsp` to log in to the Apache Ranger page. The STARROCKS service appears on the page.

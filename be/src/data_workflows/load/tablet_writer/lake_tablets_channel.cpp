@@ -148,6 +148,10 @@ private:
                     writer_global_dicts->find(item.first) != writer_global_dicts->end()) {
                     info->add_valid_dict_cache_columns(item.first);
                     info->add_valid_dict_collected_version(writer_global_dicts->at(item.first).version);
+                    const auto& identity = writer_global_dicts->at(item.first).content_identity;
+                    if (identity.has_value()) {
+                        info->add_valid_dict_content_identities(*identity);
+                    }
                 } else {
                     info->add_invalid_dict_cache_columns(item.first);
                 }
@@ -869,13 +873,13 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
                         RuntimeMetrics::instance()->lake_txn_log_collect_orphan_partition_total.increment(orphan_count);
                     }
                     context->add_txn_logs(my_logs);
-                    if (config::lake_enable_tablet_location_handoff) {
+                    if (config::lake_shard_info_cache_ttl_sec > 0) {
                         context->add_shard_infos(_tablet_manager, my_logs);
                     }
                 } else {
                     // Legacy path: sender 0 takes every log.
                     context->add_txn_logs(all_logs);
-                    if (config::lake_enable_tablet_location_handoff) {
+                    if (config::lake_shard_info_cache_ttl_sec > 0) {
                         context->add_shard_infos(_tablet_manager, all_logs);
                     }
                 }
@@ -988,6 +992,9 @@ Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest&
                 GlobalDictsWithVersion<GlobalDictMap> dict;
                 dict.dict = std::move(global_dict);
                 dict.version = slot.has_global_dict_version() ? slot.global_dict_version() : 0;
+                if (slot.has_global_dict_content_identity()) {
+                    dict.content_identity = slot.global_dict_content_identity();
+                }
                 _global_dicts.emplace(std::string(slot.col_name()), std::move(dict));
             }
         }

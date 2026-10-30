@@ -38,7 +38,7 @@ public class AuditEncryptionCheckerTest {
     @Test
     public void testProviderFunctionDoesNotContainCredentials() {
         StatementBase stmt = SqlParser.parseSingleStatement(
-                "SELECT ai_custom_query('p', 'prompt')", SqlModeHelper.MODE_DEFAULT);
+                "SELECT ai_complete('p', 'explicit-model', 'prompt')", SqlModeHelper.MODE_DEFAULT);
         Assertions.assertFalse(AuditEncryptionChecker.needEncrypt(stmt));
     }
 

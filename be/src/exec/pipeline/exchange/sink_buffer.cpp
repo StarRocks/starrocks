@@ -37,6 +37,15 @@
 
 namespace starrocks::pipeline {
 
+namespace {
+template <typename T>
+void update_peak(std::atomic<T>& peak, T value) {
+    T current = peak.load(std::memory_order_relaxed);
+    while (value > current && !peak.compare_exchange_weak(current, value, std::memory_order_relaxed)) {
+    }
+}
+} // namespace
+
 SinkBuffer::SinkBuffer(FragmentContext* fragment_ctx, const std::vector<TPlanFragmentDestination>& destinations,
                        bool is_dest_merge)
         : _fragment_ctx(fragment_ctx),
@@ -105,6 +114,7 @@ Status SinkBuffer::add_request(TransmitChunkInfo& request) {
         return Status::OK();
     }
     _buffered_mem_usage->consume(request.request_byte_size);
+    update_peak(_peak_buffered_requests, ++_num_buffered_requests);
     if (!request.attachment.empty()) {
         _bytes_enqueued += request.attachment.size();
         _request_enqueued++;
@@ -231,6 +241,20 @@ void SinkBuffer::update_profile(RuntimeProfile* profile) {
     COUNTER_SET(bytes_unsent_counter, _bytes_enqueued - _bytes_sent);
     COUNTER_SET(request_unsent_counter, _request_enqueued - _request_sent);
 
+    // Memory of requests that are queued or in flight. It is only released when the RPC completes,
+    // so it keeps growing while the receiver holds closures (back pressure) until it reaches
+    // SinkBufferMemoryLimit, which is what finally blocks the upstream operators.
+    RuntimeProfile::Counter* buffer_peak_mem_counter = ADD_COUNTER(profile, "SinkBufferPeakMemoryUsage", TUnit::BYTES);
+    RuntimeProfile::Counter* buffer_mem_limit_counter = ADD_COUNTER(profile, "SinkBufferMemoryLimit", TUnit::BYTES);
+    RuntimeProfile::Counter* peak_in_flight_rpc_counter =
+            ADD_COUNTER(profile, "SinkBufferPeakInFlightRpcNum", TUnit::UNIT);
+    RuntimeProfile::Counter* peak_buffered_request_counter =
+            ADD_COUNTER(profile, "SinkBufferPeakRequestNum", TUnit::UNIT);
+    COUNTER_SET(buffer_peak_mem_counter, _buffered_mem_usage->peak_consumption());
+    COUNTER_SET(buffer_mem_limit_counter, static_cast<int64_t>(_memory_limit));
+    COUNTER_SET(peak_in_flight_rpc_counter, static_cast<int64_t>(_peak_in_flight_rpc.load()));
+    COUNTER_SET(peak_buffered_request_counter, _peak_buffered_requests.load());
+
     profile->add_derived_counter(
             "NetworkBandwidth", TUnit::BYTES_PER_SECOND,
             [bytes_sent_counter, network_timer] {
@@ -355,7 +379,7 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
         size_t request_byte_size = request.request_byte_size;
 
         bool need_wait = false;
-        DeferOp pop_defer([&need_wait, &buffer, mem_tracker = _mem_tracker]() {
+        DeferOp pop_defer([this, &need_wait, &buffer, mem_tracker = _mem_tracker]() {
             if (need_wait) {
                 return;
             }
@@ -365,6 +389,7 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
             // This must be invoked before decrease_defer desctructed to avoid sink_buffer and fragment_ctx released.
             SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker);
             buffer.pop();
+            --_num_buffered_requests;
         });
 
         // The order of data transmiting in IO level may not be strictly the same as
@@ -491,7 +516,7 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
         closure->addFailureHandler(failed_function);
         closure->addSuccessHandler(success_function);
 
-        ++_total_in_flight_rpc;
+        update_peak(_peak_in_flight_rpc, ++_total_in_flight_rpc);
         ++context.num_in_flight_rpcs;
 
         // Attachment will be released by process_mem_tracker in closure->Run() in bthread, when receiving the response,

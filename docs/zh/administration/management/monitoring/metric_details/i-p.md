@@ -204,6 +204,20 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 - 单位：字节
 - 描述：INT8 列池使用的内存。
 
+## `jwks_fetch_latency_ms`
+
+- 单位：毫秒
+- 类型：Histogram
+- 描述：每次从身份提供方拉取 JWKS（JSON Web Key Set）的耗时，不区分触发原因：某个 `jwks_url` 的首次加载、缓存到期前的后台提前刷新、token 带未知 `kid` 触发的刷新、失败后的重试都算，失败的拉取同样计时。JWT 验签本身是稳定的 CPU 开销，Bearer 认证变慢时，时间基本花在这里。
+- 引入版本：v4.2
+
+## `jwks_refresh_total`
+
+- 单位：个
+- 类型：Counter
+- 描述：从身份提供方拉取 JWKS 的总次数，按 `result`（`success` / `failure`）打标签。在 HTTP 拉取本身计数，每次拉取加一：后台刷新只算一次，拉取失败但用缓存的旧 key 顶上（见 `jwks_cache_outage_ttl_seconds`）的情况算 `failure`。`failure` 持续上升说明身份提供方的 JWKS 端点不健康；在容错窗口用完之前，认证仍靠缓存的 key 继续工作。
+- 引入版本：v4.2
+
 ## `jemalloc_active_bytes`
 
 - 单位：字节
@@ -253,6 +267,55 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 
 - 单位：字节
 - 描述：JIT 编译函数缓存使用的内存。
+
+## `jvm_heap_size_bytes`
+
+- 单位：字节
+- 类型：瞬时值
+- 标签：`type`（`used`、`committed` 或 `max`）
+- 描述：BE 进程内嵌 JVM 的堆内存。`used` 为对象占用的内存，`committed` 为 JVM 已向操作系统申请的内存，`max` 为堆内存上限。FE 节点也会为自身的 JVM 导出同名指标，此处描述的是 BE 指标。
+  - 仅当 BE 配置项 `enable_jvm_metrics` 为 `true`（默认值）且 BE 启动时设置了环境变量 `JAVA_HOME` 时，才会导出 BE JVM 指标（本节中所有 `jvm_*_size_bytes` 指标）。
+  - BE 不会为了采集这些指标而启动 JVM。在 BE 进程中创建 JVM 之前（例如访问 HDFS、使用基于 JNI 的 Scanner 或 Java UDF），所有取值均为 `0`。
+  - 当 BE 配置项 `enable_metric_calculator` 为 `true`（默认值）时，每 15 秒刷新一次取值；否则在拉取指标时刷新。
+  - 当 `enable_jvm_memory_tracker` 为 `true`（默认值）时，已提交的堆内存和非堆内存还会计入 BE 的 `jvm` 内存追踪器（MemTracker）。
+
+## `jvm_non_heap_size_bytes`
+
+- 单位：字节
+- 类型：瞬时值
+- 标签：`type`（`used` 或 `committed`）
+- 描述：BE 进程内嵌 JVM 的非堆内存，例如 Metaspace 和 Code Cache。不导出 `max` 取值。BE JVM 指标的导出条件参见 [`jvm_heap_size_bytes`](#jvm_heap_size_bytes)。
+
+## `jvm_old_size_bytes`
+
+- 单位：字节
+- 类型：瞬时值
+- 标签：`type`（`used`、`committed`、`max`、`peak_used` 或 `peak_max`）
+- 描述：BE 进程内嵌 JVM 的老年代内存池。各 `type` 的含义及支持的垃圾回收器参见 [`jvm_young_size_bytes`](#jvm_young_size_bytes)。
+
+## `jvm_perm_size_bytes`
+
+- 单位：字节
+- 类型：瞬时值
+- 标签：`type`（`used`、`committed`、`max`、`peak_used` 或 `peak_max`）
+- 描述：BE 进程内嵌 JVM 的 Metaspace（Java 7 及更早版本中为永久代）。除非设置了 JVM 参数 `-XX:MaxMetaspaceSize`，Metaspace 没有确定的上限，因此 `max` 和 `peak_max` 通常为 `-1`。各 `type` 的含义参见 [`jvm_young_size_bytes`](#jvm_young_size_bytes)。
+
+## `jvm_survivor_size_bytes`
+
+- 单位：字节
+- 类型：瞬时值
+- 标签：`type`（`used`、`committed`、`max`、`peak_used` 或 `peak_max`）
+- 描述：BE 进程内嵌 JVM 的 Survivor 区内存池。使用默认的 G1 回收器时，`max` 和 `peak_max` 为 `-1`。各 `type` 的含义及支持的垃圾回收器参见 [`jvm_young_size_bytes`](#jvm_young_size_bytes)。
+
+## `jvm_young_size_bytes`
+
+- 单位：字节
+- 类型：瞬时值
+- 标签：`type`（`used`、`committed`、`max`、`peak_used` 或 `peak_max`）
+- 描述：BE 进程内嵌 JVM 的新生代（Eden 区）内存池。使用默认的 G1 回收器时，`max` 和 `peak_max` 为 `-1`。BE JVM 指标的导出条件参见 [`jvm_heap_size_bytes`](#jvm_heap_size_bytes)。
+  - `used`、`committed` 和 `max` 为内存池的当前使用情况。`peak_used` 和 `peak_max` 来自 JVM 为该内存池记录的峰值使用情况（`MemoryPoolMXBean.getPeakUsage()`）：`peak_used` 为 `used` 的最大值，`peak_max` 为该峰值记录中的 `max` 字段。`peak_max` 并不是单独统计的 `max` 历史最大值，因此监控内存池容量时请使用 `max`，而不是 `peak_max`。峰值记录从 JVM 启动或上一次重置时开始统计。BE 不会重置峰值记录，因此只有 BE 重启时才会重置。
+  - `max` 或 `peak_max` 为 `-1` 表示该内存池没有确定的上限，并不表示出错。
+  - `jvm_young_size_bytes`、`jvm_survivor_size_bytes` 和 `jvm_old_size_bytes` 按照内存池名称匹配，因此仅在 JVM 使用 Serial、Parallel、CMS 或 G1 垃圾回收器时才有取值。使用 ZGC 或 Shenandoah 时，这些指标保持为 `0`。`jvm_heap_size_bytes` 和 `jvm_non_heap_size_bytes` 不受影响。
 
 ## `lake_compaction_held_segment_bytes`
 
@@ -333,11 +396,29 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 - 类型：累积
 - 描述：仅存算分离模式。主键表 Publish 时，tablet 的主键索引不在主键索引缓存中、必须整体加载的次数。索引不在缓存中，要么是 BE 启动后尚未加载过，要么是已被淘汰。加载时会打开该 tablet 的全部主键索引 SST 文件，并重放这些文件尚未覆盖的 rowset。加载失败也会计入。如果写入的 tablet 集合不变而该值持续上升，说明主键索引在被反复淘汰和重新加载。
 
+## `lake_segment_cache_hit_minute`
+
+- 单位：次数
+- 类型：Gauge
+- 描述：存算分离集群下，过去 60 秒内 segment 元数据缓存查找命中的次数。命中表示找到一个缓存候选对象，该对象仍可能因 schema 与请求不兼容而被拒绝复用。启用 `dump_metrics_with_bvar` 后，通过 `/metrics` 导出。
+
+## `lake_segment_cache_miss_minute`
+
+- 单位：次数
+- 类型：Gauge
+- 描述：存算分离集群下，过去 60 秒内 segment 元数据缓存查找未找到缓存条目的次数。启用 `dump_metrics_with_bvar` 后，通过 `/metrics` 导出。
+
+## `lake_segment_cache_schema_reject_total`
+
+- 单位：次数
+- 类型：Gauge
+- 描述：本 BE/CN 启动以来，缓存 segment 候选对象因 schema 缺失或与请求指定的 schema 不兼容而被拒绝复用的累积次数。启用缓存填充时，仅当被拒绝的条目仍指向同一个 segment 对象，才会原子替换该条目；在途读取继续使用原对象。否则，本次请求打开私有 segment。也包括查找未命中后，并发缓存插入返回不兼容候选对象的情况，因此不能直接从查找命中数中扣除此值。启用 `dump_metrics_with_bvar` 后，通过 `/metrics` 导出。
+
 ## `lake_tablet_location_handoff_entries`
 
 - 单位：计数
 - 类型：瞬时值
-- 描述：仅存算分离模式。本 BE 为自己不持有的 tablet 保留的存储位置条数。这些位置由 tablet 的持有节点在导入时交来，用于写 combined txn log（参见 BE 配置项 `lake_enable_tablet_location_handoff`）。条目保存在一个 16 MiB 的 LRU 缓存中，最后一次刷新后 5 分钟内有效，缓存需要空间时被淘汰。因此该值反映的是缓存占用，而不是位置交接当前是否在用。
+- 描述：仅存算分离模式。本 BE 为自己不持有的 tablet 保留的存储位置条数。这些位置由 tablet 的持有节点在导入时交来，用于写 combined txn log（参见 BE 配置项 `lake_shard_info_cache_ttl_sec`）。条目保存在一个 16 MiB 的 LRU 缓存中，与 `staros_shard_info_fallback_cache_entries` 统计的条目共用，最后一次刷新后在 `lake_shard_info_cache_ttl_sec` 时长内有效，缓存需要空间时被淘汰。因此该值反映的是缓存占用，而不是位置交接当前是否在用。
 
 ## `lake_tablet_location_handoff_hits_total`
 
@@ -381,6 +462,48 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 
 - 单位：计数
 - 描述：RPC 线程池的当前大小，用于处理 Routine Load 和通过表函数加载。默认值为 10，最大值为 1000。此值根据线程池的使用情况动态调整。
+
+## `load_sink_close_active_threads`
+
+- 单位：计数
+- 类型：瞬时值
+- 描述：导入 Sink 关闭线程池中正在执行的关闭操作数。存算分离集群下，每个关闭操作会向对象存储写入一次导入的合并事务日志。
+
+## `load_sink_close_execute_time_ns_total`
+
+- 单位：纳秒
+- 类型：累积
+- 描述：已完成的导入 Sink 关闭任务的累计执行时间，包含关闭过程中的等待和对象存储写入耗时。在每个任务结束时更新。
+
+## `load_sink_close_executed_tasks_total`
+
+- 单位：计数
+- 类型：累积
+- 描述：线程池已完成的导入 Sink 关闭任务数，包含返回错误的关闭任务。
+
+## `load_sink_close_pending_time_ns_total`
+
+- 单位：纳秒
+- 类型：累积
+- 描述：已完成的导入 Sink 关闭任务在线程池队列中等待的累计时间。在每个任务结束时更新，尚未包含当前仍在排队的任务。
+
+## `load_sink_close_queue_count`
+
+- 单位：计数
+- 类型：瞬时值
+- 描述：在导入 Sink 关闭线程池队列中等待的关闭操作数。该值持续增长，说明对象存储写入跟不上导入结束的速度。
+
+## `load_sink_close_running_threads`
+
+- 单位：计数
+- 类型：瞬时值
+- 描述：导入 Sink 关闭线程池中的线程数。
+
+## `load_sink_close_threadpool_size`
+
+- 单位：计数
+- 类型：瞬时值
+- 描述：导入 Sink 关闭线程池的最大线程数，由 `load_sink_close_thread_pool_num_max` 设置。
 
 ## `local_column_pool_bytes (Deprecated)`
 
@@ -616,6 +739,18 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 - 单位：计数
 - 描述：管道引擎中 PipelineDriverPoller 的阻塞队列当前长度。
 
+## `pipe_poller_max_driver_check`
+
+- 单位：微秒
+- 类型：汇总
+- 描述：PipelineDriverPoller 每轮轮询中耗时最长的单个 Driver 检查所用的时间。该值偏大，说明某个阻塞 Driver 的检查拖慢了整轮轮询。
+
+## `pipe_poller_pass`
+
+- 单位：微秒
+- 类型：汇总
+- 描述：PipelineDriverPoller 检查一遍所有阻塞 Driver 所用的时间。每个执行器集合只有一个 Poller 线程，一轮耗时过长会推迟所有等待该线程检查的 Driver。最近窗口内的最大值见 `pipe_poller_pass_max_latency`。
+
 ## `pipe_prepare_pool_queue_len`
 
 - 单位：计数
@@ -687,6 +822,8 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 
 - 单位：字节
 - 描述：此进程使用的内存。
+
+此指标包含 `passthrough_mem_bytes` 统计的本机 pass-through 缓冲内存。pass-through 指标是进程总量的组成部分，而非额外内存；计算总用量时不要将两个指标相加。此记账指标不等同于容器 RSS。
 
 ## `process_thread_num`
 

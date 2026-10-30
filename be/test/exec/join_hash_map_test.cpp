@@ -45,9 +45,9 @@ protected:
         _mem_pool = std::make_shared<MemPool>();
         _runtime_profile = create_runtime_profile();
         _runtime_state = create_runtime_state();
-        _int_type = TypeDescriptor::from_logical_type(TYPE_INT);
-        _tinyint_type = TypeDescriptor::from_logical_type(TYPE_TINYINT);
-        _varchar_type = TypeDescriptor::from_logical_type(TYPE_VARCHAR);
+        _int_type = TYPE_INT_DESC;
+        _tinyint_type = TYPE_TINYINT_DESC;
+        _varchar_type = TYPE_VARCHAR_DESC;
     }
     void TearDown() override {}
 
@@ -395,8 +395,7 @@ ColumnPtr JoinHashMapTest::create_int32_column(uint32_t row_count, uint32_t star
 }
 
 ColumnPtr JoinHashMapTest::create_binary_column(uint32_t row_count, uint32_t start_value) {
-    const auto& varchar_type_desc = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
-    MutableColumnPtr column = ColumnHelper::create_column(varchar_type_desc, false);
+    MutableColumnPtr column = ColumnHelper::create_column(TYPE_VARCHAR_DESC, false);
     auto* binary_column = ColumnHelper::as_raw_column<BinaryColumn>(column);
     for (int32_t i = 0; i < row_count; i++) {
         std::string str = std::to_string(start_value + i);
@@ -640,7 +639,7 @@ void JoinHashMapTest::prepare_table_items(JoinHashTableItems* table_items, TJoin
                                           bool with_other_conjunct, uint32_t batch_count) {
     table_items->join_type = join_type;
     table_items->with_other_conjunct = with_other_conjunct;
-    const auto int_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+    const auto int_type = TYPE_INT_DESC;
     table_items->join_keys.emplace_back(JoinKeyDesc{&int_type, false, nullptr});
     table_items->next.resize(1 + batch_count * config::vector_chunk_size, 0);
     for (size_t i = 0; i < config::vector_chunk_size; i++) {
@@ -1057,7 +1056,7 @@ TEST_F(JoinHashMapTest, GetHashKey) {
 
 // NOLINTNEXTLINE
 TEST_F(JoinHashMapTest, CompileFixedSizeKeyColumn) {
-    auto type = TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT);
+    auto type = TYPE_BIGINT_DESC;
     auto data_column = ColumnHelper::create_column(type, false);
     data_column->resize(2);
 
@@ -1147,7 +1146,7 @@ TEST_F(JoinHashMapTest, JoinBuildProbeFunc) {
     JoinHashTableItems table_items;
     HashTableProbeState probe_state;
 
-    auto type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+    auto type = TYPE_INT_DESC;
     auto build_column = ColumnHelper::create_column(type, false);
     build_column->append_default();
     build_column->append(*JoinHashMapTest::create_int32_column(10, 0), 0, 10);
@@ -1197,7 +1196,7 @@ TEST_F(JoinHashMapTest, JoinBuildProbeFuncNullable) {
     JoinHashTableItems table_items;
     HashTableProbeState probe_state;
 
-    auto type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+    auto type = TYPE_INT_DESC;
     auto build_column = ColumnHelper::create_column(type, true);
     build_column->append_default();
     build_column->append(*JoinHashMapTest::create_int32_nullable_column(10, 0), 0, 10);
@@ -3268,7 +3267,7 @@ TEST_F(JoinHashMapTest, TestLazyPredicateSlotsNormal) {
 TEST_F(JoinHashMapTest, TestBuildKeyConstructorForOneKeyNonNullable) {
     using BuildKeyBuilder = BuildKeyConstructorForOneKey<LogicalType::TYPE_INT>;
 
-    const auto int_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+    const auto int_type = TYPE_INT_DESC;
 
     JoinHashTableItems table_items;
     table_items.row_count = 10;
@@ -3294,7 +3293,7 @@ TEST_F(JoinHashMapTest, TestBuildKeyConstructorForOneKeyNonNullable) {
 TEST_F(JoinHashMapTest, TestBuildKeyConstructorForOneKeyNullable) {
     using BuildKeyBuilder = BuildKeyConstructorForOneKey<LogicalType::TYPE_INT>;
 
-    const auto int_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+    const auto int_type = TYPE_INT_DESC;
 
     JoinHashTableItems table_items;
     table_items.join_keys.emplace_back(JoinKeyDesc{&int_type, false, nullptr});
@@ -3340,7 +3339,7 @@ TEST_F(JoinHashMapTest, TestBuildKeyConstructorForOneKeyNullable) {
 TEST_F(JoinHashMapTest, TestBuildKeyConstructorForSerializedFixedSizeNonNullable) {
     using BuildKeyBuilder = BuildKeyConstructorForSerializedFixedSize<LogicalType::TYPE_BIGINT>;
 
-    const auto int_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+    const auto int_type = TYPE_INT_DESC;
 
     JoinHashTableItems table_items;
     table_items.row_count = 10;
@@ -3374,7 +3373,7 @@ TEST_F(JoinHashMapTest, TestBuildKeyConstructorForSerializedFixedSizeNonNullable
 TEST_F(JoinHashMapTest, TestBuildKeyConstructorForSerializedFixedSizeNullable) {
     using BuildKeyBuilder = BuildKeyConstructorForSerializedFixedSize<LogicalType::TYPE_BIGINT>;
 
-    const auto int_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+    const auto int_type = TYPE_INT_DESC;
 
     JoinHashTableItems table_items;
     table_items.join_keys.emplace_back(JoinKeyDesc{&int_type, false, nullptr});
@@ -3431,7 +3430,7 @@ TEST_F(JoinHashMapTest, TestBuildKeyConstructorForSerializedFixedSizeNullable) {
 TEST_F(JoinHashMapTest, TestProbeKeyConstructorForSerializedFixedSizeNullable) {
     using ProbeKeyBuilder = ProbeKeyConstructorForSerializedFixedSize<LogicalType::TYPE_BIGINT>;
 
-    const auto int_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+    const auto int_type = TYPE_INT_DESC;
     JoinHashTableItems table_items;
     table_items.join_keys.emplace_back(JoinKeyDesc{&int_type, false, nullptr});
     table_items.join_keys.emplace_back(JoinKeyDesc{&int_type, false, nullptr});
@@ -3486,7 +3485,7 @@ TEST_F(JoinHashMapTest, TestProbeKeyConstructorForSerializedFixedSizeNullable) {
 TEST_F(JoinHashMapTest, TestBuildKeyConstructorForSerializedNullable) {
     using BuildKeyBuilder = BuildKeyConstructorForSerialized;
 
-    const auto int_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+    const auto int_type = TYPE_INT_DESC;
 
     JoinHashTableItems table_items;
     table_items.join_keys.emplace_back(JoinKeyDesc{&int_type, false, nullptr});
@@ -3543,7 +3542,7 @@ TEST_F(JoinHashMapTest, TestBuildKeyConstructorForSerializedNullable) {
 TEST_F(JoinHashMapTest, TestProbeKeyConstructorForSerializedNullable) {
     using ProbeKeyBuilder = ProbeKeyConstructorForSerialized;
 
-    const auto int_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+    const auto int_type = TYPE_INT_DESC;
     JoinHashTableItems table_items;
     table_items.join_keys.emplace_back(JoinKeyDesc{&int_type, false, nullptr});
     table_items.join_keys.emplace_back(JoinKeyDesc{&int_type, false, nullptr});

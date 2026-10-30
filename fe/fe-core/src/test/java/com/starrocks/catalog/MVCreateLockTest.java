@@ -15,11 +15,15 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
+import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.persist.AlterMaterializedViewStatusLog;
+import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.sql.ast.AlterMaterializedViewStatusClause;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.utframe.LockProbe;
@@ -29,12 +33,18 @@ import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
+
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.verify;
 
 /**
  * CREATE MATERIALIZED VIEW reloads the new mv as the last step of the creation, and that reload resolves every
@@ -209,5 +219,99 @@ public class MVCreateLockTest extends MVTestBase {
                 .getTable("test", "drop_lock_external_mv"), "the mv should be gone");
         Assertions.assertEquals(0, externalResolves.get(),
                 "dropping an mv must not resolve its external base tables through the connector");
+    }
+
+    /**
+     * CREATE resolves a base table and links itself into it without any lock, so a DROP TABLE of that base table
+     * can land in between. Runs the drop's critical section -- unregister plus the inactivation of the linked
+     * mvs, under the database write lock -- right before or right after the link, and expects the mv to end up
+     * inactive either way.
+     *
+     * <p>Before the link the drop finds no mv to inactivate; after it, it finds this mv still transiently
+     * inactive from the reload and leaves it to the creation's verdict, which turns it active. Without a recheck
+     * the creation then left an active mv over a dropped base table, on the leader and every follower.
+     */
+    @Test
+    public void testBaseTableDroppedBeforeTheCreatedMvLinksIntoIt() throws Exception {
+        assertDropDuringCreateInactivates(true);
+    }
+
+    @Test
+    public void testBaseTableDroppedAfterTheCreatedMvLinksIntoIt() throws Exception {
+        assertDropDuringCreateInactivates(false);
+    }
+
+    private void assertDropDuringCreateInactivates(boolean dropBeforeLink) throws Exception {
+        final String baseName = "create_drop_race_base";
+        final String mvName = "create_drop_race_mv";
+        starRocksAssert.withTable("CREATE TABLE test." + baseName + " (k1 int, v1 int)\n" +
+                "DUPLICATE KEY(k1) DISTRIBUTED BY HASH(k1) BUCKETS 1\n" +
+                "PROPERTIES ('replication_num' = '1');");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
+        final Thread testThread = Thread.currentThread();
+        AtomicInteger drops = new AtomicInteger();
+        // Confined to the test thread: the async mv plan cache may touch the same table on another one.
+        new MockUp<Table>() {
+            @Mock
+            public void addRelatedMaterializedView(Invocation invocation, MvId mvId) {
+                Table table = invocation.getInvokedInstance();
+                boolean race = Thread.currentThread() == testThread && baseName.equals(table.getName())
+                        && drops.get() == 0;
+                if (race && dropBeforeLink) {
+                    dropUnderTheLock(db, table, drops);
+                }
+                invocation.proceed(mvId);
+                if (race && !dropBeforeLink) {
+                    dropUnderTheLock(db, table, drops);
+                }
+            }
+        };
+        EditLog originalEditLog = GlobalStateMgr.getCurrentState().getEditLog();
+        EditLog spyEditLog = spy(originalEditLog);
+        GlobalStateMgr.getCurrentState().setEditLog(spyEditLog);
+        try {
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test." + mvName + "\n" +
+                    "DISTRIBUTED BY HASH(k1) BUCKETS 1\n" +
+                    "REFRESH DEFERRED MANUAL\n" +
+                    "PROPERTIES ('replication_num' = '1')\n" +
+                    "AS SELECT k1, v1 FROM test." + baseName + ";");
+        } finally {
+            GlobalStateMgr.getCurrentState().setEditLog(originalEditLog);
+        }
+        try {
+            Assertions.assertEquals(1, drops.get(), "the drop never ran inside the creation, nothing was tested");
+            Assertions.assertNull(db.getTable(baseName), "the base table should be gone");
+            MaterializedView mv = (MaterializedView) db.getTable(mvName);
+            Assertions.assertNotNull(mv);
+            Assertions.assertFalse(mv.isActive(), "an mv whose base table was dropped must not stay active");
+            Assertions.assertEquals(MaterializedViewExceptions.inactiveReasonForBaseTableNotExists(baseName),
+                    mv.getInactiveReason());
+            // Followers replay the drop without inactivating anything, so only a journaled INACTIVE reaches them.
+            // A drop after the link finds the mv transiently inactive and still journals the clear of its version
+            // map; the recheck journals the inactivation after the verdict. Replay applies them in order, so the
+            // last one is what followers end with.
+            ArgumentCaptor<AlterMaterializedViewStatusLog> captor =
+                    ArgumentCaptor.forClass(AlterMaterializedViewStatusLog.class);
+            verify(spyEditLog, atLeastOnce()).logAlterMvStatus(captor.capture(), any());
+            for (AlterMaterializedViewStatusLog log : captor.getAllValues()) {
+                Assertions.assertEquals(AlterMaterializedViewStatusClause.INACTIVE, log.getStatus());
+            }
+            Assertions.assertEquals(MaterializedViewExceptions.inactiveReasonForBaseTableNotExists(baseName),
+                    captor.getValue().getReason());
+        } finally {
+            starRocksAssert.dropMaterializedView("test." + mvName);
+        }
+    }
+
+    /** What DROP TABLE does under the database write lock, see Database#unprotectDropTable. */
+    private static void dropUnderTheLock(Database db, Table table, AtomicInteger drops) {
+        Locker locker = new Locker();
+        locker.lockDatabase(db.getId(), LockType.WRITE);
+        try {
+            db.unprotectDropTable(table.getId(), false, false);
+        } finally {
+            locker.unLockDatabase(db.getId(), LockType.WRITE);
+        }
+        drops.incrementAndGet();
     }
 }

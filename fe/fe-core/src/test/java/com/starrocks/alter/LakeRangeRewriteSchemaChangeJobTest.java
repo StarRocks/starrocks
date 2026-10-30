@@ -361,7 +361,8 @@ public class LakeRangeRewriteSchemaChangeJobTest {
     @Test
     public void testBuildShadowTabletCreateTasksThrowsWithoutComputeNode() throws Exception {
         // No alive compute node for the shadow tablet -> resolution throws, and the job aborts the alter.
-        new MockUp<WarehouseManager>() {
+        // Control the fixture's concrete warehouse manager.
+        new MockUp<WarehouseManager>(GlobalStateMgr.getCurrentState().getWarehouseMgr().getClass()) {
             @Mock
             public ComputeNode getComputeNodeAssignedToTablet(ComputeResource computeResource, long tabletId) {
                 throw ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, tabletId);

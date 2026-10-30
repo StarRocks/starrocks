@@ -99,8 +99,13 @@ public class DeletePlanner {
         if (table instanceof IcebergTable icebergTable) {
             Optional<ConnectorMetadata> connectorMetadata = GlobalStateMgr.getCurrentState()
                     .getMetadataMgr().getOptionalMetadata(table.getCatalogName());
-            // Extract predicate from logical plan
-            ScalarOperator predicate = extractPredicateFromOptExpression(logicalPlan.getRoot());
+            // Extract predicate from logical plan. A metadata delete commits to the main branch. The first filter is
+            // the predicate on the target only when the target is the only relation: with USING or WITH it can be a
+            // join condition or a filter inside a CTE.
+            boolean singleRelation = deleteStatement.getUsingRelations() == null
+                    && deleteStatement.getCommonTableExpressions() == null;
+            ScalarOperator predicate = singleRelation && deleteStatement.getTargetBranch() == null
+                    ? extractPredicateFromOptExpression(logicalPlan.getRoot()) : null;
             if (predicate != null && connectorMetadata.isPresent()) {
                 ConnectorMetadata metadata = connectorMetadata.get();
                 if (metadata.canDeleteUsingMetadata(icebergTable, predicate)) {
@@ -191,7 +196,8 @@ public class DeletePlanner {
 
             // Create sink based on table type
             if (table instanceof IcebergTable) {
-                setupIcebergDeleteSink(execPlan, colNames, (IcebergTable) table, session);
+                setupIcebergDeleteSink(execPlan, colNames, (IcebergTable) table, deleteStatement.getTargetBranch(),
+                        session);
                 configureIcebergTableSinkPipeline(execPlan, session, canUsePipeline);
             } else if (table instanceof OlapTable) {
                 setupOlapTableSink(execPlan, deleteStatement, session);
@@ -288,7 +294,7 @@ public class DeletePlanner {
      * Sets up Iceberg delete sink for delete operations
      */
     private void setupIcebergDeleteSink(ExecPlan execPlan, List<String> colNames,
-                                        IcebergTable icebergTable, ConnectContext session) {
+                                        IcebergTable icebergTable, String targetBranch, ConnectContext session) {
         DescriptorTable descriptorTable = execPlan.getDescTbl();
         TupleDescriptor deleteTuple = descriptorTable.createTupleDescriptor();
 
@@ -312,8 +318,11 @@ public class DeletePlanner {
                 session.getSessionVariable()
         );
         dataSink.init();
+        dataSink.setTargetBranch(targetBranch);
         // Create IcebergSinkExtra for DELETE operations
         IcebergMetadata.IcebergSinkExtra icebergSinkExtra = new IcebergMetadata.IcebergSinkExtra();
+        // The BE partitions the output by the spec of the table descriptor built now.
+        icebergSinkExtra.setWriteSpecId(icebergTable.getReadSpec().specId());
         // Build Iceberg filter expression from scan node for conflict detection.
         // Both helpers filter by the target table so subqueries over other Iceberg tables
         // don't leak their scan's predicate / snapshot id into the target's commit.

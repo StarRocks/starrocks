@@ -18,8 +18,16 @@ import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.Table;
 import com.starrocks.scheduler.mv.pct.PCTTableSnapshotInfo;
+import com.starrocks.sql.common.PCellSortedSet;
+import com.starrocks.sql.common.PCellWithName;
+import com.starrocks.sql.common.PListCell;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -27,6 +35,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
@@ -97,5 +106,54 @@ class PCTTableSnapshotInfoTest {
         Assertions.assertEquals(1L, mvPartitionInfo.getId());
         Assertions.assertEquals(30L, mvPartitionInfo.getVersion());
         Assertions.assertEquals(3000L, mvPartitionInfo.getLastRefreshTime());
+    }
+
+    private static PCellSortedSet listCells(String... values) {
+        return PCellSortedSet.of(Arrays.stream(values)
+                .map(v -> PCellWithName.of("p" + v, new PListCell(v)))
+                .toList());
+    }
+
+    private static OlapTable listPartitionedTable(PCellSortedSet cells) {
+        OlapTable table = mock(OlapTable.class);
+        PartitionInfo partitionInfo = mock(PartitionInfo.class);
+        when(partitionInfo.isUnPartitioned()).thenReturn(false);
+        when(partitionInfo.isListPartition()).thenReturn(true);
+        when(table.isOlapOrCloudNativeTable()).thenReturn(true);
+        when(table.getPartitionInfo()).thenReturn(partitionInfo);
+        when(table.getListPartitionItems()).thenReturn(cells);
+        return table;
+    }
+
+    /**
+     * The drift check must compare the snapshot copy against the live table. Comparing the snapshot
+     * with itself always reports "unchanged", which silently disables the retry loop that guards MV
+     * refresh against base-table partitions changing mid-refresh.
+     */
+    @Test
+    void testListPartitionDriftIsDetectedAgainstLiveTable() {
+        BaseTableInfo baseTableInfo = mock(BaseTableInfo.class);
+        MaterializedView mv = mock(MaterializedView.class);
+        OlapTable snapshot = listPartitionedTable(listCells("2026-01-01", "2026-01-02"));
+
+        OlapTable live = listPartitionedTable(listCells("2026-01-01", "2026-01-02", "2026-01-03"));
+        mockLiveTable(live);
+        Assertions.assertTrue(new PCTTableSnapshotInfo(baseTableInfo, snapshot).hasBaseTableChanged(mv),
+                "a partition added to the live table after the snapshot must be reported as changed");
+
+        // Control: an unchanged live table must still report false, so the assertion above cannot pass
+        // merely because hasBaseTableChanged swallows an exception and defaults to true.
+        mockLiveTable(listPartitionedTable(listCells("2026-01-01", "2026-01-02")));
+        Assertions.assertFalse(new PCTTableSnapshotInfo(baseTableInfo, snapshot).hasBaseTableChanged(mv),
+                "an unchanged live table must not be reported as changed");
+    }
+
+    private static void mockLiveTable(OlapTable live) {
+        new MockUp<MvUtils>() {
+            @Mock
+            public Optional<Table> getTableWithIdentifier(BaseTableInfo baseTableInfo) {
+                return Optional.of(live);
+            }
+        };
     }
 }

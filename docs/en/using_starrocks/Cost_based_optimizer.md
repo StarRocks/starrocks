@@ -458,6 +458,12 @@ CREATE ANALYZE FULL ALL db_name PROPERTIES (
 );
 ```
 
+**Keep the auto collection task provided by StarRocks, but skip the `db_name.tbl_name` table.**
+
+```sql
+ALTER TABLE db_name.tbl_name SET ("enable_statistic_auto_collect" = "false");
+```
+
 ### Collect statistics during data loading
 
 To ensure a good execution plan for queries immediately after data loading, StarRocks triggers an asynchronous statistic collection task at the end of the INSERT INTO/OVERWRITE DML statements, which by default waits for 30 seconds after the DML finishes. If the statistics collection task does not finish in 30 seconds, the DML execution result is returned.
