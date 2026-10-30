@@ -1890,6 +1890,44 @@ TEST_F(FileReaderTest, TestReadStructNull) {
               chunk->debug_row(3));
 }
 
+// An array<struct> used only through its length (/c2/OFFSET) reads one leaf of the element for the levels:
+// the offsets are those of the full read, and every subfield is NULL.
+TEST_F(FileReaderTest, TestReadArrayOfStructOffsetsOnly) {
+    auto file_reader = _create_file_reader(_file_struct_null_path);
+
+    TypeDescriptor c2_struct = TypeDescriptor::create_struct_type({"c2_0", "c2_1"}, {TYPE_INT_DESC, TYPE_INT_DESC});
+    TypeDescriptor c2 = TypeDescriptor::create_array_type(c2_struct);
+    Utils::SlotDesc slot_descs[] = {{"c0", TYPE_INT_DESC}, {"c2", c2}, {""}};
+    auto ctx = _create_scan_context(slot_descs, _file_struct_null_path);
+
+    auto root = ColumnAccessPath::create(TAccessPathType::ROOT, "c2", 0);
+    ASSERT_OK(root.status());
+    auto offset = ColumnAccessPath::create(TAccessPathType::OFFSET, "OFFSET", 0, root.value()->absolute_path());
+    ASSERT_OK(offset.status());
+    root.value()->children().emplace_back(std::move(offset).value());
+    ctx->format_scan_context.column_access_paths.emplace_back(std::move(root).value());
+
+    ASSERT_OK(file_reader->init(&ctx->format_scan_context));
+    ASSERT_EQ(file_reader->row_group_size(), 1);
+
+    // c0 and a single leaf of c2's element, instead of both leaves.
+    std::vector<SharedBufferedInputStream::IORange> ranges;
+    int64_t end_offset = 0;
+    file_reader->_row_group_readers[0]->collect_io_ranges(&ranges, &end_offset);
+    EXPECT_EQ(2, ranges.size());
+
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(c2, true), chunk->num_columns());
+    ASSERT_OK(file_reader->get_next(&chunk));
+    ASSERT_EQ(4, chunk->num_rows());
+
+    EXPECT_EQ("[1, [{c2_0:NULL,c2_1:NULL},{c2_0:NULL,c2_1:NULL},{c2_0:NULL,c2_1:NULL}]]", chunk->debug_row(0));
+    EXPECT_EQ("[2, [{c2_0:NULL,c2_1:NULL},{c2_0:NULL,c2_1:NULL}]]", chunk->debug_row(1));
+    EXPECT_EQ("[3, [{c2_0:NULL,c2_1:NULL},{c2_0:NULL,c2_1:NULL},{c2_0:NULL,c2_1:NULL}]]", chunk->debug_row(2));
+    EXPECT_EQ("[4, [{c2_0:NULL,c2_1:NULL},{c2_0:NULL,c2_1:NULL},{c2_0:NULL,c2_1:NULL}]]", chunk->debug_row(3));
+}
+
 TEST_F(FileReaderTest, TestReadBinary) {
     auto file_reader = _create_file_reader(_file_binary_path);
 
