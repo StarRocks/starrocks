@@ -50,6 +50,10 @@ import static com.starrocks.sql.parser.AstBuilderUtils.getIdentifier;
 import static com.starrocks.sql.parser.ErrorMsgProxy.PARSER_ERROR_MSG;
 
 public class TypeParser {
+    // MySQL accepts a fractional-seconds precision argument in range [0, 6] for DATETIME(p)/TIME(p).
+    private static final int MIN_FRACTIONAL_SECONDS_PRECISION = 0;
+    private static final int MAX_FRACTIONAL_SECONDS_PRECISION = 6;
+
     public static Type getType(com.starrocks.sql.parser.StarRocksParser.TypeContext context) {
         if (context.baseType() != null) {
             return getBaseType(context.baseType());
@@ -82,9 +86,27 @@ public class TypeParser {
             return HLLType.HLL;
         } else if (context.BINARY() != null || context.VARBINARY() != null) {
             return TypeFactory.createVarbinary(length);
+        } else if (context.DATETIME() != null || context.TIME() != null) {
+            // MySQL ecosystem tools emit DATETIME(p)/TIME(p) with a fractional-seconds precision
+            // argument. StarRocks always stores microsecond precision internally, so the argument is
+            // accepted (validated against MySQL's 0-6 range) and then ignored.
+            if (context.typeParameter() != null) {
+                checkFractionalSecondsPrecision(length, context);
+            }
+            return context.DATETIME() != null ? DateType.DATETIME : DateType.TIME;
         } else {
             String typeStr = context.getChild(0).getText();
             return getTypeByName(typeStr);
+        }
+    }
+
+    private static void checkFractionalSecondsPrecision(int precision,
+            com.starrocks.sql.parser.StarRocksParser.BaseTypeContext context) {
+        if (precision < MIN_FRACTIONAL_SECONDS_PRECISION || precision > MAX_FRACTIONAL_SECONDS_PRECISION) {
+            throw new ParsingException(
+                    String.format("fractional seconds precision must be in range [%d, %d], but got %d",
+                            MIN_FRACTIONAL_SECONDS_PRECISION, MAX_FRACTIONAL_SECONDS_PRECISION, precision),
+                    createPos(context));
         }
     }
 
