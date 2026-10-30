@@ -487,12 +487,6 @@ description: "Alphabetical s"
 - Type: Cumulative
 - Description: Total number of `publish-version-daemon` loop runs on this FE node.
 
-## `starrocks_fe_lake_publish_batch_frozen_total`
-
-- Unit: Count
-- Type: Cumulative
-- Description: Total number of failed publish batches in shared-data clusters that were frozen, so that their retries publish no more transactions than the failed attempt. A batch that fails repeatedly is counted once. Only the Leader FE increments this counter. The behavior is controlled by the FE parameter `lake_enable_batch_publish_retry_freeze`.
-
 The following metrics are `summary`-type metrics that provide latency distributions for different phases of a transaction. These metrics are reported exclusively by the Leader FE node.
 
 Each metric includes the following outputs:

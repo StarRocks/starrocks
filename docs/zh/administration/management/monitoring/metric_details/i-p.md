@@ -396,6 +396,12 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 - 类型：累积
 - 描述：仅存算分离模式。主键表 Publish 时，tablet 的主键索引不在主键索引缓存中、必须整体加载的次数。索引不在缓存中，要么是 BE 启动后尚未加载过，要么是已被淘汰。加载时会打开该 tablet 的全部主键索引 SST 文件，并重放这些文件尚未覆盖的 rowset。加载失败也会计入。如果写入的 tablet 集合不变而该值持续上升，说明主键索引在被反复淘汰和重新加载。
 
+## `lake_publish_batch_frozen_total`
+
+- 单位：计数
+- 类型：累积
+- 描述：存算分离集群中 publish 失败后被冻结的批次总数。批次被冻结后，重试时 publish 的事务数不超过失败时的事务数。同一批次多次失败只计一次。仅 Leader FE 递增该计数器。该行为由 FE 参数 `lake_enable_batch_publish_retry_freeze` 控制。
+
 ## `lake_segment_cache_hit_minute`
 
 - 单位：次数

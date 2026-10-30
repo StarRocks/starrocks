@@ -507,12 +507,6 @@ description: "Alphabetical s"
 - 类型：累积
 - 描述：此FE节点上`publish-version-daemon`循环的总运行次数。
 
-## `starrocks_fe_lake_publish_batch_frozen_total`
-
-- 单位：计数
-- 类型：累积
-- 描述：存算分离集群中 publish 失败后被冻结的批次总数。批次被冻结后，重试时 publish 的事务数不超过失败时的事务数。同一批次多次失败只计一次。仅 Leader FE 递增该计数器。该行为由 FE 参数 `lake_enable_batch_publish_retry_freeze` 控制。
-
 以下指标是`summary`类型的指标，提供事务不同阶段的延迟分布。这些指标仅由Leader FE节点报告。
 
 每个指标包括以下输出：
