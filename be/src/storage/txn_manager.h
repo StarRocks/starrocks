@@ -102,6 +102,11 @@ public:
     Status commit_txn(TPartitionId partition_id, const TabletSharedPtr& tablet, TTransactionId transaction_id,
                       const PUniqueId& load_id, const RowsetSharedPtr& rowset_ptr, bool is_recovery, bool is_shadow);
 
+    // Record bytes only while this tablet/transaction is still being written. The transaction
+    // lock serializes this operation with commit, rollback and clear-transaction cleanup.
+    void add_in_writing_data_size(TPartitionId partition_id, const TabletSharedPtr& tablet,
+                                  TTransactionId transaction_id, int64_t delta);
+
     Status publish_txn(TPartitionId partition_id, const TabletSharedPtr& tablet, TTransactionId transaction_id,
                        int64_t version, const RowsetSharedPtr& rowset, uint32_t wait_time = 0,
                        bool is_double_write = false);
@@ -188,6 +193,8 @@ private:
 
     std::shared_mutex& _get_txn_map_lock(TTransactionId transactionId);
 
+    std::shared_mutex& _get_tablet_txn_lock(TTabletId tablet_id);
+
     txn_tablet_map_t& _get_txn_tablet_map(TTransactionId transactionId);
 
     txn_partition_map_t& _get_txn_partition_map(TTransactionId transactionId);
@@ -212,12 +219,23 @@ private:
 
     std::unique_ptr<std::shared_mutex[]> _txn_map_locks;
 
+    // Commits hold a shared lock across metadata persistence and the map update. Cleanup
+    // takes the exclusive lock so it cannot erase a prepared entry during an in-flight
+    // commit. Shard by tablet so force rollback can use the same lock for all its txns.
+    // Lock order: tablet txn lock -> txn map lock -> tablet writing-size mutex. Commits on
+    // the same shard can still persist metadata concurrently without holding a map lock.
+    std::unique_ptr<std::shared_mutex[]> _tablet_txn_locks;
+
     // Dynamic thread pool used to concurrently flush WAL to disk
     std::unique_ptr<ThreadPool> _flush_thread_pool;
 }; // TxnManager
 
 inline std::shared_mutex& TxnManager::_get_txn_map_lock(TTransactionId transactionId) {
     return _txn_map_locks[transactionId & (_txn_map_shard_size - 1)];
+}
+
+inline std::shared_mutex& TxnManager::_get_tablet_txn_lock(TTabletId tablet_id) {
+    return _tablet_txn_locks[tablet_id & (_txn_shard_size - 1)];
 }
 
 inline TxnManager::txn_tablet_map_t& TxnManager::_get_txn_tablet_map(TTransactionId transactionId) {

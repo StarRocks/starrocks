@@ -130,6 +130,9 @@ public:
 
     // get total size of latest version's rowset files
     size_t data_size() const;
+    // Bytes accepted for out-of-order publish but not yet included in data_size().
+    // Used only by the immutable-tablet capacity estimate, not the reported footprint.
+    size_t pending_data_size() const;
 
     // get number of rows and total size of latest version's rowset files together
     std::pair<int64_t, int64_t> num_rows_and_data_size() const;
