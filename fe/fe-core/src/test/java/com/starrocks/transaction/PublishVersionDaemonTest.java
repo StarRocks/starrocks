@@ -57,6 +57,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
@@ -953,6 +954,82 @@ public class PublishVersionDaemonTest {
         // One backed-off partition plus one that is ready: the batch still has work.
         Assertions.assertTrue(PublishVersionDaemon.batchHasPublishablePartition(
                 Lists.newArrayList(stateWith(1L, tableId, justFailed), stateWith(2L, tableId, fresh)), now));
+    }
+
+    @Test
+    public void testSingleTransactionBatchBacksOffBeforeStartingPublish() {
+        long original = Config.lake_publish_version_retry_interval_ms;
+        try {
+            Config.lake_publish_version_retry_interval_ms = 60_000;
+            PartitionCommitInfo partition = new PartitionCommitInfo(100L, 2, 0);
+            TransactionState state = stateWith(1L, 10L, partition);
+            List<TransactionStateBatch> batches = Lists.newArrayList(
+                    new TransactionStateBatch(Lists.newArrayList(state)));
+            AtomicInteger publishCalls = new AtomicInteger();
+            PublishVersionDaemon daemon = new PublishVersionDaemon() {
+                @Override
+                CompletableFuture<Void> publishLakeTransactionAsync(TransactionState txnState) {
+                    Assertions.assertSame(state, txnState);
+                    publishCalls.incrementAndGet();
+                    partition.markPublishFailed(System.currentTimeMillis());
+                    return CompletableFuture.completedFuture(null);
+                }
+            };
+
+            daemon.publishVersionForLakeTableBatch(batches);
+            Assertions.assertEquals(1, publishCalls.get());
+            for (int tick = 0; tick < 100; tick++) {
+                daemon.publishVersionForLakeTableBatch(batches);
+            }
+            Assertions.assertEquals(1, publishCalls.get(), "back-off must skip the transaction publish entrypoint");
+            Assertions.assertTrue(daemon.publishingLakeTransactionsBatchTableId.isEmpty());
+
+            partition.markPublishFailed(System.currentTimeMillis() - 60_000);
+            daemon.publishVersionForLakeTableBatch(batches);
+            Assertions.assertEquals(2, publishCalls.get(), "publish must resume after back-off expires");
+
+            partition.markPublishSucceeded(System.currentTimeMillis());
+            daemon.publishVersionForLakeTableBatch(batches);
+            Assertions.assertEquals(3, publishCalls.get(), "published partitions must still allow finishing the transaction");
+        } finally {
+            Config.lake_publish_version_retry_interval_ms = original;
+        }
+    }
+
+    @Test
+    public void testSingleMultiTableTransactionPublishesWhenAnyPartitionIsReady() {
+        long original = Config.lake_publish_version_retry_interval_ms;
+        try {
+            Config.lake_publish_version_retry_interval_ms = 60_000;
+            PartitionCommitInfo failed = new PartitionCommitInfo(100L, 2, 0);
+            failed.markPublishFailed(System.currentTimeMillis());
+            PartitionCommitInfo ready = new PartitionCommitInfo(200L, 2, 0);
+            TransactionState state = txnOn(1L, 10L, 20L);
+            state.putIdToTableCommitInfo(10L, stateWith(1L, 10L, failed).getTableCommitInfo(10L));
+            state.putIdToTableCommitInfo(20L, stateWith(1L, 20L, ready).getTableCommitInfo(20L));
+            List<TransactionStateBatch> batches = Lists.newArrayList(
+                    new TransactionStateBatch(Lists.newArrayList(state)));
+            AtomicInteger publishCalls = new AtomicInteger();
+            PublishVersionDaemon daemon = new PublishVersionDaemon() {
+                @Override
+                CompletableFuture<Void> publishLakeTransactionAsync(TransactionState txnState) {
+                    publishCalls.incrementAndGet();
+                    return CompletableFuture.completedFuture(null);
+                }
+            };
+
+            daemon.publishVersionForLakeTableBatch(batches);
+            Assertions.assertEquals(1, publishCalls.get(), "a ready partition in another table must still publish");
+            ready.markPublishSucceeded(System.currentTimeMillis());
+            daemon.publishVersionForLakeTableBatch(batches);
+            Assertions.assertEquals(1, publishCalls.get(), "an already published partition must not bypass back-off");
+            ready.markPublishFailed(System.currentTimeMillis());
+            daemon.publishVersionForLakeTableBatch(batches);
+            Assertions.assertEquals(1, publishCalls.get(), "back-off must cover every table in a single transaction");
+            Assertions.assertTrue(daemon.publishingLakeTransactionsBatchTableId.isEmpty());
+        } finally {
+            Config.lake_publish_version_retry_interval_ms = original;
+        }
     }
 
     @Test

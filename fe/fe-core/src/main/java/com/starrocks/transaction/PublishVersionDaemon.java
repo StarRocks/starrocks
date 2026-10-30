@@ -521,6 +521,11 @@ public class PublishVersionDaemon extends LeaderDaemon {
                 }
                 List<Long> tableIdList = state.getTableIdList();
                 if (tableIdList.stream().noneMatch(publishingLakeTransactionsBatchTableId::contains)) {
+                    // Skip backed-off transactions before logging a publish start or creating futures.
+                    if (!batchHasPublishablePartition(txnStateBatch.transactionStates,
+                            System.currentTimeMillis())) {
+                        continue;
+                    }
                     publishingLakeTransactionsBatchTableId.addAll(tableIdList);
                     CompletableFuture<Void> future = publishLakeTransactionAsync(state);
                     future.thenRun(() -> tableIdList.forEach(publishingLakeTransactionsBatchTableId::remove));
@@ -568,7 +573,8 @@ public class PublishVersionDaemon extends LeaderDaemon {
         }
     }
 
-    private CompletableFuture<Void> publishLakeTransactionAsync(TransactionState txnState) {
+    @VisibleForTesting
+    CompletableFuture<Void> publishLakeTransactionAsync(TransactionState txnState) {
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         long txnId = txnState.getTransactionId();
         long dbId = txnState.getDbId();
