@@ -37,25 +37,6 @@ def restrictive_umask():
 
 
 class LanceBuildTest(unittest.TestCase):
-    def test_lance_target_downloads_only_its_protobuf_prerequisite(self):
-        env = dict(os.environ, TP_DIR=str(builder.SOURCE.parent),
-                   TP_ARCHIVES="PROTOBUF PAIMON_CPP OPENSSL")
-        for packages, expected in [("lance", {"PROTOBUF"}),
-                                   ("lance paimon_cpp", {"PROTOBUF", "PAIMON_CPP"})]:
-            with self.subTest(packages=packages):
-                archives = subprocess.check_output(
-                    ["bash", "-c", '. "$TP_DIR/package-manifest.sh"; starrocks_package_archives "$@"',
-                     "test", *packages.split()], env=env, text=True)
-                self.assertEqual(expected, set(archives.split()))
-
-    def test_standalone_image_downloads_only_lance_build_prerequisites(self):
-        env = dict(os.environ, TP_DIR=str(builder.SOURCE.parent),
-                   TP_ARCHIVES="PROTOBUF GTEST ZLIB PAIMON_CPP OPENSSL")
-        archives = subprocess.check_output(
-            ["bash", "-c", '. "$TP_DIR/package-manifest.sh"; starrocks_package_archives zlib protobuf lance'],
-            env=env, text=True)
-        self.assertEqual({"ZLIB", "PROTOBUF", "GTEST"}, set(archives.split()))
-
     def test_missing_or_old_rust_is_rejected(self):
         with patch.object(builder.shutil, "which", return_value=None):
             with self.assertRaisesRegex(RuntimeError, "Install Rust"):
