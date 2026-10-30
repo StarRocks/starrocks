@@ -15,6 +15,9 @@
 package com.starrocks.connector.jdbc;
 
 import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Lists;
+import com.starrocks.catalog.JDBCTable;
+import com.starrocks.catalog.Table;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.Type;
@@ -24,10 +27,12 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.sql.Types;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -170,6 +175,58 @@ public class ClickhouseSchemaResolver extends JDBCSchemaResolver {
             }
         }
         return -1L;
+    }
+
+    @Override
+    public List<Partition> getPartitions(Connection connection, Table table) {
+        // ClickHouse has no engine-agnostic system table for per-partition metadata, so return a single
+        // synthetic partition for the whole table, matching MysqlSchemaResolver/PostgresSchemaResolver's
+        // handling of non-partitioned tables. The "modified time" used to decide whether an MV built on
+        // this table is stale must reflect actual data changes, not just DDL:
+        // system.tables.metadata_modification_time only updates on schema changes (e.g. ALTER TABLE), so
+        // relying on it alone would make StarRocks silently skip refreshes after plain INSERTs.
+        // system.parts.modification_time (MergeTree-family engines only) updates whenever a new part is
+        // written (INSERT/merge), so prefer it and fall back to metadata_modification_time for engines
+        // without entries there (e.g. Distributed, Memory, Log).
+        JDBCTable jdbcTable = (JDBCTable) table;
+        long modifiedTime = System.currentTimeMillis();
+        boolean gotPartsSignal = false;
+        String partsSql = "SELECT MAX(modification_time) FROM system.parts WHERE database = ? AND table = ? AND active = 1";
+        try (PreparedStatement ps = connection.prepareStatement(partsSql)) {
+            ps.setString(1, jdbcTable.getCatalogDBName());
+            ps.setString(2, jdbcTable.getCatalogTableName());
+            ps.setQueryTimeout(getQueryTimeoutSeconds());
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    Timestamp ts = rs.getTimestamp(1);
+                    if (ts != null) {
+                        modifiedTime = ts.getTime();
+                        gotPartsSignal = true;
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            // ignore: engines without system.parts entries fall through to the metadata-time query below
+        }
+        if (!gotPartsSignal) {
+            String metaSql = "SELECT metadata_modification_time FROM system.tables WHERE database = ? AND name = ?";
+            try (PreparedStatement ps = connection.prepareStatement(metaSql)) {
+                ps.setString(1, jdbcTable.getCatalogDBName());
+                ps.setString(2, jdbcTable.getCatalogTableName());
+                ps.setQueryTimeout(getQueryTimeoutSeconds());
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (rs.next()) {
+                        Timestamp ts = rs.getTimestamp(1);
+                        if (ts != null) {
+                            modifiedTime = ts.getTime();
+                        }
+                    }
+                }
+            } catch (SQLException e) {
+                throw new StarRocksConnectorException(e.getMessage(), e);
+            }
+        }
+        return Lists.newArrayList(new Partition(table.getName(), modifiedTime));
     }
 
 }
