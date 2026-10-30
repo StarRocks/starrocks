@@ -128,8 +128,7 @@ public:
     // Like unpack_and_duplicate_const_column(chunk_size, column), but an only-null column becomes an all-NULL column
     // of `type_desc`: a NULL literal is a Nullable(Int8) column whatever its type is, so its data column must not be
     // handed on as a column of `type_desc`.
-    static ColumnPtr unpack_and_duplicate_const_column(const TypeDescriptor& type_desc, size_t chunk_size,
-                                                       ColumnPtr&& column) {
+    static ColumnPtr materialize_const_column(const TypeDescriptor& type_desc, size_t chunk_size, ColumnPtr&& column) {
         if (column->only_null()) {
             auto col = create_column(type_desc, true);
             [[maybe_unused]] bool ok = col->append_nulls(chunk_size);

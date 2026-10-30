@@ -100,10 +100,10 @@ TEST_F(ColumnHelperTest, align_return_type) {
     ASSERT_FALSE(nullable_column->is_constant());
 }
 
-TEST_F(ColumnHelperTest, unpack_and_duplicate_const_column_with_type) {
-    // A NULL literal is a Nullable(Int8) column; unpacking it must give an all-NULL column of the given type.
-    auto null_col = ColumnHelper::unpack_and_duplicate_const_column(TYPE_VARCHAR_DESC, 3,
-                                                                    ColumnHelper::create_const_null_column(1));
+TEST_F(ColumnHelperTest, materialize_const_column) {
+    // A NULL literal is a Nullable(Int8) column; materializing it must give an all-NULL column of the given type.
+    auto null_col = ColumnHelper::materialize_const_column(TYPE_VARCHAR_DESC, 3,
+                                                           ColumnHelper::create_const_null_column(1));
     ASSERT_FALSE(null_col->is_constant());
     ASSERT_FALSE(null_col->only_null());
     ASSERT_EQ(3, null_col->size());
@@ -117,7 +117,7 @@ TEST_F(ColumnHelperTest, unpack_and_duplicate_const_column_with_type) {
     inner->append(7);
     ColumnPtr const_col = ConstColumn::create(std::move(inner), 1);
     ColumnPtr shared = const_col;
-    auto col = ColumnHelper::unpack_and_duplicate_const_column(TYPE_INT_DESC, 3, std::move(const_col));
+    auto col = ColumnHelper::materialize_const_column(TYPE_INT_DESC, 3, std::move(const_col));
     ASSERT_FALSE(col->is_constant());
     ASSERT_EQ(3, col->size());
     for (size_t i = 0; i < 3; ++i) {
@@ -128,7 +128,7 @@ TEST_F(ColumnHelperTest, unpack_and_duplicate_const_column_with_type) {
 
     // A non-constant column is returned as is.
     ColumnPtr plain = col;
-    ASSERT_EQ(col.get(), ColumnHelper::unpack_and_duplicate_const_column(TYPE_INT_DESC, 3, std::move(plain)).get());
+    ASSERT_EQ(col.get(), ColumnHelper::materialize_const_column(TYPE_INT_DESC, 3, std::move(plain)).get());
 }
 
 TEST_F(ColumnHelperTest, get_data_column_by_type) {
