@@ -371,6 +371,15 @@ public:
 
     std::string bundle_tablet_metadata_location(int64_t tablet_id, int64_t version) const;
 
+    // Keeps |metadata|, one tablet's publish result under file bundling that the aggregator may never put into
+    // the version's bundle, in this node's local disk cache (the datacache) and nowhere else: a retry of the
+    // publish on this node reads it back. Never written to object storage and never deleted; the cache evicts it
+    // like any other entry. NotSupported when the local disk cache is not enabled.
+    Status put_partial_tablet_metadata(const TabletMetadataPtr& metadata);
+
+    // Reads what put_partial_tablet_metadata() kept on this node. NotFound when there is none.
+    StatusOr<TabletMetadataPtr> get_partial_tablet_metadata(int64_t tablet_id, int64_t version, int64_t expected_gtid);
+
     std::string txn_log_location(int64_t tablet_id, int64_t txn_id) const;
 
     std::string txn_log_location(int64_t tablet_id, int64_t txn_id, const PUniqueId& load_id) const;

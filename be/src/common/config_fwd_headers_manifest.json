@@ -936,6 +936,7 @@
         "table_schema_service_max_retries",
         "lake_pk_partial_update_use_segment_cache",
         "lake_publish_version_slow_log_ms",
+        "lake_enable_publish_partial_meta",
         "lake_put_txn_log_timeout_guard_ms",
         "lake_enable_accurate_pk_row_count",
         "lake_tablet_stat_slow_log_ms",

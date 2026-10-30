@@ -146,6 +146,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：是否在写入存算分离集群的 Tablet 元数据和事务日志文件时附加 Adler-32 校验和，以便在读取时检测这些文件是否损坏。无论该配置项如何设置，读取端在文件包含校验和时都会自动识别并校验；该配置项仅控制写入格式。仅当集群仍可能降级到不支持该校验和格式的版本时，才将该配置项设置为 `false`。在滚动升级或降级期间，旧版本的 BE 或 CN 使用旧的读取逻辑，无法解析新格式写入的文件。
 - 引入版本：v4.2
 
+### lake_enable_publish_partial_meta
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群中开启 File Bundling 的表在导入发布（Publish）时，是否保留聚合节点可能未收到的 Tablet 发布结果。某个 Tablet 的 Publish 在请求到达后超过 Publish RPC 超时时间加 3 秒才完成，或者重试时不得不重新执行，就会把结果保存在本节点的 Data Cache 中，不写入对象存储。之后该节点上的重试会直接读取这份结果，不再重新执行事务，因此慢分区每次重试时，已完成的 Tablet 不会被重做。这些缓存条目和其他 Data Cache 数据一样按需淘汰。仅在开启 Data Cache 时生效。所有 BE 和 CN 节点应设置相同的值。
+- 引入版本：v26.2
+
 ### lake_pk_compaction_max_input_rowsets
 
 - 默认值：500
