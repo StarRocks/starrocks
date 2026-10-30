@@ -21,12 +21,59 @@ import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.type.IntegerType;
+import org.apache.paimon.schema.TableSchema;
+import org.apache.paimon.types.DataField;
+import org.apache.paimon.types.DataTypes;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.Map;
 
 public class PaimonGlobalIndexRequestTest {
+    @Test
+    public void testSchemaBoundLiteralValidation() {
+        TableSchema schema = new TableSchema(3L, List.of(new DataField(7, "k", DataTypes.TINYINT())),
+                7, List.of(), List.of(), Map.of(), null);
+        for (String value : List.of("-128", "127")) {
+            requestWithPredicate(binary("tinyint", "tinyint", value)).validatePredicate(schema);
+        }
+        for (String predicate : List.of(
+                binary("tinyint", "tinyint", "128"), binary("tinyint", "tinyint", "-129"),
+                binary("tinyint", "tinyint", "1.5"), binary("tinyint", "tinyint", "9223372036854775808"),
+                binary("tinyint", "tinyint", "1e1000000000"), binary("tinyint", "tinyint", "-1e1000000000"),
+                binary("tinyint", "tinyint", "1e-1000000000"),
+                binary("tinyint", "varchar(" + "9".repeat(100000) + ")", "1"),
+                binary("tinyint", "int", "1"), binary("int", "int", "1"),
+                binary("tinyint", "varchar", "\"bad\""), binary("tinyint", "tinyint", "null"),
+                "{\"o\":\"ca\",\"f\":\"starts_with\",\"a\":[{\"o\":\"cr\",\"n\":\"k\",\"t\":\"tinyint\"},"
+                        + "{\"o\":\"co\",\"t\":\"tinyint\",\"v\":1}]}",
+                "{\"o\":\"ip\",\"ng\":false,\"c\":{}}")) {
+            Assertions.assertTimeoutPreemptively(java.time.Duration.ofSeconds(2), () ->
+                    Assertions.assertThrows(IllegalArgumentException.class,
+                            () -> requestWithPredicate(predicate).validatePredicate(schema), predicate));
+        }
+        TableSchema wrongName = new TableSchema(3L, List.of(new DataField(7, "renamed", DataTypes.TINYINT())),
+                7, List.of(), List.of(), Map.of(), null);
+        Assertions.assertThrows(IllegalArgumentException.class,
+                () -> requestWithPredicate(binary("tinyint", "tinyint", "1")).validatePredicate(wrongName));
+        TableSchema floatSchema = new TableSchema(3L, List.of(new DataField(7, "k", DataTypes.FLOAT())),
+                7, List.of(), List.of(), Map.of(), null);
+        Assertions.assertThrows(IllegalArgumentException.class,
+                () -> requestWithPredicate(binary("float", "float", "1e39")).validatePredicate(floatSchema));
+    }
+
+    private static String binary(String columnType, String literalType, String value) {
+        return "{\"o\":\"b\",\"b\":\"EQ\",\"c\":[{\"o\":\"cr\",\"t\":\"" + columnType
+                + "\",\"n\":\"k\"},{\"o\":\"co\",\"t\":\"" + literalType + "\",\"v\":" + value + "}]}";
+    }
+
+    private static PaimonGlobalIndexRequest requestWithPredicate(String predicate) {
+        return PaimonGlobalIndexRequest.parse("{\"version\":3,\"snapshotId\":42,\"schemaId\":3,"
+                + "\"schemaTimeMillis\":1000,\"tablePath\":\"file:/tmp/orders\",\"branch\":\"main\","
+                + "\"indexes\":{\"k\":{\"fieldId\":7,\"provider\":\"btree\"}},\"predicate\":" + predicate + "}");
+    }
+
     @Test
     public void testJsonAndTransportRoundTrip() {
         ColumnRefOperator column = new ColumnRefOperator(1, IntegerType.INT, "k", true);

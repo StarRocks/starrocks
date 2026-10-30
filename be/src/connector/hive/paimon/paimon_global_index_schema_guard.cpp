@@ -17,6 +17,10 @@
 #include <paimon/io/byte_array_input_stream.h>
 #include <rapidjson/document.h>
 
+#include <algorithm>
+#include <cctype>
+#include <regex>
+
 namespace starrocks {
 namespace {
 
@@ -81,8 +85,46 @@ paimon::Result<std::unique_ptr<paimon::InputStream>> PaimonGlobalIndexSchemaGuar
         schema["timeMillis"].GetInt64() != _schema_time_millis) {
         return paimon::Status::Invalid("Paimon Global Index schema identity does not match planning");
     }
+    if (!schema.HasMember("fields") || !schema["fields"].IsArray()) {
+        return paimon::Status::Invalid("Invalid Paimon Global Index schema fields");
+    }
+    std::lock_guard lock(_fields_mutex);
+    _fields.clear();
+    for (const auto& field : schema["fields"].GetArray()) {
+        if (!field.IsObject() || !field.HasMember("id") || !field["id"].IsInt() || !field.HasMember("name") ||
+            !field["name"].IsString() || !field.HasMember("type")) {
+            return paimon::Status::Invalid("Invalid Paimon Global Index schema field");
+        }
+        if (field["type"].IsString() && field["type"].GetStringLength() > 64) {
+            return paimon::Status::Invalid("Paimon Global Index schema type token is too long");
+        }
+        std::string type = field["type"].IsString() ? field["type"].GetString() : "unsupported";
+        std::transform(type.begin(), type.end(), type.begin(), [](unsigned char c) { return std::tolower(c); });
+        constexpr std::string_view suffix = " not null";
+        if (type.ends_with(suffix)) {
+            type.resize(type.size() - suffix.size());
+        }
+        static const std::regex string_type("(string|varchar|char)(\\([0-9]+\\))?");
+        if (std::regex_match(type, string_type)) {
+            type = "string";
+        } else if (type == "integer") {
+            type = "int";
+        }
+        if (!_fields.emplace(field["id"].GetInt(), std::make_pair(field["name"].GetString(), type)).second) {
+            return paimon::Status::Invalid("Duplicate Paimon Global Index schema field ID");
+        }
+    }
     _schema_validated.store(true);
     return std::make_unique<ValidatedSchemaInputStream>(std::move(contents), path);
+}
+
+StatusOr<std::string> PaimonGlobalIndexSchemaGuard::field_type(int32_t field_id, std::string_view field_name) const {
+    std::lock_guard lock(_fields_mutex);
+    auto field = _fields.find(field_id);
+    if (!_schema_validated.load() || field == _fields.end() || field->second.first != field_name) {
+        return Status::InvalidArgument("Paimon Global Index field binding does not match the validated schema");
+    }
+    return field->second.second;
 }
 
 } // namespace starrocks

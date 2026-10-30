@@ -15,6 +15,7 @@
 package com.starrocks.connector.paimon;
 
 import org.apache.paimon.predicate.Predicate;
+import org.apache.paimon.table.Table;
 import org.apache.paimon.table.source.Split;
 
 import java.util.List;
@@ -22,9 +23,20 @@ import java.util.List;
 public class PaimonSplitsInfo {
     private final List<Split> paimonSplits;
     private final List<Predicate> predicates;
+    private final Table nativeTable;
+
     public PaimonSplitsInfo(List<Predicate> predicates, List<Split> paimonSplits) {
+        this(predicates, paimonSplits, null);
+    }
+
+    public PaimonSplitsInfo(List<Predicate> predicates, List<Split> paimonSplits, Table nativeTable) {
         this.predicates = predicates;
         this.paimonSplits = paimonSplits;
+        this.nativeTable = nativeTable;
+    }
+
+    public Table getNativeTable() {
+        return nativeTable;
     }
 
     public List<Split> getPaimonSplits() {

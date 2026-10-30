@@ -46,6 +46,7 @@ namespace starrocks {
 
 class HiveTableDescriptor;
 class RuntimeFilterProbeCollector;
+struct PaimonGlobalIndexScanContext;
 
 struct HdfsScannerProfile {
     RuntimeProfile* runtime_profile = nullptr;
@@ -129,6 +130,10 @@ struct HdfsScannerContext {
     // ===== per-range fields =====
     const THdfsScanRange* scan_range = nullptr;
     FileSystem* fs = nullptr;
+    // Global-index metadata is reused across this provider's ranges. Its filesystem
+    // must outlive the first range's ObjectPool, including asynchronous SDK reads.
+    std::shared_ptr<FileSystem> paimon_global_index_file_system;
+    std::shared_ptr<PaimonGlobalIndexScanContext> paimon_global_index_context;
     std::string file_path;
     int64_t file_size = -1;
     std::string table_location;

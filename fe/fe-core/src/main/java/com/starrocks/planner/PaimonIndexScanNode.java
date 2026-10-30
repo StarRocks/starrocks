@@ -75,6 +75,7 @@ public final class PaimonIndexScanNode extends ScanNode {
         if (!request.matchesSchema(nativeTable.schema().id(), nativeTable.schema().timeMillis())) {
             throw new IllegalArgumentException("Paimon Global Index request targets a different schema");
         }
+        request.validatePredicate(nativeTable.schema());
 
         ConnectorMetadata metadata = GlobalStateMgr.getCurrentState().getMetadataMgr()
                 .getOptionalMetadata(table.getCatalogName())
@@ -111,6 +112,7 @@ public final class PaimonIndexScanNode extends ScanNode {
         message.setNode_type(TPlanNodeType.HDFS_SCAN_NODE);
         THdfsScanNode scanNode = new THdfsScanNode();
         scanNode.setTuple_id(desc.getId().asInt());
+        HdfsScanNode.setDataCacheOptionsToThrift(scanNode, dataCacheOptions);
         if (cloudConfiguration != null) {
             HdfsScanNode.setCloudConfigurationToThrift(scanNode, cloudConfiguration);
         }

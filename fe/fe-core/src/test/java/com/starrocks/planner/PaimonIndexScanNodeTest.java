@@ -47,6 +47,8 @@ import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.paimon.fs.Path;
 import org.apache.paimon.table.FileStoreTable;
+import org.apache.paimon.types.DataField;
+import org.apache.paimon.types.DataTypes;
 import org.apache.thrift.TDeserializer;
 import org.apache.thrift.TException;
 import org.apache.thrift.TSerializer;
@@ -155,6 +157,8 @@ public class PaimonIndexScanNodeTest {
                 result = 3L;
                 nativeTable.schema().timeMillis();
                 result = 1000L;
+                nativeTable.schema().idToFieldMap();
+                result = Map.of(7, new DataField(7, "id", DataTypes.INT()));
 
                 GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
                 result = connector;

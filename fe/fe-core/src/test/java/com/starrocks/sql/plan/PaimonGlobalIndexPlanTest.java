@@ -14,6 +14,8 @@
 
 package com.starrocks.sql.plan;
 
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
@@ -43,6 +45,8 @@ import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.optimizer.MvRewritePreprocessor;
+import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -150,6 +154,50 @@ public class PaimonGlobalIndexPlanTest extends ConnectorPlanTestBase {
             Assertions.assertEquals(0, indexMetadataLoads.get());
         } finally {
             connectContext.getSessionVariable().setPaimonGlobalIndexScanStage(1);
+        }
+    }
+
+    @Test
+    public void testBranchAndVersionQueriesSkipMvRewriteAtEveryIndexStage() throws Exception {
+        FileStoreTable nativeTable = (FileStoreTable) ((PaimonTable) indexedMetadata.getTable(
+                connectContext, "pmn_db1", "unpartitioned_table")).getNativeTable();
+        long snapshot = nativeTable.latestSnapshot().orElseThrow().id();
+        nativeTable.createTag("index_mv_main", snapshot);
+        nativeTable.createBranch("index_mv_dev", "index_mv_main");
+        AtomicInteger preparations = new AtomicInteger();
+        new MockUp<MvRewritePreprocessor>() {
+            @Mock
+            public void prepare(OptExpression root) {
+                preparations.incrementAndGet();
+            }
+        };
+        SessionVariable variables = connectContext.getSessionVariable();
+        boolean enabled = variables.isEnableMaterializedViewRewrite();
+        String rewriteMode = variables.getMaterializedViewRewriteMode();
+        try {
+            variables.setEnableMaterializedViewRewrite(true);
+            variables.setMaterializedViewRewriteMode("default");
+            for (int stage : List.of(0, 1, 2)) {
+                variables.setPaimonGlobalIndexScanStage(stage);
+                preparations.set(0);
+                StatementPlanner.plan(SqlParser.parseOneWithStarRocksDialect(
+                        "SELECT pk FROM unpartitioned_table", variables), connectContext);
+                Assertions.assertTrue(preparations.get() > 0, "ordinary main reads remain eligible for MV rewrite");
+                for (String version : List.of("'branch:index_mv_dev'", Long.toString(snapshot))) {
+                    preparations.set(0);
+                    // Query-only planning: the generic test helper also creates a view,
+                    // whose definition correctly disallows explicit time-travel reads.
+                    StatementPlanner.plan(SqlParser.parseOneWithStarRocksDialect(
+                            "SELECT pk FROM unpartitioned_table FOR VERSION AS OF " + version, variables), connectContext);
+                    Assertions.assertEquals(0, preparations.get(), "explicit branch/version must skip MV preparation");
+                }
+            }
+        } finally {
+            variables.setEnableMaterializedViewRewrite(enabled);
+            variables.setMaterializedViewRewriteMode(rewriteMode);
+            variables.setPaimonGlobalIndexScanStage(1);
+            nativeTable.deleteBranch("index_mv_dev");
+            nativeTable.deleteTag("index_mv_main");
         }
     }
 
@@ -362,6 +410,57 @@ public class PaimonGlobalIndexPlanTest extends ConnectorPlanTestBase {
                 BinaryType.EQ, column, ConstantOperator.createVarchar("1")), Map.of(1, 0));
         return PaimonGlobalIndexRequest.create(nativeTable.location().toString(), "main", snapshotId,
                 nativeTable.schema().id(), nativeTable.schema().timeMillis(), condition);
+    }
+
+    @Test
+    public void testVirtualIndexRejectsForgedLiteralBeforeShardPlanning() {
+        PaimonTable table = (PaimonTable) indexedMetadata.getTable(
+                connectContext, "pmn_db1", "unpartitioned_table");
+        for (boolean forgeColumnToo : List.of(false, true)) {
+            JsonObject request = JsonParser.parseString(createVirtualIndexRequest(table).toJson()).getAsJsonObject();
+            var children = request.getAsJsonObject("predicate").getAsJsonArray("c");
+            children.get(1).getAsJsonObject().addProperty("t", "bigint");
+            children.get(1).getAsJsonObject().addProperty("v", Long.MAX_VALUE);
+            if (forgeColumnToo) {
+                children.get(0).getAsJsonObject().addProperty("t", "bigint");
+            }
+            String transport = Base64.getEncoder().encodeToString(request.toString().getBytes(StandardCharsets.UTF_8));
+            Exception failure = Assertions.assertThrows(Exception.class, () -> getExecPlan(
+                    "SELECT index_result FROM `unpartitioned_table$global_index` WHERE args='" + transport + "'"));
+            Assertions.assertTrue(failure.toString().contains("Paimon Global Index"), failure.toString());
+        }
+        verify(indexedMetadata, never()).getIndexShards(any(Table.class), anyLong(), anyMap());
+    }
+
+    @Test
+    public void testVirtualIndexPreservesDataCachePopulateDecision() throws Exception {
+        PaimonTable table = (PaimonTable) indexedMetadata.getTable(
+                connectContext, "pmn_db1", "unpartitioned_table");
+        String transport = createVirtualIndexRequest(table).toTransportString();
+        SessionVariable session = connectContext.getSessionVariable();
+        boolean scanCache = session.isEnableScanDataCache();
+        boolean populate = session.isEnablePopulateDataCache();
+        String mode = session.getDataCachePopulateMode().toString();
+        doAnswer(invocation -> List.of(new ConnectorIndexShard(0, 9)))
+                .when(indexedMetadata).getIndexShards(any(Table.class), anyLong(), anyMap());
+        try {
+            session.setEnableScanDataCache(true);
+            session.setEnablePopulateDataCache(true);
+            for (String policy : List.of("never", "always", "auto")) {
+                session.setDataCachePopulateMode(policy);
+                ExecPlan plan = getExecPlan("SELECT index_result FROM `unpartitioned_table$global_index` "
+                        + "WHERE args='" + transport + "'");
+                TPlanNode scan = plan.getScanNodes().get(0).treeToThrift().getNodes().get(0);
+                Assertions.assertTrue(scan.getHdfs_scan_node().isSetDatacache_options(), policy);
+                Assertions.assertEquals(policy.equals("always"),
+                        scan.getHdfs_scan_node().getDatacache_options().isEnable_populate_datacache(), policy);
+            }
+        } finally {
+            session.setEnableScanDataCache(scanCache);
+            session.setEnablePopulateDataCache(populate);
+            session.setDataCachePopulateMode(mode);
+            doCallRealMethod().when(indexedMetadata).getIndexShards(any(Table.class), anyLong(), anyMap());
+        }
     }
 
     @Test

@@ -18,8 +18,12 @@
 
 #include <atomic>
 #include <memory>
+#include <mutex>
 #include <string>
+#include <unordered_map>
 #include <utility>
+
+#include "common/statusor.h"
 
 namespace starrocks {
 
@@ -40,6 +44,7 @@ public:
 
     paimon::Result<std::unique_ptr<paimon::InputStream>> Open(const std::string& path) const override;
     bool schema_validated() const { return _schema_validated.load(); }
+    StatusOr<std::string> field_type(int32_t field_id, std::string_view field_name) const;
 
     paimon::Result<std::unique_ptr<paimon::OutputStream>> Create(const std::string& path,
                                                                  bool overwrite) const override {
@@ -71,6 +76,8 @@ private:
     int64_t _schema_id;
     int64_t _schema_time_millis;
     mutable std::atomic<bool> _schema_validated{false};
+    mutable std::mutex _fields_mutex;
+    mutable std::unordered_map<int32_t, std::pair<std::string, std::string>> _fields;
 };
 
 } // namespace starrocks

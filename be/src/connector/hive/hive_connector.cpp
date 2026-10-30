@@ -849,7 +849,13 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     _scanner_ctx.obj_pool = &_pool;
 
     _scanner_ctx.scan_range = &scan_range;
-    _scanner_ctx.fs = _pool.add(fs.release());
+    if (scan_range.__isset.paimon_global_index_scan_range) {
+        _scanner_ctx.paimon_global_index_file_system = std::move(fs);
+        _scanner_ctx.fs = _scanner_ctx.paimon_global_index_file_system.get();
+        _scanner_ctx.paimon_global_index_context = _provider->_paimon_global_index_context;
+    } else {
+        _scanner_ctx.fs = _pool.add(fs.release());
+    }
     _scanner_ctx.file_path = native_file_path;
     _scanner_ctx.file_size = _scan_range.file_length;
     _scanner_ctx.table_location = _scanner_ctx.hive_table->get_base_path();

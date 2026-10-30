@@ -132,4 +132,33 @@ TEST_F(PaimonGlobalIndexSchemaGuardTest, RejectsUnboundedSchemaBuffer) {
     EXPECT_FALSE(guard.schema_validated());
 }
 
+TEST_F(PaimonGlobalIndexSchemaGuardTest, BindsFieldTypesToValidatedSchemaBytes) {
+    ASSERT_TRUE(
+            _fs->WriteFile(
+                       _path,
+                       R"json({"id":1,"timeMillis":1000,"fields":[{"id":7,"name":"k","type":"BIGINT NOT NULL"},{"id":8,"name":"s","type":"VARCHAR(12)"}]})json",
+                       true)
+                    .ok());
+    PaimonGlobalIndexSchemaGuard guard(_fs, _root, 1, 1000);
+    ASSERT_TRUE(guard.Open(_path).ok());
+    ASSERT_TRUE(guard.field_type(7, "k").ok());
+    EXPECT_EQ("bigint", guard.field_type(7, "k").value());
+    EXPECT_EQ("string", guard.field_type(8, "s").value());
+    EXPECT_FALSE(guard.field_type(7, "s").ok());
+    EXPECT_FALSE(guard.field_type(99, "k").ok());
+    ASSERT_TRUE(_fs->WriteFile(_path, R"({"id":1,"timeMillis":1000,"fields":[{"id":7,"name":"k","type":"INT"}]})", true)
+                        .ok());
+    // The getter must describe the bytes already consumed by the SDK.
+    EXPECT_EQ("bigint", guard.field_type(7, "k").value());
+}
+
+TEST_F(PaimonGlobalIndexSchemaGuardTest, RejectsUnboundedTypeTokenBeforeNormalization) {
+    std::string contents = R"({"id":1,"timeMillis":1000,"fields":[{"id":7,"name":"k","type":"VARCHAR()";
+    contents += std::string(100000, '9') + R"json()"}]})json";
+    ASSERT_TRUE(_fs->WriteFile(_path, contents, true).ok());
+    PaimonGlobalIndexSchemaGuard guard(_fs, _root, 1, 1000);
+    EXPECT_FALSE(guard.Open(_path).ok());
+    EXPECT_FALSE(guard.schema_validated());
+}
+
 } // namespace starrocks
