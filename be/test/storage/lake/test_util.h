@@ -45,11 +45,8 @@
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/lake_persistent_index_parallel_compact_mgr.h"
-<<<<<<< HEAD
-#include "storage/lake/primary_key_manager.h"
-=======
 #include "storage/lake/location_provider.h"
->>>>>>> 3c530271451... [BugFix] Resolve vacuum metadata reads through a local anchor tablet (#64294)
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reshard.h"
 #include "storage/lake/transactions.h"
