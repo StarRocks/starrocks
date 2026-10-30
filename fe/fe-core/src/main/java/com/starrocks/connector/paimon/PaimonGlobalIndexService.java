@@ -29,6 +29,7 @@ import io.netty.buffer.Unpooled;
 import org.apache.paimon.globalindex.GlobalIndexResult;
 import org.apache.paimon.globalindex.GlobalIndexResultSerializer;
 import org.apache.paimon.io.DataInputDeserializer;
+import org.apache.paimon.utils.RoaringNavigableMap64;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -69,7 +70,8 @@ public final class PaimonGlobalIndexService {
         int timeout = Math.max(1, SimpleExecutor.outerRemainingQueryTimeoutS());
         List<TResultBatch> batches = executor.execute(buildSql(request.toTransportString()), timeout);
 
-        GlobalIndexResult aggregate = null;
+        RoaringNavigableMap64 aggregate = new RoaringNavigableMap64();
+        boolean hasResult = false;
         GlobalIndexResultSerializer serializer = new GlobalIndexResultSerializer();
         for (TResultBatch batch : batches) {
             for (ByteBuffer row : batch.getRows()) {
@@ -80,17 +82,20 @@ public final class PaimonGlobalIndexService {
                 byte[] serialized = Base64.getDecoder().decode(data.get(0).getAsString());
                 try {
                     GlobalIndexResult partial = serializer.deserialize(new DataInputDeserializer(serialized));
-                    aggregate = aggregate == null ? partial : aggregate.or(partial);
+                    // GlobalIndexResult.or uses staticOR and copies the entire accumulated bitmap.
+                    // Mutate only our own accumulator so disjoint shards do not repeatedly copy it.
+                    aggregate.or(partial.results());
+                    hasResult = true;
                 } catch (IOException e) {
                     throw new IllegalStateException("Failed to deserialize Paimon Global Index result", e);
                 }
             }
         }
-        if (aggregate == null) {
+        if (!hasResult) {
             throw new IllegalStateException("Paimon Global Index query returned no shard results");
         }
         return new PaimonGlobalIndexResult(
-                request.getTablePath(), request.getBranch(), request.getSnapshotId(), aggregate);
+                request.getTablePath(), request.getBranch(), request.getSnapshotId(), GlobalIndexResult.create(aggregate));
     }
 
     String buildSql(String requestTransport) {
