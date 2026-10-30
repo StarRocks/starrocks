@@ -444,10 +444,7 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_const_array) {
                 ASSERT_EQ(-110, result->get(2).get_array()[0].get_int32());
                 ASSERT_EQ(-110, result->get(2).get_array()[1].get_int32());
             } else if (i == 6) { // array_map(x -> x || x->x is null || x -> x+a, array<const(null...)>)
-                ASSERT_EQ(3, result->size());
-                ASSERT_TRUE(result->is_null(0));
-                ASSERT_TRUE(result->is_null(1));
-                ASSERT_TRUE(result->is_null(2));
+                ASSERT_EQ("[NULL, NULL, NULL]", result->debug_string());
             } else if (i == 7 && (j == 0 || j == 2)) { // array_map(x -> x || x-> x+a,array<const([null]...)>)
                 ASSERT_EQ(3, result->size());
                 ASSERT_TRUE(result->get(0).get_array()[0].is_null());
