@@ -16,6 +16,7 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.ImmutableList;
 import com.starrocks.clone.DynamicPartitionScheduler;
+import com.starrocks.common.Config;
 import com.starrocks.scheduler.mv.pct.MVPCTRefreshProcessor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.StatementBase;
