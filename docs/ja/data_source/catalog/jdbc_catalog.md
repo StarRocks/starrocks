@@ -18,7 +18,7 @@ JDBC catalog は、データを取り込むことなく、JDBC を通じてア�
 
 また、JDBC catalog を使用して、JDBC データソースからデータを直接変換してロードすることもできます。[INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) を使用します。
 
-JDBC catalog は v3.0 から MySQL と PostgreSQL を、v3.2.9 と v3.3.1 から Oracle と SQLServer を、v3.3.0 から ClickHouse (実験的) をサポートしています。
+JDBC catalog は v3.0 から MySQL と PostgreSQL を、v3.2.9 と v3.3.1 から Oracle と SQLServer を、v3.3.0 から ClickHouse (実験的) をサポートしています。さらに、JDBC catalog は DM (達夢/Dameng) もサポートしています。
 
 ## 前提条件
 
@@ -59,8 +59,8 @@ JDBC catalog のプロパティ。`PROPERTIES` には以下のパラメーター
 | password          | ターゲットデータベースに接続するために使用されるパスワード。 |
 | jdbc_uri          | JDBC ドライバーがターゲットデータベースに接続するために使用する URI。MySQL の場合、URI は `"jdbc:mysql://ip:port"` 形式です。PostgreSQL の場合、URI は `"jdbc:postgresql://ip:port/db_name"` 形式です。詳細は [PostgreSQL](https://jdbc.postgresql.org/documentation/head/connect.html) を参照してください。 |
 | driver_url        | JDBC ドライバー JAR パッケージのダウンロード URL。HTTP URL またはファイル URL がサポートされます。例えば、`https://repo1.maven.org/maven2/org/postgresql/postgresql/42.3.3/postgresql-42.3.3.jar` や `file:///home/disk1/postgresql-42.3.3.jar` です。<br />**注意**<br />JDBC ドライバーを FE と BE または CN ノードの同じパスに配置し、`driver_url` をそのパスに設定することもできます。この場合、`file:///<path>/to/the/driver` 形式でなければなりません。 |
-| driver_class      | JDBC ドライバーのクラス名。一般的なデータベースエンジンの JDBC ドライバークラス名は以下の通りです：<ul><li>MySQL: `com.mysql.jdbc.Driver` (MySQL v5.x およびそれ以前) および `com.mysql.cj.jdbc.Driver` (MySQL v6.x およびそれ以降)</li><li>PostgreSQL: `org.postgresql.Driver`</li><li>Oracle: `oracle.jdbc.driver.OracleDriver`</li></ul> |
-| schema_resolver   | (オプション) 使用するスキーマリゾルバーを明示的に指定します。有効な値：`postgresql`、`mysql`、`oracle`、`sqlserver`、`clickhouse`。ドライバークラス名から自動検出できない非標準の JDBC ドライバーを使用する場合にこのパラメーターを使用します。指定しない場合、StarRocks は `driver_class` パラメーターに基づいて適切なリゾルバーを自動検出します。 |
+| driver_class      | JDBC ドライバーのクラス名。一般的なデータベースエンジンの JDBC ドライバークラス名は以下の通りです：<ul><li>MySQL: `com.mysql.jdbc.Driver` (MySQL v5.x およびそれ以前) および `com.mysql.cj.jdbc.Driver` (MySQL v6.x およびそれ以降)</li><li>PostgreSQL: `org.postgresql.Driver`</li><li>Oracle: `oracle.jdbc.driver.OracleDriver`</li><li>DM (達夢): `dm.jdbc.driver.DmDriver`</li></ul> |
+| schema_resolver   | (オプション) 使用するスキーマリゾルバーを明示的に指定します。有効な値：`postgresql`、`mysql`、`oracle`、`sqlserver`、`clickhouse`、`dameng`。ドライバークラス名から自動検出できない非標準の JDBC ドライバーを使用する場合にこのパラメーターを使用します。指定しない場合、StarRocks は `driver_class` パラメーターに基づいて適切なリゾルバーを自動検出します。 |
 
 #### オプションの Oracle プロパティ
 
@@ -71,6 +71,17 @@ JDBC catalog のプロパティ。`PROPERTIES` には以下のパラメーター
 | oracle.number.default-scale    | 6           | Oracle の `NUMBER` メタデータに明示的な精度とスケールが指定されていない場合に設定します。有効な範囲：`0`～`38`。             |
 | oracle.temporal.to-datetime    | false       | Oracle の `DATE`、`TIMESTAMP`、および `TIMESTAMP WITH LOCAL TIME ZONE` のマッピングを制御します。この設定が `true` に設定されている場合、これらのデータ型は StarRocks の `DATETIME` 型にマッピングされます。そうでない場合、`DATE` は `DATE` のままとなり、`TIMESTAMP` および `TIMESTAMP WITH LOCAL TIME ZONE` は `VARCHAR(64)` にマッピングされます。 |
 | oracle.timestamptz.to-datetime | false       | Oracle の `TIMESTAMP WITH TIME ZONE` のマッピングを制御します。`true` に設定されている場合、StarRocksの `DATETIME` 型にマッピングされます。それ以外の場合は、 `VARCHAR(64)` にマッピングされます。 |
+
+#### オプションの DM プロパティ
+
+`driver_class` が DM (達夢/Dameng) に設定されている場合、以下のオプションプロパティを設定できます：
+
+| **パラメーター**                  | **デフォルト** | **説明**                                                                                                  |
+| -------------------------------- | ------------- | --------------------------------------------------------------------------------------------------------- |
+| dameng.number.default-scale      | 6             | DM の `NUMBER`/`DECIMAL` カラムが精度とスケールなしで宣言されている場合に使用されるデフォルトのスケール。有効範囲：`0`～`38`。 |
+| dameng.timestamptz.to-datetime   | false         | DM の `TIMESTAMP WITH TIME ZONE` のマッピングを制御します。`true` に設定すると StarRocks の `DATETIME` 型（タイムゾーンオフセットは無視）にマッピングされ、それ以外の場合は `VARCHAR(64)` にマッピングされます。 |
+
+**タイプマッピング**: DM の `DATE` は StarRocks の `DATE` 型に、`TIME` は `TIME` に、`TIMESTAMP` は `DATETIME` に、`INTERVAL`/`TIME WITH TIME ZONE` は `VARCHAR(64)` にマッピングされます。
 
 #### オプションの行数キャッシュプロパティ
 
@@ -158,6 +169,30 @@ PROPERTIES
     "jdbc_uri"="jdbc:clickhouse://127.0.0.1:8443",
     "driver_url"="https://repo1.maven.org/maven2/com/clickhouse/clickhouse-jdbc/0.4.6/clickhouse-jdbc-0.4.6.jar",
     "driver_class"="com.clickhouse.jdbc.ClickHouseDriver"
+);
+-- DM (達夢/Dameng)
+CREATE EXTERNAL CATALOG jdbc6
+PROPERTIES
+(
+    "type"="jdbc",
+    "user"="SYSDBA",
+    "password"="changeme",
+    "jdbc_uri"="jdbc:dm://127.0.0.1:5236",
+    "driver_url"="https://repo1.maven.org/maven2/com/dameng/DmJdbcDriver18/8.1.3.140/DmJdbcDriver18-8.1.3.140.jar",
+    "driver_class"="dm.jdbc.driver.DmDriver"
+);
+-- DM (DM 固有のオプションプロパティ付き)
+CREATE EXTERNAL CATALOG jdbc6_ext
+PROPERTIES
+(
+    "type"="jdbc",
+    "user"="SYSDBA",
+    "password"="changeme",
+    "jdbc_uri"="jdbc:dm://127.0.0.1:5236",
+    "driver_url"="https://repo1.maven.org/maven2/com/dameng/DmJdbcDriver18/8.1.3.140/DmJdbcDriver18-8.1.3.140.jar",
+    "driver_class"="dm.jdbc.driver.DmDriver",
+    "dameng.number.default-scale"="6",
+    "dameng.timestamptz.to-datetime"="false"
 );
 -- 非標準ドライバーに schema_resolver を使用
 CREATE EXTERNAL CATALOG jdbc5
