@@ -56,8 +56,11 @@ public abstract class BaseSlotTracker {
     private static final Logger LOG = LogManager.getLogger(BaseSlotTracker.class);
 
     protected final ConcurrentMap<TUniqueId, LogicalSlot> slots = new ConcurrentHashMap<>();
+    // Ordered by the allocated deadline: the same field peakExpiredSlots() judges with and
+    // getMinExpiredTimeMs() reports. One shared key keeps the early break sound and makes a
+    // past getMinExpiredTimeMs() imply there is something to reclaim.
     protected final Set<LogicalSlot> slotsOrderByExpiredTime = new TreeSet<>(
-            Comparator.comparingLong(LogicalSlot::getExpiredPendingTimeMs)
+            Comparator.comparingLong(LogicalSlot::getExpiredAllocatedTimeMs)
                     .thenComparing(LogicalSlot::getSlotId));
 
     protected final Map<TUniqueId, LogicalSlot> pendingSlots = new HashMap<>();
@@ -306,7 +309,7 @@ public abstract class BaseSlotTracker {
         if (slotsOrderByExpiredTime.isEmpty()) {
             return 0;
         }
-        return slotsOrderByExpiredTime.iterator().next().getExpiredPendingTimeMs();
+        return slotsOrderByExpiredTime.iterator().next().getExpiredAllocatedTimeMs();
     }
 
     public double getEarliestQueryWaitTimeSecond() {
