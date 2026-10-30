@@ -4015,6 +4015,28 @@ TEST_F(FileReaderTest, no_matched_reader) {
     ASSERT_EQ("Global dictionary not match", status.code_as_string());
 }
 
+// Column b is an optional BOOLEAN whose data page is RLE_DICTIONARY over a PLAIN dictionary page of {false, true}.
+TEST_F(FileReaderTest, boolean_rle_dictionary) {
+    const std::string file = "./be/test/formats/parquet/test_data/boolean_rle_dictionary.parquet";
+
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_BOOLEAN_DESC, true), chunk->num_columns());
+
+    Utils::SlotDesc slot_descs[] = {{"id", TYPE_INT_DESC}, {"b", TYPE_BOOLEAN_DESC}, {""}};
+    auto ctx = _create_file_random_read_context(file, slot_descs);
+    auto file_reader = _create_file_reader(file);
+    ASSERT_OK(file_reader->init(&ctx->format_scan_context));
+
+    ASSERT_OK(file_reader->get_next(&chunk));
+    ASSERT_EQ(10, chunk->num_rows());
+    const std::vector<std::string> expected = {"[0, 1]", "[1, 0]",    "[2, NULL]", "[3, 1]", "[4, 1]",
+                                               "[5, 0]", "[6, NULL]", "[7, 0]",    "[8, 1]", "[9, 1]"};
+    for (size_t i = 0; i < expected.size(); i++) {
+        EXPECT_EQ(expected[i], chunk->debug_row(i));
+    }
+}
+
 TEST_F(FileReaderTest, low_rows_reader) {
     auto chunk = std::make_shared<Chunk>();
 
