@@ -64,6 +64,11 @@ jobs:
         github.event.comment.user.login == 'chatgpt-codex-connector[bot]' &&
         contains(github.event.comment.body, 'Something went wrong')))
     timeout-minutes: 40
+    # statuses:write only for the ai-codex-review status; no GitHub token enters the codex container.
+    permissions:
+      contents: read
+      pull-requests: read
+      statuses: write
     # Job-level, so the skipped runs of unrelated comments never touch it. Not cancelling: a
     # second hosted failure on the same push waits, then skips as already reviewed.
     concurrency:
@@ -75,6 +80,7 @@ jobs:
       mode: ${{ steps.resolve.outputs.mode }}
       status: ${{ steps.review.outputs.status }}
       head_sha: ${{ steps.review.outputs.head_sha }}
+      status_sha: ${{ steps.resolve.outputs.status_sha }}
       review_b64: ${{ steps.review.outputs.review_b64 }}
       inline_b64: ${{ steps.review.outputs.inline_b64 }}
     steps:
@@ -112,6 +118,18 @@ jobs:
           if ! OUT="${OUT}" ./ci-tool/bin/ai_codex_review.sh --resolve; then
             echo "mode=failed" >> "${GITHUB_OUTPUT}"
           fi
+
+      # The run starts from an issue comment, so it is not under the PR's checks: an
+      # ai-codex-review status on the PR head shows the review is in flight (open PRs only).
+      - name: mark the review in progress
+        if: steps.resolve.outputs.status_sha != ''
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STATUS_SHA: ${{ steps.resolve.outputs.status_sha }}
+          CODEX_STATUS: pending
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: ./ci-tool/bin/ai_codex_review.sh --status
 
       # Both parents are needed: the merge ref's first parent / the squash commit's parent is
       # the base. A PR with conflicts has no merge ref; this step then fails and the next
@@ -196,3 +214,24 @@ jobs:
           INLINE_PATHS="${RUNNER_TEMP}/codex-review-${PR_NUMBER}.inline"
           printf '%s' "${INLINE_B64}" | base64 -d > "${INLINE_PATHS}"
           IN="${IN}" INLINE_PATHS="${INLINE_PATHS}" ./ci-tool/bin/ai_codex_review.sh --publish
+
+  # Ends the pending ai-codex-review status: success once the result is posted, error otherwise
+  # (failed or cancelled review, failed publish).
+  status:
+    needs: [review, publish]
+    if: ${{ always() && needs.review.outputs.status_sha != '' }}
+    runs-on: [self-hosted, quick]
+    permissions:
+      statuses: write
+    env:
+      PR_NUMBER: ${{ github.event.issue.number || inputs.pr_number }}
+    steps:
+      - name: set the ai-codex-review status
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STATUS_SHA: ${{ needs.review.outputs.status_sha }}
+          CODEX_STATUS: ${{ needs.review.outputs.status == 'ok' && needs.publish.result == 'success' && 'ok' || 'failed' }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && (cd ci-tool && git pull -q 2>/dev/null || true)
+          ./ci-tool/bin/ai_codex_review.sh --status
