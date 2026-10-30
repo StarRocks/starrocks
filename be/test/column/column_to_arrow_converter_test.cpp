@@ -51,6 +51,7 @@ DIAGNOSTIC_POP
 #include "column/arrow/arrow_type_traits.h"
 #include "column/column_helper.h"
 #include "column/runtime_type_traits.h"
+#include "testutil/type_test_helper.h"
 #include "types/type_descriptor.h"
 
 namespace starrocks {
@@ -286,9 +287,8 @@ TEST_F(StarRocksColumnToArrowTest, testStringColumn) {
     for (auto& s : strings) {
         data.emplace_back(s);
     }
-    auto type_desc = TypeDescriptor::create_varchar_type(10000);
-    NotNullableColumnTester<TYPE_VARCHAR, ArrowTypeId::STRING>::apply(997, data, type_desc);
-    NotNullableColumnTester<TYPE_CHAR, ArrowTypeId::STRING>::apply(997, data, type_desc);
+    NotNullableColumnTester<TYPE_VARCHAR, ArrowTypeId::STRING>::apply(997, data, TYPE_VARCHAR_DESC);
+    NotNullableColumnTester<TYPE_CHAR, ArrowTypeId::STRING>::apply(997, data, TYPE_VARCHAR_DESC);
 }
 
 TEST_F(StarRocksColumnToArrowTest, testLargeIntColumn) {
@@ -409,10 +409,9 @@ TEST_F(StarRocksColumnToArrowTest, testNullableStringColumn) {
     for (auto& s : strings) {
         data.emplace_back(s);
     }
-    auto type_desc = TypeDescriptor::create_varchar_type(10000);
     std::set<size_t> null_index{1, 99, 100, 111, 252, 900, 993};
-    NullableColumnTester<TYPE_VARCHAR, ArrowTypeId::STRING>::apply(997, null_index, data, type_desc);
-    NullableColumnTester<TYPE_CHAR, ArrowTypeId::STRING>::apply(997, null_index, data, type_desc);
+    NullableColumnTester<TYPE_VARCHAR, ArrowTypeId::STRING>::apply(997, null_index, data, TYPE_VARCHAR_DESC);
+    NullableColumnTester<TYPE_CHAR, ArrowTypeId::STRING>::apply(997, null_index, data, TYPE_VARCHAR_DESC);
 }
 
 TEST_F(StarRocksColumnToArrowTest, testNullableLargeIntColumn) {
@@ -495,8 +494,7 @@ TEST_F(StarRocksColumnToArrowTest, testConstDateTimeColumn) {
 }
 
 TEST_F(StarRocksColumnToArrowTest, testConstNullColumn) {
-    auto varchar_type_desc = TypeDescriptor::create_varchar_type(10000);
-    ConstNullColumnTester<TYPE_VARCHAR, ArrowTypeId::STRING>::apply(997, varchar_type_desc);
+    ConstNullColumnTester<TYPE_VARCHAR, ArrowTypeId::STRING>::apply(997, TYPE_VARCHAR_DESC);
     auto decimal128_type_desc = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 27, 9);
     ConstNullColumnTester<TYPE_DECIMAL128, ArrowTypeId::DECIMAL>::apply(997, decimal128_type_desc);
 }
@@ -511,8 +509,7 @@ void convert_to_arrow(const TypeDescriptor& type_desc, const ColumnPtr& column,
 }
 
 TEST_F(StarRocksColumnToArrowTest, testArrayColumn) {
-    auto array_type_desc = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_INT));
-    auto column = ColumnHelper::create_column(array_type_desc, false, false, 0, false);
+    auto column = ColumnHelper::create_column(TYPE_ARRAY_INT_DESC, false, false, 0, false);
 
     // [1, 2, 3]
     column->append_datum(DatumArray{1, 2, 3});
@@ -526,15 +523,14 @@ TEST_F(StarRocksColumnToArrowTest, testArrayColumn) {
     auto memory_pool = arrow::MemoryPool::CreateDefault();
     std::shared_ptr<arrow::DataType> arrow_type = arrow::list(arrow::int32());
     std::shared_ptr<arrow::Array> array;
-    convert_to_arrow(array_type_desc, column, arrow_type, memory_pool.get(), &array);
+    convert_to_arrow(TYPE_ARRAY_INT_DESC, column, arrow_type, memory_pool.get(), &array);
 
     auto s = arrow::ArrayFromJSON(arrow_type, "[[1, 2, 3], [4, null, 5, 6], [], [null, null]]");
     ASSERT_TRUE(s->Equals(array));
 }
 
 TEST_F(StarRocksColumnToArrowTest, testNullableArrayColumn) {
-    auto array_type_desc = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_INT));
-    auto column = ColumnHelper::create_column(array_type_desc, true, false, 0, false);
+    auto column = ColumnHelper::create_column(TYPE_ARRAY_INT_DESC, true, false, 0, false);
 
     // [1, 2, 3]
     column->append_datum(DatumArray{1, 2, 3});
@@ -550,7 +546,7 @@ TEST_F(StarRocksColumnToArrowTest, testNullableArrayColumn) {
     auto memory_pool = arrow::MemoryPool::CreateDefault();
     std::shared_ptr<arrow::DataType> arrow_type = arrow::list(arrow::int32());
     std::shared_ptr<arrow::Array> array;
-    convert_to_arrow(array_type_desc, column, arrow_type, memory_pool.get(), &array);
+    convert_to_arrow(TYPE_ARRAY_INT_DESC, column, arrow_type, memory_pool.get(), &array);
 
     std::shared_ptr<arrow::Array> expect_array;
     auto s = arrow::ArrayFromJSON(arrow_type, "[[1, 2, 3], null, [4, null, 5, 6], [], [null, null]]");

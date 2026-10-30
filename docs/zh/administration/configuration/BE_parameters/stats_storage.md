@@ -176,7 +176,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 类型：Int
 - 单位：秒
 - 是否动态：是
-- 描述：上一轮 Base Compaction 距今的间隔。此项为 Base Compaction 触发条件之一。
+- 描述：上一轮 Base Compaction 距今的间隔。对于存算一体表，此项为 Base Compaction 的触发条件之一。对于存算分离主键表和使用 Base and Cumulative 策略的非主键表，同一 Tablet 上次 Base Compaction 成功完成后，自动 Base Compaction 至少等待此间隔。对于使用 Size Tiered 策略的非主键表，此间隔仅禁用删除版本数达到阈值后强制触发 Base Compaction 的条件，不改变正常的层级选择。手动 Compaction 不受此限制。
 - 引入版本：-
 
 ### base_compaction_num_threads_per_disk
@@ -277,6 +277,33 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 是否动态：是
 - 描述：单次 Compaction 打印 Trace 的时间阈值，如果单次 Compaction 时间超过该阈值就打印 Trace。
 - 引入版本：-
+
+### zstd_compression_dict_min_gain
+
+- 默认值：0.10
+- 类型：Double
+- 单位：-
+- 是否动态：是
+- 描述：试压页至少要小多少（以比例表示），列级压缩字典才会被保留。写入端会把采样页之后的若干个页分别用「带字典」和「不带字典」压一遍做对比；低于该阈值时整列放弃字典，改为普通 ZSTD 压缩。字典不是免费的——每列每个 Segment 要多存一个字典页，读取时每个 Segment 要加载一次，而且一旦有数据页引用了它，这个决定就无法回退——因此默认值要求的是「明显更优」而非「可测量的更优」。在 13 份数据集 × 3 档页大小上实测：取 `0.10` 时字典只在收益达到 10% 以上的场景被保留，代价是放弃了一批 5%~9% 的收益（集中在 256 KB 页，那里页内已经吃掉了大部分重复）；若希望把这批也拿到，可下调到约 `0.05`。小于 `0` 的取值按 `0` 处理；即便取 `0`，试压页带字典也必须严格小于不带字典，因此把页压得更大的字典永远不会被保留。该参数仅在 `enable_zstd_compression_dict` 为 `true` 时生效，且只影响修改之后写入的数据。
+- 引入版本：v4.2
+
+### zstd_compression_dict_min_sample_bytes
+
+- 默认值：1024
+- 类型：Int
+- 单位：Bytes
+- 是否动态：是
+- 描述：数据页的 encoded values 至少需要达到的字节数，达到后该页才能被用作字典样本。该阈值用于避免依据一个过小或近乎为空的首个数据页构建出无效字典，并因此将该列永久标记为“字典就绪”。该值会与每一个数据页的 encoded values 依次比较，直到某一页达到为止；因此首页太小的列会改用后面的页采样，而不是就此放弃。请设置为大于等于 `0` 的值。该参数仅在 `enable_zstd_compression_dict` 为 `true` 时生效。
+- 引入版本：v4.2
+
+### zstd_compression_dict_sample_bytes
+
+- 默认值：65536
+- 类型：Int
+- 单位：Bytes
+- 是否动态：是
+- 描述：为构建压缩字典而从第一个符合条件的数据页采样的字节数。默认值大致相当于一个 64 KB 数据页。实际采样量为 `min(该页 encoded values 的大小, zstd_compression_dict_sample_bytes)`，因此该参数同时限定了字典大小。该值在创建 Column Writer 时读取，因此修改后对之后写入的 Segment 生效。该参数仅在 `enable_zstd_compression_dict` 为 `true` 时生效。
+- 引入版本：v4.2
 
 ### cumulative_compaction_check_interval_seconds
 
@@ -448,6 +475,21 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 是否动态：否
 - 描述：是否在导入时进行数据长度检查，以解决 VARCHAR 类型数据越界导致的 Compaction 失败问题。
 - 引入版本：-
+
+### enable_zstd_compression_dict
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：列级压缩字典的集群级总开关。列级压缩字典是一个 ZSTD 字典，按列存储在每个 Segment 文件中。该开关在 Segment 写入入口处判定。当其为 `false` 时，由表属性 `zstd_compression_columns` 指定的列**仍然使用 ZSTD 压缩**——这是用户的显式要求，不受该开关影响——只是不再为它们构建共享字典。也就是说该开关只影响压缩率，不会改变压缩算法，因此可以在运行时作为运维安全阀随时切换。
+
+  该参数默认值为 `true`：任何带有这个开关的版本都同时带有读取端（`ColumnMetaPB.zstd_compression_dict_page`，字段 35，先于写入端发布），并且只有通过表属性 `zstd_compression_columns` 被指定的列才会写出字典页——从未设置该属性的集群无论此默认值如何都不会写出任何字典页。
+
+  唯一仍需注意的窗口，是从一个尚不含读取端的旧版本做滚动升级。压缩字典数据页是一个基于原始内容字典（`dictID=0`）压缩的 ZSTD 帧，其帧头不携带任何“需要字典”的标识；不认识字段 35 的旧版本 BE 会在不加载字典的情况下解压该页，从而遇到 ZSTD 数据损坏错误。在这样的升级期间，请勿给任何表添加 `zstd_compression_columns`（或将该参数设置为 `false`），直到所有 BE 升级完成。混合版本窗口期内的跨副本 Clone 与 Replication 同理。
+
+  警告：一旦集群写出了带压缩字典的 Segment，就无法再降级到引入该特性之前的版本，因为旧版本 BE 既无法读取也无法 Compaction 这些 Segment。
+- 引入版本：v4.2
 
 ### enable_event_based_compaction_framework
 
@@ -721,6 +763,15 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 描述：主键表单次 Compaction 合并的最大 Rowset 数。
 - 引入版本：-
 
+### max_update_compaction_num_level_minus_one_rowsets
+
+- 默认值：10000
+- 类型：Int
+- 单位：Rowset
+- 是否动态：是
+- 描述：主键表 size-tiered 合并时，单次选入的 level=-1 Rowset 最大数量；配置小于 2 时按 2 生效。level=-1 包括零行或估算有效字节为零的 Rowset。与其他层同时合并时，此配置不限制总输入数。
+- 引入版本：-
+
 ### memory_limitation_per_thread_for_schema_change
 
 - 默认值：2
@@ -898,7 +949,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：存算分离集群中，主键索引并行执行的线程池最大线程数。0 表示自动设置为 CPU 核数的一半。
+- 描述：存算分离集群中，主键索引并行执行的线程池最大线程数。0 表示自动设置为 CPU 核数，且至少为 1。运行时将此参数设置为 0 可恢复自动设置。
 - 引入版本：-
 
 ### pk_index_parallel_rebuild_mem_ratio
@@ -1088,6 +1139,15 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 单位：Bytes
 - 是否动态：是
 - 描述：Size-tiered Compaction 策略中，最小 Level 的大小，小于此数值的 Rowset 会直接触发 Compaction。
+- 引入版本：-
+
+### skip_pindex_l1_l2_check_in_insert
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：在存算一体集群中，向本地持久化主键索引执行 insert 时，是否跳过不可变 L1/L2 文件的重复键检查。默认值 `true` 表示仅检查 L0 memtable，避免这些检查带来的磁盘读取，与存算分离集群的云原生主键索引行为对齐。设置为 `false` 可恢复不可变索引检查。此配置控制索引内部的一致性检查，不改变主键表 SQL INSERT 语句的更新语义。
 - 引入版本：-
 
 ### snapshot_expire_time_sec
@@ -1281,6 +1341,15 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 是否动态：是
 - 描述：用于存算分离表 tablet 元数据获取操作（例如 `get_tablet_stats`、`get_tablet_metadatas`）的线程数。
 - 引入版本：v3.5.16, v4.0.9
+
+### tablet_writer_add_segment_lock_timeout_ms
+
+- 默认值：0
+- 类型：Int
+- 单位：毫秒
+- 是否动态：是
+- 描述：存算一体集群中，从副本 BE 接收 segment 复制请求时的总等锁预算。小于或等于 `0` 表示使用 `be_exit_after_disk_write_hang_second` 换算成毫秒后的值；正值直接覆盖该预算。LoadChannel 互斥锁和 LocalTabletsChannel 读锁共用一个截止时间，在 BRPC 请求处理函数入口统一计算一次。任一锁等待超时，RPC 都会在提交本次 segment 写入前返回超时错误。此预算与 RPC 超时独立，不限制后续 segment flush 或 commit 的执行时间，仅作用于 segment 复制接收路径。writer 挂起退出的计时起点不同，因此不能保证等锁超时一定早于 BE 退出。
+- 引入版本：-
 
 ### tablet_writer_open_rpc_timeout_sec
 

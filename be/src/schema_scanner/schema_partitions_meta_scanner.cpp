@@ -61,6 +61,7 @@ SchemaScanner::ColumnDesc SchemaPartitionsMetaScanner::_s_columns[] = {
         {"MAX_VI_BUILT_VERSION", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
         {"LAST_UPDATE_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
         {"LAST_ACCESS_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
+        {"VACUUM_VERSION", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
 };
 
 SchemaPartitionsMetaScanner::SchemaPartitionsMetaScanner()
@@ -348,6 +349,11 @@ Status SchemaPartitionsMetaScanner::fill_chunk(ChunkPtr* chunk) {
             } else {
                 fill_data_column_with_null(column);
             }
+            break;
+        }
+        case 36: {
+            // VACUUM_VERSION
+            fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.vacuum_version);
             break;
         }
 

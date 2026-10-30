@@ -19,6 +19,8 @@
 #include <bthread/mutex.h>
 
 #include <atomic>
+#include <ctime>
+#include <memory>
 
 #include "base/brpc/reusable_closure.h"
 #include "base/concurrency/bthread_shared_mutex.h"
@@ -63,7 +65,8 @@ public:
                             std::shared_ptr<OlapTableSchemaParam> schema) override;
 
     void add_segment(brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
-                     PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done) const;
+                     PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done,
+                     const timespec& deadline) const;
 
     void cancel(const std::string& reason) override;
 

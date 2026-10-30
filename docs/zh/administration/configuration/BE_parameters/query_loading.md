@@ -67,6 +67,16 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：单次 AI HTTP attempt 可接受的 response body 最大大小。超过限制的响应会在 Provider 解析前被拒绝，以限制 BE 内存消耗。仅在模型确实会返回更大响应时调高。新打开的 AI fragment/operator 会将该值作为一个完整 immutable runtime snapshot 的一部分捕获；已经打开的 fragment 继续使用原 snapshot。修改无需重启 BE。
 - 引入版本：-
 
+### ai_function_max_input_file_bytes
+
+- 默认值：10485760
+- 类型：Int
+- 单位：字节
+- 有效值：正整数
+- 是否动态：是
+- 描述：传入 `ai_complete` 或 `ai_embed` 的每个 inline FILE 的原始字节数上限，在 AI 自身复制载荷和进行 Base64 编码前检查。默认值为 10 MiB。仅在所选提供商和模型支持更大输入时调高。该参数不控制扫描或 Chunk 物化；这些内存分配与 AI 载荷仍受查询内存跟踪约束。无效或超限的 inline 输入遵循 `ai_function_on_error`。新打开的 AI fragment/operator 将该值捕获到不可变运行时快照中；已打开的 fragment 继续使用原快照。修改无需重启 BE。
+- 引入版本：-
+
 ### ai_function_worker_thread_num
 
 - 默认值：16
@@ -134,7 +144,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 单位：请求/秒
 - 有效值：正整数
 - 是否动态：是
-- 描述：每个 BE 中按端点、凭证和 capability 分桶的文本向量 HTTP attempt 准入速率。适用于 SYSTEM 和 AI provider 指定的向量调用，包括重试。该限制独立于 `ai_function_rate_limit_qps_chat`，同时仍受进程级 `ai_function_max_inflight` 限制。可调小以遵守提供商配额或控制出站负载；仅在提供商和 BE 均有容量时调大。运行时修改实时生效，无需重启 BE。
+- 描述：每个 BE 中按端点、凭证和 capability 分桶的文本向量 HTTP attempt 准入速率。该限制独立于 `ai_function_rate_limit_qps_chat`，同时仍受进程级 `ai_function_max_inflight` 限制。可调小以遵守提供商配额或控制出站负载；仅在提供商和 BE 均有容量时调大。运行时修改实时生效，无需重启 BE。
 - 引入版本：-
 
 ### ai_function_max_inflight
@@ -163,6 +173,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 单位：-
 - 是否动态：是
 - 描述：根据 L2 驻留情况控制聚合哈希表的软件预取。仅当桶数组溢出 L2 时才会启用预取，即当 `bucket_count * slot_bytes >= L2_size * agg_prefetch_l2_ratio` 时，其中 L2 大小在运行时检测（若检测失败则回退为 1 MiB）。在此阈值以下，哈希表驻留于 L2 中，此时预取会导致净损耗。在每个核心运行多个驱动程序且竞争激烈的部署环境中，应降低该比率——此时每个哈希表实际占用的 L2 空间小于名义上的每核心大小；将其提高至 1.0 以上会延迟预取，直到哈希表远超 L2 容量。另请参阅 `agg_hash_map_prefetch_dist`。
+- 引入版本：-
+
+### arrow_io_thread_pool_size
+
+- 默认值：0
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：Apache Arrow 进程级 I/O 线程池的线程数，Arrow 的异步 I/O 任务都在这个线程池中执行。设为 `0` 时沿用 Arrow 启动时自行确定的大小：环境变量 `ARROW_IO_THREADS` 为正整数时取该值，否则为 8。设为大于 `0` 的值时，该值优先于 `ARROW_IO_THREADS`。取值范围为 [0, 32768]。修改后立即生效，无需重启：调大时立即为排队中的任务启动新线程；调小时，多出的线程在完成手头的任务后退出。改回 `0` 即恢复为 Arrow 启动时确定的大小。如果配置文件中的值超出取值范围，BE 会打印告警日志，并保留 Arrow 自行确定的大小。
 - 引入版本：-
 
 ### clear_udf_cache_when_start
@@ -213,6 +232,34 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 是否动态：是
 - 描述：控制是否为 Flat Json 数据进行 Compaction。
 - 引入版本：v3.3.3
+
+### enable_compaction_flat_json_mixed_inputs
+
+- 默认值：True
+- 类型：Bool
+- 单位：
+- 是否动态：是
+- 描述：当参与 Compaction 的 segment 中，JSON 列一部分以 Flat JSON 存储、一部分以完整 JSON 存储时，是否把完整 JSON 的 segment 按其他 segment 的 Flat JSON 布局读出，且所有子列都使用 JSON 类型。这样输出可以边读边写，不必把整个 segment 缓存在内存中。JSON 类型的子列会记录其值的类型和范围，之后的 Compaction 可以据此改用能精确保存所有值的类型。仅在 `enable_compaction_flat_json` 为 `true` 且表开启了 Flat JSON 时生效。
+- 引入版本：-
+
+### enable_compaction_flat_json_partial_paths
+
+- 默认值：True
+- 类型：Bool
+- 单位：
+- 是否动态：是
+- 描述：Flat JSON 的 Compaction 中，某个子列只在部分输入 segment 中存在时，如果包含它的行数足够多（`json_flat_sparsity_factor`），是否在输出中保留这个子列。不含该子列的 segment 从其剩余 JSON 中提供对应的值；若这样的 segment 可能在剩余 JSON 中存有该值，该子列使用 JSON 类型。关闭时，Compaction 只保留所有输入 segment 都有的子列，任一输入 segment 未拍平的 key 都存入剩余 JSON。仅在 `enable_compaction_flat_json` 为 `true` 时生效。
+- 引入版本：-
+
+### enable_default_value_column_zonemap_filter
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 取值范围：`true`、`false`
+- 是否动态：是
+- 描述：是否通过常量折叠对 segment 中物理缺失的列进行数据裁剪。通过 fast schema evolution（`ALTER TABLE ... ADD COLUMN`）新增的列不会写入已有的 segment，因此该列的每一行都是列默认值（或 `NULL`）。取值为 `true` 时，针对该列的谓词会直接对这个常量求值，若不可能命中则整个 segment 被跳过。取值为 `false` 时，这些 segment 会被完整读取，且每个批次都会重新按删除条件检查，即该选项引入之前的行为。如果新增过列的表出现查询结果异常，可将其设为 `false` 回滚。该选项与 `enable_index_page_level_zonemap_filter` 相互独立，后者无法覆盖 runtime filter 路径。
+- 引入版本：-
 
 ### enable_json_flat
 
@@ -266,6 +313,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 单位：-
 - 是否动态：是
 - 描述：是否为 Zonemap index 开启 Memory Cache。使用 Zonemap index 加速 Scan 时，可以考虑开启。
+- 引入版本：-
+
+### exchange_sink_buffer_flush_threshold_bytes
+
+- 默认值：67108864
+- 类型：Int
+- 单位：Bytes
+- 是否动态：是
+- 描述：Exchange Sink 中每个 Driver 在 Shuffle 时用于缓存待发送数据的最大内存。Shuffle 时，Exchange Sink 会为每个目标 Pipeline Driver 保留一个未填满的 Chunk，Chunk 填满后才会发送。当这些 Chunk 的总大小超过该阈值时，会立即全部发送并清空；如果清空后仍占用超过阈值一半的内存，则会依次释放这些 Chunk，直到占用降至阈值的一半以下。设置为 `0` 或更小的值表示不限制。
 - 引入版本：-
 
 ### exchg_node_buffer_size_bytes
@@ -411,6 +467,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 是否动态：是
 - 描述：控制 Flat JSON 时，同名列的占比阈值，当同名列占比低于该值时不进行提取，默认为 0.9。该参数仅在 `enable_json_flat` 为 `true` 时生效。
 - 引入版本：v3.3.0
+
+### json_max_parse_nesting_depth
+
+- 默认值：1024
+- 类型：Int
+- 单位：
+- 是否动态：是
+- 描述：解析 JSON（例如 `parse_json`、`CAST AS JSON` 以及 JSON 列导入）时允许的最大对象/数组嵌套深度。解析器每层嵌套递归一次，若不加限制，超深文档会耗尽线程栈并导致 BE 崩溃。嵌套深度超过该值的输入会返回数据质量错误。正值表示生效的上限；设置为 `0` 或负数时保留内置默认值（1024），而非关闭该检查。
+- 引入版本：v4.2.0
 
 ### lake_tablet_ignore_invalid_delete_predicate
 
@@ -655,6 +720,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：Pipeline 执行引擎扫描线程池任务队列的最大队列长度。
 - 引入版本：-
 
+### case_when_selective_eval_ratio
+
+- 默认值：2
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：控制 searched `CASE WHEN` 的每个 `THEN` 分支是否只在该分支实际拥有的行上求值，而不是在整个 chunk 上求值一遍再逐行挑选。仅在 `CASE` 返回复合类型（ARRAY/MAP/STRUCT）或 VARIANT 时生效，因为只有这些类型单行物化的代价才足以抵消把分支输入行压实成子 chunk 的拷贝开销。只有当 `owned_rows * case_when_selective_eval_ratio < chunk_rows`，即该分支拥有的行数少于 chunk 的 `1 / case_when_selective_eval_ratio` 时才会压实；超过阈值的分支仍在整个 chunk 上求值，因为此时压实输入的拷贝开销会超过省下的求值开销。设置为 `1` 表示只要分支不独占整个 chunk 就压实。设置为 `0` 或负数表示完全关闭该优化、回到原有行为，包括它带来的行为变更：当没有任何行选中某个 `THEN` 或 `ELSE` 时，即使它会报错也不再被求值。
+- 引入版本：-
+
 ### enable_lock_free_scan_task_queue
 
 - 默认值：true
@@ -718,6 +792,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：BufferControlBlock 释放数据的等待时间。
 - 引入版本：-
 
+### runtime_filter_worker_thread_num
+
+- 默认值：4
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：每个 BE 上用于合并和投递 Global Runtime Filter 的线程数。同一个 Runtime Filter 的所有事件由同一个线程处理，不同的 Runtime Filter 分散到各个线程。取值小于或等于 `1` 时只使用一个线程。
+- 引入版本：-
+
 ### scan_context_gc_interval_min
 
 - 默认值：5
@@ -763,6 +846,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：限制 ConnectorScanNode 可同时运行的远端扫描器（HDFS/对象存储等）数量上限。启动时会用此值裁剪估算并发，运行时调度 pending scanner 也会受其限制，用于控制线程、内存和文件句柄压力。
 - 引入版本：v3.2.0
 
+### spill_max_dir_bytes_ratio
+
+- 默认值：0.5
+- 类型：Double
+- 单位：-
+- 是否动态：是
+- 描述：落盘目录（`spill_local_storage_dir`）与存储路径（`storage_root_path`）位于同一块磁盘时，中间结果落盘最多可占用的磁盘容量比例。默认值 `0.5` 表示落盘最多使用该磁盘容量的 50%。落盘目录位于独立磁盘时不受此限制。该参数仅在 BE 启动时读取，修改后需重启 BE 才能生效。
+- 引入版本：v3.2.0
+
 ### string_prefix_zonemap_prefix_len
 
 - 默认值：16
@@ -795,8 +887,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 默认值：60
 - 类型：Int
 - 单位：Percent
-- 是否动态：否
-- 描述：BE 进程内存中为更新相关内存和缓存保留的比例。在启动期间，`RuntimeEnv` 将更新的 `MemTracker` 计算为 process_mem_limit * clamp(update_memory_limit_percent, 0, 100) / 100。`UpdateManager` 也使用该百分比来确定其 primary-index/index-cache 的容量（index cache capacity = RuntimeEnv::process_mem_limit * update_memory_limit_percent / 100）。HTTP 配置更新逻辑会注册一个回调，在配置更改时调用 update managers 的 `update_primary_index_memory_limit`，因此配置更改会应用到更新子系统。增加此值会为更新/primary-index 路径分配更多内存（减少其他内存池可用内存）；减少它会降低更新内存和缓存容量。值会被限定在 0–100 范围内。
+- 是否动态：是
+- 描述：BE 进程内存中为更新相关内存和缓存保留的比例。在启动期间，`RuntimeEnv` 将更新的 `MemTracker` 计算为 process_mem_limit * clamp(update_memory_limit_percent, 0, 100) / 100。`UpdateManager` 也使用该百分比来确定其 primary-index/index-cache 的容量（index cache capacity = RuntimeEnv::process_mem_limit * update_memory_limit_percent / 100）。运行时修改该值后，会重新计算更新 `MemTracker` 的上限、primary index cache 的容量，以及由其派生的 update state、compaction state 和 primary index block cache 的上限。调小该值时，未被使用的 primary index cache 条目会被立即淘汰，但正在使用的内存要等正在执行的导入和 compaction 结束后才会释放。增加此值会为更新/primary-index 路径分配更多内存（减少其他内存池可用内存）；减少它会降低更新内存和缓存容量。值会被限定在 0–100 范围内。
 - 引入版本：v3.2.0
 
 ### enable_vector_index_block_cache
@@ -1178,6 +1270,33 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：导入数据信息保留的时长。
 - 引入版本：-
 
+### load_sink_close_thread_pool_num_max
+
+- 默认值：64
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：执行导入 Sink 最终关闭（Close）操作的线程数上限。存算分离集群下，该操作会向对象存储写入合并事务日志；放在这个线程池中执行，可以避免慢写入阻塞 Pipeline 的 Poller 线程和执行线程。线程全部繁忙时，后续的关闭操作在线程池队列中排队。队列长度不受限制，不会丢弃任何关闭操作。取值必须大于 0。支持运行时修改，无需重启 BE 或 CN。降低上限不会中断正在执行的关闭操作。初始化时会预启动一个线程并在空闲时保留；其余线程空闲 500 ms 后可退出。
+- 引入版本：-
+
+### enable_put_combinded_txn_log_parallel
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群下，是否并行写入导入的合并事务日志。导入 Sink 关闭时，会为本次导入涉及的每个分区向对象存储写入一份合并事务日志。设置为 `true` 时，这些写入在专用线程池中并发执行（线程数上限由 `put_combined_txn_log_thread_pool_num_max` 控制，默认为 `64`）；设置为 `false` 时，逐个分区依次写入。两种方式下，导入都会等待所有写入完成，任一写入失败则导入失败。
+- 引入版本：-
+
+### put_combined_txn_log_thread_pool_num_max
+
+- 默认值：64
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群下，向对象存储写入合并事务日志的线程池的线程数上限。`enable_put_combinded_txn_log_parallel` 设置为 `true` 时，一次导入涉及的各分区的合并事务日志在该线程池中并发写入。线程全部繁忙时，后续写入在线程池队列中排队，队列长度不受限制。支持运行时修改，无需重启 BE 或 CN。取值小于或等于 `0` 时按 `1` 处理。降低上限不会中断正在执行的写入。线程空闲 500 ms 后退出。
+- 引入版本：-
+
 ### enable_rejected_record_sync
 
 - 默认值：false
@@ -1420,6 +1539,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 是否动态：是
 - 描述：启用后，load-channel Open 类型的 RPC（例如 PTabletWriterOpen）的处理会从 BRPC worker 转移到一个专用的线程池：请求处理器会创建一个 ChannelOpenTask 并将其提交到内部 `_async_rpc_pool`，而不是内联执行 `LoadChannelMgr::_open`。这样可以减少 BRPC 线程内的工作量和阻塞，并允许通过 `load_channel_rpc_thread_pool_num` 和 `load_channel_rpc_thread_pool_queue_size` 调整并发。如果线程池提交失败（池已满或已关闭），该请求会被取消并返回错误状态。该线程池会在 `LoadChannelMgr::close()` 时关闭，因此在启用该功能时需要考虑容量和生命周期，以避免请求被拒绝或处理延迟。
 - 引入版本：v3.5.0
+
+### enable_load_chunk_all_null_encoding
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：该 BE 是否在导入的 tablet sink RPC（把数据按分桶路由到目标 tablet 所在 BE 的那一跳）上参与全 NULL 列的紧凑编码。开启后，接收端 BE 会在 tablet writer 的 open 响应中声明支持该编码；发送端 BE 看到声明后，对于整列都是 NULL 的列，只发送一个行数，而不再逐行发送 NULL 标记和偏移量。列数多、且大部分列没有数据的宽表收益最明显，这一跳的传输字节数和两端的序列化开销都会下降。只有收发两端都认可该编码时才会启用，因此混合版本集群和版本回退都会自动回落到原有格式。把发送端或接收端任意一侧的该配置设为 `false`，即可关闭经过该节点的导入的这项编码。该配置不支持动态修改：接收端要用它同时决定对外声明的能力和是否按发送端声明的方式解析数据，运行期改动会让这两个判断不一致。
+- 引入版本：v4.2.0
 
 ### load_channel_rpc_thread_pool_num
 

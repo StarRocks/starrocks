@@ -15,9 +15,13 @@
 package com.starrocks.transaction;
 
 import com.google.common.collect.Lists;
+import com.starrocks.alter.reshard.ReshardingPhysicalPartition;
+import com.starrocks.alter.reshard.SplitTabletJob;
 import com.starrocks.alter.reshard.TabletReshardJobMgr;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RangeDistributionInfo;
 import com.starrocks.catalog.TabletMeta;
@@ -28,13 +32,17 @@ import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.compaction.CompactionTxnCommitAttachment;
 import com.starrocks.proto.TabletStatPB;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.thrift.TStorageMedium;
 import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.mockito.MockedStatic;
+import org.mockito.Mockito;
 
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -63,6 +71,33 @@ public class LakeTableTxnLogApplierTest extends LakeTableTestHelper {
         Assertions.assertEquals(partitionCommitInfo.getVersionTime(),
                 table.getPartition(partitionId).getDefaultPhysicalPartition()
                         .getVisibleVersionTime());
+    }
+
+    @Test
+    public void testDictionaryIdentityFallbackForWholeList() {
+        for (List<Long> identities : Arrays.<List<Long>>asList(null, List.of(), List.of(0L, -7L))) {
+            LakeTable table = buildLakeTable();
+            TransactionState state = newTransactionState();
+            state.setTransactionStatus(TransactionStatus.VISIBLE);
+            ColumnId a = ColumnId.create("a");
+            ColumnId b = ColumnId.create("b");
+            PartitionCommitInfo partition = new PartitionCommitInfo(physicalPartitionId, 2, 200,
+                    List.of(), List.of(a, b), List.of(100L, 101L));
+            if (identities != null) {
+                partition.setDictContentIdentities(identities);
+            }
+            TableCommitInfo commit = new TableCommitInfo(tableId);
+            commit.addPartitionCommitInfo(partition);
+            IDictManager manager = Mockito.mock(IDictManager.class);
+            try (MockedStatic<IDictManager> mocked = Mockito.mockStatic(IDictManager.class)) {
+                mocked.when(IDictManager::getInstance).thenReturn(manager);
+                new LakeTableTxnLogApplier(table).applyVisibleLog(state, commit, null);
+                boolean hasIdentity = identities != null && !identities.isEmpty();
+                Mockito.verify(manager).updateGlobalDict(table, a, 100L, 200L, hasIdentity ? 0L : null);
+                Mockito.verify(manager).updateGlobalDict(table, b, 101L, 200L, hasIdentity ? -7L : null);
+                Mockito.verifyNoMoreInteractions(manager);
+            }
+        }
     }
 
     @Test
@@ -659,4 +694,136 @@ public class LakeTableTxnLogApplierTest extends LakeTableTestHelper {
         applier.applyCommitLog(state, tableCommitInfo);
         Assertions.assertEquals(21, physicalPartition.getNextVersion());
     }
+
+    @Test
+    public void testPublishAppliesSharedFileFlagWhenTableIsNormal() {
+        LakeTable table = buildLakeTable();
+        LakeTablet lakeTablet = (LakeTablet) table.getPartition(partitionId).getDefaultPhysicalPartition()
+                .getLatestBaseIndex().getTablet(tabletId[0]);
+        LakeTableTxnLogApplier applier = new LakeTableTxnLogApplier(table);
+        TransactionState state = newTransactionState();
+        state.setTransactionStatus(TransactionStatus.COMMITTED);
+        PartitionCommitInfo partitionCommitInfo = new PartitionCommitInfo(physicalPartitionId, 2, 0);
+        TableCommitInfo tableCommitInfo = new TableCommitInfo(tableId);
+        tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo);
+        applier.applyCommitLog(state, tableCommitInfo);
+
+        state.setTransactionStatus(TransactionStatus.VISIBLE);
+        partitionCommitInfo.setVersionTime(System.currentTimeMillis());
+        TabletStatPB stat = new TabletStatPB();
+        stat.numRows = 5L;
+        stat.dataSize = 100L;
+        stat.hasSharedFiles = Boolean.FALSE;
+        partitionCommitInfo.getTabletStats().put(tabletId[0], stat);
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public boolean isLeader() {
+                return true;
+            }
+
+            @Mock
+            public static boolean isCheckpointThread() {
+                return false;
+            }
+        };
+
+        applier.applyVisibleLog(state, tableCommitInfo, /*unused*/null);
+
+        Assertions.assertFalse(lakeTablet.hasSharedFiles());
+    }
+
+    @Test
+    public void testPublishKeepsFlagSetWhenFieldAbsent() {
+        LakeTable table = buildLakeTable();
+        LakeTablet lakeTablet = (LakeTablet) table.getPartition(partitionId).getDefaultPhysicalPartition()
+                .getLatestBaseIndex().getTablet(tabletId[0]);
+        LakeTableTxnLogApplier applier = new LakeTableTxnLogApplier(table);
+        TransactionState state = newTransactionState();
+        state.setTransactionStatus(TransactionStatus.COMMITTED);
+        PartitionCommitInfo partitionCommitInfo = new PartitionCommitInfo(physicalPartitionId, 2, 0);
+        TableCommitInfo tableCommitInfo = new TableCommitInfo(tableId);
+        tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo);
+        applier.applyCommitLog(state, tableCommitInfo);
+
+        state.setTransactionStatus(TransactionStatus.VISIBLE);
+        partitionCommitInfo.setVersionTime(System.currentTimeMillis());
+        TabletStatPB stat = new TabletStatPB();
+        stat.numRows = 5L;
+        stat.dataSize = 100L;
+        stat.hasSharedFiles = null;
+        partitionCommitInfo.getTabletStats().put(tabletId[0], stat);
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public boolean isLeader() {
+                return true;
+            }
+
+            @Mock
+            public static boolean isCheckpointThread() {
+                return false;
+            }
+        };
+
+        applier.applyVisibleLog(state, tableCommitInfo, /*unused*/null);
+
+        Assertions.assertTrue(lakeTablet.hasSharedFiles());
+    }
+
+    @Test
+    public void testPublishDoesNotApplySharedFileFlagWhileResharding() {
+        // A split's children are catalog-visible while the table is still TABLET_RESHARD, and
+        // cross-published transactions reach this method. Without the NORMAL gate, a cross-publish
+        // that happens to contribute no shared file could mark the tablet clean, and a merge could be
+        // planned in that window before the next cross-publish corrects it -- a planned merge's
+        // transaction is already committed by publish time, so it cannot be abandoned.
+        LakeTable table = buildLakeTable();
+        LakeTablet lakeTablet = (LakeTablet) table.getPartition(partitionId).getDefaultPhysicalPartition()
+                .getLatestBaseIndex().getTablet(tabletId[0]);
+        LakeTableTxnLogApplier applier = new LakeTableTxnLogApplier(table);
+        TransactionState state = newTransactionState();
+        state.setTransactionStatus(TransactionStatus.COMMITTED);
+        PartitionCommitInfo partitionCommitInfo = new PartitionCommitInfo(physicalPartitionId, 2, 0);
+        TableCommitInfo tableCommitInfo = new TableCommitInfo(tableId);
+        tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo);
+        applier.applyCommitLog(state, tableCommitInfo);
+
+        table.setState(OlapTable.OlapTableState.TABLET_RESHARD);
+        TabletReshardJobMgr manager = new TabletReshardJobMgr();
+        manager.getTabletReshardJobs().put(1L, new SplitTabletJob(1L, dbId, table.getId(),
+                Map.of(physicalPartitionId, new ReshardingPhysicalPartition(physicalPartitionId, Map.of()))));
+
+        state.setTransactionStatus(TransactionStatus.VISIBLE);
+        partitionCommitInfo.setVersionTime(System.currentTimeMillis());
+        TabletStatPB stat = new TabletStatPB();
+        stat.numRows = 5L;
+        stat.dataSize = 100L;
+        stat.hasSharedFiles = Boolean.FALSE;
+        partitionCommitInfo.getTabletStats().put(tabletId[0], stat);
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public boolean isLeader() {
+                return true;
+            }
+
+            @Mock
+            public static boolean isCheckpointThread() {
+                return false;
+            }
+
+            @Mock
+            public TabletReshardJobMgr getTabletReshardJobMgr() {
+                return manager;
+            }
+        };
+
+        applier.applyVisibleLog(state, tableCommitInfo, /*unused*/null);
+
+        Assertions.assertTrue(lakeTablet.hasSharedFiles());
+        // Size and row statistics may still be updated; only the shared-file state is gated.
+        Assertions.assertTrue(lakeTablet.getDataSize(true) > 0);
+    }
+
 }

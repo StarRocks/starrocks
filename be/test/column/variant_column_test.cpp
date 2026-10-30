@@ -23,11 +23,16 @@
 #include "base/testutil/parallel_test.h"
 #include "column/binary_column.h"
 #include "column/column_builder.h"
+#include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "column/mysql_row_buffer.h"
 #include "column/nullable_column.h"
 #include "column/runtime_type_traits.h"
+#include "column/serde/column_array_serde.h"
 #include "column/variant_encoder.h"
+#include "column/variant_path_parser.h"
+#include "testutil/column_test_helper.h"
+#include "testutil/type_test_helper.h"
 #include "types/datum.h"
 #include "types/logical_type.h"
 #include "types/variant.h"
@@ -77,8 +82,7 @@ static MutableColumnPtr build_nullable_varchar_column(const std::vector<std::str
 
 static MutableColumnPtr build_nullable_int_array_column(const std::vector<DatumArray>& values,
                                                         const std::vector<uint8_t>& is_null) {
-    TypeDescriptor array_type = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_BIGINT));
-    auto col = ColumnHelper::create_column(array_type, true);
+    auto col = ColumnHelper::create_column(TYPE_ARRAY_BIGINT_DESC, true);
     DCHECK_EQ(values.size(), is_null.size());
     for (size_t i = 0; i < values.size(); ++i) {
         if (is_null[i] != 0) {
@@ -269,8 +273,7 @@ PARALLEL_TEST(VariantColumnTest, test_remove_first_n_values_from_shredded_varian
 
 PARALLEL_TEST(VariantColumnTest, test_remove_values_from_const_typed_variant) {
     auto column = VariantColumn::create();
-    auto typed_data = Int64Column::create();
-    typed_data->append(42);
+    auto typed_data = ColumnTestHelper::build_column<int64_t>({42});
     MutableColumns typed;
     typed.emplace_back(ConstColumn::create(std::move(typed_data), 3));
     column->set_shredded_columns({"a"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(typed), nullptr, nullptr);
@@ -405,6 +408,194 @@ PARALLEL_TEST(VariantColumnTest, test_create_variant_column) {
 
     size_t memory_usage = variant_column->memory_usage();
     EXPECT_GE(memory_usage, 0);
+}
+
+// The members below are the rest of the ObjectColumn family that a VariantColumn's shredded storage
+// invalidates: rows live in the metadata/remain base payload and the typed columns, never in the
+// inherited `_pool`. Each test pins the takeover by checking that the pool stays empty while the
+// real storage carries the effect - against the inherited bodies they index an empty pool or write
+// rows no reader can reach.
+
+PARALLEL_TEST(VariantColumnTest, test_get_refuses_rather_than_handing_out_a_pool_pointer) {
+    auto column = VariantColumn::create();
+    column->append(create_variant_row_from_json_text(R"({"a":1})"));
+    ASSERT_EQ(1, column->size());
+    // ObjectColumn::get() returns Datum(&_pool[n]); the pool holds no rows at all, so the Datum
+    // carries a wild pointer that its only consumer, append_datum(), then dereferences.
+    ASSERT_TRUE(column->get_pool().empty());
+    EXPECT_THROW((void)column->get(0), std::runtime_error);
+}
+
+PARALLEL_TEST(VariantColumnTest, test_append_strings_lands_in_the_base_payload) {
+    auto column = VariantColumn::create();
+    const std::vector<std::string> jsons = {R"({"a":1})", R"({"b":2})"};
+
+    std::vector<std::string> buffers;
+    for (const auto& json : jsons) {
+        VariantRowValue row = create_variant_row_from_json_text(json);
+        buffers.emplace_back(row.serialize_size(), '\0');
+        row.serialize(reinterpret_cast<uint8_t*>(buffers.back().data()));
+    }
+    std::vector<Slice> slices;
+    slices.reserve(buffers.size());
+    for (auto& buffer : buffers) {
+        slices.emplace_back(buffer.data(), buffer.size());
+    }
+
+    ASSERT_TRUE(column->append_strings(slices.data(), slices.size()));
+
+    // ObjectColumn::append_strings() emplaces into `_pool`, which size() does not count: the rows
+    // would land somewhere no reader ever looks.
+    ASSERT_TRUE(column->get_pool().empty());
+    ASSERT_EQ(2, column->size());
+    for (size_t i = 0; i < jsons.size(); ++i) {
+        assert_variant_row_json(column.get(), i, jsons[i]);
+    }
+    ASSERT_TRUE(column->capacity_limit_reached().ok());
+}
+
+PARALLEL_TEST(VariantColumnTest, test_update_rows_replaces_rows_in_the_real_storage) {
+    auto column = VariantColumn::create();
+    column->append(create_variant_row_from_json_text(R"({"a":1})"));
+    column->append(create_variant_row_from_json_text(R"({"b":2})"));
+    column->append(create_variant_row_from_json_text(R"({"c":3})"));
+
+    auto replacement = VariantColumn::create();
+    replacement->append(create_variant_row_from_json_text(R"({"z":9})"));
+    const uint32_t indexes[] = {1};
+    column->update_rows(*replacement, indexes);
+
+    ASSERT_EQ(3, column->size());
+    ASSERT_TRUE(column->get_pool().empty());
+    assert_variant_row_json(column.get(), 0, R"({"a":1})");
+    assert_variant_row_json(column.get(), 1, R"({"z":9})");
+    assert_variant_row_json(column.get(), 2, R"({"c":3})");
+}
+
+PARALLEL_TEST(VariantColumnTest, test_update_rows_replaces_the_first_and_last_row) {
+    auto column = VariantColumn::create();
+    column->append(create_variant_row_from_json_text(R"({"a":1})"));
+    column->append(create_variant_row_from_json_text(R"({"b":2})"));
+    column->append(create_variant_row_from_json_text(R"({"c":3})"));
+
+    auto replacement = VariantColumn::create();
+    replacement->append(create_variant_row_from_json_text(R"({"y":8})"));
+    replacement->append(create_variant_row_from_json_text(R"({"z":9})"));
+    const uint32_t indexes[] = {0, 2};
+    column->update_rows(*replacement, indexes);
+
+    ASSERT_EQ(3, column->size());
+    assert_variant_row_json(column.get(), 0, R"({"y":8})");
+    assert_variant_row_json(column.get(), 1, R"({"b":2})");
+    assert_variant_row_json(column.get(), 2, R"({"z":9})");
+}
+
+PARALLEL_TEST(VariantColumnTest, test_fill_default_defaults_only_the_selected_rows) {
+    auto column = VariantColumn::create();
+    column->append(create_variant_row_from_json_text(R"({"a":1})"));
+    column->append(create_variant_row_from_json_text(R"({"b":2})"));
+    column->append(create_variant_row_from_json_text(R"({"c":3})"));
+
+    // ObjectColumn::fill_default() assigns `_pool[i] = {}` - an out-of-bounds write on an empty pool.
+    Filter filter{0, 1, 0};
+    column->fill_default(filter);
+
+    ASSERT_EQ(3, column->size());
+    ASSERT_TRUE(column->get_pool().empty());
+    assert_variant_row_json(column.get(), 0, R"({"a":1})");
+    assert_null_base_payload(column.get(), 1);
+    assert_variant_row_json(column.get(), 2, R"({"c":3})");
+}
+
+PARALLEL_TEST(VariantColumnTest, test_memory_usage_does_not_double_count_the_base_payload) {
+    auto column = VariantColumn::create();
+    for (int i = 0; i < 8; ++i) {
+        column->append(create_variant_row_from_json_text(R"({"a":1})"));
+    }
+    ASSERT_EQ(8, column->size());
+    ASSERT_GT(column->byte_size(0, column->size()), 0);
+
+    // The base payload is BinaryColumn, whose every byte lives in its own container, so it has no
+    // referenced memory of its own. Inheriting ObjectColumn's `reference_memory_usage() =
+    // byte_size()` would add those bytes a second time on top of container_memory_usage() and
+    // report a variant chunk at roughly twice its real size.
+    EXPECT_EQ(0, column->reference_memory_usage());
+    EXPECT_EQ(0, column->reference_memory_usage(0, column->size()));
+
+    const size_t children = column->metadata_column()->memory_usage() + column->remain_value_column()->memory_usage();
+    EXPECT_EQ(children, column->memory_usage());
+    EXPECT_EQ(column->container_memory_usage(), column->memory_usage());
+}
+
+PARALLEL_TEST(VariantColumnTest, test_container_memory_usage_follows_the_real_storage) {
+    auto column = VariantColumn::create();
+    const size_t before = column->container_memory_usage();
+
+    for (int i = 0; i < 64; ++i) {
+        column->append(create_variant_row_from_json_text(R"({"a":1})"));
+    }
+
+    // ObjectColumn reports `_pool.capacity() * type_size()`, which stays 0 whatever the column does
+    // - so the rows appended into the base payload would be invisible to the tracker.
+    const size_t after = column->container_memory_usage();
+    EXPECT_GT(after, before);
+    EXPECT_EQ(column->metadata_column()->container_memory_usage() +
+                      column->remain_value_column()->container_memory_usage(),
+              after);
+    EXPECT_TRUE(column->get_pool().empty());
+}
+
+// ObjectColumn::reserve pre-sizes the inherited VariantRowValue pool, which a VariantColumn never
+// writes to. The override has to reach the columns that actually receive the rows, otherwise a
+// caller sizing a variant result up front pays for a vector that stays empty while the base payload
+// it meant to size still grows geometrically.
+PARALLEL_TEST(VariantColumnTest, test_reserve_sizes_base_payload_not_object_pool) {
+    auto column = VariantColumn::create();
+    constexpr size_t kRows = 4096;
+
+    column->reserve(kRows);
+
+    EXPECT_EQ(0, column->get_pool().capacity());
+    EXPECT_GE(column->metadata_column()->capacity(), kRows);
+    EXPECT_GE(column->remain_value_column()->capacity(), kRows);
+    EXPECT_EQ(0, column->size());
+    EXPECT_TRUE(column->empty());
+
+    // A reservation must not disturb what a later append reads back.
+    column->append(create_variant_row_from_json_text(R"({"a":1})"));
+    ASSERT_EQ(1, column->size());
+    VariantRowValue row_buffer;
+    const VariantRowValue* row = column->get_row_value(0, &row_buffer);
+    ASSERT_NE(nullptr, row);
+    auto json = row->to_json();
+    ASSERT_TRUE(json.ok()) << json.status().to_string();
+    EXPECT_EQ(R"({"a":1})", json.value());
+    EXPECT_EQ(0, column->get_pool().capacity());
+}
+
+PARALLEL_TEST(VariantColumnTest, test_reserve_skips_shredded_typed_columns) {
+    auto column = VariantColumn::create();
+    auto metadata = BinaryColumn::create();
+    auto remain = BinaryColumn::create();
+    append_json_variant_row(metadata.get(), remain.get(), R"({})");
+    MutableColumns typed;
+    typed.emplace_back(build_nullable_int_array_column({DatumArray{Datum(int64_t(1)), Datum(int64_t(2))}}, {0}));
+    column->set_shredded_columns({"a"}, {TYPE_ARRAY_BIGINT_DESC}, std::move(typed), std::move(metadata),
+                                 std::move(remain));
+    const size_t typed_capacity_before = column->typed_columns()[0]->capacity();
+
+    constexpr size_t kRows = 2048;
+    column->reserve(kRows);
+
+    EXPECT_EQ(0, column->get_pool().capacity());
+    EXPECT_GE(column->metadata_column()->capacity(), kRows);
+    EXPECT_GE(column->remain_value_column()->capacity(), kRows);
+    // The shredded schema is data-dependent in both width and element type, so the reservation
+    // stops at the base payload. This typed field is an ARRAY: forwarding would have reserved
+    // kRows inner elements on top of the kRows offsets, for arrays the rows may not contain.
+    ASSERT_EQ(1, column->typed_columns().size());
+    EXPECT_EQ(typed_capacity_before, column->typed_columns()[0]->capacity());
+    EXPECT_EQ(1, column->size());
 }
 
 PARALLEL_TEST(VariantColumnTest, test_clone_shredded_schema_integrity) {
@@ -773,8 +964,7 @@ PARALLEL_TEST(VariantColumnTest, test_single_path_typed_only_scalar_materializat
 // Verifies single-path typed-only supports const typed column row access (row index should map to 0 for const data).
 PARALLEL_TEST(VariantColumnTest, test_single_path_typed_only_const_typed_column) {
     auto col = VariantColumn::create();
-    auto typed_data = Int64Column::create();
-    typed_data->append(42);
+    auto typed_data = ColumnTestHelper::build_column<int64_t>({42});
     MutableColumns typed;
     typed.emplace_back(ConstColumn::create(std::move(typed_data), 3));
     col->set_shredded_columns({"a"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(typed), nullptr, nullptr);
@@ -798,8 +988,7 @@ PARALLEL_TEST(VariantColumnTest, test_single_path_typed_only_array_materializati
     auto col = VariantColumn::create();
     MutableColumns typed;
     typed.emplace_back(build_nullable_int_array_column({DatumArray{Datum(int64_t(1)), Datum(int64_t(2))}}, {0}));
-    col->set_shredded_columns({"a"}, {TypeDescriptor::create_array_type(TypeDescriptor(TYPE_BIGINT))}, std::move(typed),
-                              nullptr, nullptr);
+    col->set_shredded_columns({"a"}, {TYPE_ARRAY_BIGINT_DESC}, std::move(typed), nullptr, nullptr);
 
     ASSERT_EQ(1, col->shredded_paths().size());
     ASSERT_EQ("a", col->shredded_paths()[0]);
@@ -1168,8 +1357,7 @@ PARALLEL_TEST(VariantColumnTest, test_base_shredded_const_typed_column_materiali
     std::string metadata(base.get_metadata().raw());
     std::string value(base.get_value().raw());
 
-    auto typed_data = Int64Column::create();
-    typed_data->append(42);
+    auto typed_data = ColumnTestHelper::build_column<int64_t>({42});
     MutableColumns typed;
     typed.emplace_back(ConstColumn::create(std::move(typed_data), 2));
     auto metadata_col = BinaryColumn::create();
@@ -1372,6 +1560,244 @@ PARALLEL_TEST(VariantColumnTest, test_equals_and_compare_at_invalid_metadata_fal
     ASSERT_EQ(0, lhs->equals(0, *rhs, 0, false));
     ASSERT_LT(lhs->compare_at(0, 0, *rhs, -1), 0);
     ASSERT_GT(rhs->compare_at(0, 0, *lhs, -1), 0);
+}
+
+// ---------------------------------------------------------------------------
+// Fallback columns: values of a typed path that do not fit the typed column type
+// ---------------------------------------------------------------------------
+
+// Builds a VariantColumn with typed BIGINT path "a" and its fallback column from JSON objects that either have only
+// key "a" or have no key "a". An integer "a" goes to the typed cell; any other "a" goes to the fallback cell as the
+// variant bytes of that field, decoded with the row metadata; the remain never holds "a".
+static MutableColumnPtr build_bigint_path_with_fallback(const std::vector<std::string>& rows_json,
+                                                        bool allocate_empty_fallback = true) {
+    auto metadata = BinaryColumn::create();
+    auto remain = BinaryColumn::create();
+    auto typed = ColumnHelper::create_column(TypeDescriptor(TYPE_BIGINT), true);
+    auto fallback = VariantColumn::create_fallback_column();
+    auto path_a = VariantPathParser::parse(std::string("$.a"));
+    CHECK(path_a.ok());
+    std::string empty_object;
+    VariantEncoder::append_object_container(&empty_object, {}, {}, {});
+    bool has_fallback_value = false;
+    for (const auto& json : rows_json) {
+        VariantRowValue row = create_variant_row_from_json_text(json);
+        std::string_view metadata_raw = row.get_metadata().raw();
+        metadata->append(Slice(metadata_raw.data(), metadata_raw.size()));
+        auto field = VariantPath::seek_view(row.as_ref(), path_a.value());
+        if (!field.ok() || field->is_null()) {
+            std::string_view value_raw = row.get_value().raw();
+            remain->append(Slice(value_raw.data(), value_raw.size()));
+            typed->append_nulls(1);
+            fallback->append_nulls(1);
+            continue;
+        }
+        remain->append(Slice(empty_object));
+        auto as_int = field->get_value().get_int8();
+        if (as_int.ok()) {
+            typed->append_datum(Datum(static_cast<int64_t>(as_int.value())));
+            fallback->append_nulls(1);
+        } else {
+            typed->append_nulls(1);
+            std::string_view field_raw = field->get_value().raw();
+            fallback->append_datum(Datum(Slice(field_raw.data(), field_raw.size())));
+            has_fallback_value = true;
+        }
+    }
+    MutableColumns typed_columns;
+    typed_columns.emplace_back(std::move(typed));
+    MutableColumns fallback_columns;
+    // Without allocate_empty_fallback, a fallback column without values is left unallocated, as the readers do.
+    fallback_columns.emplace_back(allocate_empty_fallback || has_fallback_value ? std::move(fallback) : nullptr);
+    auto col = VariantColumn::create();
+    col->set_shredded_columns({"a"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(typed_columns),
+                              std::move(fallback_columns), std::move(metadata), std::move(remain));
+    return col;
+}
+
+static const std::vector<std::string> kFallbackRows = {R"({"a":1})", R"({"a":"x"})", R"({"a":{"k":1}})", R"({"b":2})"};
+
+PARALLEL_TEST(VariantColumnTest, test_fallback_column_rebuilds_rows) {
+    auto col = build_bigint_path_with_fallback(kFallbackRows);
+    const auto* variant = down_cast<const VariantColumn*>(col.get());
+    ASSERT_EQ(4, variant->size());
+    EXPECT_EQ(TYPE_BIGINT, variant->shredded_types()[0].type);
+    EXPECT_TRUE(variant->has_any_fallback_value(0));
+    EXPECT_FALSE(variant->has_fallback_value(0, 0));
+    EXPECT_TRUE(variant->has_fallback_value(0, 1));
+    EXPECT_TRUE(variant->has_fallback_value(0, 2));
+    EXPECT_FALSE(variant->has_fallback_value(0, 3));
+
+    // A row with a fallback value is not just its base payload.
+    VariantRowRef ref;
+    EXPECT_FALSE(variant->try_get_row_ref(1, &ref));
+
+    assert_variant_row_json(variant, 0, R"({"a":1})");
+    assert_variant_row_json(variant, 1, R"({"a":"x"})");
+    // The nested object is decoded with the row metadata.
+    assert_variant_row_json(variant, 2, R"({"a":{"k":1}})");
+    assert_variant_row_json(variant, 3, R"({"b":2})");
+
+    auto fallback = variant->fallback_value(0, 2);
+    ASSERT_TRUE(fallback.ok()) << fallback.status().to_string();
+    EXPECT_EQ(R"({"k":1})", fallback->to_json().value());
+    EXPECT_FALSE(variant->fallback_value(0, 0).ok());
+}
+
+PARALLEL_TEST(VariantColumnTest, test_fallback_column_without_values_is_absent) {
+    auto col = build_bigint_path_with_fallback({R"({"a":1})", R"({"b":2})"});
+    const auto* variant = down_cast<const VariantColumn*>(col.get());
+    EXPECT_FALSE(variant->has_any_fallback_value(0));
+    VariantRowRef ref;
+    EXPECT_TRUE(variant->try_get_row_ref(1, &ref));
+}
+
+PARALLEL_TEST(VariantColumnTest, test_fallback_column_follows_row_operations) {
+    auto col = build_bigint_path_with_fallback(kFallbackRows);
+
+    // clone
+    auto cloned = col->clone();
+    for (size_t i = 0; i < kFallbackRows.size(); ++i) {
+        assert_variant_row_json(down_cast<const VariantColumn*>(cloned.get()), i,
+                                down_cast<const VariantColumn*>(col.get())->debug_item(i));
+    }
+
+    // filter: keep rows 1 and 3
+    auto filtered = col->clone();
+    Filter filter = {0, 1, 0, 1};
+    filtered->filter(filter);
+    ASSERT_EQ(2, filtered->size());
+    assert_variant_row_json(down_cast<const VariantColumn*>(filtered.get()), 0, R"({"a":"x"})");
+    assert_variant_row_json(down_cast<const VariantColumn*>(filtered.get()), 1, R"({"b":2})");
+
+    // append_selective into an empty column
+    auto selected = VariantColumn::create();
+    std::vector<uint32_t> indexes = {2, 0};
+    selected->append_selective(*col, indexes.data(), 0, 2);
+    ASSERT_EQ(2, selected->size());
+    assert_variant_row_json(selected.get(), 0, R"({"a":{"k":1}})");
+    assert_variant_row_json(selected.get(), 1, R"({"a":1})");
+
+    // remove_first_n_values
+    auto removed = col->clone();
+    removed->remove_first_n_values(2);
+    ASSERT_EQ(2, removed->size());
+    assert_variant_row_json(down_cast<const VariantColumn*>(removed.get()), 0, R"({"a":{"k":1}})");
+
+    // resize
+    auto resized = col->clone();
+    resized->resize(2);
+    ASSERT_EQ(2, resized->size());
+    assert_variant_row_json(down_cast<const VariantColumn*>(resized.get()), 1, R"({"a":"x"})");
+    resized->check_or_die();
+}
+
+PARALLEL_TEST(VariantColumnTest, test_fallback_column_appended_into_column_without_fallback) {
+    // Destination has the same typed path but no fallback values yet.
+    auto dst = build_bigint_path_with_fallback({R"({"a":5})"});
+    ASSERT_FALSE(down_cast<const VariantColumn*>(dst.get())->has_any_fallback_value(0));
+    auto src = build_bigint_path_with_fallback(kFallbackRows);
+    dst->append(*src);
+    const auto* variant = down_cast<const VariantColumn*>(dst.get());
+    ASSERT_EQ(5, variant->size());
+    variant->check_or_die();
+    assert_variant_row_json(variant, 0, R"({"a":5})");
+    assert_variant_row_json(variant, 2, R"({"a":"x"})");
+    assert_variant_row_json(variant, 3, R"({"a":{"k":1}})");
+    assert_variant_row_json(variant, 4, R"({"b":2})");
+
+    // Destination with fallback values, source without: source rows get null fallback cells.
+    auto dst2 = build_bigint_path_with_fallback(kFallbackRows);
+    dst2->append(*build_bigint_path_with_fallback({R"({"a":7})"}));
+    const auto* variant2 = down_cast<const VariantColumn*>(dst2.get());
+    ASSERT_EQ(5, variant2->size());
+    variant2->check_or_die();
+    EXPECT_FALSE(variant2->has_fallback_value(0, 4));
+    assert_variant_row_json(variant2, 4, R"({"a":7})");
+}
+
+PARALLEL_TEST(VariantColumnTest, test_fallback_column_created_on_append_keeps_rows_aligned) {
+    // Destination without an allocated fallback column: appending a source with fallback values creates it with one
+    // null cell per existing destination row, so the source fallback values stay on their own rows.
+    auto dst = build_bigint_path_with_fallback({R"({"a":5})", R"({"b":6})"}, false);
+    ASSERT_EQ(nullptr, down_cast<const VariantColumn*>(dst.get())->fallback_column_by_index(0));
+    auto src = build_bigint_path_with_fallback(kFallbackRows);
+    dst->append(*src);
+    const auto* variant = down_cast<const VariantColumn*>(dst.get());
+    ASSERT_EQ(6, variant->size());
+    ASSERT_NE(nullptr, variant->fallback_column_by_index(0));
+    ASSERT_EQ(6, variant->fallback_column_by_index(0)->size());
+    variant->check_or_die();
+    assert_variant_row_json(variant, 0, R"({"a":5})");
+    assert_variant_row_json(variant, 1, R"({"b":6})");
+    assert_variant_row_json(variant, 2, R"({"a":1})");
+    assert_variant_row_json(variant, 3, R"({"a":"x"})");
+    assert_variant_row_json(variant, 4, R"({"a":{"k":1}})");
+    assert_variant_row_json(variant, 5, R"({"b":2})");
+
+    // The same through append_selective.
+    auto dst2 = build_bigint_path_with_fallback({R"({"a":5})"}, false);
+    std::vector<uint32_t> indexes = {1, 3};
+    dst2->append_selective(*src, indexes.data(), 0, 2);
+    const auto* variant2 = down_cast<const VariantColumn*>(dst2.get());
+    ASSERT_EQ(3, variant2->size());
+    ASSERT_EQ(3, variant2->fallback_column_by_index(0)->size());
+    assert_variant_row_json(variant2, 1, R"({"a":"x"})");
+    assert_variant_row_json(variant2, 2, R"({"b":2})");
+}
+
+PARALLEL_TEST(VariantColumnTest, test_fallback_column_serde_roundtrip) {
+    auto col = build_bigint_path_with_fallback(kFallbackRows);
+    std::vector<uint8_t> buffer(serde::ColumnArraySerde::max_serialized_size(*col));
+    auto end = serde::ColumnArraySerde::serialize(*col, buffer.data());
+    ASSERT_TRUE(end.ok()) << end.status().to_string();
+
+    auto restored = VariantColumn::create();
+    auto read_end = serde::ColumnArraySerde::deserialize(buffer.data(), buffer.data() + buffer.size(), restored.get());
+    ASSERT_TRUE(read_end.ok()) << read_end.status().to_string();
+    ASSERT_EQ(kFallbackRows.size(), restored->size());
+    EXPECT_EQ(TYPE_BIGINT, restored->shredded_types()[0].type);
+    EXPECT_TRUE(restored->has_any_fallback_value(0));
+    assert_variant_row_json(restored.get(), 1, R"({"a":"x"})");
+    assert_variant_row_json(restored.get(), 2, R"({"a":{"k":1}})");
+}
+
+// A partially shredded object: path "a" has no typed value, its fallback is the residual {"x":...}, and its
+// shredded child "a.b" is a typed path. The child is listed first to check that the residual is applied before it.
+PARALLEL_TEST(VariantColumnTest, test_residual_fallback_with_shredded_child) {
+    auto residual_row = create_variant_row_from_json_text(R"({"a":{"x":1}})");
+    auto path_a = VariantPathParser::parse(std::string("$.a"));
+    ASSERT_TRUE(path_a.ok());
+    auto residual = VariantPath::seek_view(residual_row.as_ref(), path_a.value());
+    ASSERT_TRUE(residual.ok());
+    std::string_view residual_raw = residual->get_value().raw();
+    std::string_view metadata_raw = residual_row.get_metadata().raw();
+
+    std::string empty_object;
+    VariantEncoder::append_object_container(&empty_object, {}, {}, {});
+    auto metadata = BinaryColumn::create();
+    auto remain = BinaryColumn::create();
+    for (int i = 0; i < 2; ++i) {
+        metadata->append(Slice(metadata_raw.data(), metadata_raw.size()));
+        remain->append(Slice(empty_object));
+    }
+    MutableColumns typed;
+    typed.emplace_back(build_nullable_int64_column({2, 3}, {0, 0})); // a.b
+    auto residual_typed = ColumnHelper::create_column(TypeDescriptor(TYPE_VARIANT), true);
+    residual_typed->append_nulls(2);
+    typed.emplace_back(std::move(residual_typed)); // a
+    MutableColumns fallback;
+    fallback.emplace_back(nullptr);
+    auto residual_fallback = VariantColumn::create_fallback_column();
+    residual_fallback->append_datum(Datum(Slice(residual_raw.data(), residual_raw.size())));
+    residual_fallback->append_nulls(1);
+    fallback.emplace_back(std::move(residual_fallback));
+    auto col = VariantColumn::create();
+    col->set_shredded_columns({"a.b", "a"}, {TypeDescriptor(TYPE_BIGINT), TypeDescriptor(TYPE_VARIANT)},
+                              std::move(typed), std::move(fallback), std::move(metadata), std::move(remain));
+
+    assert_variant_row_json(col.get(), 0, R"({"a":{"b":2,"x":1}})");
+    assert_variant_row_json(col.get(), 1, R"({"a":{"b":3}})");
 }
 
 } // namespace starrocks

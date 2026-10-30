@@ -209,6 +209,21 @@ struct TypeEncodingTraits<tparquet::Type::FIXED_LEN_BYTE_ARRAY, tparquet::Encodi
     }
 };
 
+// The generic trait would instantiate DictDecoder<bool>, whose std::vector<bool> dictionary is bit-packed and
+// has no contiguous storage. Decode through uint8_t instead: PlainDecoder<bool> unpacks the dictionary page one
+// byte per value, and BooleanColumn is a UInt8Column.
+template <>
+struct TypeEncodingTraits<tparquet::Type::BOOLEAN, tparquet::Encoding::RLE_DICTIONARY> {
+    static Status create_decoder(std::unique_ptr<Decoder>* decoder) {
+        *decoder = std::make_unique<DictDecoder<uint8_t>>();
+        return Status::OK();
+    }
+    static Status create_encoder(std::unique_ptr<Encoder>* encoder) {
+        *encoder = std::make_unique<DictEncoder<uint8_t>>();
+        return Status::OK();
+    }
+};
+
 template <tparquet::Type::type type_arg, tparquet::Encoding::type encoding_arg>
 struct EncodingTraits : TypeEncodingTraits<type_arg, encoding_arg> {
     static constexpr tparquet::Type::type type = type_arg;
@@ -242,6 +257,7 @@ private:
 EncodingInfoResolver::EncodingInfoResolver() {
     // BOOL
     _add_map<tparquet::Type::BOOLEAN, tparquet::Encoding::PLAIN>();
+    _add_map<tparquet::Type::BOOLEAN, tparquet::Encoding::RLE_DICTIONARY>();
     // INT32
     _add_map<tparquet::Type::INT32, tparquet::Encoding::PLAIN>();
     _add_map<tparquet::Type::INT32, tparquet::Encoding::RLE_DICTIONARY>();

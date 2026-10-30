@@ -249,18 +249,30 @@ public class RangeDistributionGuardTest {
     }
 
     /**
-     * A range table carrying an AUTO_INCREMENT column stays rejected (out of scope for the rollup
-     * re-route, mirroring the sort-key-reorder auto-increment rejection).
+     * A range table carrying an AUTO_INCREMENT column is routed to {@link LakeRangeRollupJob}, both for
+     * a rollup that omits the column and for one that stores it. Two tables are used so the second
+     * ALTER does not depend on resetting the first table's state.
      */
     @Test
-    public void testRangeRollupWithAutoIncrementRejected() throws Exception {
-        starRocksAssert.withTable("create table t_guard_rollup_autoinc "
-                + "(k1 int not null, k2 int not null, id bigint not null auto_increment)\n"
-                + "duplicate key(k1, k2)\n"
-                + "order by(k1, k2)\n"
-                + "properties('replication_num' = '1');");
-        assertAlterRejectedWithRangeDistribution(
+    public void testRangeRollupWithAutoIncrementRouted() throws Exception {
+        for (String name : List.of("t_guard_rollup_autoinc", "t_guard_rollup_autoinc2")) {
+            starRocksAssert.withTable("create table " + name + " "
+                    + "(k1 int not null, k2 int not null, id bigint not null auto_increment)\n"
+                    + "duplicate key(k1, k2)\n"
+                    + "order by(k1, k2)\n"
+                    + "properties('replication_num' = '1');");
+        }
+        starRocksAssert.alterTable(
                 "alter table t_guard_rollup_autoinc add rollup r1(k1, k2) order by (k2, k1)");
+        AlterJobV2 job = fetchAndClearRollupJob();
+        assertTrue(job instanceof LakeRangeRollupJob, "Expected a LakeRangeRollupJob, got: " + job);
+        assertEquals("r1", ((LakeRangeRollupJob) job).getRollupIndexName());
+
+        starRocksAssert.alterTable(
+                "alter table t_guard_rollup_autoinc2 add rollup r2(k2, id) order by (k2)");
+        job = fetchAndClearRollupJob();
+        assertTrue(job instanceof LakeRangeRollupJob, "Expected a LakeRangeRollupJob, got: " + job);
+        assertEquals("r2", ((LakeRangeRollupJob) job).getRollupIndexName());
     }
 
     /**
@@ -305,17 +317,175 @@ public class RangeDistributionGuardTest {
     }
 
     @Test
-    public void testSyncCreateMaterializedViewRejectedOnRangeDistribution() throws Exception {
+    public void testSyncCreateMaterializedViewRoutedToRangeJob() throws Exception {
         starRocksAssert.withTable(rangeTableDdl("t_guard_syncmv"));
-        DdlException exception = assertThrowsDdlException(() ->
-                starRocksAssert.withMaterializedView(
-                        "create materialized view mv_guard_sync as " +
-                        "select k1, v1 from t_guard_syncmv"));
-        assertTrue(exception.getMessage().toLowerCase(Locale.ROOT).contains("range distribution"),
-                "Expected 'range distribution' in: " + exception.getMessage());
-        // A plain ADD ROLLUP IS supported now; the sync-MV message must not blanket-claim otherwise.
-        assertFalse(exception.getMessage().toLowerCase(Locale.ROOT).contains("rollup is not supported"),
-                "sync-MV message must not claim rollup is unsupported: " + exception.getMessage());
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) db.getTable("t_guard_syncmv");
+        com.starrocks.sql.ast.CreateSyncMVStmt stmt = (com.starrocks.sql.ast.CreateSyncMVStmt)
+                UtFrameUtils.parseStmtWithNewParser("create materialized view mv_guard_sync as "
+                        + "select k2, v1 from t_guard_syncmv", connectContext);
+        GlobalStateMgr.getCurrentState().getRollupHandler().processCreateMaterializedView(stmt, db, table);
+        LakeRangeRollupJob job = org.junit.jupiter.api.Assertions.assertInstanceOf(
+                LakeRangeRollupJob.class, fetchAndClearRollupJob());
+        assertEquals(List.of(0, 1), job.getShadowSortKeyIdxes());
+        assertEquals(List.of(baseColumn("t_guard_syncmv", "k2").getUniqueId(),
+                baseColumn("t_guard_syncmv", "v1").getUniqueId()), job.getShadowSortKeyUniqueIds());
+    }
+
+    private static void createSync(String tableName, String query) throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        com.starrocks.sql.ast.CreateSyncMVStmt stmt = (com.starrocks.sql.ast.CreateSyncMVStmt)
+                UtFrameUtils.parseStmtWithNewParser("create materialized view mv_" + tableName + " as " + query, connectContext);
+        GlobalStateMgr.getCurrentState().getRollupHandler().processCreateMaterializedView(stmt, db,
+                (OlapTable) db.getTable(tableName));
+    }
+
+    @Test
+    public void testSyncAggregateDistinctExpressionAndStatePreserveAnalyzerSchema() throws Exception {
+        List<String> queries = List.of("select k2, sum(v1) from %s group by k2",
+                "select distinct k2, v1 from %s",
+                "select k2 + 1 as derived, count(v1) from %s where k1 > 0 group by k2 + 1",
+                "select k2, avg_union(avg_state(v1)) as avg_value from %s group by k2");
+        for (int i = 0; i < queries.size(); i++) {
+            String name = "t_sync_variant_" + i;
+            starRocksAssert.withTable(rangeTableDdl(name));
+            createSync(name, String.format(queries.get(i), name));
+            LakeRangeRollupJob job = org.junit.jupiter.api.Assertions.assertInstanceOf(
+                    LakeRangeRollupJob.class, fetchAndClearRollupJob());
+            assertTrue(job.isSyncMaterializedView());
+            assertEquals(i == 1 ? List.of(0, 1) : List.of(0), job.getShadowSortKeyIdxes());
+            assertEquals(com.starrocks.sql.ast.KeysType.AGG_KEYS, job.getShadowKeysType());
+            assertFalse(job.getShadowSortKeyUniqueIds().contains(baseColumn(name, "k1").getUniqueId()));
+        }
+    }
+
+    @Test
+    public void testSyncRangeRequestedColocateOptimizationRetainsValidation() throws Exception {
+        String name = "t_sync_requested_colocate";
+        starRocksAssert.withTable(rangeTableDdl(name));
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        com.starrocks.sql.ast.CreateSyncMVStmt stmt = (com.starrocks.sql.ast.CreateSyncMVStmt)
+                UtFrameUtils.parseStmtWithNewParser("create materialized view mv_requested_colocate "
+                        + "properties('colocate_mv'='true') as select k2 from " + name, connectContext);
+        MaterializedViewHandler handler = GlobalStateMgr.getCurrentState().getRollupHandler();
+        try {
+            com.starrocks.common.AnalysisException error = assertThrows(com.starrocks.common.AnalysisException.class,
+                    () -> handler.processCreateMaterializedView(stmt, db, (OlapTable) db.getTable(name)));
+            assertTrue(error.getMessage().contains("is in colocate group"));
+            assertTrue(handler.getAlterJobsV2().isEmpty());
+        } finally {
+            handler.clearJobs();
+        }
+    }
+
+    @Test
+    public void testSyncRangeColocateRemainsRejected() throws Exception {
+        String colocate = "t_sync_colocate";
+        starRocksAssert.withTable(rangeTableDdl(colocate));
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", colocate);
+        table.setColocateGroup("sync_colocate_group");
+        DdlException error = assertThrowsDdlException(() -> createSync(colocate, "select k2 from " + colocate));
+        assertTrue(error.getMessage().contains("range distribution"));
+    }
+
+    private static String autoIncrementSyncTableDdl(String name) {
+        return "create table " + name + " (k1 int not null, k2 int, "
+                + "id bigint not null auto_increment) duplicate key(k1) order by(k1,k2) "
+                + "properties('replication_num'='1')";
+    }
+
+    /**
+     * Selecting the AUTO_INCREMENT column itself, or filtering on it in WHERE, is allowed on a range
+     * synchronous MV: the view column shares the slot the sink fills, and the WHERE clause is evaluated
+     * after the fill.
+     */
+    @Test
+    public void testSyncRangeAutoIncrementPlainAndWhereAllowed() throws Exception {
+        starRocksAssert.withTable(autoIncrementSyncTableDdl("t_sync_auto"));
+        createSync("t_sync_auto", "select k2, id from t_sync_auto");
+        LakeRangeRollupJob job = org.junit.jupiter.api.Assertions.assertInstanceOf(
+                LakeRangeRollupJob.class, fetchAndClearRollupJob());
+        assertTrue(job.isSyncMaterializedView());
+
+        starRocksAssert.withTable(autoIncrementSyncTableDdl("t_sync_auto_where"));
+        createSync("t_sync_auto_where", "select k1, k2 from t_sync_auto_where where id > 0");
+        job = org.junit.jupiter.api.Assertions.assertInstanceOf(LakeRangeRollupJob.class, fetchAndClearRollupJob());
+        assertTrue(job.isSyncMaterializedView());
+    }
+
+    /**
+     * A range synchronous MV column computed from the AUTO_INCREMENT column is rejected before any job
+     * is registered: the load plan computes it before the sink assigns the AUTO_INCREMENT value.
+     */
+    @Test
+    public void testSyncRangeComputedFromAutoIncrementRejected() throws Exception {
+        String[][] cases = {
+                {"t_sync_auto_sum", "select k2, sum(id) from t_sync_auto_sum group by k2",
+                        "Column[mv_sum_id] of range synchronous materialized view[mv_t_sync_auto_sum] "
+                                + "cannot be computed from AUTO_INCREMENT column[id]"},
+                {"t_sync_auto_expr", "select k2, id + 1 as id_plus from t_sync_auto_expr",
+                        "Column[mv_id_plus] of range synchronous materialized view[mv_t_sync_auto_expr] "
+                                + "cannot be computed from AUTO_INCREMENT column[id]"}};
+        MaterializedViewHandler handler = GlobalStateMgr.getCurrentState().getRollupHandler();
+        try {
+            for (String[] c : cases) {
+                String name = c[0];
+                starRocksAssert.withTable(autoIncrementSyncTableDdl(name));
+                DdlException error = assertThrows(DdlException.class, () -> createSync(name, c[1]));
+                assertEquals(c[2], error.getMessage());
+                assertTrue(handler.getAlterJobsV2().isEmpty());
+                assertEquals(OlapTable.OlapTableState.NORMAL, getTable(name).getState());
+            }
+        } finally {
+            handler.clearJobs();
+        }
+    }
+
+    @Test
+    public void testSyncRangeSharedNothingRemainsRejected() throws Exception {
+        String name = "t_sync_shared_nothing";
+        starRocksAssert.withTable(rangeTableDdl(name));
+        new MockUp<OlapTable>() {
+            @Mock
+            public boolean isCloudNativeTable() {
+                return false;
+            }
+        };
+        DdlException error = assertThrowsDdlException(() -> createSync(name, "select k2 from " + name));
+        assertTrue(error.getMessage().contains("range distribution"));
+    }
+
+    @Test
+    public void testSyncRangePrimaryKeyRemainsRejected() throws Exception {
+        String name = "t_sync_primary";
+        starRocksAssert.withTable("create table " + name + " (k1 int not null, k2 int) primary key(k1) "
+                + "order by(k1,k2) properties('replication_num'='1')");
+        DdlException error = assertThrows(DdlException.class, () -> createSync(name, "select k2 from " + name));
+        assertEquals("Synchronous materialized view with range distribution requires a shared-data, "
+                + "non-colocate, non-primary-key table. "
+                + "Use an asynchronous materialized view instead: declare it with an explicit "
+                + "REFRESH clause (REFRESH ASYNC or REFRESH MANUAL) or a DISTRIBUTED BY clause, "
+                + "e.g. CREATE MATERIALIZED VIEW ... DISTRIBUTED BY HASH(...) REFRESH ASYNC AS SELECT ...",
+                error.getMessage());
+        assertTrue(GlobalStateMgr.getCurrentState().getRollupHandler().getAlterJobsV2().isEmpty());
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", name);
+        assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+    }
+
+    @Test
+    public void testSyncRangeMultiplePhysicalPartitionsRejectedBeforeJobRegistration() throws Exception {
+        String name = "t_sync_multi_physical";
+        starRocksAssert.withTable(rangeTableDdl(name));
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) db.getTable(name);
+        com.starrocks.catalog.Partition partition = table.getPartitions().iterator().next();
+        MaterializedIndex base = new MaterializedIndex(GlobalStateMgr.getCurrentState().getNextId(),
+                table.getBaseIndexMetaId(), MaterializedIndex.IndexState.NORMAL, PhysicalPartition.INVALID_SHARD_GROUP_ID);
+        partition.addSubPartition(new PhysicalPartition(GlobalStateMgr.getCurrentState().getNextId(), partition.getId(), base));
+        DdlException error = assertThrowsDdlException(() -> createSync(name, "select k2 from " + name));
+        assertTrue(error.getMessage().contains("1:1 logical-to-physical partition"));
+        assertTrue(GlobalStateMgr.getCurrentState().getRollupHandler().getAlterJobsV2().isEmpty());
+        assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
     }
 
     /**
@@ -561,16 +731,34 @@ public class RangeDistributionGuardTest {
     }
 
     /**
-     * A range table carrying an AUTO_INCREMENT column stays rejected (out of scope for the re-route).
+     * A range table carrying an AUTO_INCREMENT column routes a sort-key reorder to the range rewrite job:
+     * the rewrite copies existing AUTO_INCREMENT values verbatim.
      */
     @Test
-    public void testAutoIncrementRangeTableRejectsSortKeyReorder() throws Exception {
+    public void testAutoIncrementRangeTableRoutesSortKeyReorder() throws Exception {
         starRocksAssert.withTable("create table t_guard_autoinc "
                 + "(k1 int not null, k2 int not null, id bigint not null auto_increment)\n"
                 + "duplicate key(k1, k2)\n"
                 + "order by(k1, k2)\n"
                 + "properties('replication_num' = '1');");
-        assertAlterRejectedWithRangeDistribution("alter table t_guard_autoinc order by (k2, k1)");
+        AlterJobV2 job = buildAlterJob("t_guard_autoinc", "alter table t_guard_autoinc order by (k2, k1)");
+        assertTrue(job instanceof LakeRangeRewriteSchemaChangeJob);
+    }
+
+    /**
+     * ALTER TABLE ... ORDER BY may put the AUTO_INCREMENT column itself into the sort key.
+     */
+    @Test
+    public void testAutoIncrementColumnIntoSortKeyRoutes() throws Exception {
+        starRocksAssert.withTable("create table t_guard_autoinc_sk "
+                + "(k1 int not null, k2 int not null, id bigint not null auto_increment)\n"
+                + "duplicate key(k1, k2)\n"
+                + "order by(k1, k2)\n"
+                + "properties('replication_num' = '1');");
+        AlterJobV2 job = buildAlterJob("t_guard_autoinc_sk", "alter table t_guard_autoinc_sk order by (id, k1)");
+        assertTrue(job instanceof LakeRangeRewriteSchemaChangeJob);
+        assertEquals(baseColumn("t_guard_autoinc_sk", "id").getUniqueId(),
+                ((LakeRangeRewriteSchemaChangeJob) job).getShadowSortKeyUniqueIds().get(0));
     }
 
     /**
@@ -1235,7 +1423,7 @@ public class RangeDistributionGuardTest {
     }
 
     @Test
-    public void testAutoIncrementTableNotMetadataOnly() throws Exception {
+    public void testAutoIncrementTableMetadataOnly() throws Exception {
         starRocksAssert.withTable("create table t_meta_autoinc "
                 + "(k1 int not null, k2 int not null, id bigint not null auto_increment)\n"
                 + "DUPLICATE KEY(k1, k2)\n"
@@ -1243,7 +1431,7 @@ public class RangeDistributionGuardTest {
                 + "properties('replication_num' = '1');");
         OlapTable table = getTable("t_meta_autoinc");
         SchemaChangeData resolved = buildTrailingKeyAddCandidate(table, constKeyColumn(table, "c_new"));
-        assertFalse(SchemaChangeHandler.isMetadataOnlyTrailingKeyAdd(resolved));
+        assertTrue(SchemaChangeHandler.isMetadataOnlyTrailingKeyAdd(resolved));
     }
 
     /**
@@ -1675,21 +1863,18 @@ public class RangeDistributionGuardTest {
     }
 
     /**
-     * AUTO_INCREMENT range tables are excluded from range-rewrite routing, so an ADD COLUMN KEY stays
-     * on the existing range-distribution rejection (unaffected by the diversion).
+     * An AUTO_INCREMENT range table still takes the metadata-only trailing key add: the new key column
+     * is a constant, and the existing AUTO_INCREMENT values are not touched. The sort key is derived
+     * from the key columns, so the new key column joins it.
      */
     @Test
-    public void testAutoIncrementRangeAddKeyColUnaffected() throws Exception {
+    public void testAutoIncrementRangeAddKeyColMetadataOnly() throws Exception {
         starRocksAssert.withTable("create table t_add_meta_autoinc "
                 + "(k1 int not null, k2 int not null, id bigint not null auto_increment)\n"
                 + "duplicate key(k1, k2)\n"
-                + "order by(k1, k2)\n"
                 + "properties('replication_num' = '1');");
-        DdlException e = assertThrowsDdlException(() ->
-                buildAlterJob("t_add_meta_autoinc",
-                        "alter table t_add_meta_autoinc add column c int key default '0'"));
-        assertTrue(e.getMessage().toLowerCase(Locale.ROOT).contains("range distribution"),
-                "Expected 'range distribution' in: " + e.getMessage());
+        assertMetadataOnlyJob(buildAlterJob("t_add_meta_autoinc",
+                "alter table t_add_meta_autoinc add column c int key default '0'"));
     }
 
     /**

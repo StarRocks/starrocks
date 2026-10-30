@@ -11,9 +11,9 @@ PROPERTIES ('endpoint' = 'https://models.example.test/v1/chat/completions',
 
 SHOW AI PROVIDERS LIKE 'ai_chat_${uuid0}';
 
-EXPLAIN SELECT ai_custom_query('ai_chat_${uuid0}', 'prompt');
+EXPLAIN SELECT ai_complete(prompt => 'prompt', provider => 'ai_chat_${uuid0}', model => 'explicit-model');
 
-EXPLAIN SELECT ai_custom_query('ai_chat_${uuid0}', 'prompt', map{'temperature': 0.0});
+EXPLAIN SELECT ai_complete(prompt => 'prompt', provider => 'ai_chat_${uuid0}', model => 'explicit-model', options => json_object('temperature', 0.0));
 
 ALTER AI PROVIDER ai_chat_${uuid0} SET ('model' = 'chat-v2', 'timeout_ms' = '1000');
 
@@ -23,29 +23,29 @@ CREATE AI PROVIDER ai_embedding_${uuid0} TYPE embedding COMMENT 'integration emb
 PROPERTIES ('endpoint' = 'http://models.example.test/v1/embeddings',
 'model' = 'embedding-model', 'dimensions' = '256', 'timeout_ms' = '2500');
 
-EXPLAIN SELECT ai_custom_embedding('ai_embedding_${uuid0}', 'text');
+EXPLAIN SELECT ai_embed(input => 'text', provider => 'ai_embedding_${uuid0}', model => 'explicit-model');
 
-EXPLAIN SELECT ai_custom_embedding('ai_embedding_${uuid0}', 'text', map{'dimensions': 128});
+EXPLAIN SELECT ai_embed(input => 'text', provider => 'ai_embedding_${uuid0}', model => 'explicit-model', options => json_object('dimensions', 128));
 
-EXPLAIN SELECT ai_custom_embedding('ai_embedding_${uuid0}', 'text', CAST(NULL AS MAP<VARCHAR, JSON>));
+EXPLAIN SELECT ai_embed(input => 'text', provider => 'ai_embedding_${uuid0}', model => 'explicit-model', options => json_object());
 
 SHOW AI PROVIDERS LIKE 'ai_embedding_${uuid0}';
 
 ALTER AI PROVIDER ai_chat_${uuid0} SET ('protocol' = 'anthropic');
 
-EXPLAIN SELECT ai_custom_query('ai_chat_${uuid0}', 'prompt');
+EXPLAIN SELECT ai_complete(prompt => 'prompt', provider => 'ai_chat_${uuid0}', model => 'explicit-model');
 
 ALTER AI PROVIDER ai_chat_${uuid0} SET ('protocol' = 'openai');
 
-EXPLAIN SELECT ai_custom_query('ai_chat_${uuid0}', 'prompt');
+EXPLAIN SELECT ai_complete(prompt => 'prompt', provider => 'ai_chat_${uuid0}', model => 'explicit-model');
 
 ALTER AI PROVIDER ai_embedding_${uuid0} SET ('protocol' = 'cohere');
 
-EXPLAIN SELECT ai_custom_embedding('ai_embedding_${uuid0}', 'text');
+EXPLAIN SELECT ai_embed(input => 'text', provider => 'ai_embedding_${uuid0}', model => 'explicit-model');
 
 ALTER AI PROVIDER ai_embedding_${uuid0} SET ('protocol' = 'openai');
 
-EXPLAIN SELECT ai_custom_embedding('ai_embedding_${uuid0}', 'text');
+EXPLAIN SELECT ai_embed(input => 'text', provider => 'ai_embedding_${uuid0}', model => 'explicit-model');
 
 DROP AI PROVIDER ai_chat_${uuid0};
 

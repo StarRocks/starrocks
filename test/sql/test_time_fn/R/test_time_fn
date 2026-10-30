@@ -1,3 +1,25 @@
+-- name: test_dayofweek_iso
+select dayofweek_iso("2023-01-01");
+-- result:
+7
+-- !result
+select dayofweek_iso("2023-01-02");
+-- result:
+1
+-- !result
+select dayofweek_iso("2023-01-03");
+-- result:
+2
+-- !result
+select dayofweek_iso("");
+-- result:
+None
+-- !result
+select dayofweek_iso(NULL);
+-- result:
+None
+-- !result
+
 -- name: test_to_iso8601
 CREATE TABLE IF NOT EXISTS `to_iso8601_test`(
   `d1` DATE,
@@ -30,10 +52,10 @@ select to_iso8601(date'2020-01-01'), to_iso8601(datetime'2020-01-01 00:00:00'),t
 2020-01-01	2020-01-01T00:00:00.000000	2020-01-01T00:00:00.100000
 -- !result
 
--- name: sec_to_time
+-- name: test_sec_to_time
 select sec_to_time(NULL);
 -- result:
-NULL
+None
 -- !result
 select sec_to_time(0);
 -- result:

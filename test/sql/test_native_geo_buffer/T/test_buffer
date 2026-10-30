@@ -1,0 +1,14 @@
+-- name: test_native_geo_buffer
+
+SELECT ROUND(ST_Area(ST_Buffer(ST_GeomFromText('POINT (0 0)', 'EPSG:3857'), 1.0)), 6);
+SELECT ST_Area(ST_Buffer(ST_GeomFromText('POLYGON ((0 0,10 0,10 10,0 10,0 0))', 'EPSG:3857'), -1.0));
+SELECT ST_AsText(ST_Buffer(ST_GeomFromText('POLYGON ((0 0,10 0,10 10,0 10,0 0))', 'EPSG:3857'), -5.0));
+SELECT ST_AsText(ST_Buffer(ST_GeomFromText('POINT (0 0)', 'EPSG:4326'), 0));
+SELECT ST_AsText(ST_Buffer(ST_GeomFromText('POINT (0 0)', 'EPSG:3857'), NULL));
+SELECT ST_SRID(ST_Buffer(ST_GeomFromText('POINT (37 55)', 'EPSG:4326'), 1000)), ST_GeometryType(ST_Buffer(ST_GeomFromText('POINT (37 55)', 'EPSG:4326'), 1000));
+SELECT ST_AsText(ST_Buffer(ST_GeomFromText('MULTILINESTRING EMPTY', 'EPSG:3857'), 1));
+SELECT ST_GeometryType(ST_Buffer(ST_GeomFromText('MULTIPOINT ((0 0),(10 0))', 'EPSG:3857'), 1));
+SELECT ST_GeometryType(ST_Buffer(ST_GeomFromText('MULTIPOINT ((0 0),(1 0))', 'EPSG:3857'), 1));
+SET pipeline_dop=4;
+SELECT id, ST_Area(ST_Buffer(ST_GeomFromText('POLYGON ((0 0,10 0,10 10,0 10,0 0))', 'EPSG:3857'), r)) FROM (SELECT 1 AS id, CAST(0 AS DOUBLE) AS r UNION ALL SELECT 2, CAST(-1 AS DOUBLE) UNION ALL SELECT 3, CAST(NULL AS DOUBLE)) radii ORDER BY id;
+SET pipeline_dop=1;

@@ -1,0 +1,52 @@
+-- name: test_date_function_on_out_of_range_numeric_stats
+create database test_date_stats_${uuid0};
+-- result:
+-- !result
+use test_date_stats_${uuid0};
+-- result:
+-- !result
+CREATE TABLE t_ns (
+    k INT,
+    ts_nanos BIGINT
+)
+DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO t_ns VALUES (1, 1758412800000000000), (2, 1758499200000000000);
+-- result:
+-- !result
+ANALYZE TABLE t_ns WITH SYNC MODE;
+-- result:
+test_date_stats_${uuid0}.t_ns	analyze	status	OK
+-- !result
+SELECT k FROM t_ns WHERE date_trunc('day', ts_nanos) > '2020-01-01' ORDER BY k;
+-- result:
+-- !result
+SELECT k, date_trunc('day', ts_nanos) FROM t_ns ORDER BY k;
+-- result:
+1	None
+2	None
+-- !result
+SELECT k FROM t_ns WHERE to_date(ts_nanos) > '2020-01-01' ORDER BY k;
+-- result:
+-- !result
+SELECT k, to_days(ts_nanos) FROM t_ns ORDER BY k;
+-- result:
+1	None
+2	None
+-- !result
+SELECT k, week(ts_nanos, 0) FROM t_ns ORDER BY k;
+-- result:
+1	None
+2	None
+-- !result
+SELECT k, year(ts_nanos) FROM t_ns ORDER BY k;
+-- result:
+1	None
+2	None
+-- !result
+drop database test_date_stats_${uuid0};
+-- result:
+-- !result

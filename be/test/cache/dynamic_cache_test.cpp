@@ -16,7 +16,9 @@
 
 #include <gtest/gtest.h>
 
+#include <atomic>
 #include <iostream>
+#include <thread>
 #include <vector>
 
 #include "base/logging.h"
@@ -95,6 +97,25 @@ TEST(DynamicCacheTest, release_last_pin_evicts_if_over_capacity) {
     EXPECT_TRUE(cache.release_with_expire_time_evict_if_over_capacity(entry, MonotonicMillis() + 1000));
     EXPECT_EQ(0, cache.size());
     EXPECT_EQ(0, cache.object_size());
+}
+
+// peek_object_size() is for monitoring: it must neither pin an entry nor move it in the LRU list, or reading
+// sizes would change which entry gets evicted next.
+TEST(DynamicCacheTest, peek_object_size_keeps_lru_order) {
+    DynamicCache<int32_t, int64_t> cache(/*capacity=*/2);
+    for (int i = 0; i < 2; i++) {
+        auto* e = cache.get_or_create(i);
+        cache.update_object_size(e, 1);
+        cache.release(e);
+    }
+    // 0 is the least recently used entry. get() would have made it the most recently used.
+    EXPECT_EQ(1, cache.peek_object_size(0));
+    EXPECT_EQ(1, cache.peek_object_size(1));
+    EXPECT_EQ(0, cache.peek_object_size(2));
+
+    cache.set_capacity(1);
+    EXPECT_EQ(0, cache.peek_object_size(0));
+    EXPECT_EQ(1, cache.peek_object_size(1));
 }
 
 // Default tracker accounting is additive: a plain consume() walks the ancestor
@@ -203,6 +224,31 @@ TEST(DynamicCacheTest, get_all_entries) {
         ASSERT_EQ(i, e->key());
         cache.release(e);
     }
+}
+
+// capacity() is read without the cache lock (e.g. by background eviction) while set_capacity() may run
+// concurrently when the capacity is resized at runtime. Run under TSAN to catch a data race here.
+TEST(DynamicCacheTest, capacity_concurrent_with_set_capacity) {
+    DynamicCache<int32_t, int64_t> cache(100);
+    for (int i = 0; i < 100; i++) {
+        auto e = cache.get_or_create(i);
+        cache.update_object_size(e, 1);
+        cache.release(e);
+    }
+    std::atomic<bool> stop{false};
+    std::thread reader([&]() {
+        while (!stop.load()) {
+            const size_t capacity = cache.capacity();
+            ASSERT_TRUE(capacity == 100 || capacity == 50);
+        }
+    });
+    for (int i = 0; i < 1000; i++) {
+        cache.set_capacity(i % 2 == 0 ? 50 : 100);
+    }
+    stop.store(true);
+    reader.join();
+    ASSERT_EQ(100, cache.capacity());
+    ASSERT_LE(cache.size(), 100);
 }
 
 } // namespace starrocks

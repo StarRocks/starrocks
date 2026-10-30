@@ -101,6 +101,7 @@ using Morsels = std::vector<MorselPtr>;
 class ScanMorsel : public ScanMorselX {
 public:
     ScanMorsel(int32_t plan_node_id, const TScanRange& scan_range);
+    ScanMorsel(int32_t plan_node_id, TScanRange&& scan_range);
     ScanMorsel(int32_t plan_node_id, const TScanRangeParams& scan_range);
     ~ScanMorsel() override;
 
@@ -131,9 +132,14 @@ public:
 
     static void build_scan_morsels(int node_id, const std::vector<TScanRangeParams>& scan_ranges,
                                    bool accept_empty_scan_ranges, pipeline::Morsels* morsels, bool* has_more_morsel);
+    // Moves each scan range into its morsel instead of copying it.
+    static void build_scan_morsels(int node_id, std::vector<TScanRangeParams>&& scan_ranges,
+                                   bool accept_empty_scan_ranges, pipeline::Morsels* morsels, bool* has_more_morsel);
     static bool has_more_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges);
 
 private:
+    void _init_owner();
+
     std::unique_ptr<TScanRange> _scan_range;
     ScanSplitContextPtr _split_context = nullptr;
     bool _has_owner_id = false;

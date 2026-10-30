@@ -16,6 +16,7 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.gson.JsonObject;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.common.FeConstants;
@@ -156,8 +157,30 @@ public class PhysicalPartitionTest {
         p.gsonPostProcess();
         Assertions.assertEquals(p.getDataVersion(), p.getVisibleVersion());
         Assertions.assertEquals(p.getNextDataVersion(), p.getNextVersion());
-        Assertions.assertTrue(p.getVersionEpoch() > 0);
+        Assertions.assertEquals(0, p.getVersionEpoch());
         Assertions.assertEquals(p.getVersionTxnType(), TransactionType.TXN_NORMAL);
+    }
+
+    @Test
+    public void testConstructorLeavesVersionEpochUnassigned() {
+        PhysicalPartition physicalPartition = new PhysicalPartition(1L, 2L, new MaterializedIndex());
+        PhysicalPartition externalTablePartition = new PhysicalPartition(3L, 4L);
+        Partition partition = new Partition(5L, 6L, "p1", new MaterializedIndex(), null);
+
+        Assertions.assertEquals(0, physicalPartition.getVersionEpoch());
+        Assertions.assertEquals(0, externalTablePartition.getVersionEpoch());
+        Assertions.assertEquals(0, partition.getDefaultPhysicalPartition().getVersionEpoch());
+    }
+
+    @Test
+    public void testVersionEpochStaysZeroWhenAbsentFromStoredMetadata() {
+        PhysicalPartition partition = new PhysicalPartition(1L, 2L, new MaterializedIndex());
+        JsonObject json = GsonUtils.GSON.toJsonTree(partition).getAsJsonObject();
+        json.remove("versionEpoch");
+
+        PhysicalPartition restored = GsonUtils.GSON.fromJson(json, PhysicalPartition.class);
+
+        Assertions.assertEquals(0, restored.getVersionEpoch());
     }
 
     @Test
@@ -635,5 +658,19 @@ public class PhysicalPartitionTest {
         Assertions.assertFalse(partition.finishUnshare());
         Assertions.assertFalse(partition.isUnsharing());
         Assertions.assertEquals(children, partition.getQueryableBaseIndex());
+    }
+
+    @Test
+    public void testReleaseMinRetainVersionKeepsAPinSetByAnotherHolder() {
+        PhysicalPartition partition = new PhysicalPartition(1L, 2L, new MaterializedIndex());
+        partition.setMinRetainVersion(3);
+        Assertions.assertTrue(partition.releaseMinRetainVersion(3));
+        Assertions.assertEquals(0, partition.getMinRetainVersion());
+
+        partition.setMinRetainVersion(3);
+        // Another holder pinned a different version since.
+        partition.setMinRetainVersion(7);
+        Assertions.assertFalse(partition.releaseMinRetainVersion(3));
+        Assertions.assertEquals(7, partition.getMinRetainVersion());
     }
 }

@@ -26,6 +26,7 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
+import mockit.Injectable;
 import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -47,9 +48,18 @@ public class RefreshTableStmtTest {
     }
 
     @Test
+    // MetadataMgr stays @Mocked: the analyzer reads its own instance out of
+    // GlobalStateMgr.getCurrentState().getMetadataMgr(), not the one injected here, so the
+    // expectations recorded below only reach it because @Mocked covers every instance.
+    //
+    // Table and Database are only here to be non-null return values, and @Mocked covers every
+    // instance of them too -- including the ones the TabletChecker daemon walks while this test
+    // records. A call it makes then lands in this Expectations block as if the test had made it,
+    // and the next `result =` binds to that instead, which fails as a type mismatch far from its
+    // cause. @Injectable keeps the mock to the instance this test was handed.
     public void testRefreshTableParserAndAnalyzer(@Mocked MetadataMgr metadataMgr,
-                                                  @Mocked Table table,
-                                                  @Mocked Database database) {
+                                                  @Injectable Table table,
+                                                  @Injectable Database database) {
         new Expectations() {
             {
                 GlobalStateMgr.getCurrentState().getMetadataMgr();

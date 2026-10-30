@@ -20,6 +20,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.util.concurrent.lock.BlockingCallValidator;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.RemoteFileBlockDesc;
 import com.starrocks.connector.RemoteFileDesc;
@@ -67,6 +68,10 @@ public class HiveRemoteFileIO implements RemoteFileIO {
     }
 
     public Map<RemotePathKey, List<RemoteFileDesc>> getRemoteFiles(RemotePathKey pathKey, boolean expandWildCards) {
+        // Listing a partition's files on HDFS or an object store. CachingRemoteFileIO sits in
+        // front, so reaching here means the listing was not cached and really goes out.
+        // The single-argument overload delegates here.
+        BlockingCallValidator.validateNotUnderLock("remote-storage");
         ImmutableMap.Builder<RemotePathKey, List<RemoteFileDesc>> resultPartitions = ImmutableMap.builder();
         String path = pathKey.getPath();
         List<RemoteFileDesc> fileDescs = Lists.newArrayList();
@@ -238,6 +243,8 @@ public class HiveRemoteFileIO implements RemoteFileIO {
 
     @Override
     public FileStatus[] getFileStatus(Path... files) throws IOException {
+        // The other door out of this class: stats a path directly, no cache in front.
+        BlockingCallValidator.validateNotUnderLock("remote-storage");
         if (files == null || files.length <= 0) {
             return null;
         }

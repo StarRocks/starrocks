@@ -72,6 +72,9 @@ TEST(FlatJsonMetricsTest, InstallRegistersDurationAndCompactionMetrics) {
 
     metrics.flat_json_compaction_schema_change_total.increment(11);
     assert_metric_value(&registry, "flat_json_compaction_schema_change_total", "11");
+
+    metrics.flat_json_compaction_streaming_total.increment(12);
+    assert_metric_value(&registry, "flat_json_compaction_streaming_total", "12");
 }
 
 } // namespace starrocks

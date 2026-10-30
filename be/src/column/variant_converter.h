@@ -19,6 +19,7 @@
 
 #include "base/statusor.h"
 #include "base/string/string_parser.hpp"
+#include "base/time/tz_offset_cache.h"
 #include "column/column_builder.h"
 #include "column/runtime_type_traits.h"
 #include "types/date_value.h"
@@ -54,12 +55,16 @@ public:
     static Status cast_to_string(const VariantRowRef& row, const cctz::time_zone& zone,
                                  ColumnBuilder<TYPE_VARCHAR>& result);
 
-    static Status cast_to_date(const VariantRowRef& row, const cctz::time_zone& zone, ColumnBuilder<TYPE_DATE>& result);
+    // offset_cache, when given, is bound to `zone` (TzOffsetCache::bind) by the caller and converts TIMESTAMP_TZ
+    // values without a cctz conversion per row.
+    static Status cast_to_date(const VariantRowRef& row, const cctz::time_zone& zone, ColumnBuilder<TYPE_DATE>& result,
+                               TzOffsetCache* offset_cache = nullptr);
 
-    static Status cast_to_time(const VariantRowRef& row, const cctz::time_zone& zone, ColumnBuilder<TYPE_TIME>& result);
+    static Status cast_to_time(const VariantRowRef& row, const cctz::time_zone& zone, ColumnBuilder<TYPE_TIME>& result,
+                               TzOffsetCache* offset_cache = nullptr);
 
     static Status cast_to_datetime(const VariantRowRef& row, const cctz::time_zone& zone,
-                                   ColumnBuilder<TYPE_DATETIME>& result);
+                                   ColumnBuilder<TYPE_DATETIME>& result, TzOffsetCache* offset_cache = nullptr);
 
     template <LogicalType ResultType>
     static Status cast_to_arithmetic(const VariantRowRef& row, ColumnBuilder<ResultType>& result) {
@@ -111,7 +116,8 @@ public:
     // If AllowThrowException is true, returns an error Status on cast failure.
     // If AllowThrowException is false, appends null on cast failure and returns OK.
     template <LogicalType ResultType, bool AllowThrowException>
-    static Status cast_to(const VariantRowRef& row, const cctz::time_zone& zone, ColumnBuilder<ResultType>& result) {
+    static Status cast_to(const VariantRowRef& row, const cctz::time_zone& zone, ColumnBuilder<ResultType>& result,
+                          TzOffsetCache* offset_cache = nullptr) {
         const VariantType variant_type = row.get_value().type();
         // Supported types: arithmetic, string, variant
         // Some casting require more information like target type within ARRAY/MAP/STRUCT which is not available here:
@@ -147,11 +153,11 @@ public:
         } else if constexpr (lt_is_string<ResultType>) {
             status = cast_to_string(row, zone, result);
         } else if constexpr (ResultType == TYPE_DATE) {
-            status = cast_to_date(row, zone, result);
+            status = cast_to_date(row, zone, result, offset_cache);
         } else if constexpr (ResultType == TYPE_DATETIME) {
-            status = cast_to_datetime(row, zone, result);
+            status = cast_to_datetime(row, zone, result, offset_cache);
         } else if constexpr (ResultType == TYPE_TIME) {
-            status = cast_to_time(row, zone, result);
+            status = cast_to_time(row, zone, result, offset_cache);
         }
 
         if (!status.ok()) {

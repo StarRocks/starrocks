@@ -243,6 +243,12 @@ public:
         return *this;
     }
 
+    // See DeltaWriterBuilder::set_multi_node_write.
+    AsyncDeltaWriterBuilder& set_multi_node_write(bool multi_node_write) {
+        _multi_node_write = multi_node_write;
+        return *this;
+    }
+
     StatusOr<AsyncDeltaWriterPtr> build();
 
 private:
@@ -266,6 +272,7 @@ private:
     BundleWritableFileContext* _bundle_writable_file_context{nullptr};
     GlobalDictByNameMaps* _global_dicts = nullptr;
     bool _is_multi_statements_txn = false;
+    bool _multi_node_write = false;
 };
 
 } // namespace starrocks::lake

@@ -434,6 +434,18 @@ void SpillableHashJoinProbeOperator::_reset_load_partitions() {
 }
 
 Status SpillableHashJoinProbeOperator::_restore_probe_partition(RuntimeState* state) {
+    // The probe-side spiller flushes and splits its partitions on IO tasks, and those tasks report a
+    // failure only through its task status. Once the probe stops pushing, nothing consults it any
+    // more: Spiller::partitioned_spill() checks it on the way in, but this loop drives the readers
+    // directly and neither SpillerReader::trigger_restore() nor SpillerReader::restore() looks at the
+    // spiller, while _status() only covers the build side. Without this check a probe partition whose
+    // flush died half-way is read back as if it were complete.
+    //
+    // This belongs here rather than in _status(): _status() also runs on the build-side restore IO
+    // tasks, which can outlive close(), and close() drops _probe_spiller -- reading it from there
+    // would race. _restore_probe_partition() only ever runs on the driver thread, as does close().
+    RETURN_IF_ERROR(_probe_spiller->task_status());
+
     for (size_t i = 0; i < _probers.size(); ++i) {
         auto guard = TRACKER_WITH_SPILLER_RES_GUARD(state, _probe_spiller, std::weak_ptr(_current_reader[i]));
         // probe partition has been processed
@@ -460,7 +472,12 @@ StatusOr<ChunkPtr> SpillableHashJoinProbeOperator::pull_chunk(RuntimeState* stat
     if (!spilled()) {
         return HashJoinProbeOperator::pull_chunk(state);
     }
+    ASSIGN_OR_RETURN(auto chunk, _pull_chunk_from_spilled_partitions(state));
+    eval_runtime_bloom_filters_keep_nulls(chunk.get());
+    return chunk;
+}
 
+StatusOr<ChunkPtr> SpillableHashJoinProbeOperator::_pull_chunk_from_spilled_partitions(RuntimeState* state) {
     _check_partitions();
 
     auto all_probe_partition_is_empty = [this]() {

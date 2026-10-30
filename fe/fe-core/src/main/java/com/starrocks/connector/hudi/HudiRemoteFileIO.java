@@ -19,6 +19,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
+import com.starrocks.common.util.concurrent.lock.BlockingCallValidator;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileIO;
 import com.starrocks.connector.RemoteFileScanContext;
@@ -37,7 +38,9 @@ import org.apache.hudi.common.model.HoodieLogFile;
 import org.apache.hudi.common.table.HoodieTableMetaClient;
 import org.apache.hudi.common.table.timeline.HoodieInstant;
 import org.apache.hudi.common.table.timeline.HoodieTimeline;
+import org.apache.hudi.common.table.view.HoodieTableFileSystemView;
 import org.apache.hudi.common.util.Option;
+import org.apache.hudi.metadata.HoodieTableMetadata;
 import org.apache.hudi.storage.StoragePath;
 import org.apache.hudi.storage.hadoop.HadoopStorageConfiguration;
 import org.apache.logging.log4j.LogManager;
@@ -52,7 +55,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
-import static org.apache.hudi.common.table.view.FileSystemViewManager.createInMemoryFileSystemViewWithTimeline;
 
 public class HudiRemoteFileIO implements RemoteFileIO {
     private static final Logger LOG = LogManager.getLogger(HudiRemoteFileIO.class);
@@ -76,8 +78,12 @@ public class HudiRemoteFileIO implements RemoteFileIO {
                 HoodieTimeline timeline = metaClient.getCommitsAndCompactionTimeline().filterCompletedInstants();
                 Option<HoodieInstant> lastInstant = timeline.lastInstant();
                 if (lastInstant.isPresent()) {
-                    ctx.hudiFsView =
-                            createInMemoryFileSystemViewWithTimeline(engineContext, metaClient, metadataConfig, timeline);
+                    // Reuse the metadata readers across this scan. The default factory hardcodes
+                    // reuse = false, so every partition reopens them and re-reads the rollback
+                    // metadata that opening them recomputes.
+                    HoodieTableMetadata tableMetadata = HoodieTableMetadata.create(
+                            engineContext, metaClient.getStorage(), metadataConfig, ctx.tableLocation, true);
+                    ctx.hudiFsView = new HoodieTableFileSystemView(tableMetadata, metaClient, timeline);
                     ctx.hudiLastInstant = lastInstant.get();
                     ctx.hudiTimeline = timeline;
                 }
@@ -115,6 +121,17 @@ public class HudiRemoteFileIO implements RemoteFileIO {
         ImmutableMap.Builder<RemotePathKey, List<RemoteFileDesc>> resultPartitions = ImmutableMap.builder();
         List<RemoteFileDesc> fileDescs = Lists.newArrayList();
 
+        // Everything above is local: a missing table location throws without touching storage, so the
+        // guard belongs here rather than at the method's entry, where it would report a wait that never
+        // happens (and in error mode would mask the argument error). From here on createHudiContext reads
+        // the table's Hudi timeline -- and, with the metadata table enabled, that table too -- before the
+        // partition's file slices are listed. CachingRemoteFileIO sits in front, so reaching here means
+        // the listing was not cached and really goes out. This is the only door out of the Hudi connector
+        // that does not pass through the HMS client: everything else in HudiMetadata is hmsOps.
+        //
+        // Outside the try on purpose: the catch below wraps everything in StarRocksConnectorException, and
+        // the refusal error mode raises has to reach the caller as itself.
+        BlockingCallValidator.validateNotUnderLock("remote-storage");
         try {
             createHudiContext(scanContext);
             if (scanContext.hudiLastInstant == null) {

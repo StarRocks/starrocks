@@ -1,0 +1,19 @@
+-- name: test_cte_consume_duplicate_column
+-- A CTE that outputs one column under two names, read by consumers that each filter their input.
+-- With a large CTE (here forced by cbo_cte_force_reuse_node_count) the consumers map two slots onto
+-- one produced column; the consume predicate must not filter that shared column twice.
+create database db_${uuid0};
+use db_${uuid0};
+create table t (k int, s varchar(64)) duplicate key(k) distributed by hash(k) buckets 4 properties("replication_num" = "1");
+insert into t select g, concat('s', g) from table(generate_series(1, 10000)) as x(g);
+set cbo_cte_reuse = true;
+set cbo_cte_reuse_rate = 0;
+set cbo_cte_force_reuse_node_count = 1;
+with c(k, x, x2, inst) as (select k, s, s, if(k % 2 = 0, 'even', 'odd') from t)
+select inst, count(*), sum(k), sum(if(x = x2, 1, 0)), min(x), max(x2)
+from (select inst, k, x, x2 from c where inst = 'even' union all select inst, k, x, x2 from c where inst = 'odd') u
+group by inst order by inst;
+with c(k, mn, mn2, mx, mx2) as (select k % 100, min(s), min(s), max(s), max(s) from t group by k % 100)
+select count(*), sum(if(mn = mn2, 1, 0)), sum(if(mx = mx2, 1, 0)), min(mn2), max(mx2)
+from (select k, mn, mn2, mx, mx2 from c where k < 30 union all select k, mn, mn2, mx, mx2 from c where k >= 60) u;
+drop database db_${uuid0};

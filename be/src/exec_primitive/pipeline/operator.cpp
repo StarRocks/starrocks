@@ -238,12 +238,20 @@ void Operator::eval_runtime_bloom_filters(Chunk* chunk) {
         return;
     }
 
+    eval_runtime_bloom_filters_keep_nulls(chunk);
+
+    ChunkPredicateEvaluator::eval_filter_null_values(chunk, _runtime_access->get_filter_null_value_columns());
+}
+
+void Operator::eval_runtime_bloom_filters_keep_nulls(Chunk* chunk) {
+    if (chunk == nullptr || chunk->is_empty()) {
+        return;
+    }
+
     if (auto* bloom_filters = _runtime_access->get_runtime_bloom_filters()) {
         _init_rf_counters(true);
         bloom_filters->evaluate(chunk, _bloom_filter_eval_context);
     }
-
-    ChunkPredicateEvaluator::eval_filter_null_values(chunk, _runtime_access->get_filter_null_value_columns());
 }
 
 void Operator::_init_rf_counters(bool init_bloom) {

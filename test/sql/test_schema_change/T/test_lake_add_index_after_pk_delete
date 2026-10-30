@@ -1,0 +1,53 @@
+-- name: test_lake_add_index_after_pk_delete @cloud
+-- A DELETE on a primary key table writes only the key columns, and each of its
+-- flushes leaves a zero-row segment beside the .del file. That segment does not
+-- physically hold the value columns, so the ADD INDEX fast path must skip it
+-- instead of cancelling the alter for a NOT NULL column without a default.
+create database lake_idx_pk_del_${uuid0};
+use lake_idx_pk_del_${uuid0};
+
+CREATE TABLE t1 (
+    k1 int NOT NULL,
+    v1 int NOT NULL,
+    v2 varchar(32) NOT NULL
+) PRIMARY KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+insert into t1 select x, 10 * (x % 6 + 1), concat('s_', x) from table(generate_series(1, 600)) t(x);
+delete from t1 where k1 <= 6;
+
+-- wait_alter_table_finish() fails the case unless the job reaches FINISHED.
+ALTER TABLE t1 ADD INDEX idx_v1(v1) USING BITMAP;
+function: wait_alter_table_finish()
+ALTER TABLE t1 SET ("bloom_filter_columns" = "v2");
+function: wait_alter_table_finish()
+
+select count(*) from t1;
+select count(*) from t1 where v1 = 20;
+select count(*) from t1 where v2 = 's_300';
+select count(*) from t1 where v2 = 's_3';
+
+-- Both indexes were built for the segment holding the inserted rows, and scans read them.
+set enable_profile = true;
+set enable_async_profile = false;
+[UC]select count(*) from t1 where v1 = 20;
+create table profile_bitmap properties("replication_num"="1") as
+    select line from table(unnest(split(get_query_profile(last_query_id()), "\n"))) t(line);
+select assert_true(max(cast(coalesce(nullif(regexp_extract(line, '.*- BitmapIndexIteratorInit: ([0-9.]+).*', 1), ''), '0') as double)) > 0)
+    from profile_bitmap
+    where line like '%- BitmapIndexIteratorInit%';
+[UC]select count(*) from t1 where v2 = 's_300';
+create table profile_bloom properties("replication_num"="1") as
+    select line from table(unnest(split(get_query_profile(last_query_id()), "\n"))) t(line);
+select assert_true(max(cast(coalesce(nullif(regexp_extract(line, '.*- BloomFilterFilter: ([0-9.]+).*', 1), ''), '0') as double)) > 0)
+    from profile_bloom
+    where line like '%- BloomFilterFilter:%';
+
+-- Writes after the alter keep working on the indexed schema.
+insert into t1 values (1, 20, 's_1');
+delete from t1 where k1 = 600;
+select count(*) from t1 where v1 = 20;
+select * from t1 where k1 in (1, 600) order by k1;
+
+drop database lake_idx_pk_del_${uuid0};

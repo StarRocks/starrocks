@@ -22,17 +22,20 @@
 #include <thread>
 #include <vector>
 
+#include "base/container/lru_cache.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
+#include "base/testutil/scoped_updater.h"
+#include "common/config_primary_key_fwd.h"
 #include "fs/fs_util.h"
 #include "storage/del_vector.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/metacache.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
-#include "storage/lake/update_manager.h"
 
 namespace starrocks::lake {
 
@@ -45,8 +48,9 @@ public:
 
         _location_provider = std::make_shared<FixedLocationProvider>(kTestDir);
         _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
-        _update_manager = std::make_unique<lake::UpdateManager>(_location_provider, _mem_tracker.get());
-        _tablet_manager = std::make_unique<lake::TabletManager>(_location_provider, _update_manager.get(), 1638400000);
+        _primary_key_manager = std::make_unique<lake::PrimaryKeyManager>(_location_provider, _mem_tracker.get());
+        _tablet_manager =
+                std::make_unique<lake::TabletManager>(_location_provider, _primary_key_manager.get(), 1638400000);
     }
 
     void TearDown() override { (void)FileSystem::Default()->delete_dir_recursive(kTestDir); }
@@ -56,7 +60,7 @@ protected:
     std::shared_ptr<LocationProvider> _location_provider;
     std::unique_ptr<TabletManager> _tablet_manager;
     std::unique_ptr<MemTracker> _mem_tracker;
-    std::unique_ptr<UpdateManager> _update_manager;
+    std::unique_ptr<PrimaryKeyManager> _primary_key_manager;
 };
 
 // Test load_from_meta with empty pdelvec pointer
@@ -491,6 +495,73 @@ TEST_F(LakeDelvecLoaderTest, test_load_with_pk_builder) {
     st = loader.load(tsid, version, &pdelvec);
     // The load should succeed (either found in builder or loaded from file)
     ASSERT_TRUE(st.ok());
+}
+
+TEST_F(LakeDelvecLoaderTest, test_refresh_mem_limits) {
+    SCOPED_UPDATE(int32_t, config::lake_pk_preload_memory_limit_percent, 30);
+    SCOPED_UPDATE(int32_t, config::lake_pk_index_block_cache_limit_percent, 10);
+    MemTracker primary_key_tracker(1000, "primary_key");
+    PrimaryKeyManager manager(_location_provider, &primary_key_tracker);
+    ASSERT_EQ(1000, manager.index_cache().capacity());
+    ASSERT_EQ(300, manager.update_state_mem_tracker()->limit());
+    ASSERT_EQ(300, manager.compaction_state_mem_tracker()->limit());
+    ASSERT_EQ(100, manager.block_cache()->cache()->get_capacity());
+
+    config::lake_pk_preload_memory_limit_percent = 50;
+    primary_key_tracker.set_limit(2000);
+    manager.refresh_mem_limits();
+    ASSERT_EQ(2000, manager.index_cache().capacity());
+    ASSERT_EQ(1000, manager.update_state_mem_tracker()->limit());
+    ASSERT_EQ(1000, manager.compaction_state_mem_tracker()->limit());
+    ASSERT_EQ(200, manager.block_cache()->cache()->get_capacity());
+
+    // out-of-range values are clamped to [0, 100]
+    config::lake_pk_preload_memory_limit_percent = 200;
+    manager.refresh_mem_limits();
+    ASSERT_EQ(2000, manager.update_state_mem_tracker()->limit());
+    ASSERT_EQ(2000, manager.compaction_state_mem_tracker()->limit());
+}
+
+TEST_F(LakeDelvecLoaderTest, test_refresh_preload_mem_limit) {
+    SCOPED_UPDATE(int32_t, config::lake_pk_preload_memory_limit_percent, 30);
+    MemTracker primary_key_tracker(1000, "primary_key");
+    PrimaryKeyManager manager(_location_provider, &primary_key_tracker);
+    ASSERT_EQ(300, manager.update_state_mem_tracker()->limit());
+    ASSERT_EQ(300, manager.compaction_state_mem_tracker()->limit());
+
+    config::lake_pk_preload_memory_limit_percent = 50;
+    manager.refresh_preload_mem_limit();
+    ASSERT_EQ(500, manager.update_state_mem_tracker()->limit());
+    ASSERT_EQ(500, manager.compaction_state_mem_tracker()->limit());
+
+    // out-of-range values are clamped to [0, 100]
+    config::lake_pk_preload_memory_limit_percent = 200;
+    manager.refresh_preload_mem_limit();
+    ASSERT_EQ(1000, manager.update_state_mem_tracker()->limit());
+    ASSERT_EQ(1000, manager.compaction_state_mem_tracker()->limit());
+    config::lake_pk_preload_memory_limit_percent = -1;
+    manager.refresh_preload_mem_limit();
+    ASSERT_EQ(0, manager.update_state_mem_tracker()->limit());
+    ASSERT_EQ(0, manager.compaction_state_mem_tracker()->limit());
+}
+
+TEST_F(LakeDelvecLoaderTest, test_refresh_block_cache_mem_limit) {
+    SCOPED_UPDATE(int32_t, config::lake_pk_index_block_cache_limit_percent, 10);
+    MemTracker primary_key_tracker(1000, "primary_key");
+    PrimaryKeyManager manager(_location_provider, &primary_key_tracker);
+    ASSERT_EQ(100, manager.block_cache()->cache()->get_capacity());
+
+    config::lake_pk_index_block_cache_limit_percent = 50;
+    manager.refresh_block_cache_mem_limit();
+    ASSERT_EQ(500, manager.block_cache()->cache()->get_capacity());
+
+    // out-of-range values are clamped to [0, 100]
+    config::lake_pk_index_block_cache_limit_percent = 200;
+    manager.refresh_block_cache_mem_limit();
+    ASSERT_EQ(1000, manager.block_cache()->cache()->get_capacity());
+    config::lake_pk_index_block_cache_limit_percent = -1;
+    manager.refresh_block_cache_mem_limit();
+    ASSERT_EQ(0, manager.block_cache()->cache()->get_capacity());
 }
 
 } // namespace starrocks::lake

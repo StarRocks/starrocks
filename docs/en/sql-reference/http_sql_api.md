@@ -50,6 +50,14 @@ Authorization: Basic <credentials>
 
 Basic authentication is used, that is, enter the username and password for `credentials` (`-u '<username>:<password>'`). If no password is set for the username, you can pass in only `<username>:` and leave the password empty. For example, if the root account is used, you can enter `-u 'root:'`.
 
+A token issued by your identity provider is also accepted, if a JWT or OAuth 2.0 [security integration](../administration/user_privs/authentication/security_integration.md) is configured:
+
+```shell
+Authorization: Bearer <token>
+```
+
+No username is sent with a token: StarRocks takes it from the claim named by the integration's `principal_field`. For which credential each kind of user can send, see [Where each authentication method works](../administration/user_privs/authentication/authentication.mdx#where-each-authentication-method-works).
+
 ### Request body
 
 ```shell

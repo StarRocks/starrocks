@@ -1,0 +1,14 @@
+-- name: test_encode_fingerprint_sha256_v2
+-- v1 writes a string with no length, so ('a', 5) and ('a\x03\x05\x00\x00', NULL) hash alike; v2 must not.
+CREATE TABLE t_fp_v2 (id INT, s VARCHAR(32), i INT)
+  DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1
+  PROPERTIES("replication_num" = "1");
+INSERT INTO t_fp_v2 VALUES (1, 'a', 5), (2, unhex('6103050000'), NULL);
+SELECT count(DISTINCT encode_fingerprint_sha256(s, i)) FROM t_fp_v2;
+SELECT count(DISTINCT encode_fingerprint_sha256_v2(s, i)) FROM t_fp_v2;
+SELECT id, hex(encode_fingerprint_sha256_v2(s, i)) FROM t_fp_v2 ORDER BY id;
+SELECT encode_fingerprint_sha256(concat('a', char(8)), 'b') = encode_fingerprint_sha256('a', concat(char(8), 'b'));
+SELECT encode_fingerprint_sha256_v2(concat('a', char(8)), 'b') = encode_fingerprint_sha256_v2('a', concat(char(8), 'b'));
+SELECT encode_fingerprint_sha256_v2('', concat(char(8), '')) = encode_fingerprint_sha256_v2(char(8), '');
+SELECT encode_fingerprint_sha256_v2(CAST(NULL AS INT), 'a') IS NULL;
+SELECT count(*) FROM t_fp_v2 WHERE encode_fingerprint_sha256_v2(s, CAST(5 AS INT)) = encode_fingerprint_sha256_v2(s, i);

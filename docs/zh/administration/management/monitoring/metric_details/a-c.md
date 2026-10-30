@@ -48,6 +48,27 @@ description: "Alphabetical a - c"
 - 单位：计数
 - 描述：tablet delta writer 线程池中排队的任务数量。
 
+## `authentication_failure_reason_total`
+
+- 单位: 个
+- 类型: Counter
+- 描述: 认证失败次数，按失败原因（`reason`）打标签，取值为 `malformed`、`no_matching_si`、`signature_fail`、`expired`、`claim_mismatch`、`bad_credential`、`disabled`、`internal`。HTTP 响应对客户端一律只报 `invalid_token`，真实原因只能从这个指标看。
+- 引入版本: v4.2
+
+## `authentication_failure_total`
+
+- 单位: 个
+- 类型: Counter
+- 描述: 认证失败次数，用两个相互独立的标签：`channel` 表示凭据从哪条通道进来，取值为 `mysql`、`http`、`arrow_flight`、`thrift_load`、`thrift_gateway`；`kind` 表示凭据该怎么解读，取值为 `mysql_native_scramble`、`mysql_oauth2_client`、`gssapi_token`、`plain_password`、`bearer_token`。按 `channel` 聚合可区分是哪条通道在失败——HTTP、Arrow Flight，还是 BE 到 FE 的导入 RPC；按 `kind` 聚合可看 Bearer 认证整体是否健康。
+- 引入版本: v4.2
+
+## `authentication_success_total`
+
+- 单位: 个
+- 类型: Counter
+- 描述: 认证成功次数，按 `channel` 和 `kind` 打标签，取值同 `authentication_failure_total`。
+- 引入版本: v4.2
+
 ## `base_compaction_task_byte_per_second`
 
 - 单位：字节/秒
@@ -464,6 +485,21 @@ description: "Alphabetical a - c"
 
 - 单位：字节
 - 描述：合并操作使用的内存。
+
+## `zstd_compression_dict_build_fallback`
+
+- 单位：计数
+- 描述：符合压缩字典条件的列最终没有拿到字典、按普通 ZSTD 写出的累计次数。原因可能是试压页带字典后不够小（见 `zstd_compression_dict_min_gain`），也可能是字典构建失败。按“writer + Segment”计数——与 `zstd_compression_dict_pages_written` 一样，打平 JSON 列的每个打平子列各是一个 writer。只统计尝试过字典的 writer：数据页太小无法用于采样不计入本项（写入端会改用后面的页再试），根本没走到试压的列（被字典编码、或长度不够跑完试压）也不计入，因此本项与 `zstd_compression_dict_pages_written` 之和并不等于被指定的列数。该值相对于 `zstd_compression_dict_pages_written` 偏高，说明由表属性 `zstd_compression_columns` 指定的列很少真正用上压缩字典。
+
+## `zstd_compression_dict_bytes`
+
+- 单位：字节
+- 描述：写入 Segment 文件的压缩字典页的累计磁盘占用大小。将其除以 `zstd_compression_dict_pages_written` 即可得到平均字典大小，该大小受 `zstd_compression_dict_sample_bytes` 限制。
+
+## `zstd_compression_dict_pages_written`
+
+- 单位：计数
+- 描述：写入 Segment 文件的压缩字典页的累计数量。每个 Segment 的每个列 writer 最多写入一个字典页，而打平的 JSON 列会为每个打平子列各建一个 writer、各自可能写出自己的字典页。因此该指标统计的是实际用上压缩字典的 writer 数——既不是 schema 列数，也不是使用字典压缩的数据页数量。
 
 ## `consistency_mem_bytes`
 

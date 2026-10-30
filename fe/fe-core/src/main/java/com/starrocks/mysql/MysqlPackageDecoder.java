@@ -34,6 +34,17 @@ public class MysqlPackageDecoder {
     private int sequenceId = 0;
     private ByteBuffer currentPayload = null;
     private ByteBuffer headerPackage = null;
+    // With the compressed protocol only the compressed packets' sequence ids are kept in order by clients, so
+    // like the MySQL server we do not check the ids of the packets inside them.
+    private final boolean verifySequenceId;
+
+    public MysqlPackageDecoder() {
+        this(true);
+    }
+
+    public MysqlPackageDecoder(boolean verifySequenceId) {
+        this.verifySequenceId = verifySequenceId;
+    }
 
     private static final class HeaderDecoder {
         private final int length;
@@ -82,7 +93,7 @@ public class MysqlPackageDecoder {
             if (currentPayload == null) {
                 currentPayload = ByteBuffer.allocate(packageLen);
             }
-            if (sequenceId != headerDecoder.getSeq()) {
+            if (verifySequenceId && sequenceId != headerDecoder.getSeq()) {
                 LOG.warn("receive packet sequence id[{}] expected[{}]", headerDecoder.getSeq(), sequenceId);
                 throw new IllegalStateException(
                         "receive packet sequence id[" + headerDecoder.getSeq() + "] expected[" + sequenceId + "]");

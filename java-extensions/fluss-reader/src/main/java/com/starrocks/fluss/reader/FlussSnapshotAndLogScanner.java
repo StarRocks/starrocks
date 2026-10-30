@@ -15,7 +15,7 @@
 package com.starrocks.fluss.reader;
 
 import org.apache.fluss.client.table.Table;
-import org.apache.fluss.flink.lake.reader.LakeSnapshotAndLogSplitScanner;
+import org.apache.fluss.client.table.scanner.batch.LakeSnapshotAndLogSplitScanner;
 import org.apache.fluss.flink.lake.split.LakeSnapshotAndFlussLogSplit;
 import org.apache.fluss.lake.source.LakeSource;
 import org.apache.fluss.lake.source.LakeSplit;
@@ -49,7 +49,11 @@ public class FlussSnapshotAndLogScanner extends ConnectorScannerProxy {
 
     @Override
     void open() throws IOException {
-        batchScanner = new LakeSnapshotAndLogSplitScanner(table, lakeSource, split, projectedFields);
+        long stoppingOffset = split.getStoppingOffset().orElseThrow(
+                () -> new IllegalArgumentException("Stopping offset is required for Fluss hybrid split: " + split));
+        batchScanner = new LakeSnapshotAndLogSplitScanner(
+                table, lakeSource, split.getLakeSplits(), split.getTableBucket(),
+                split.getStartingOffset(), stoppingOffset, projectedFields);
     }
 
     @Override

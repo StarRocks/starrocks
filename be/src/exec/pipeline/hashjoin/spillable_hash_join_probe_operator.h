@@ -111,6 +111,8 @@ private:
 
     Status _restore_probe_partition(RuntimeState* state);
 
+    StatusOr<ChunkPtr> _pull_chunk_from_spilled_partitions(RuntimeState* state);
+
     // some DCHECK for hash table/partition num_rows
     void _check_partitions();
 

@@ -131,7 +131,7 @@ public class LogAction extends WebBaseAction {
         buffer.append("<br/><h2>Log Contents</h2>");
 
         final String logPath = Config.sys_log_dir + "/fe.warn.log";
-        buffer.append("Log path is: " + logPath + "<br/>");
+        buffer.append("Log path is: " + Encode.forHtml(logPath) + "<br/>");
 
         RandomAccessFile raf = null;
         try {
@@ -150,10 +150,10 @@ public class LogAction extends WebBaseAction {
             buffer.append("</pre>");
         } catch (FileNotFoundException e) {
             buffer.append("<p class=\"text-error\">Couldn't open log file: "
-                    + logPath + "</p>");
+                    + Encode.forHtml(logPath) + "</p>");
         } catch (IOException e) {
             buffer.append("<p class=\"text-error\">Failed to read log file: "
-                    + logPath + "</p>");
+                    + Encode.forHtml(logPath) + "</p>");
         } finally {
             try {
                 if (raf != null) {
