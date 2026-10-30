@@ -304,6 +304,11 @@ public class OlapTable extends Table {
 
     protected Map<Long, Long> doubleWritePartitions = new HashMap<>();
 
+    // Online optimize: temp partition id -> the source partition version its rewrite copies. Absent until the
+    // job fixes it; until then a load committing a double write leaves the temp partition out, because the
+    // rewrite will copy that load from the source partition. See OnlineOptimizeJobV2.fixRewriteVersion.
+    protected Map<Long, Long> doubleWriteRewriteVersions = new HashMap<>();
+
     // Both the following two flags are used by StarMgrMetaSyncer
     private long lastCollectProfileTime = 0;
 
@@ -491,10 +496,24 @@ public class OlapTable extends Table {
 
     public void clearDoubleWritePartition() {
         doubleWritePartitions.clear();
+        doubleWriteRewriteVersions.clear();
     }
 
     public Map<Long, Long> getDoubleWritePartitions() {
         return doubleWritePartitions;
+    }
+
+    public void setDoubleWriteRewriteVersion(long tempPartitionId, long version) {
+        doubleWriteRewriteVersions.put(tempPartitionId, version);
+    }
+
+    /**
+     * The source partition version the online optimize rewrite of this temp partition copies, or null while the job
+     * has not fixed it yet.
+     */
+    @Nullable
+    public Long getDoubleWriteRewriteVersion(long tempPartitionId) {
+        return doubleWriteRewriteVersions.get(tempPartitionId);
     }
 
     public boolean hasShardGroupChanged() {
