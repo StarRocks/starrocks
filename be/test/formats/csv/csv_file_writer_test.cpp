@@ -65,10 +65,10 @@ protected:
 
 TEST_F(CSVFileWriterTest, TestWriteIntergers) {
     std::vector<TypeDescriptor> type_descs{
-            TypeDescriptor::from_logical_type(TYPE_TINYINT),
-            TypeDescriptor::from_logical_type(TYPE_SMALLINT),
-            TypeDescriptor::from_logical_type(TYPE_INT),
-            TypeDescriptor::from_logical_type(TYPE_BIGINT),
+            TYPE_TINYINT_DESC,
+            TYPE_SMALLINT_DESC,
+            TYPE_INT_DESC,
+            TYPE_BIGINT_DESC,
     };
     auto column_names = _make_type_names(type_descs);
     auto maybe_output_file = _fs.new_writable_file(_file_path);
@@ -84,25 +84,25 @@ TEST_F(CSVFileWriterTest, TestWriteIntergers) {
 
     auto chunk = std::make_shared<Chunk>();
     {
-        auto col0 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_TINYINT), true);
+        auto col0 = ColumnHelper::create_column(TYPE_TINYINT_DESC, true);
         std::vector<int8_t> int8_nums{INT8_MIN, INT8_MAX, 0, 1};
         auto count = col0->append_numbers(int8_nums.data(), size(int8_nums) * sizeof(int8_t));
         ASSERT_EQ(4, count);
         chunk->append_column(std::move(col0), chunk->num_columns());
 
-        auto col1 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_SMALLINT), true);
+        auto col1 = ColumnHelper::create_column(TYPE_SMALLINT_DESC, true);
         std::vector<int16_t> int16_nums{INT16_MIN, INT16_MAX, 0, 1};
         count = col1->append_numbers(int16_nums.data(), size(int16_nums) * sizeof(int16_t));
         ASSERT_EQ(4, count);
         chunk->append_column(std::move(col1), chunk->num_columns());
 
-        auto col2 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_INT), true);
+        auto col2 = ColumnHelper::create_column(TYPE_INT_DESC, true);
         std::vector<int32_t> int32_nums{INT32_MIN, INT32_MAX, 0, 1};
         count = col2->append_numbers(int32_nums.data(), size(int32_nums) * sizeof(int32_t));
         ASSERT_EQ(4, count);
         chunk->append_column(std::move(col2), chunk->num_columns());
 
-        auto col3 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_BIGINT), true);
+        auto col3 = ColumnHelper::create_column(TYPE_BIGINT_DESC, true);
         std::vector<int64_t> int64_nums{INT64_MIN, INT64_MAX, 0, 1};
         count = col3->append_numbers(int64_nums.data(), size(int64_nums) * sizeof(int64_t));
         ASSERT_EQ(4, count);
@@ -125,7 +125,7 @@ TEST_F(CSVFileWriterTest, TestWriteIntergers) {
 }
 
 TEST_F(CSVFileWriterTest, TestWriteBoolean) {
-    std::vector<TypeDescriptor> type_descs{TypeDescriptor::from_logical_type(TYPE_BOOLEAN)};
+    std::vector<TypeDescriptor> type_descs{TYPE_BOOLEAN_DESC};
     auto column_names = _make_type_names(type_descs);
     auto maybe_output_file = _fs.new_writable_file(_file_path);
     EXPECT_OK(maybe_output_file.status());
@@ -164,7 +164,7 @@ TEST_F(CSVFileWriterTest, TestWriteBoolean) {
 }
 
 TEST_F(CSVFileWriterTest, TestWriteFloat) {
-    std::vector<TypeDescriptor> type_descs{TypeDescriptor::from_logical_type(TYPE_FLOAT)};
+    std::vector<TypeDescriptor> type_descs{TYPE_FLOAT_DESC};
 
     auto column_names = _make_type_names(type_descs);
     auto maybe_output_file = _fs.new_writable_file(_file_path);
@@ -205,7 +205,7 @@ TEST_F(CSVFileWriterTest, TestWriteFloat) {
 }
 
 TEST_F(CSVFileWriterTest, TestWriteDouble) {
-    std::vector<TypeDescriptor> type_descs{TypeDescriptor::from_logical_type(TYPE_DOUBLE)};
+    std::vector<TypeDescriptor> type_descs{TYPE_DOUBLE_DESC};
 
     auto column_names = _make_type_names(type_descs);
     auto maybe_output_file = _fs.new_writable_file(_file_path);
@@ -246,7 +246,7 @@ TEST_F(CSVFileWriterTest, TestWriteDouble) {
 }
 
 TEST_F(CSVFileWriterTest, TestWriteDate) {
-    std::vector<TypeDescriptor> type_descs{TypeDescriptor::from_logical_type(TYPE_DATE)};
+    std::vector<TypeDescriptor> type_descs{TYPE_DATE_DESC};
 
     auto column_names = _make_type_names(type_descs);
     auto maybe_output_file = _fs.new_writable_file(_file_path);
@@ -296,7 +296,7 @@ TEST_F(CSVFileWriterTest, TestWriteDate) {
 }
 
 TEST_F(CSVFileWriterTest, TestWriteDatetime) {
-    std::vector<TypeDescriptor> type_descs{TypeDescriptor::from_logical_type(TYPE_DATETIME)};
+    std::vector<TypeDescriptor> type_descs{TYPE_DATETIME_DESC};
 
     auto column_names = _make_type_names(type_descs);
     auto maybe_output_file = _fs.new_writable_file(_file_path);
@@ -346,7 +346,7 @@ TEST_F(CSVFileWriterTest, TestWriteDatetime) {
 }
 
 TEST_F(CSVFileWriterTest, TestWriteVarchar) {
-    std::vector<TypeDescriptor> type_descs{TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
+    std::vector<TypeDescriptor> type_descs{TYPE_VARCHAR_DESC};
     auto column_names = _make_type_names(type_descs);
     auto maybe_output_file = _fs.new_writable_file(_file_path);
     EXPECT_OK(maybe_output_file.status());
@@ -387,7 +387,7 @@ TEST_F(CSVFileWriterTest, TestWriteVarchar) {
 TEST_F(CSVFileWriterTest, TestWriteArrayInt) {
     // type_descs: ARRAY<INT>
     std::vector<TypeDescriptor> type_descs;
-    auto type_int = TypeDescriptor::from_logical_type(TYPE_INT);
+    auto type_int = TYPE_INT_DESC;
     auto type_int_array = TypeDescriptor::from_logical_type(TYPE_ARRAY);
     type_int_array.children.push_back(type_int);
     type_descs.push_back(type_int_array);
@@ -453,7 +453,7 @@ TEST_F(CSVFileWriterTest, TestWriteArrayInt) {
 TEST_F(CSVFileWriterTest, TestWriteArrayBigInt) {
     // type_descs: ARRAY<BIGINT>
     std::vector<TypeDescriptor> type_descs;
-    auto type_bigint = TypeDescriptor::from_logical_type(TYPE_BIGINT);
+    auto type_bigint = TYPE_BIGINT_DESC;
     auto type_bigint_array = TypeDescriptor::from_logical_type(TYPE_ARRAY);
     type_bigint_array.children.push_back(type_bigint);
     type_descs.push_back(type_bigint_array);
@@ -510,7 +510,7 @@ TEST_F(CSVFileWriterTest, TestWriteArrayBigInt) {
 TEST_F(CSVFileWriterTest, TestWriteArrayWithNull) {
     // type_descs: ARRAY<INT> with NULL array and NULL elements
     std::vector<TypeDescriptor> type_descs;
-    auto type_int = TypeDescriptor::from_logical_type(TYPE_INT);
+    auto type_int = TYPE_INT_DESC;
     auto type_int_array = TypeDescriptor::from_logical_type(TYPE_ARRAY);
     type_int_array.children.push_back(type_int);
     type_descs.push_back(type_int_array);
@@ -572,7 +572,7 @@ TEST_F(CSVFileWriterTest, TestWriteArrayWithNull) {
 TEST_F(CSVFileWriterTest, TestWriteHiveArray) {
     // type_descs: ARRAY<INT>
     std::vector<TypeDescriptor> type_descs;
-    auto type_int = TypeDescriptor::from_logical_type(TYPE_INT);
+    auto type_int = TYPE_INT_DESC;
     auto type_int_array = TypeDescriptor::from_logical_type(TYPE_ARRAY);
     type_int_array.children.push_back(type_int);
     type_descs.push_back(type_int_array);
@@ -640,8 +640,8 @@ TEST_F(CSVFileWriterTest, TestWriteHiveArray) {
 TEST_F(CSVFileWriterTest, TestWriteMap) {
     // type_descs
     std::vector<TypeDescriptor> type_descs;
-    auto type_int_key = TypeDescriptor::from_logical_type(TYPE_INT);
-    auto type_int_value = TypeDescriptor::from_logical_type(TYPE_INT);
+    auto type_int_key = TYPE_INT_DESC;
+    auto type_int_value = TYPE_INT_DESC;
     auto type_int_map = TypeDescriptor::from_logical_type(TYPE_MAP);
     type_int_map.children.push_back(type_int_key);
     type_int_map.children.push_back(type_int_value);
@@ -663,7 +663,7 @@ TEST_F(CSVFileWriterTest, TestWriteMap) {
 TEST_F(CSVFileWriterTest, TestWriteNestedArray) {
     // type_descs: ARRAY<ARRAY<INT>>
     std::vector<TypeDescriptor> type_descs;
-    auto type_int = TypeDescriptor::from_logical_type(TYPE_INT);
+    auto type_int = TYPE_INT_DESC;
     auto type_int_array = TypeDescriptor::from_logical_type(TYPE_ARRAY);
     auto type_int_array_array = TypeDescriptor::from_logical_type(TYPE_ARRAY);
     type_int_array.children.push_back(type_int);
@@ -728,7 +728,7 @@ TEST_F(CSVFileWriterTest, TestWriteNestedArray) {
 }
 
 TEST_F(CSVFileWriterTest, TestUnknownCompression) {
-    auto type_bool = TypeDescriptor::from_logical_type(TYPE_BOOLEAN);
+    auto type_bool = TYPE_BOOLEAN_DESC;
     std::vector<TypeDescriptor> type_descs{type_bool};
 
     auto column_names = _make_type_names(type_descs);
@@ -744,7 +744,7 @@ TEST_F(CSVFileWriterTest, TestUnknownCompression) {
 }
 
 TEST_F(CSVFileWriterTest, TestFactory) {
-    auto type_bool = TypeDescriptor::from_logical_type(TYPE_BOOLEAN);
+    auto type_bool = TYPE_BOOLEAN_DESC;
     std::vector<TypeDescriptor> type_descs{type_bool};
 
     auto column_names = _make_type_names(type_descs);
@@ -759,7 +759,7 @@ TEST_F(CSVFileWriterTest, TestFactory) {
 
 // Test factory with all CSV options including header
 TEST_F(CSVFileWriterTest, TestFactoryWithOptions) {
-    auto type_int = TypeDescriptor::from_logical_type(TYPE_INT);
+    auto type_int = TYPE_INT_DESC;
     std::vector<TypeDescriptor> type_descs{type_int};
 
     std::vector<std::string> column_names = {"id"};
@@ -784,8 +784,8 @@ TEST_F(CSVFileWriterTest, TestFactoryWithOptions) {
 // Test header row output with include_header option
 TEST_F(CSVFileWriterTest, TestWriteWithHeader) {
     std::vector<TypeDescriptor> type_descs{
-            TypeDescriptor::from_logical_type(TYPE_INT),
-            TypeDescriptor::from_logical_type(TYPE_VARCHAR),
+            TYPE_INT_DESC,
+            TYPE_VARCHAR_DESC,
     };
     std::vector<std::string> column_names = {"id", "name"};
     auto maybe_output_file = _fs.new_writable_file(_file_path);
@@ -802,7 +802,7 @@ TEST_F(CSVFileWriterTest, TestWriteWithHeader) {
 
     auto chunk = std::make_shared<Chunk>();
     {
-        auto col0 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_INT), true);
+        auto col0 = ColumnHelper::create_column(TYPE_INT_DESC, true);
         std::vector<int32_t> int_nums{1, 2};
         size_t appended = col0->append_numbers(int_nums.data(), size(int_nums) * sizeof(int32_t));
         ASSERT_EQ(appended, size(int_nums));
@@ -828,8 +828,8 @@ TEST_F(CSVFileWriterTest, TestWriteWithHeader) {
 // Test header without data
 TEST_F(CSVFileWriterTest, TestWriteHeaderOnly) {
     std::vector<TypeDescriptor> type_descs{
-            TypeDescriptor::from_logical_type(TYPE_INT),
-            TypeDescriptor::from_logical_type(TYPE_VARCHAR),
+            TYPE_INT_DESC,
+            TYPE_VARCHAR_DESC,
     };
     std::vector<std::string> column_names = {"col_a", "col_b"};
     auto maybe_output_file = _fs.new_writable_file(_file_path);
@@ -857,9 +857,9 @@ TEST_F(CSVFileWriterTest, TestWriteHeaderOnly) {
 // Test header with special characters that need escaping
 TEST_F(CSVFileWriterTest, TestWriteHeaderWithSpecialChars) {
     std::vector<TypeDescriptor> type_descs{
-            TypeDescriptor::from_logical_type(TYPE_INT),
-            TypeDescriptor::from_logical_type(TYPE_VARCHAR),
-            TypeDescriptor::from_logical_type(TYPE_VARCHAR),
+            TYPE_INT_DESC,
+            TYPE_VARCHAR_DESC,
+            TYPE_VARCHAR_DESC,
     };
     // Column names with comma, quotes, and newline
     std::vector<std::string> column_names = {"user,id", "user\"name", "user\ninfo"};
@@ -888,8 +888,8 @@ TEST_F(CSVFileWriterTest, TestWriteHeaderWithSpecialChars) {
 // Test header with custom delimiter
 TEST_F(CSVFileWriterTest, TestWriteHeaderWithCustomDelimiter) {
     std::vector<TypeDescriptor> type_descs{
-            TypeDescriptor::from_logical_type(TYPE_INT),
-            TypeDescriptor::from_logical_type(TYPE_VARCHAR),
+            TYPE_INT_DESC,
+            TYPE_VARCHAR_DESC,
     };
     std::vector<std::string> column_names = {"id", "name"};
     auto maybe_output_file = _fs.new_writable_file(_file_path);
@@ -918,8 +918,8 @@ TEST_F(CSVFileWriterTest, TestWriteHeaderWithCustomDelimiter) {
 // Test header escaping when column name contains the custom delimiter
 TEST_F(CSVFileWriterTest, TestWriteHeaderEscapeCustomDelimiter) {
     std::vector<TypeDescriptor> type_descs{
-            TypeDescriptor::from_logical_type(TYPE_INT),
-            TypeDescriptor::from_logical_type(TYPE_VARCHAR),
+            TYPE_INT_DESC,
+            TYPE_VARCHAR_DESC,
     };
     // Column name contains the tab delimiter
     std::vector<std::string> column_names = {"user\tid", "name"};
@@ -948,7 +948,7 @@ TEST_F(CSVFileWriterTest, TestWriteHeaderEscapeCustomDelimiter) {
 
 // Test no header when include_header is false (default)
 TEST_F(CSVFileWriterTest, TestWriteWithoutHeader) {
-    std::vector<TypeDescriptor> type_descs{TypeDescriptor::from_logical_type(TYPE_INT)};
+    std::vector<TypeDescriptor> type_descs{TYPE_INT_DESC};
     std::vector<std::string> column_names = {"id"};
     auto maybe_output_file = _fs.new_writable_file(_file_path);
     EXPECT_OK(maybe_output_file.status());
@@ -964,7 +964,7 @@ TEST_F(CSVFileWriterTest, TestWriteWithoutHeader) {
 
     auto chunk = std::make_shared<Chunk>();
     {
-        auto col0 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_INT), true);
+        auto col0 = ColumnHelper::create_column(TYPE_INT_DESC, true);
         std::vector<int32_t> int_nums{1, 2};
         size_t appended = col0->append_numbers(int_nums.data(), size(int_nums) * sizeof(int32_t));
         ASSERT_EQ(appended, size(int_nums));
@@ -986,10 +986,10 @@ TEST_F(CSVFileWriterTest, TestWriteWithoutHeader) {
 
 TEST_F(CSVFileWriterTest, TestWriteIntegersWithGzipCompression) {
     std::vector<TypeDescriptor> type_descs{
-            TypeDescriptor::from_logical_type(TYPE_TINYINT),
-            TypeDescriptor::from_logical_type(TYPE_SMALLINT),
-            TypeDescriptor::from_logical_type(TYPE_INT),
-            TypeDescriptor::from_logical_type(TYPE_BIGINT),
+            TYPE_TINYINT_DESC,
+            TYPE_SMALLINT_DESC,
+            TYPE_INT_DESC,
+            TYPE_BIGINT_DESC,
     };
     auto column_names = _make_type_names(type_descs);
     auto maybe_output_file = _fs.new_writable_file(_file_path);
@@ -1011,25 +1011,25 @@ TEST_F(CSVFileWriterTest, TestWriteIntegersWithGzipCompression) {
 
     auto chunk = std::make_shared<Chunk>();
     {
-        auto col0 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_TINYINT), true);
+        auto col0 = ColumnHelper::create_column(TYPE_TINYINT_DESC, true);
         std::vector<int8_t> int8_nums{INT8_MIN, INT8_MAX, 0, 1};
         auto count = col0->append_numbers(int8_nums.data(), size(int8_nums) * sizeof(int8_t));
         ASSERT_EQ(4, count);
         chunk->append_column(std::move(col0), chunk->num_columns());
 
-        auto col1 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_SMALLINT), true);
+        auto col1 = ColumnHelper::create_column(TYPE_SMALLINT_DESC, true);
         std::vector<int16_t> int16_nums{INT16_MIN, INT16_MAX, 0, 1};
         count = col1->append_numbers(int16_nums.data(), size(int16_nums) * sizeof(int16_t));
         ASSERT_EQ(4, count);
         chunk->append_column(std::move(col1), chunk->num_columns());
 
-        auto col2 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_INT), true);
+        auto col2 = ColumnHelper::create_column(TYPE_INT_DESC, true);
         std::vector<int32_t> int32_nums{INT32_MIN, INT32_MAX, 0, 1};
         count = col2->append_numbers(int32_nums.data(), size(int32_nums) * sizeof(int32_t));
         ASSERT_EQ(4, count);
         chunk->append_column(std::move(col2), chunk->num_columns());
 
-        auto col3 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_BIGINT), true);
+        auto col3 = ColumnHelper::create_column(TYPE_BIGINT_DESC, true);
         std::vector<int64_t> int64_nums{INT64_MIN, INT64_MAX, 0, 1};
         count = col3->append_numbers(int64_nums.data(), size(int64_nums) * sizeof(int64_t));
         ASSERT_EQ(4, count);
@@ -1057,7 +1057,7 @@ TEST_F(CSVFileWriterTest, TestWriteIntegersWithGzipCompression) {
 }
 
 TEST_F(CSVFileWriterTest, TestWriteVarcharWithGzipCompression) {
-    std::vector<TypeDescriptor> type_descs{TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
+    std::vector<TypeDescriptor> type_descs{TYPE_VARCHAR_DESC};
     auto column_names = _make_type_names(type_descs);
     auto maybe_output_file = _fs.new_writable_file(_file_path);
     EXPECT_OK(maybe_output_file.status());
@@ -1105,8 +1105,7 @@ TEST_F(CSVFileWriterTest, TestWriteVarcharWithGzipCompression) {
 }
 
 TEST_F(CSVFileWriterTest, TestWriteLargeDataWithGzipCompression) {
-    std::vector<TypeDescriptor> type_descs{TypeDescriptor::from_logical_type(TYPE_INT),
-                                           TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
+    std::vector<TypeDescriptor> type_descs{TYPE_INT_DESC, TYPE_VARCHAR_DESC};
     auto column_names = _make_type_names(type_descs);
     auto maybe_output_file = _fs.new_writable_file(_file_path);
     EXPECT_OK(maybe_output_file.status());
@@ -1170,7 +1169,7 @@ TEST_F(CSVFileWriterTest, TestWriteLargeDataWithGzipCompression) {
 }
 
 TEST_F(CSVFileWriterTest, TestCompressionRatio) {
-    std::vector<TypeDescriptor> type_descs{TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
+    std::vector<TypeDescriptor> type_descs{TYPE_VARCHAR_DESC};
     auto column_names = _make_type_names(type_descs);
 
     // Expected uncompressed content (calculate manually)
@@ -1229,8 +1228,8 @@ TEST_F(CSVFileWriterTest, TestCompressionRatio) {
 }
 
 TEST_F(CSVFileWriterTest, TestFactoryWithGzipCompression) {
-    auto type_int = TypeDescriptor::from_logical_type(TYPE_INT);
-    auto type_varchar = TypeDescriptor::from_logical_type(TYPE_VARCHAR);
+    auto type_int = TYPE_INT_DESC;
+    auto type_varchar = TYPE_VARCHAR_DESC;
     std::vector<TypeDescriptor> type_descs{type_int, type_varchar};
 
     auto column_names = _make_type_names(type_descs);
@@ -1317,9 +1316,9 @@ std::shared_ptr<Chunk> _build_enclose_test_chunk(const std::vector<int32_t>& ids
 // Case: enclose == escape == '"'  (RFC 4180 doubling style)
 TEST_F(CSVFileWriterTest, TestEncloseEscapeRFC4180) {
     std::vector<TypeDescriptor> type_descs{
-            TypeDescriptor::from_logical_type(TYPE_INT),
-            TypeDescriptor::from_logical_type(TYPE_VARCHAR),
-            TypeDescriptor::from_logical_type(TYPE_VARCHAR),
+            TYPE_INT_DESC,
+            TYPE_VARCHAR_DESC,
+            TYPE_VARCHAR_DESC,
     };
     std::vector<std::string> column_names = {"id", "name", "val"};
     auto output_file = std::move(_fs.new_writable_file(_file_path).value());
@@ -1364,9 +1363,9 @@ TEST_F(CSVFileWriterTest, TestEncloseEscapeRFC4180) {
 //   - NULL stays as \N (unenclosed)
 TEST_F(CSVFileWriterTest, TestEncloseEscapeBackslash) {
     std::vector<TypeDescriptor> type_descs{
-            TypeDescriptor::from_logical_type(TYPE_INT),
-            TypeDescriptor::from_logical_type(TYPE_VARCHAR),
-            TypeDescriptor::from_logical_type(TYPE_VARCHAR),
+            TYPE_INT_DESC,
+            TYPE_VARCHAR_DESC,
+            TYPE_VARCHAR_DESC,
     };
     std::vector<std::string> column_names = {"id", "name", "val"};
     auto output_file = std::move(_fs.new_writable_file(_file_path).value());
@@ -1410,7 +1409,7 @@ TEST_F(CSVFileWriterTest, TestEncloseEscapeBackslash) {
 // Case: enclose set but escape not set (escape == 0).
 // Fields are wrapped but internal enclose chars are NOT escaped (caller's responsibility).
 TEST_F(CSVFileWriterTest, TestEncloseWithoutEscape) {
-    std::vector<TypeDescriptor> type_descs{TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
+    std::vector<TypeDescriptor> type_descs{TYPE_VARCHAR_DESC};
     std::vector<std::string> column_names = {"name"};
     auto output_file = std::move(_fs.new_writable_file(_file_path).value());
     auto output_stream = std::make_unique<formats::FormattedOutputStreamFile>(std::move(output_file), 1024);
@@ -1445,8 +1444,8 @@ TEST_F(CSVFileWriterTest, TestEncloseWithoutEscape) {
 // Header column names are also enclosed & escaped using the same rules.
 TEST_F(CSVFileWriterTest, TestEncloseWithHeader) {
     std::vector<TypeDescriptor> type_descs{
-            TypeDescriptor::from_logical_type(TYPE_INT),
-            TypeDescriptor::from_logical_type(TYPE_VARCHAR),
+            TYPE_INT_DESC,
+            TYPE_VARCHAR_DESC,
     };
     // Column name with enclose char inside
     std::vector<std::string> column_names = {"id", "my\"col"};
@@ -1487,8 +1486,8 @@ TEST_F(CSVFileWriterTest, TestEncloseWithHeader) {
 // Case: enclose disabled (default). Behavior must be unchanged.
 TEST_F(CSVFileWriterTest, TestEncloseDisabled) {
     std::vector<TypeDescriptor> type_descs{
-            TypeDescriptor::from_logical_type(TYPE_INT),
-            TypeDescriptor::from_logical_type(TYPE_VARCHAR),
+            TYPE_INT_DESC,
+            TYPE_VARCHAR_DESC,
     };
     std::vector<std::string> column_names = {"id", "name"};
     auto output_file = std::move(_fs.new_writable_file(_file_path).value());
@@ -1528,8 +1527,8 @@ TEST_F(CSVFileWriterTest, TestEncloseDisabled) {
 // is_null() check, the writer should treat the row as NULL and emit \N.
 TEST_F(CSVFileWriterTest, TestEncloseConstNullableColumn) {
     std::vector<TypeDescriptor> type_descs{
-            TypeDescriptor::from_logical_type(TYPE_INT),
-            TypeDescriptor::from_logical_type(TYPE_VARCHAR),
+            TYPE_INT_DESC,
+            TYPE_VARCHAR_DESC,
     };
     std::vector<std::string> column_names = {"id", "const_col"};
     auto output_file = std::move(_fs.new_writable_file(_file_path).value());
@@ -1579,8 +1578,8 @@ TEST_F(CSVFileWriterTest, TestEncloseConstNullableColumn) {
 // NullableConverter, etc.) would crash on its own down_cast.
 TEST_F(CSVFileWriterTest, TestConstColumnWithoutEnclose) {
     std::vector<TypeDescriptor> type_descs{
-            TypeDescriptor::from_logical_type(TYPE_INT),
-            TypeDescriptor::from_logical_type(TYPE_VARCHAR),
+            TYPE_INT_DESC,
+            TYPE_VARCHAR_DESC,
     };
     std::vector<std::string> column_names = {"id", "const_str"};
     auto output_file = std::move(_fs.new_writable_file(_file_path).value());
@@ -1623,8 +1622,8 @@ TEST_F(CSVFileWriterTest, TestConstColumnWithoutEnclose) {
 // converter always sees a concrete column type.
 TEST_F(CSVFileWriterTest, TestEncloseConstStringColumn) {
     std::vector<TypeDescriptor> type_descs{
-            TypeDescriptor::from_logical_type(TYPE_INT),
-            TypeDescriptor::from_logical_type(TYPE_VARCHAR),
+            TYPE_INT_DESC,
+            TYPE_VARCHAR_DESC,
     };
     std::vector<std::string> column_names = {"id", "const_str"};
     auto output_file = std::move(_fs.new_writable_file(_file_path).value());
@@ -1669,7 +1668,7 @@ TEST_F(CSVFileWriterTest, TestEncloseConstStringColumn) {
 
 // Factory: verify enclose/escape options are parsed from map.
 TEST_F(CSVFileWriterTest, TestFactoryWithEncloseEscapeOptions) {
-    auto type_varchar = TypeDescriptor::from_logical_type(TYPE_VARCHAR);
+    auto type_varchar = TYPE_VARCHAR_DESC;
     std::vector<TypeDescriptor> type_descs{type_varchar};
     std::vector<std::string> column_names = {"name"};
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
@@ -1687,8 +1686,7 @@ TEST_F(CSVFileWriterTest, TestFactoryWithEncloseEscapeOptions) {
 }
 
 TEST_F(CSVFileWriterTest, TestCompressionWithCustomDelimiters) {
-    std::vector<TypeDescriptor> type_descs{TypeDescriptor::from_logical_type(TYPE_INT),
-                                           TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
+    std::vector<TypeDescriptor> type_descs{TYPE_INT_DESC, TYPE_VARCHAR_DESC};
     auto column_names = _make_type_names(type_descs);
     auto maybe_output_file = _fs.new_writable_file(_file_path);
     EXPECT_OK(maybe_output_file.status());

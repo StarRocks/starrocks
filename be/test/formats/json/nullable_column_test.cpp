@@ -227,7 +227,7 @@ TEST_F(AddNullableColumnTest, test_add_invalid) {
 }
 
 TEST_F(AddNullableColumnTest, add_null_numeric_array) {
-    auto desc = TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_INT));
+    auto desc = TypeDescriptor::create_array_type(TYPE_INT_DESC);
     auto column = ColumnHelper::create_column(desc, true);
 
     simdjson::ondemand::parser parser;
@@ -241,7 +241,7 @@ TEST_F(AddNullableColumnTest, add_null_numeric_array) {
 }
 
 TEST_F(AddNullableColumnTest, add_boolean_array) {
-    auto desc = TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_BOOLEAN));
+    auto desc = TypeDescriptor::create_array_type(TYPE_BOOLEAN_DESC);
     auto column = ColumnHelper::create_column(desc, true);
 
     simdjson::ondemand::parser parser;

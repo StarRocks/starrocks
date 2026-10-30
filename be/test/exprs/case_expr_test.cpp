@@ -971,7 +971,7 @@ TEST_F(VectorizedCaseExprTest, NoCaseWhenFalseReturnElse) {
     bo->append_datum(Datum(true));  // [true]
     bo->append_datum(Datum(false)); // [false]
     bo->append_datum(Datum(false)); // [false]
-    auto when0 = MockExpr(TypeDescriptor::from_logical_type(LogicalType::TYPE_BOOLEAN), bo);
+    auto when0 = MockExpr(TYPE_BOOLEAN_DESC, bo);
 
     expr->_children.push_back(&when0);       // when1
     expr->_children.push_back(&array_expr0); // then1

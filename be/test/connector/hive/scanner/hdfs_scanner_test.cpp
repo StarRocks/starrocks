@@ -56,6 +56,7 @@
 #include "runtime/runtime_filter_factory.h"
 #include "runtime/runtime_state.h"
 #include "testutil/column_test_helper.h"
+#include "testutil/type_test_helper.h"
 
 namespace starrocks {
 
@@ -205,12 +206,11 @@ TupleDescriptor* HdfsScannerTest::_create_tuple_desc_with_nullable(SlotDesc* des
 
 // ========================= PARQUET SCANNER ============================
 
-static SlotDesc default_parquet_descs[] = {
-        {"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
-        {"c2", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)},
-        {"c3", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
-        {"col_varchar", TypeDescriptor::from_logical_type(LogicalType::TYPE_DATETIME)},
-        {""}};
+static SlotDesc default_parquet_descs[] = {{"c1", TYPE_INT_DESC},
+                                           {"c2", TYPE_BIGINT_DESC},
+                                           {"c3", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
+                                           {"col_varchar", TYPE_DATETIME_DESC},
+                                           {""}};
 
 std::string default_parquet_file = "./be/test/exec/test_data/parquet_scanner/file_reader_test.parquet1";
 
@@ -239,6 +239,219 @@ TEST_F(HdfsScannerTest, TestParquetOpen) {
     ASSERT_TRUE(status.ok());
 }
 
+<<<<<<< HEAD
+=======
+// A position delete file that covers every row of its data file: the data file is never opened.
+// The delete file repeats position 3, so it has 5 rows but deletes only 4 distinct positions.
+TEST_F(HdfsScannerTest, TestParquetSkipFileWithAllRowsDeleted) {
+    const std::string delete_file_path =
+            "./be/test/exec/test_data/parquet_scanner/iceberg_position_delete_repeated_pos.parquet";
+    // The data file does not exist: any attempt to open it fails the scan.
+    const std::string data_file_path = "missing_data_file.parquet";
+    ASSIGN_OR_ABORT(const int64_t delete_file_size, FileSystem::Default()->get_file_size(delete_file_path));
+    TIcebergDeleteFile delete_file;
+    delete_file.__set_full_path(delete_file_path);
+    delete_file.__set_file_content(TIcebergFileContent::POSITION_DELETES);
+    delete_file.__set_length(delete_file_size);
+
+    auto run = [&](int64_t record_count, bool expect_open_ok) {
+        auto scanner = std::make_shared<HdfsParquetScanner>();
+        auto* range = _create_scan_range(default_parquet_file, 0, 0);
+        range->__set_record_count(record_count);
+        auto* tuple_desc = _create_tuple_desc(default_parquet_descs);
+        auto* ctx = _create_ctx(data_file_path, range, tuple_desc);
+        ctx->format_scan_context.timezone = "UTC";
+        ctx->profile.runtime_profile = _runtime_profile;
+        ctx->table_specific.iceberg_delete_files.emplace_back(&delete_file);
+
+        ASSERT_OK(scanner->init(_runtime_state, ctx));
+        Status status = scanner->open(_runtime_state);
+        if (!expect_open_ok) {
+            ASSERT_FALSE(status.ok());
+            ctx->profile.runtime_profile = nullptr;
+            scanner->close();
+            return;
+        }
+        ASSERT_OK(status);
+        ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
+        status = scanner->get_next(_runtime_state, &chunk);
+        ASSERT_TRUE(status.is_end_of_file()) << status;
+        ASSERT_EQ(0, chunk->num_rows());
+
+        HdfsScannerProfile profile;
+        profile.runtime_profile = _runtime_profile;
+        scanner->do_update_counter(&profile);
+        ASSERT_NE(nullptr, _runtime_profile->get_counter("DeletedFilesSkipped"));
+        ASSERT_EQ(1, _runtime_profile->get_counter("DeletedFilesSkipped")->value());
+        // The fixture never sets up the HdfsScannerProfile counters that close() publishes into.
+        ctx->profile.runtime_profile = nullptr;
+        scanner->close();
+    };
+    // 4 rows, all deleted.
+    run(4, true);
+    // 5 rows: the 5 delete rows do not cover row 4, so the file must be opened.
+    run(5, false);
+}
+
+// Scans iceberg_three_row_groups.parquet (c1 = 0..11, 3 row groups of 4 rows) with Iceberg deletes.
+class HdfsParquetDeletedSkipTest : public HdfsScannerTest {
+protected:
+    static constexpr const char* kDataFile =
+            "./be/test/exec/test_data/parquet_scanner/iceberg_three_row_groups.parquet";
+
+    const TIcebergDeleteFile* _position_delete(const std::string& name) {
+        const std::string path = "./be/test/exec/test_data/parquet_scanner/" + name;
+        auto* df = _pool.add(new TIcebergDeleteFile());
+        df->__set_full_path(path);
+        df->__set_file_content(TIcebergFileContent::POSITION_DELETES);
+        ASSIGN_OR_ABORT(const int64_t size, FileSystem::Default()->get_file_size(path));
+        df->__set_length(size);
+        return df;
+    }
+
+    HdfsScannerContext* _create_deletes_ctx(SlotDesc* slot_descs, const std::vector<const TIcebergDeleteFile*>& deletes,
+                                            TupleDescriptor** tuple_desc) {
+        auto* range = _create_scan_range(kDataFile, 0, 0);
+        range->__set_record_count(12);
+        *tuple_desc = _create_tuple_desc(slot_descs);
+        auto* ctx = _create_ctx(kDataFile, range, *tuple_desc);
+        ctx->format_scan_context.timezone = "UTC";
+        ctx->profile.runtime_profile = _runtime_profile;
+        // As the FE sends them: on the scan range, and referenced from table_specific.
+        std::vector<TIcebergDeleteFile> range_deletes;
+        for (const auto* df : deletes) {
+            range_deletes.emplace_back(*df);
+        }
+        range->__set_delete_files(range_deletes);
+        for (const auto& df : range->delete_files) {
+            ctx->table_specific.iceberg_delete_files.emplace_back(&df);
+        }
+        return ctx;
+    }
+
+    // Reads the scanner to EOF and returns the rows; publishes its counters into _runtime_profile.
+    std::vector<std::string> _read_all(HdfsScanner* scanner, HdfsScannerContext* ctx, TupleDescriptor* tuple_desc) {
+        std::vector<std::string> rows;
+        Status status;
+        while (status.ok()) {
+            ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
+            status = scanner->get_next(_runtime_state, &chunk);
+            CHECK(status.ok() || status.is_end_of_file()) << status;
+            for (size_t i = 0; i < chunk->num_rows(); i++) {
+                rows.emplace_back(chunk->debug_row(i));
+            }
+        }
+        HdfsScannerProfile profile;
+        profile.runtime_profile = _runtime_profile;
+        scanner->do_update_counter(&profile);
+        // The fixture never sets up the HdfsScannerProfile counters that close() publishes into.
+        ctx->profile.runtime_profile = nullptr;
+        scanner->close();
+        return rows;
+    }
+
+    std::vector<std::string> _scan(const std::vector<const TIcebergDeleteFile*>& deletes) {
+        SlotDesc slot_descs[] = {{"c1", TYPE_INT_DESC}, {""}};
+        TupleDescriptor* tuple_desc = nullptr;
+        auto* ctx = _create_deletes_ctx(slot_descs, deletes, &tuple_desc);
+        auto scanner = std::make_shared<HdfsParquetScanner>();
+        CHECK_OK(scanner->init(_runtime_state, ctx));
+        CHECK_OK(scanner->open(_runtime_state));
+        return _read_all(scanner.get(), ctx, tuple_desc);
+    }
+
+    int64_t _counter(const std::string& name) {
+        auto* counter = _runtime_profile->get_counter(name);
+        return counter == nullptr ? -1 : counter->value();
+    }
+
+    // Rows left when row 0 and all of row group 1 (rows 4..7) are deleted.
+    const std::vector<std::string> _rows_without_group1{"[1]", "[2]", "[3]", "[8]", "[9]", "[10]", "[11]"};
+};
+
+// Row group 1 is fully deleted (position 6 repeated) and is skipped before any IO; row 0 of row
+// group 0 is deleted by the regular row filter.
+TEST_F(HdfsParquetDeletedSkipTest, SkipRowGroup) {
+    ASSERT_EQ(_rows_without_group1, _scan({_position_delete("iceberg_three_row_groups_position_delete.parquet")}));
+    ASSERT_EQ(3, _counter("TotalRowGroups"));
+    ASSERT_EQ(1, _counter("DeletedRowGroupsSkipped"));
+    ASSERT_EQ(0, _counter("DeletedFilesSkipped"));
+}
+
+// Neither delete file alone covers row group 1 ({0,4,5} and {6,7}); their union does. With a third
+// file the union covers the whole file.
+TEST_F(HdfsParquetDeletedSkipTest, SkipOnUnionOfDeleteFiles) {
+    const auto* a = _position_delete("iceberg_three_row_groups_position_delete_a.parquet");
+    const auto* b = _position_delete("iceberg_three_row_groups_position_delete_b.parquet");
+    const auto* c = _position_delete("iceberg_three_row_groups_position_delete_c.parquet");
+    ASSERT_EQ(_rows_without_group1, _scan({a, b}));
+    ASSERT_EQ(1, _counter("DeletedRowGroupsSkipped"));
+    ASSERT_EQ(0, _counter("DeletedFilesSkipped"));
+
+    ASSERT_TRUE(_scan({a, b, c}).empty());
+    ASSERT_EQ(1, _counter("DeletedFilesSkipped"));
+}
+
+// COUNT(*) with position deletes has no metadata count, so it reads the file without any column:
+// the skipped row group must not be counted, and a skipped file yields no count row.
+TEST_F(HdfsParquetDeletedSkipTest, CountSkipsDeletedRows) {
+    auto count = [&](const std::vector<const TIcebergDeleteFile*>& deletes) {
+        SlotDesc slot_descs[] = {{"___count___", TYPE_BIGINT_DESC}, {""}};
+        TupleDescriptor* tuple_desc = nullptr;
+        auto* ctx = _create_deletes_ctx(slot_descs, deletes, &tuple_desc);
+        ctx->format_scan_context.options.use_count_opt = true;
+        auto scanner = std::make_shared<HdfsParquetScanner>();
+        CHECK_OK(scanner->init(_runtime_state, ctx));
+        CHECK_OK(scanner->open(_runtime_state));
+        return _read_all(scanner.get(), ctx, tuple_desc);
+    };
+    ASSERT_EQ((std::vector<std::string>{"[7]"}),
+              count({_position_delete("iceberg_three_row_groups_position_delete.parquet")}));
+    ASSERT_EQ(1, _counter("DeletedRowGroupsSkipped"));
+
+    ASSERT_TRUE(count({_position_delete("iceberg_three_row_groups_position_delete_a.parquet"),
+                       _position_delete("iceberg_three_row_groups_position_delete_b.parquet"),
+                       _position_delete("iceberg_three_row_groups_position_delete_c.parquet")})
+                        .empty());
+    ASSERT_EQ(1, _counter("DeletedFilesSkipped"));
+}
+
+// The task that splits the file creates no split task for the deleted row group; the split tasks
+// it creates share its deletes.
+TEST_F(HdfsParquetDeletedSkipTest, NoSplitTaskForDeletedRowGroup) {
+    SlotDesc slot_descs[] = {{"c1", TYPE_INT_DESC}, {""}};
+    TupleDescriptor* tuple_desc = nullptr;
+    auto* ctx = _create_deletes_ctx(slot_descs, {_position_delete("iceberg_three_row_groups_position_delete.parquet")},
+                                    &tuple_desc);
+    ctx->format_scan_context.options.enable_split_tasks = true;
+    // one split task per row group: never merge
+    ctx->format_scan_context.options.connector_max_split_size = 1;
+    auto scanner = std::make_shared<HdfsParquetScanner>();
+    ASSERT_OK(scanner->init(_runtime_state, ctx));
+    ASSERT_OK(scanner->open(_runtime_state));
+    const auto& split_tasks = ctx->format_scan_context.split.split_tasks;
+    ASSERT_EQ(2, split_tasks.size());
+    ASSERT_TRUE(_read_all(scanner.get(), ctx, tuple_desc).empty());
+
+    std::vector<std::string> rows;
+    for (const auto& task : split_tasks) {
+        auto* split_range = _create_scan_range(kDataFile, task->start_offset, task->end_offset - task->start_offset);
+        split_range->__set_record_count(12);
+        auto* split_ctx = _create_ctx(kDataFile, split_range, tuple_desc);
+        split_ctx->format_scan_context.timezone = "UTC";
+        split_ctx->format_scan_context.split_context = task.get();
+        auto split_scanner = std::make_shared<HdfsParquetScanner>();
+        ASSERT_OK(split_scanner->init(_runtime_state, split_ctx));
+        ASSERT_OK(split_scanner->open(_runtime_state));
+        auto split_rows = _read_all(split_scanner.get(), split_ctx, tuple_desc);
+        rows.insert(rows.end(), split_rows.begin(), split_rows.end());
+    }
+    ASSERT_EQ(_rows_without_group1, rows);
+    // counted once, by the task that splits the file
+    ASSERT_EQ(1, _counter("DeletedRowGroupsSkipped"));
+}
+
+>>>>>>> ffea928 ([UT] Use TYPE_X_DESC instead of TypeDescriptor::from_logical_type(TYPE_X) in BE tests (#81928))
 TEST_F(HdfsScannerTest, TestHdfsRunningTime) {
     auto scanner = std::make_shared<HdfsParquetScanner>();
 
@@ -279,7 +492,7 @@ TEST_F(HdfsScannerTest, TestParquetGetNext) {
     scanner->close();
 }
 
-static SlotDesc avro_multiblock_descs[] = {{"id", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)}, {""}};
+static SlotDesc avro_multiblock_descs[] = {{"id", TYPE_INT_DESC}, {""}};
 
 std::string avro_multiblock_file = "./be/test/formats/test_data/avro/cpp/multiblock.avro";
 
@@ -334,9 +547,7 @@ TEST_F(HdfsScannerTest, TestAvroUpdateCounterWithoutOpen) {
 }
 
 TEST_F(HdfsScannerTest, TestFillNotExistedColumnWithDefaultValue) {
-    SlotDesc descs[] = {{"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
-                        {"c2", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
-                        {""}};
+    SlotDesc descs[] = {{"c1", TYPE_INT_DESC}, {"c2", TYPE_INT_DESC}, {""}};
     auto* tuple_desc = _create_tuple_desc(descs);
     HdfsScannerContext ctx;
     ctx.format_scan_context.not_existed_slots.push_back(tuple_desc->slots()[0]);
@@ -351,7 +562,7 @@ TEST_F(HdfsScannerTest, TestFillNotExistedColumnWithDefaultValue) {
 
 // Empty string defaults should be preserved for string columns.
 TEST_F(HdfsScannerTest, TestFillNotExistedColumnWithEmptyDefaultNullable) {
-    SlotDesc descs[] = {{"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)}, {""}};
+    SlotDesc descs[] = {{"c1", TYPE_VARCHAR_DESC}, {""}};
     auto* tuple_desc = _create_tuple_desc(descs);
     HdfsScannerContext ctx;
     ctx.format_scan_context.not_existed_slots.push_back(tuple_desc->slots()[0]);
@@ -365,7 +576,7 @@ TEST_F(HdfsScannerTest, TestFillNotExistedColumnWithEmptyDefaultNullable) {
 
 // Empty string defaults should also work for non-nullable string columns.
 TEST_F(HdfsScannerTest, TestFillNotExistedColumnWithEmptyDefaultNonNullable) {
-    SlotDesc descs[] = {{"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)}, {""}};
+    SlotDesc descs[] = {{"c1", TYPE_VARCHAR_DESC}, {""}};
     auto* tuple_desc = _create_tuple_desc_with_nullable(descs, false);
     HdfsScannerContext ctx;
     ctx.format_scan_context.not_existed_slots.push_back(tuple_desc->slots()[0]);
@@ -378,7 +589,7 @@ TEST_F(HdfsScannerTest, TestFillNotExistedColumnWithEmptyDefaultNonNullable) {
 }
 
 TEST_F(HdfsScannerTest, TestFillNotExistedColumnWithEmptyDefaultNonString) {
-    SlotDesc descs[] = {{"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)}, {""}};
+    SlotDesc descs[] = {{"c1", TYPE_INT_DESC}, {""}};
     auto* tuple_desc = _create_tuple_desc(descs);
     HdfsScannerContext ctx;
     ctx.format_scan_context.not_existed_slots.push_back(tuple_desc->slots()[0]);
@@ -391,9 +602,7 @@ TEST_F(HdfsScannerTest, TestFillNotExistedColumnWithEmptyDefaultNonString) {
 
 // An Iceberg TIME initial-default arrives as "HH:MM[:SS[.ffffff]]" and is stored as whole seconds.
 TEST_F(HdfsScannerTest, TestFillNotExistedColumnWithTimeDefault) {
-    SlotDesc descs[] = {{"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_TIME)},
-                        {"c2", TypeDescriptor::from_logical_type(LogicalType::TYPE_TIME)},
-                        {""}};
+    SlotDesc descs[] = {{"c1", TYPE_TIME_DESC}, {"c2", TYPE_TIME_DESC}, {""}};
     auto* tuple_desc = _create_tuple_desc(descs);
     HdfsScannerContext ctx;
     ctx.format_scan_context.not_existed_slots.push_back(tuple_desc->slots()[0]);
@@ -410,9 +619,7 @@ TEST_F(HdfsScannerTest, TestFillNotExistedColumnWithTimeDefault) {
 // FE sends a TIMESTAMP default as LocalDateTime#toString (seconds omitted when zero) and a TIMESTAMPTZ
 // default with microseconds.
 TEST_F(HdfsScannerTest, TestFillNotExistedColumnWithDatetimeDefault) {
-    SlotDesc descs[] = {{"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_DATETIME)},
-                        {"c2", TypeDescriptor::from_logical_type(LogicalType::TYPE_DATETIME)},
-                        {""}};
+    SlotDesc descs[] = {{"c1", TYPE_DATETIME_DESC}, {"c2", TYPE_DATETIME_DESC}, {""}};
     auto* tuple_desc = _create_tuple_desc(descs);
     HdfsScannerContext ctx;
     ctx.format_scan_context.not_existed_slots.push_back(tuple_desc->slots()[0]);
@@ -428,7 +635,7 @@ TEST_F(HdfsScannerTest, TestFillNotExistedColumnWithDatetimeDefault) {
 
 TEST_F(HdfsScannerTest, TestFillNotExistedColumnWithInvalidTimeDefault) {
     for (const char* value : {"", "01", "01:02:03:04", "24:00:00", "01:60", "01:02:x"}) {
-        SlotDesc descs[] = {{"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_TIME)}, {""}};
+        SlotDesc descs[] = {{"c1", TYPE_TIME_DESC}, {""}};
         auto* tuple_desc = _create_tuple_desc(descs);
         HdfsScannerContext ctx;
         ctx.format_scan_context.not_existed_slots.push_back(tuple_desc->slots()[0]);
@@ -440,7 +647,7 @@ TEST_F(HdfsScannerTest, TestFillNotExistedColumnWithInvalidTimeDefault) {
 }
 
 TEST_F(HdfsScannerTest, TestCreateMinMaxValueColumnForDatetimeSupportsNegativeMicros) {
-    SlotDesc descs[] = {{"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_DATETIME)}, {""}};
+    SlotDesc descs[] = {{"c1", TYPE_DATETIME_DESC}, {""}};
     auto* tuple_desc = _create_tuple_desc(descs);
     HdfsScannerContext ctx;
     ctx.format_scan_context.is_first_split = true;
@@ -587,38 +794,36 @@ static void extend_partition_values(ObjectPool* pool, HdfsScannerContext* ctx, s
 
 // ====================================================================================================
 
-static SlotDesc mtypes_orc_descs[] = {{"id", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)},
-                                      {"col_float", TypeDescriptor::from_logical_type(LogicalType::TYPE_FLOAT)},
-                                      {"col_double", TypeDescriptor::from_logical_type(LogicalType::TYPE_DOUBLE)},
-                                      {"col_varchar", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
-                                      {"col_char", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
-                                      {"col_tinyint", TypeDescriptor::from_logical_type(LogicalType::TYPE_TINYINT)},
-                                      {"col_smallint", TypeDescriptor::from_logical_type(LogicalType::TYPE_SMALLINT)},
-                                      {"col_int", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
-                                      {"col_bigint", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)},
-                                      {"col_largeint", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)},
-                                      {"col0_i32p7s2", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
-                                      {"col1_i32p7s2", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
-                                      {"col0_i32p6s3", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
-                                      {"col1_i32p6s3", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
-                                      {"col0_i64p7s2", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
-                                      {"col1_i64p7s2", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
-                                      {"col0_i64p9s5", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
-                                      {"col1_i64p9s5", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
-                                      {"col0_i128p7s2", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
-                                      {"col1_i128p7s2", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
-                                      {"col0_i128p18s9", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
-                                      {"col1_i128p18s9", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
-                                      {"col0_i128p30s9", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
-                                      {"col1_i128p30s9", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
-                                      {"PART_x", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
-                                      {"PART_y", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
+static SlotDesc mtypes_orc_descs[] = {{"id", TYPE_BIGINT_DESC},
+                                      {"col_float", TYPE_FLOAT_DESC},
+                                      {"col_double", TYPE_DOUBLE_DESC},
+                                      {"col_varchar", TYPE_VARCHAR_DESC},
+                                      {"col_char", TYPE_VARCHAR_DESC},
+                                      {"col_tinyint", TYPE_TINYINT_DESC},
+                                      {"col_smallint", TYPE_SMALLINT_DESC},
+                                      {"col_int", TYPE_INT_DESC},
+                                      {"col_bigint", TYPE_BIGINT_DESC},
+                                      {"col_largeint", TYPE_BIGINT_DESC},
+                                      {"col0_i32p7s2", TYPE_VARCHAR_DESC},
+                                      {"col1_i32p7s2", TYPE_VARCHAR_DESC},
+                                      {"col0_i32p6s3", TYPE_VARCHAR_DESC},
+                                      {"col1_i32p6s3", TYPE_VARCHAR_DESC},
+                                      {"col0_i64p7s2", TYPE_VARCHAR_DESC},
+                                      {"col1_i64p7s2", TYPE_VARCHAR_DESC},
+                                      {"col0_i64p9s5", TYPE_VARCHAR_DESC},
+                                      {"col1_i64p9s5", TYPE_VARCHAR_DESC},
+                                      {"col0_i128p7s2", TYPE_VARCHAR_DESC},
+                                      {"col1_i128p7s2", TYPE_VARCHAR_DESC},
+                                      {"col0_i128p18s9", TYPE_VARCHAR_DESC},
+                                      {"col1_i128p18s9", TYPE_VARCHAR_DESC},
+                                      {"col0_i128p30s9", TYPE_VARCHAR_DESC},
+                                      {"col1_i128p30s9", TYPE_VARCHAR_DESC},
+                                      {"PART_x", TYPE_INT_DESC},
+                                      {"PART_y", TYPE_INT_DESC},
                                       {""}};
 std::string mtypes_orc_file = "./be/test/exec/test_data/orc_scanner/mtypes_100.orc.zlib";
 
-static SlotDesc mtypes_orc_min_max_descs[] = {{"id", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)},
-                                              {"PART_y", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
-                                              {""}};
+static SlotDesc mtypes_orc_min_max_descs[] = {{"id", TYPE_BIGINT_DESC}, {"PART_y", TYPE_INT_DESC}, {""}};
 
 TEST_F(HdfsScannerTest, TestOrcGetNext) {
     auto scanner = std::make_shared<HdfsOrcScanner>();
@@ -795,15 +1000,9 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterNoRows) {
         TSlotDescriptorBuilder slot_desc_builder;
         TTupleDescriptorBuilder tuple_desc_builder;
 
-        slot_desc_builder.column_name("id")
-                .type(TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT))
-                .id(0)
-                .nullable(true);
+        slot_desc_builder.column_name("id").type(TYPE_BIGINT_DESC).id(0).nullable(true);
         tuple_desc_builder.add_slot(slot_desc_builder.build());
-        slot_desc_builder.column_name("PART_y")
-                .type(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT))
-                .id(25)
-                .nullable(true);
+        slot_desc_builder.column_name("PART_y").type(TYPE_INT_DESC).id(25).nullable(true);
         tuple_desc_builder.add_slot(slot_desc_builder.build());
 
         tuple_desc_builder.build(&table_desc_builder);
@@ -931,9 +1130,7 @@ Total length: 48800
  */
 
 TEST_F(HdfsScannerTest, TestOrcGetNextWithDictFilter) {
-    SlotDesc string_key_value_orc_desc[] = {{"key", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
-                                            {"value", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
-                                            {""}};
+    SlotDesc string_key_value_orc_desc[] = {{"key", TYPE_VARCHAR_DESC}, {"value", TYPE_VARCHAR_DESC}, {""}};
     const std::string string_key_value_orc_file = "./be/test/exec/test_data/orc_scanner/string_key_value_10k.orc.zstd";
 
     auto scanner = std::make_shared<HdfsOrcScanner>();
@@ -980,10 +1177,7 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithDictFilter) {
 // Iceberg `_pos` on ORC: the scanner fills it from the ORC row number.
 
 static SlotDesc string_key_value_with_pos_orc_desc[] = {
-        {"key", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
-        {"value", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
-        {"_pos", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)},
-        {""}};
+        {"key", TYPE_VARCHAR_DESC}, {"value", TYPE_VARCHAR_DESC}, {"_pos", TYPE_BIGINT_DESC}, {""}};
 static const std::string string_key_value_10k_orc_file =
         "./be/test/exec/test_data/orc_scanner/string_key_value_10k.orc.zstd";
 
@@ -1016,8 +1210,7 @@ TEST_F(HdfsScannerTest, TestOrcIcebergRowPositionWithParquetPositionDelete) {
 
     // a Parquet position delete file for an ORC data file: rows 0, 4097 (2nd batch) and 9999 (last row) are deleted.
     {
-        std::vector type_descs{TypeDescriptor::from_logical_type(TYPE_VARCHAR),
-                               TypeDescriptor::from_logical_type(TYPE_BIGINT)};
+        std::vector type_descs{TYPE_VARCHAR_DESC, TYPE_BIGINT_DESC};
         auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
         auto writer_options = std::make_shared<formats::ParquetWriterOptions>();
         writer_options->column_ids = {
@@ -1201,9 +1394,7 @@ Stripes:
 */
 
 TEST_F(HdfsScannerTest, TestOrcGetNextWithDiffEncodeDictFilter) {
-    SlotDesc two_diff_encode_orc_desc[] = {{"x", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
-                                           {"y", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
-                                           {""}};
+    SlotDesc two_diff_encode_orc_desc[] = {{"x", TYPE_INT_DESC}, {"y", TYPE_VARCHAR_DESC}, {""}};
     const std::string two_diff_encode_orc_file = "./be/test/exec/test_data/orc_scanner/two-strips-dict-and-nodict.orc";
 
     auto scanner = std::make_shared<HdfsOrcScanner>();
@@ -1298,7 +1489,7 @@ Stripes:
 */
 
 TEST_F(HdfsScannerTest, TestOrcGetNextWithDatetimeMinMaxFilter) {
-    SlotDesc datetime_orc_descs[] = {{"c0", TypeDescriptor::from_logical_type(LogicalType::TYPE_DATETIME)}, {""}};
+    SlotDesc datetime_orc_descs[] = {{"c0", TYPE_DATETIME_DESC}, {""}};
     const std::string datetime_orc_file = "./be/test/exec/test_data/orc_scanner/datetime_20k.orc.zlib";
 
     auto scanner = std::make_shared<HdfsOrcScanner>();
@@ -1395,9 +1586,7 @@ Padding ratio: 0%
  */
 
 TEST_F(HdfsScannerTest, TestOrcGetNextWithPaddingCharDictFilter) {
-    SlotDesc padding_char_varchar_desc[] = {{"c0", TypeDescriptor::from_logical_type(LogicalType::TYPE_CHAR)},
-                                            {"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
-                                            {""}};
+    SlotDesc padding_char_varchar_desc[] = {{"c0", TYPE_CHAR_DESC}, {"c1", TYPE_VARCHAR_DESC}, {""}};
     const std::string padding_char_varchar_orc_file =
             "./be/test/exec/test_data/orc_scanner/padding_char_varchar_10k.orc";
 
@@ -1499,9 +1688,7 @@ Stripes:
 */
 
 TEST_F(HdfsScannerTest, TestOrcDecodeMinMaxDateTime) {
-    SlotDesc timezone_datetime_slot_descs[] = {{"c0", TypeDescriptor::from_logical_type(LogicalType::TYPE_DATETIME)},
-                                               {"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_DATE)},
-                                               {""}};
+    SlotDesc timezone_datetime_slot_descs[] = {{"c0", TYPE_DATETIME_DESC}, {"c1", TYPE_DATE_DESC}, {""}};
 
     // They are a timestamp type, we will ignore all timezone information
     const std::string timezone_datetime_shanghai_orc_file =
@@ -1571,7 +1758,7 @@ Stripe Statistics:
        Column 1: count: 4 hasNull: false bytesOnDisk: 21 min: 10 max: 11 sum: 15
  */
 TEST_F(HdfsScannerTest, TestOrcDecodeMinMaxWithTypeMismatch) {
-    SlotDesc slot_descs[] = {{"col1", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)}, {""}};
+    SlotDesc slot_descs[] = {{"col1", TYPE_INT_DESC}, {""}};
 
     // They are a timestamp type, we will ignore all timezone information
     const std::string orc_file = "./be/test/exec/test_data/orc_scanner/type_mismatch.orc";
@@ -1675,14 +1862,14 @@ Stripes:
     Stream: column 16 section DATA start: 401 length 0
  */
 TEST_F(HdfsScannerTest, TestOrcZeroSizeStream) {
-    SlotDesc slot_descs[] = {{"col_boolean", TypeDescriptor::from_logical_type(LogicalType::TYPE_BOOLEAN)},
-                             {"col_int", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
-                             {"col_long", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)},
-                             {"col_float", TypeDescriptor::from_logical_type(LogicalType::TYPE_FLOAT)},
-                             {"col_double", TypeDescriptor::from_logical_type(LogicalType::TYPE_DOUBLE)},
-                             {"col_date", TypeDescriptor::from_logical_type(LogicalType::TYPE_DATE)},
-                             {"col_timestamp", TypeDescriptor::from_logical_type(LogicalType::TYPE_DATETIME)},
-                             {"col_string", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
+    SlotDesc slot_descs[] = {{"col_boolean", TYPE_BOOLEAN_DESC},
+                             {"col_int", TYPE_INT_DESC},
+                             {"col_long", TYPE_BIGINT_DESC},
+                             {"col_float", TYPE_FLOAT_DESC},
+                             {"col_double", TYPE_DOUBLE_DESC},
+                             {"col_date", TYPE_DATE_DESC},
+                             {"col_timestamp", TYPE_DATETIME_DESC},
+                             {"col_string", TYPE_VARCHAR_DESC},
                              {"col_binary", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARBINARY)},
                              {""}};
 
@@ -1715,9 +1902,9 @@ TEST_F(HdfsScannerTest, TestOrcZeroSizeStream) {
 TEST_F(HdfsScannerTest, TestOrcLazyLoad) {
     static const std::string input_orc_file = "./be/test/exec/test_data/orc_scanner/orc_test_struct_basic.orc";
 
-    SlotDesc c0{"c0", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)};
+    SlotDesc c0{"c0", TYPE_INT_DESC};
     SlotDesc c1{"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT)};
-    c1.type.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR));
+    c1.type.children.push_back(TYPE_VARCHAR_DESC);
     c1.type.field_names.emplace_back("Cc1");
 
     SlotDesc slot_descs[] = {c0, c1, {""}};
@@ -1782,10 +1969,10 @@ TEST_F(HdfsScannerTest, TestOrcLazyLoad) {
 TEST_F(HdfsScannerTest, TestOrcMapLazyLoadWithSubfieldSeleted) {
     static const std::string input_orc_file = "./be/test/exec/test_data/orc_scanner/map_filter_bug.orc";
 
-    SlotDesc c0{"col1", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)};
+    SlotDesc c0{"col1", TYPE_INT_DESC};
     SlotDesc c1{"col2", TypeDescriptor::from_logical_type(LogicalType::TYPE_MAP)};
-    c1.type.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_UNKNOWN));
-    c1.type.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR));
+    c1.type.children.push_back(TYPE_UNKNOWN_DESC);
+    c1.type.children.push_back(TYPE_VARCHAR_DESC);
 
     SlotDesc slot_descs[] = {c0, c1, {""}};
 
@@ -1840,7 +2027,7 @@ TEST_F(HdfsScannerTest, TestOrcMapLazyLoadWithSubfieldSeleted) {
 TEST_F(HdfsScannerTest, TestOrcBooleanConjunct) {
     static const std::string input_orc_file = "./be/test/exec/test_data/orc_scanner/boolean_slot_ref.orc";
 
-    SlotDesc c0{"sex", TypeDescriptor::from_logical_type(LogicalType::TYPE_BOOLEAN)};
+    SlotDesc c0{"sex", TYPE_BOOLEAN_DESC};
 
     SlotDesc slot_descs[] = {c0, {""}};
 
@@ -1890,8 +2077,8 @@ TEST_F(HdfsScannerTest, TestOrcBooleanConjunct) {
 TEST_F(HdfsScannerTest, TestOrcCompoundConjunct) {
     static const std::string input_orc_file = "./be/test/exec/test_data/orc_scanner/scalar_types.orc";
 
-    SlotDesc c0{"col_tinyint", TypeDescriptor::from_logical_type(LogicalType::TYPE_TINYINT)};
-    SlotDesc c1{"col_smallint", TypeDescriptor::from_logical_type(LogicalType::TYPE_SMALLINT)};
+    SlotDesc c0{"col_tinyint", TYPE_TINYINT_DESC};
+    SlotDesc c1{"col_smallint", TYPE_SMALLINT_DESC};
 
     SlotDesc slot_descs[] = {c0, c1, {""}};
 
@@ -2016,7 +2203,7 @@ TEST_F(HdfsScannerTest, TestOrcSplitTasksShareDeletes) {
         bitmap->add_value(i);
     }
 
-    SlotDesc descs[] = {{"id", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)}, {""}};
+    SlotDesc descs[] = {{"id", TYPE_BIGINT_DESC}, {""}};
     auto* tuple_desc = _create_tuple_desc(descs);
     auto* range = _create_scan_range(file, 0, 0);
     auto* ctx = _create_ctx(file, range, tuple_desc);
@@ -2071,6 +2258,193 @@ TEST_F(HdfsScannerTest, TestOrcSplitTasksShareDeletes) {
     split_scanner->close();
 }
 
+<<<<<<< HEAD
+=======
+// Stripes whose rows are all deleted are skipped: no IO, no split task; a scan range left with no
+// stripe returns nothing.
+TEST_F(HdfsScannerTest, TestOrcSkipStripesWithAllRowsDeleted) {
+    const std::string file = "orc_skip_deleted_stripes.orc";
+    std::filesystem::remove(file);
+    const size_t num_rows = 5000;
+    const size_t stripe_rows = 1000;
+    {
+        ORC_UNIQUE_PTR<orc::Type> schema(orc::Type::buildTypeFromString("struct<id:bigint>"));
+        orc::WriterOptions options;
+        // force a stripe per batch
+        options.setStripeSize(0);
+        ORC_UNIQUE_PTR<orc::OutputStream> out = orc::writeLocalFile(file);
+        ORC_UNIQUE_PTR<orc::Writer> writer = orc::createWriter(*schema, out.get(), options);
+        ORC_UNIQUE_PTR<orc::ColumnVectorBatch> batch = writer->createRowBatch(stripe_rows);
+        auto* root = dynamic_cast<orc::StructVectorBatch*>(batch.get());
+        auto* id = dynamic_cast<orc::LongVectorBatch*>(root->fields[0]);
+        for (size_t start = 0; start < num_rows; start += stripe_rows) {
+            for (size_t i = 0; i < stripe_rows; i++) {
+                id->data[i] = start + i;
+            }
+            id->numElements = stripe_rows;
+            root->numElements = stripe_rows;
+            writer->add(*batch);
+        }
+        writer->close();
+    }
+    DeferOp remove_file([&]() { std::filesystem::remove(file); });
+    const size_t num_stripes = orc::createReader(orc::readLocalFile(file), orc::ReaderOptions{})->getNumberOfStripes();
+    ASSERT_EQ(num_rows / stripe_rows, num_stripes);
+
+    SlotDesc descs[] = {{"id", TYPE_BIGINT_DESC}, {""}};
+    auto* tuple_desc = _create_tuple_desc(descs);
+    auto open_scanner = [&](const DeletionBitmapPtr& bitmap, bool enable_split_tasks) {
+        auto* range = _create_scan_range(file, 0, 0);
+        auto* ctx = _create_ctx(file, range, tuple_desc);
+        ctx->format_scan_context.options.enable_split_tasks = enable_split_tasks;
+        auto scanner = std::make_shared<HdfsOrcScanner>();
+        scanner->_skip_rows_ctx->deletion_bitmap = bitmap;
+        CHECK_OK(scanner->init(_runtime_state, ctx));
+        CHECK_OK(scanner->open(_runtime_state));
+        return std::make_pair(scanner, ctx);
+    };
+    auto read_ids = [&](HdfsOrcScanner* scanner) {
+        std::vector<int64_t> ids;
+        Status status;
+        while (status.ok()) {
+            ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
+            status = scanner->get_next(_runtime_state, &chunk);
+            CHECK(status.ok() || status.is_end_of_file()) << status;
+            const Column* col = chunk->get_column_raw_ptr_by_slot_id(0);
+            for (size_t i = 0; i < chunk->num_rows(); i++) {
+                ids.push_back(col->get(i).get_int64());
+            }
+        }
+        return ids;
+    };
+    auto skipped_counter = [&](HdfsOrcScanner* scanner) {
+        RuntimeProfile profile("orc");
+        HdfsScannerProfile hdfs_profile;
+        hdfs_profile.runtime_profile = &profile;
+        scanner->do_update_counter(&hdfs_profile);
+        auto* counter = profile.get_counter("DeletedStripesSkipped");
+        return counter == nullptr ? -1 : counter->value();
+    };
+
+    // row 0 and all of stripe 1
+    auto bitmap = std::make_shared<DeletionBitmap>(roaring64_bitmap_create());
+    bitmap->add_value(0);
+    for (size_t i = stripe_rows; i < 2 * stripe_rows; i++) {
+        bitmap->add_value(i);
+    }
+    {
+        auto [scanner, ctx] = open_scanner(bitmap, false);
+        auto ids = read_ids(scanner.get());
+        std::vector<int64_t> expected;
+        for (int64_t v = 1; v < static_cast<int64_t>(num_rows); v++) {
+            if (v < static_cast<int64_t>(stripe_rows) || v >= static_cast<int64_t>(2 * stripe_rows)) {
+                expected.push_back(v);
+            }
+        }
+        EXPECT_EQ(expected, ids);
+        EXPECT_EQ(1, skipped_counter(scanner.get()));
+        scanner->close();
+    }
+    {
+        // no split task for the deleted stripe
+        auto [scanner, ctx] = open_scanner(bitmap, true);
+        const auto& split_tasks = ctx->format_scan_context.split.split_tasks;
+        ASSERT_EQ(num_stripes - 1, split_tasks.size());
+        const int64_t deleted_offset =
+                orc::createReader(orc::readLocalFile(file), orc::ReaderOptions{})->getStripe(1)->getOffset();
+        for (const auto& task : split_tasks) {
+            EXPECT_NE(deleted_offset, task->start_offset);
+        }
+        // the task that splits the file reports the stripe it dropped
+        EXPECT_EQ(1, skipped_counter(scanner.get()));
+        scanner->close();
+    }
+    {
+        // every stripe deleted
+        auto all = std::make_shared<DeletionBitmap>(roaring64_bitmap_create());
+        for (size_t i = 0; i < num_rows; i++) {
+            all->add_value(i);
+        }
+        auto [scanner, ctx] = open_scanner(all, false);
+        EXPECT_TRUE(read_ids(scanner.get()).empty());
+        EXPECT_EQ(num_stripes, skipped_counter(scanner.get()));
+        scanner->close();
+    }
+}
+
+// The whole-stripe (tiny stripe) read is decided on every stripe of the scan range: dropping a large,
+// fully deleted stripe must not switch the small surviving ones to whole-stripe reads.
+TEST_F(HdfsScannerTest, TestOrcSkipDeletedStripeKeepsTinyStripeDecision) {
+    const std::string file = "orc_skip_deleted_large_stripe.orc";
+    std::filesystem::remove(file);
+    // stripe 1 is much larger than stripes 0 and 2
+    const std::vector<size_t> stripe_rows{100, 100000, 100};
+    {
+        ORC_UNIQUE_PTR<orc::Type> schema(orc::Type::buildTypeFromString("struct<id:bigint>"));
+        orc::WriterOptions options;
+        options.setStripeSize(0);
+        ORC_UNIQUE_PTR<orc::OutputStream> out = orc::writeLocalFile(file);
+        ORC_UNIQUE_PTR<orc::Writer> writer = orc::createWriter(*schema, out.get(), options);
+        int64_t next = 0;
+        for (size_t rows : stripe_rows) {
+            ORC_UNIQUE_PTR<orc::ColumnVectorBatch> batch = writer->createRowBatch(rows);
+            auto* root = dynamic_cast<orc::StructVectorBatch*>(batch.get());
+            auto* id = dynamic_cast<orc::LongVectorBatch*>(root->fields[0]);
+            for (size_t i = 0; i < rows; i++) {
+                // not compressible to nothing: keep the large stripe large
+                id->data[i] = (next++) * 2654435761LL;
+            }
+            id->numElements = rows;
+            root->numElements = rows;
+            writer->add(*batch);
+        }
+        writer->close();
+    }
+    DeferOp remove_file([&]() { std::filesystem::remove(file); });
+    auto reader = orc::createReader(orc::readLocalFile(file), orc::ReaderOptions{});
+    ASSERT_EQ(stripe_rows.size(), reader->getNumberOfStripes());
+    auto stripe_size = [&](size_t idx) {
+        auto stripe = reader->getStripe(idx);
+        return static_cast<int64_t>(stripe->getIndexLength() + stripe->getDataLength() + stripe->getFooterLength());
+    };
+    ASSERT_GT(stripe_size(1), 4 * stripe_size(0));
+    // stripes 0 and 2 are tiny, stripe 1 is not
+    const int32_t saved_threshold = config::orc_tiny_stripe_threshold_size;
+    DeferOp restore([&]() { config::orc_tiny_stripe_threshold_size = saved_threshold; });
+    config::orc_tiny_stripe_threshold_size = static_cast<int32_t>((stripe_size(0) + stripe_size(1)) / 2);
+
+    auto bitmap = std::make_shared<DeletionBitmap>(roaring64_bitmap_create());
+    for (size_t i = stripe_rows[0]; i < stripe_rows[0] + stripe_rows[1]; i++) {
+        bitmap->add_value(i);
+    }
+    SlotDesc descs[] = {{"id", TYPE_BIGINT_DESC}, {""}};
+    auto* tuple_desc = _create_tuple_desc(descs);
+    auto* range = _create_scan_range(file, 0, 0);
+    auto* ctx = _create_ctx(file, range, tuple_desc);
+    auto scanner = std::make_shared<HdfsOrcScanner>();
+    scanner->_skip_rows_ctx->deletion_bitmap = bitmap;
+    ASSERT_OK(scanner->init(_runtime_state, ctx));
+    ASSERT_OK(scanner->open(_runtime_state));
+    size_t rows = 0;
+    Status status;
+    while (status.ok()) {
+        ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
+        status = scanner->get_next(_runtime_state, &chunk);
+        ASSERT_TRUE(status.ok() || status.is_end_of_file()) << status;
+        rows += chunk->num_rows();
+    }
+    EXPECT_EQ(stripe_rows[0] + stripe_rows[2], rows);
+
+    RuntimeProfile profile("orc");
+    HdfsScannerProfile hdfs_profile;
+    hdfs_profile.runtime_profile = &profile;
+    scanner->do_update_counter(&hdfs_profile);
+    EXPECT_EQ(1, profile.get_counter("DeletedStripesSkipped")->value());
+    EXPECT_EQ(0, profile.get_counter("TotalTinyStripeSize")->value());
+    scanner->close();
+}
+
+>>>>>>> ffea928 ([UT] Use TYPE_X_DESC instead of TypeDescriptor::from_logical_type(TYPE_X) in BE tests (#81928))
 // =============================================================================
 
 /*
@@ -2100,8 +2474,8 @@ c3:            BINARY SNAPPY DO:2764882 FPO:2803392 SZ:43059/586643/13.62 VC:272
  */
 
 TEST_F(HdfsScannerTest, TestParquetCoalesceReadAcrossRowGroup) {
-    SlotDesc parquet_descs[] = {{"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)},
-                                {"c2", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)},
+    SlotDesc parquet_descs[] = {{"c1", TYPE_BIGINT_DESC},
+                                {"c2", TYPE_BIGINT_DESC},
                                 {"c3", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
                                 {""}};
 
@@ -2125,8 +2499,8 @@ TEST_F(HdfsScannerTest, TestParquetCoalesceReadAcrossRowGroup) {
 }
 
 TEST_F(HdfsScannerTest, TestParquetRuntimeFilter) {
-    SlotDesc parquet_descs[] = {{"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)},
-                                {"c2", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)},
+    SlotDesc parquet_descs[] = {{"c1", TYPE_BIGINT_DESC},
+                                {"c2", TYPE_BIGINT_DESC},
                                 {"c3", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
                                 {""}};
 
@@ -2219,7 +2593,7 @@ is_original:           REQUIRED INT32 R:0 D:0
 
 TEST_F(HdfsScannerTest, TestParqueTypeMismatchDecodeMinMax) {
     SlotDesc parquet_descs[] = {{"vin", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
-                                {"is_cloud", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
+                                {"is_cloud", TYPE_VARCHAR_DESC},
                                 {""}};
 
     SlotDesc min_max_descs[] = {{"vin", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)}, {""}};
@@ -2774,10 +3148,7 @@ TEST_F(HdfsScannerTest, TestCSVCaseIgnore) {
 }
 
 TEST_F(HdfsScannerTest, TestCSVWithoutEndDelemeter) {
-    SlotDesc csv_descs[] = {{"col1", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
-                            {"col2", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
-                            {"col3", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
-                            {""}};
+    SlotDesc csv_descs[] = {{"col1", TYPE_INT_DESC}, {"col2", TYPE_INT_DESC}, {"col3", TYPE_INT_DESC}, {""}};
 
     const std::string small_file = "./be/test/exec/test_data/csv_scanner/delimiter.csv";
     Status status;
@@ -2994,20 +3365,17 @@ TEST_F(HdfsScannerTest, TestCSVDifferentOrderColumn) {
 TEST_F(HdfsScannerTest, TestCSVWithStructMap) {
     TypeDescriptor struct_col = TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT);
     struct_col.field_names.emplace_back("subfield");
-    struct_col.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+    struct_col.children.emplace_back(TYPE_INT_DESC);
     TypeDescriptor array_struct = TypeDescriptor::from_logical_type(LogicalType::TYPE_ARRAY);
     array_struct.children.emplace_back(struct_col);
 
     TypeDescriptor map_col = TypeDescriptor::from_logical_type(LogicalType::TYPE_MAP);
-    map_col.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
-    map_col.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+    map_col.children.emplace_back(TYPE_INT_DESC);
+    map_col.children.emplace_back(TYPE_INT_DESC);
     TypeDescriptor array_map = TypeDescriptor::from_logical_type(LogicalType::TYPE_ARRAY);
     array_map.children.emplace_back(map_col);
 
-    SlotDesc csv_descs[] = {{"id", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
-                            {"struct", array_struct},
-                            {"map", array_map},
-                            {""}};
+    SlotDesc csv_descs[] = {{"id", TYPE_INT_DESC}, {"struct", array_struct}, {"map", array_map}, {""}};
 
     const std::string small_file = "./be/test/exec/test_data/csv_scanner/array_struct_map.csv";
     Status status;
@@ -3142,12 +3510,9 @@ TEST_F(HdfsScannerTest, TestLazySimpleSplitter) {
 
 TEST_F(HdfsScannerTest, TestCSVArrayLastElementEmpty) {
     TypeDescriptor array_col = TypeDescriptor::from_logical_type(LogicalType::TYPE_ARRAY);
-    array_col.children.emplace_back(TypeDescriptor::from_logical_type(TYPE_VARCHAR));
+    array_col.children.emplace_back(TYPE_VARCHAR_DESC);
 
-    SlotDesc csv_descs[] = {{"id", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
-                            {"array", array_col},
-                            {"sex", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
-                            {""}};
+    SlotDesc csv_descs[] = {{"id", TYPE_VARCHAR_DESC}, {"array", array_col}, {"sex", TYPE_VARCHAR_DESC}, {""}};
 
     const std::string small_file = "./be/test/exec/test_data/csv_scanner/array_last_element_is_empty.csv";
     Status status;
@@ -3184,7 +3549,7 @@ TEST_F(HdfsScannerTest, TestCSVArrayLastElementEmpty) {
 TEST_F(HdfsScannerTest, TestCSVWithBlankDelimiter) {
     const std::string small_file = "./be/test/exec/test_data/csv_scanner/array_struct_map.csv";
 
-    SlotDesc csv_descs[] = {{"id", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)}, {""}};
+    SlotDesc csv_descs[] = {{"id", TYPE_INT_DESC}, {""}};
 
     auto* tuple_desc = _create_tuple_desc(csv_descs);
     auto* common_range = _create_scan_range(small_file, 0, 0);
@@ -3322,9 +3687,8 @@ A:            BINARY SNAPPY DO:693 FPO:1139 SZ:581/749/1.29 VC:100 ENC:PLAIN,RLE
 */
 
 TEST_F(HdfsScannerTest, TestParquetUppercaseFiledPredicate) {
-    SlotDesc parquet_descs[] = {{"id", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
-                                {"a", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
-                                {""}};
+    SlotDesc parquet_descs[] = {
+            {"id", TYPE_INT_DESC}, {"a", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)}, {""}};
 
     const std::string parquet_file = "./be/test/exec/test_data/parquet_scanner/upcase_field.parquet";
 
@@ -3414,10 +3778,9 @@ def array2_parquet():
 
 TEST_F(HdfsScannerTest, TestParquetArrayDecode) {
     TypeDescriptor array_type(TYPE_ARRAY);
-    array_type.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+    array_type.children.emplace_back(TYPE_INT_DESC);
 
-    SlotDesc parquet_descs[] = {
-            {"id", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)}, {"f00", array_type}, {""}};
+    SlotDesc parquet_descs[] = {{"id", TYPE_INT_DESC}, {"f00", array_type}, {""}};
 
     const std::string parquet_file = "./be/test/exec/test_data/parquet_scanner/array_decode.parquet";
 
@@ -3536,7 +3899,7 @@ TEST_F(HdfsScannerTest, TestParquetDictTwoPage) {
 
 // Test min-max logic when parquet file contains complex types
 TEST_F(HdfsScannerTest, TestMinMaxFilterWhenContainsComplexTypes) {
-    SlotDesc parquet_descs[] = {{"col82", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)}, {""}};
+    SlotDesc parquet_descs[] = {{"col82", TYPE_INT_DESC}, {""}};
 
     const std::string parquet_file = "./be/test/exec/test_data/parquet_data/min-max-complex-types.parquet";
 
@@ -3634,7 +3997,7 @@ TEST_F(HdfsScannerTest, TestHudiMORArrayMapStruct) {
 
     TypeDescriptor C(LogicalType::TYPE_ARRAY);
     TypeDescriptor C1(LogicalType::TYPE_ARRAY);
-    C1.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+    C1.children.push_back(TYPE_INT_DESC);
     C.children.push_back(C1); // array<array<int>>
 
     TypeDescriptor D(LogicalType::TYPE_MAP);
@@ -3648,7 +4011,7 @@ TEST_F(HdfsScannerTest, TestHudiMORArrayMapStruct) {
 
         TypeDescriptor B0(LogicalType::TYPE_MAP);
         B0.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22));
-        B0.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+        B0.children.push_back(TYPE_INT_DESC);
         E.children.push_back(B0);
         E.field_names.emplace_back("b");
 
@@ -3658,7 +4021,7 @@ TEST_F(HdfsScannerTest, TestHudiMORArrayMapStruct) {
             C0.field_names.emplace_back("a");
 
             TypeDescriptor B1(LogicalType::TYPE_STRUCT);
-            B1.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+            B1.children.push_back(TYPE_INT_DESC);
             B1.field_names.emplace_back("a");
             B1.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22));
             B1.field_names.emplace_back("b");
@@ -3670,7 +4033,7 @@ TEST_F(HdfsScannerTest, TestHudiMORArrayMapStruct) {
         E.field_names.emplace_back("c");
     }
 
-    SlotDesc parquet_descs[] = {{"a", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
+    SlotDesc parquet_descs[] = {{"a", TYPE_INT_DESC},
                                 {"b", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
                                 {"c", C},
                                 {"d", D},
@@ -3772,20 +4135,20 @@ TEST_F(HdfsScannerTest, TestHudiMORArrayMapStruct2) {
     {
         // c: array<int>
         TypeDescriptor C(LogicalType::TYPE_ARRAY);
-        C.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+        C.children.push_back(TYPE_INT_DESC);
 
         // d: map<string, int>
         TypeDescriptor D(LogicalType::TYPE_MAP);
         D.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22));
-        D.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+        D.children.push_back(TYPE_INT_DESC);
 
         TypeDescriptor E(LogicalType::TYPE_STRUCT);
-        E.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+        E.children.push_back(TYPE_INT_DESC);
         E.field_names.emplace_back("a");
         E.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22));
         E.field_names.emplace_back("b");
 
-        SlotDesc parquet_descs[] = {{"a", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
+        SlotDesc parquet_descs[] = {{"a", TYPE_INT_DESC},
                                     {"b", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
                                     {"c", C},
                                     {"d", D},
@@ -3813,7 +4176,7 @@ TEST_F(HdfsScannerTest, TestHudiMORArrayMapStruct2) {
         TypeDescriptor E(LogicalType::TYPE_STRUCT);
         E.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22));
         E.field_names.emplace_back("b");
-        E.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+        E.children.push_back(TYPE_INT_DESC);
         E.field_names.emplace_back("a");
 
         SlotDesc parquet_descs[] = {{"e", E}, {""}};
@@ -3841,7 +4204,7 @@ TEST_F(HdfsScannerTest, TestHudiMORArrayMapStruct2) {
         TypeDescriptor E(LogicalType::TYPE_STRUCT);
         E.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22));
         E.field_names.emplace_back("B");
-        E.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+        E.children.push_back(TYPE_INT_DESC);
         E.field_names.emplace_back("a");
 
         SlotDesc parquet_descs[] = {{"e", E}, {""}};
@@ -3867,7 +4230,7 @@ TEST_F(HdfsScannerTest, TestHudiMORArrayMapStruct2) {
     // select e but as <a:int>
     {
         TypeDescriptor E(LogicalType::TYPE_STRUCT);
-        E.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+        E.children.push_back(TYPE_INT_DESC);
         E.field_names.emplace_back("a");
 
         SlotDesc parquet_descs[] = {{"e", E}, {""}};
@@ -3895,7 +4258,7 @@ TEST_F(HdfsScannerTest, TestHudiMORArrayMapStruct2) {
         // d: map<string, int>
         TypeDescriptor D(LogicalType::TYPE_MAP);
         D.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22));
-        D.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_UNKNOWN));
+        D.children.push_back(TYPE_UNKNOWN_DESC);
 
         SlotDesc parquet_descs[] = {{"d", D}, {""}};
 
@@ -3971,7 +4334,7 @@ uuid = aa
 */
 
 TEST_F(HdfsScannerTest, TestParquetTimestampToDatetime) {
-    SlotDesc parquet_descs[] = {{"b", TypeDescriptor::from_logical_type(LogicalType::TYPE_DATETIME)}, {""}};
+    SlotDesc parquet_descs[] = {{"b", TYPE_DATETIME_DESC}, {""}};
 
     const std::string parquet_file = "./be/test/exec/test_data/parquet_scanner/timestamp_to_datetime.parquet";
 
@@ -3994,7 +4357,7 @@ TEST_F(HdfsScannerTest, TestParquetTimestampToDatetime) {
 }
 
 TEST_F(HdfsScannerTest, TestParquetIcebergCaseSensitive) {
-    SlotDesc parquet_descs[] = {{"Id", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)}, {""}};
+    SlotDesc parquet_descs[] = {{"Id", TYPE_INT_DESC}, {""}};
 
     const std::string parquet_file =
             "./be/test/formats/parquet/test_data/iceberg_schema_evolution/add_struct_subfield.parquet";
@@ -4027,9 +4390,7 @@ TEST_F(HdfsScannerTest, TestParquetIcebergCaseSensitive) {
 }
 
 TEST_F(HdfsScannerTest, TestParquetLZOFormat) {
-    SlotDesc parquet_descs[] = {{"a", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
-                                {"b", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
-                                {""}};
+    SlotDesc parquet_descs[] = {{"a", TYPE_VARCHAR_DESC}, {"b", TYPE_VARCHAR_DESC}, {""}};
 
     const std::string parquet_file = "./be/test/exec/test_data/parquet_scanner/lzo_compression.parquet";
 
@@ -4050,28 +4411,22 @@ TEST_F(HdfsScannerTest, TestParquetLZOFormat) {
 #if defined(WITH_STARCACHE)
 // Real columns of `default_parquet_file`, so that its data pages are read.
 static SlotDesc corrupted_datacache_parquet_descs[] = {
-        {"col1", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
-        {"col2", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)},
+        {"col1", TYPE_INT_DESC},
+        {"col2", TYPE_BIGINT_DESC},
         {"col3", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
-        {"col4", TypeDescriptor::from_logical_type(LogicalType::TYPE_DATETIME)},
+        {"col4", TYPE_DATETIME_DESC},
         {""}};
 
 // Two row groups, with c0 in [0, 1023] and [1024, 1999].
 static const std::string multi_row_groups_parquet_file =
         "./be/test/exec/test_data/parquet_scanner/multi_stripes.parquet";
-static SlotDesc multi_row_groups_parquet_descs[] = {
-        {"c0", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)},
-        {"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
-        {""}};
+static SlotDesc multi_row_groups_parquet_descs[] = {{"c0", TYPE_BIGINT_DESC}, {"c1", TYPE_VARCHAR_DESC}, {""}};
 // The first data page of c0 in the second row group: a header, then the Snappy compressed data of one literal.
 static constexpr size_t second_row_group_page_offset = 9859;
 static constexpr size_t second_row_group_page_header_size = 64;
 
 static const std::string corrupted_datacache_orc_file = "./be/test/exec/test_data/orc_scanner/mtypes_100.orc.zlib";
-static SlotDesc corrupted_datacache_orc_descs[] = {
-        {"id", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)},
-        {"col_varchar", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
-        {""}};
+static SlotDesc corrupted_datacache_orc_descs[] = {{"id", TYPE_BIGINT_DESC}, {"col_varchar", TYPE_VARCHAR_DESC}, {""}};
 
 #define ASSERT_SCAN_MATCHES(Scanner, file)            \
     do {                                              \

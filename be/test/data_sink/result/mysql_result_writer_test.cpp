@@ -81,16 +81,14 @@ TEST_F(MysqlResultWriterTest, should_set_binary_null_bit_after_fallback_column) 
     auto nullable_col = NullableColumn::create(nullable_data, null_flags);
 
     std::vector<std::pair<TypeDescriptor, ColumnPtr>> expr_columns;
-    expr_columns.emplace_back(TypeDescriptor::from_logical_type(TYPE_BIGINT), bigint_col);
-    expr_columns.emplace_back(
-            TypeDescriptor::create_struct_type(field_names, {TypeDescriptor::from_logical_type(TYPE_VARCHAR)}),
-            struct_col);
-    expr_columns.emplace_back(TypeDescriptor::from_logical_type(TYPE_BIGINT), nullable_col);
+    expr_columns.emplace_back(TYPE_BIGINT_DESC, bigint_col);
+    expr_columns.emplace_back(TypeDescriptor::create_struct_type(field_names, {TYPE_VARCHAR_DESC}), struct_col);
+    expr_columns.emplace_back(TYPE_BIGINT_DESC, nullable_col);
     auto expr_ctxs = make_expr_ctxs(expr_columns);
 
     // Dummy chunk that only carries row count information.
     Chunk chunk;
-    auto dummy_col = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_INT), false);
+    auto dummy_col = ColumnHelper::create_column(TYPE_INT_DESC, false);
     dummy_col->append_default();
     dummy_col->append_default();
     chunk.append_column(dummy_col, 0);
@@ -184,10 +182,9 @@ TEST_F(MysqlResultWriterTest, geography_matches_varbinary_output) {
                 bytes_col = ColumnHelper::create_const_null_column(2);
             }
             auto run = [&](const TypeDescriptor& type, const ColumnPtr& column) {
-                auto ctxs =
-                        make_expr_ctxs({{type, column},
-                                        {TypeDescriptor::from_logical_type(TYPE_BIGINT),
-                                         NullableColumn::create(Int64Column::create(2), NullColumn::create(2, 1))}});
+                auto ctxs = make_expr_ctxs(
+                        {{type, column},
+                         {TYPE_BIGINT_DESC, NullableColumn::create(Int64Column::create(2), NullColumn::create(2, 1))}});
                 Chunk chunk;
                 chunk.append_column(Int32Column::create(2), 0);
                 RuntimeProfile profile("geography_output");
