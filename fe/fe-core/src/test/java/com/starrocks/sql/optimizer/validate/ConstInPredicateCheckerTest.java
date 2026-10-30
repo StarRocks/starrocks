@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.validate;
 
 import com.google.common.collect.ImmutableMap;
+import com.starrocks.catalog.Type;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.operator.Operator;
@@ -27,8 +28,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.type.BooleanType;
-import com.starrocks.type.IntegerType;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -37,8 +36,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ConstInPredicateCheckerTest {
 
-    private static final ColumnRefOperator VALUE = new ColumnRefOperator(1, IntegerType.TINYINT, "v", true);
-    private static final ColumnRefOperator AUTO_FILL = new ColumnRefOperator(14, IntegerType.TINYINT,
+    private static final ColumnRefOperator VALUE = new ColumnRefOperator(1, Type.TINYINT, "v", true);
+    private static final ColumnRefOperator AUTO_FILL = new ColumnRefOperator(14, Type.TINYINT,
             "auto_fill_col", false);
 
     private static OptExpression filter(ScalarOperator predicate) {
@@ -61,7 +60,7 @@ class ConstInPredicateCheckerTest {
     @Test
     void testColumnRefUnderCastInValueListIsRejected() {
         InPredicateOperator in = new InPredicateOperator(true, VALUE,
-                ConstantOperator.createTinyInt((byte) 0), new CastOperator(IntegerType.TINYINT, AUTO_FILL));
+                ConstantOperator.createTinyInt((byte) 0), new CastOperator(Type.TINYINT, AUTO_FILL));
 
         assertThrows(StarRocksPlannerException.class,
                 () -> ConstInPredicateChecker.getInstance().validate(filter(in), null));
@@ -71,7 +70,7 @@ class ConstInPredicateCheckerTest {
     void testNestedInProjectionIsRejected() {
         InPredicateOperator in = new InPredicateOperator(false, VALUE,
                 ConstantOperator.createTinyInt((byte) 0), AUTO_FILL);
-        ColumnRefOperator out = new ColumnRefOperator(20, BooleanType.BOOLEAN, "out", true);
+        ColumnRefOperator out = new ColumnRefOperator(20, Type.BOOLEAN, "out", true);
         PhysicalProjectOperator project = new PhysicalProjectOperator(ImmutableMap.of(out, in), ImmutableMap.of());
         OptExpression root = OptExpression.create(project,
                 new OptExpression(new MockOperator(OperatorType.LOGICAL_VALUES)));
@@ -84,7 +83,7 @@ class ConstInPredicateCheckerTest {
     void testConstantValueListIsAccepted() {
         InPredicateOperator in = new InPredicateOperator(false, VALUE,
                 ConstantOperator.createTinyInt((byte) 0), ConstantOperator.createTinyInt((byte) 1),
-                ConstantOperator.createNull(IntegerType.TINYINT));
+                ConstantOperator.createNull(Type.TINYINT));
 
         assertDoesNotThrow(() -> ConstInPredicateChecker.getInstance().validate(filter(in), null));
     }
