@@ -4373,12 +4373,7 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpCountTest) {
 
         auto result = StringFunctions::regexp_count(context, columns).value();
 
-        ASSERT_EQ(result->size(), 5);
-        ASSERT_EQ(result->get(0).get_int64(), 6);
-        ASSERT_EQ(result->get(1).get_int64(), 0);
-        ASSERT_EQ(result->get(2).get_int64(), 0);
-        ASSERT_EQ(result->get(3).get_int64(), 0);
-        ASSERT_TRUE(result->is_null(4));
+        ASSERT_EQ("[6, 0, 0, 0, NULL]", result->debug_string());
     }
 
     // Dynamic regex pattern test
@@ -4393,10 +4388,7 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpCountTest) {
 
         auto result = StringFunctions::regexp_count(context, columns).value();
 
-        ASSERT_EQ(result->size(), 3);
-        ASSERT_EQ(result->get(0).get_int64(), 6);
-        ASSERT_EQ(result->get(1).get_int64(), 0);
-        ASSERT_EQ(result->get(2).get_int64(), 0);
+        ASSERT_EQ("[6, 0, 0]", result->debug_string());
     }
 
     // Special characters test
@@ -4410,9 +4402,7 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpCountTest) {
 
         auto result = StringFunctions::regexp_count(context, columns).value();
 
-        ASSERT_EQ(result->size(), 2);
-        ASSERT_EQ(result->get(0).get_int64(), 4);
-        ASSERT_EQ(result->get(1).get_int64(), 4);
+        ASSERT_EQ("[4, 4]", result->debug_string());
     }
 
     // Empty and invalid pattern test
@@ -4429,10 +4419,7 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpCountTest) {
         Columns columns = {str_col, nullable_pattern};
 
         auto result = StringFunctions::regexp_count(context, columns).value();
-        ASSERT_EQ(result->size(), 3);
-        ASSERT_TRUE(result->is_null(0));
-        ASSERT_TRUE(result->is_null(1));
-        ASSERT_TRUE(result->is_null(2));
+        ASSERT_EQ("[NULL, NULL, NULL]", result->debug_string());
     }
 
     {
@@ -4443,10 +4430,7 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpCountTest) {
 
         auto result = StringFunctions::regexp_count(context, columns).value();
 
-        ASSERT_EQ(result->size(), 3);
-        ASSERT_EQ(result->get(0).get_int64(), 5);
-        ASSERT_EQ(result->get(1).get_int64(), 10);
-        ASSERT_EQ(result->get(2).get_int64(), 2);
+        ASSERT_EQ("[5, 10, 2]", result->debug_string());
     }
 
     // Unicode characters test
@@ -4458,9 +4442,7 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpCountTest) {
 
         auto result = StringFunctions::regexp_count(context, columns).value();
 
-        ASSERT_EQ(result->size(), 2);
-        ASSERT_EQ(result->get(0).get_int64(), 2);
-        ASSERT_EQ(result->get(1).get_int64(), 3);
+        ASSERT_EQ("[2, 3]", result->debug_string());
     }
 }
 

@@ -368,9 +368,7 @@ TEST_F(VariantFunctionsTest, variant_query_null_columns) {
 
     ColumnPtr result = VariantFunctions::variant_query(ctx.get(), columns).value();
     ASSERT_TRUE(!!result);
-    ASSERT_EQ(2, result->size());
-    ASSERT_TRUE(result->is_null(0));
-    ASSERT_TRUE(result->is_null(1));
+    ASSERT_EQ("[NULL, NULL]", result->debug_string());
 }
 
 // Validates invalid json-path handling returns NULL instead of failing evaluation.
