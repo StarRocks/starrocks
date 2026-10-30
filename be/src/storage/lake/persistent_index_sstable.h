@@ -83,7 +83,13 @@ public:
     // Full path of the underlying sstable file. Only valid after a successful init().
     std::string filename() const { return _rf->filename(); }
 
+    // Resident bytes of the index block and bloom filter; memory_usage() is their sum.
+    size_t index_block_memory_usage() const;
+    size_t filter_memory_usage() const;
     size_t memory_usage() const;
+
+    // Bytes of the delete vector attached to this sstable, if any. Not part of memory_usage().
+    size_t delvec_memory_usage() const;
 
     // Sample keys from the table for parallel compaction task splitting.
     Status sample_keys(std::vector<std::string>* keys, size_t sample_interval_bytes) const;

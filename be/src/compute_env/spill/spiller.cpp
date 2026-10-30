@@ -73,6 +73,9 @@ SpillProcessMetrics::SpillProcessMetrics(RuntimeProfile* profile, std::atomic_in
     append_data_timer = ADD_CHILD_TIMER(profile, "AppendDataTime", parent);
     spill_rows = ADD_CHILD_COUNTER(profile, "RowsSpilled", TUnit::UNIT, parent);
     flush_timer = ADD_CHILD_TIMER(profile, "FlushTime", parent);
+    flush_mem_table_timer = ADD_CHILD_TIMER(profile, "FlushMemTableTime", "FlushTime");
+    compact_timer = ADD_CHILD_TIMER(profile, "CompactTime", "FlushTime");
+    compact_merge_timer = ADD_CHILD_TIMER(profile, "CompactMergeTime", "CompactTime");
 
     write_io_timer = ADD_CHILD_TIMER(profile, "WriteIOTime", parent);
     local_write_io_timer = ADD_CHILD_TIMER(profile, "LocalWriteIOTime", "WriteIOTime");
@@ -120,6 +123,8 @@ SpillProcessMetrics::SpillProcessMetrics(RuntimeProfile* profile, std::atomic_in
 
     compact_count = ADD_CHILD_COUNTER(profile, "CompactCount", TUnit::UNIT, parent);
     compact_block_count = ADD_CHILD_COUNTER(profile, "CompactBlockCount", TUnit::UNIT, parent);
+    compact_bytes_read = ADD_CHILD_COUNTER(profile, "CompactBytesRead", TUnit::BYTES, parent);
+    compact_bytes_written = ADD_CHILD_COUNTER(profile, "CompactBytesWritten", TUnit::BYTES, parent);
 
     flush_io_task_count = ADD_CHILD_COUNTER(profile, "FlushIOTaskCount", TUnit::UNIT, parent);
     peak_flush_io_task_count = profile->AddHighWaterMarkCounter(

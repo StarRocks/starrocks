@@ -19,19 +19,85 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.TableName;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TStatisticData;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.mockito.MockedStatic;
+import org.mockito.Mockito;
 
 import java.time.LocalDateTime;
 import java.util.List;
 
 public class StatisticExecutorTest extends PlanTestBase {
+    @Test
+    public void testStatisticsDmlUsesInternalCatalogAndRestoresCaller() throws Exception {
+        ConnectContext caller = new ConnectContext();
+        caller.setCurrentCatalog("iceberg_catalog");
+        caller.setDatabase("iceberg_db");
+        ConnectContext internal = StatisticUtils.buildConnectContext();
+        StmtExecutor executor = Mockito.mock(StmtExecutor.class);
+        Mockito.doAnswer(invocation -> {
+            // The DELETE partition-pruning query resolves its unqualified catalog via the thread context.
+            TableName table = new TableName(StatsConstants.STATISTICS_DB_NAME,
+                    StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME);
+            table.normalization(ConnectContext.get());
+            Assertions.assertEquals(internal.getCurrentCatalog(), table.getCatalog());
+            // A failed pruning attempt may be recovered by a successful DELETE.
+            Assertions.assertThrows(SemanticException.class, () ->
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, "pruning_probe"));
+            internal.getState().setOk();
+            return null;
+        }).when(executor).execute();
+
+        try (var scope = caller.bindScope();
+                MockedStatic<StmtExecutor> factory = Mockito.mockStatic(StmtExecutor.class)) {
+            factory.when(() -> StmtExecutor.newInternalExecutor(Mockito.same(internal),
+                    Mockito.any(StatementBase.class))).thenReturn(executor);
+            new StatisticExecutor().dropExternalTableStatistics(internal, "external_table_uuid");
+            Mockito.verify(executor).execute();
+            Assertions.assertSame(caller, ConnectContext.get());
+            Assertions.assertFalse(caller.getState().isError());
+            Assertions.assertEquals("iceberg_catalog", caller.getCurrentCatalog());
+            Assertions.assertEquals("iceberg_db", caller.getDatabase());
+        }
+    }
+
+    @Test
+    public void testStatisticsDmlExceptionRestoresCaller() throws Exception {
+        ConnectContext caller = new ConnectContext();
+        caller.setCurrentCatalog("iceberg_catalog");
+        ConnectContext internal = StatisticUtils.buildConnectContext();
+        StmtExecutor executor = Mockito.mock(StmtExecutor.class);
+        Mockito.doAnswer(invocation -> {
+            ErrorReport.report(ErrorCode.ERR_BAD_DB_ERROR, "missing_statistics_db");
+            throw new IllegalStateException("statistics delete failed");
+        }).when(executor).execute();
+
+        try (var scope = caller.bindScope();
+                MockedStatic<StmtExecutor> factory = Mockito.mockStatic(StmtExecutor.class)) {
+            factory.when(() -> StmtExecutor.newInternalExecutor(Mockito.same(internal),
+                    Mockito.any(StatementBase.class))).thenReturn(executor);
+            Assertions.assertFalse(new StatisticExecutor().dropTableStatistics(
+                    internal, List.of(1L), StatsConstants.AnalyzeType.FULL));
+            Mockito.verify(executor).execute();
+            Assertions.assertTrue(internal.getState().isError());
+            Assertions.assertSame(caller, ConnectContext.get());
+            Assertions.assertFalse(caller.getState().isError());
+            Assertions.assertEquals("iceberg_catalog", caller.getCurrentCatalog());
+        }
+    }
+
     @Test
     public void testEmpty() throws Exception {
         StatisticExecutor statisticExecutor = new StatisticExecutor();

@@ -38,10 +38,7 @@ TEST_F(NullableConverterTest, test_read_string) {
     EXPECT_TRUE(conv->read_string(col.get(), "-1", Converter::Options()));
     EXPECT_TRUE(conv->read_string(col.get(), "\\N", Converter::Options()));
 
-    EXPECT_EQ(3, col->size());
-    EXPECT_EQ(1, col->get(0).get_int32());
-    EXPECT_EQ(-1, col->get(1).get_int32());
-    EXPECT_TRUE(col->get(2).is_null());
+    EXPECT_EQ("[1, -1, NULL]", col->debug_string());
 }
 
 // NOLINTNEXTLINE
@@ -53,10 +50,7 @@ TEST_F(NullableConverterTest, test_read_quoted_string) {
     EXPECT_TRUE(conv->read_quoted_string(col.get(), "-1", Converter::Options()));
     EXPECT_TRUE(conv->read_quoted_string(col.get(), "null", Converter::Options()));
 
-    EXPECT_EQ(3, col->size());
-    EXPECT_EQ(1, col->get(0).get_int32());
-    EXPECT_EQ(-1, col->get(1).get_int32());
-    EXPECT_TRUE(col->get(2).is_null());
+    EXPECT_EQ("[1, -1, NULL]", col->debug_string());
 }
 
 // NOLINTNEXTLINE
@@ -71,13 +65,7 @@ TEST_F(NullableConverterTest, test_read_string_invalid_value_as_null) {
     EXPECT_TRUE(conv->read_string(col.get(), "\"100\"", Converter::Options()));
     EXPECT_TRUE(conv->read_quoted_string(col.get(), "\"100\"", Converter::Options()));
 
-    EXPECT_EQ(6, col->size());
-    EXPECT_TRUE(col->get(0).is_null());
-    EXPECT_TRUE(col->get(1).is_null());
-    EXPECT_TRUE(col->get(2).is_null());
-    EXPECT_TRUE(col->get(3).is_null());
-    EXPECT_TRUE(col->get(4).is_null());
-    EXPECT_TRUE(col->get(5).is_null());
+    EXPECT_EQ("[NULL, NULL, NULL, NULL, NULL, NULL]", col->debug_string());
 }
 
 // NOLINTNEXTLINE

@@ -44,7 +44,7 @@ import com.starrocks.sql.optimizer.rule.ivm.IvmRewriter;
 import com.starrocks.sql.optimizer.rule.join.JoinReorderFactory;
 import com.starrocks.sql.optimizer.rule.join.ReorderJoinRule;
 import com.starrocks.sql.optimizer.rule.mv.MaterializedViewRule;
-import com.starrocks.sql.optimizer.rule.transformation.AiFunctionExtractor;
+import com.starrocks.sql.optimizer.rule.transformation.AIFunctionExtractor;
 import com.starrocks.sql.optimizer.rule.transformation.ApplyExceptionRule;
 import com.starrocks.sql.optimizer.rule.transformation.ArrayDistinctAfterAggRule;
 import com.starrocks.sql.optimizer.rule.transformation.CTEProduceAddProjectionRule;
@@ -139,10 +139,12 @@ import com.starrocks.sql.optimizer.rule.tree.SubfieldExprNoCopyRule;
 import com.starrocks.sql.optimizer.rule.tree.VariantPathRewriteRule;
 import com.starrocks.sql.optimizer.rule.tree.WidenProjectionNullableRule;
 import com.starrocks.sql.optimizer.rule.tree.exprreuse.ScalarOperatorsReuseRule;
+import com.starrocks.sql.optimizer.rule.tree.exprreuse.ShareJsonParseRule;
 import com.starrocks.sql.optimizer.rule.tree.lazymaterialize.GlobalLateMaterializationRewriter;
 import com.starrocks.sql.optimizer.rule.tree.lowcardinality.LowCardinalityRewriteRule;
 import com.starrocks.sql.optimizer.rule.tree.prunesubfield.PruneSubfieldRule;
 import com.starrocks.sql.optimizer.rule.tree.prunesubfield.PushDownSubfieldRule;
+import com.starrocks.sql.optimizer.statistics.JoinKeyContainmentBound;
 import com.starrocks.sql.optimizer.task.OptimizeGroupTask;
 import com.starrocks.sql.optimizer.task.PrepareCollectMetaTask;
 import com.starrocks.sql.optimizer.task.TaskContext;
@@ -267,6 +269,10 @@ public class QueryOptimizer extends Optimizer {
             logicOperatorTree = rewriteAndValidatePlan(logicOperatorTree, rootTaskContext);
         }
 
+        // the bounds only matter to the cost-based reorder that cbo_join_reorder_with_unknown_stats turns on
+        if (context.getSessionVariable().isCboJoinReorderWithUnknownStats()) {
+            context.setJoinKeyNdvBounds(JoinKeyContainmentBound.compute(logicOperatorTree, context));
+        }
         Preconditions.checkNotNull(memo);
         memo.init(logicOperatorTree);
         OptimizerTraceUtil.log("after logical rewrite, root group:\n%s", memo.getRootGroup());
@@ -551,7 +557,7 @@ public class QueryOptimizer extends Optimizer {
         scheduler.rewriteIterative(tree, rootTaskContext, new EliminateConstantCTERule());
         CTEUtils.collectCteOperators(tree, context);
         scheduler.rewriteOnce(tree, rootTaskContext,
-                ForceCTEReuseRule.forCallsMatching(AiFunctionExtractor::isAICall));
+                ForceCTEReuseRule.forCallsMatching(AIFunctionExtractor::isAICall));
         // inline CTE if consume use once
         while (cteContext.hasInlineCTE()) {
             scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.INLINE_CTE_RULES);
@@ -803,7 +809,12 @@ public class QueryOptimizer extends Optimizer {
             scheduler.rewriteIterative(tree, rootTaskContext, new RewriteGroupingSetsByCTERule());
         }
         if (sessionVariable.isCboPushDownGroupingSet()) {
-            scheduler.rewriteOnce(tree, rootTaskContext, new PushDownAggregateGroupingSetsRule());
+            // Iterative, not once: the rule's own output matches its pattern again, so re-applying it
+            // peels one more grouping set and builds the next level of the rollup cascade. The rule's
+            // own guards bound this - it stops when the repeat is down to 3 grouping sets, when a
+            // level would peel no key (CUBE and other non-prefix-nested sets), or at
+            // cbo_push_down_groupingset_cascade_level.
+            scheduler.rewriteIterative(tree, rootTaskContext, new PushDownAggregateGroupingSetsRule());
         }
     }
 
@@ -1065,6 +1076,8 @@ public class QueryOptimizer extends Optimizer {
         // Put before ScalarOperatorsReuseRule
         result = new PruneSubfieldsForComplexType().rewrite(result, rootTaskContext);
         result = new InlineCteProjectPruneRule().rewrite(result, rootTaskContext);
+        // Must run right before ScalarOperatorsReuseRule, which evaluates the shared parse_json once
+        result = new ShareJsonParseRule().rewrite(result, rootTaskContext);
         // This rule should be last
         result = new ScalarOperatorsReuseRule().rewrite(result, rootTaskContext);
         // Reorder predicates

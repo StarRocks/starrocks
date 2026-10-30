@@ -188,6 +188,9 @@ private:
     RuntimeProfile::Counter* _expr_filter_timer = nullptr;
     RuntimeProfile::Counter* _expr_filter_counter = nullptr;
     RuntimeProfile::Counter* _create_seg_iter_timer = nullptr;
+    // Segment-level zone map prune. Runs during iterator creation, so it is a child of
+    // CreateSegmentIter, not of SegmentInit.
+    RuntimeProfile::Counter* _segment_zone_map_filter_timer = nullptr;
     RuntimeProfile::Counter* _io_timer = nullptr;
     RuntimeProfile::Counter* _read_compressed_counter = nullptr;
     RuntimeProfile::Counter* _decompress_timer = nullptr;
@@ -205,6 +208,17 @@ private:
     RuntimeProfile::Counter* _seg_init_timer = nullptr;
     RuntimeProfile::Counter* _column_iterator_init_timer = nullptr;
     RuntimeProfile::Counter* _bitmap_index_iterator_init_timer = nullptr;
+    // Remaining SegmentInit phases. Reported unconditionally, like every other SegmentInit child: a
+    // display threshold would drop a phase below it, and the point of these counters is that
+    // SegmentInit minus the sum of its children is a residual you can compute rather than guess at.
+    RuntimeProfile::Counter* _segment_init_prepare_timer = nullptr;
+    RuntimeProfile::Counter* _rowid_range_filter_timer = nullptr;
+    RuntimeProfile::Counter* _precomputed_range_filter_timer = nullptr;
+    RuntimeProfile::Counter* _tablet_range_filter_timer = nullptr;
+    RuntimeProfile::Counter* _del_vector_apply_timer = nullptr;
+    RuntimeProfile::Counter* _segment_init_finalize_timer = nullptr;
+    RuntimeProfile::Counter* _rewrite_predicates_timer = nullptr;
+    RuntimeProfile::Counter* _init_context_timer = nullptr;
     RuntimeProfile::Counter* _zone_map_filter_timer = nullptr;
     RuntimeProfile::Counter* _rows_key_range_filter_timer = nullptr;
     RuntimeProfile::Counter* _rows_key_range_counter = nullptr;
@@ -253,6 +267,8 @@ private:
     RuntimeProfile::Counter* _non_pushdown_predicates_counter = nullptr;
     RuntimeProfile::Counter* _rowsets_read_count = nullptr;
     RuntimeProfile::Counter* _segments_read_count = nullptr;
+    RuntimeProfile::Counter* _phy_rowsets_count = nullptr;
+    RuntimeProfile::Counter* _phy_segments_count = nullptr;
     RuntimeProfile::Counter* _total_columns_data_page_count = nullptr;
     RuntimeProfile::Counter* _read_pk_index_timer = nullptr;
     RuntimeProfile::Counter* _lake_prepared_rowsets_counter = nullptr;
@@ -264,11 +280,25 @@ private:
     RuntimeProfile::Counter* _lake_reusable_segment_iter_reused_counter = nullptr;
     RuntimeProfile::Counter* _lake_late_rf_reinit_counter = nullptr;
     RuntimeProfile::Counter* _lake_prepared_seed_timer = nullptr;
+    RuntimeProfile::Counter* _lake_prepared_tablet_timer = nullptr;
+    // TabletPrepareTime breakdown (children of TabletPrepareTime): opening the segments and loading their
+    // short key indexes.
+    RuntimeProfile::Counter* _lake_tablet_prepare_segment_open_timer = nullptr;
+    RuntimeProfile::Counter* _lake_tablet_prepare_segments_counter = nullptr;
+    RuntimeProfile::Counter* _lake_tablet_prepare_segments_opened_counter = nullptr;
+    RuntimeProfile::Counter* _lake_tablet_prepare_io_timer = nullptr;
+    RuntimeProfile::Counter* _lake_tablet_prepare_io_count_counter = nullptr;
+    RuntimeProfile::Counter* _lake_tablet_prepare_io_remote_timer = nullptr;
+    RuntimeProfile::Counter* _lake_tablet_prepare_io_count_remote_counter = nullptr;
+    RuntimeProfile::Counter* _lake_tablet_prepare_bytes_read_remote_counter = nullptr;
     RuntimeProfile::Counter* _lake_initial_coarse_counter = nullptr;
     RuntimeProfile::Counter* _lake_refined_counter = nullptr;
     // SeedPrepareTime breakdown (children of SeedPrepareTime): the seed's one-time per-segment prune cost.
     RuntimeProfile::Counter* _lake_seed_io_timer = nullptr;
     RuntimeProfile::Counter* _lake_seed_io_count_counter = nullptr;
+    RuntimeProfile::Counter* _lake_seed_io_remote_timer = nullptr;
+    RuntimeProfile::Counter* _lake_seed_io_count_remote_counter = nullptr;
+    RuntimeProfile::Counter* _lake_seed_bytes_read_remote_counter = nullptr;
     RuntimeProfile::Counter* _lake_seed_segment_init_timer = nullptr;
     RuntimeProfile::Counter* _lake_seed_vector_index_timer = nullptr;
     RuntimeProfile::Counter* _lake_seed_vector_index_load_timer = nullptr;

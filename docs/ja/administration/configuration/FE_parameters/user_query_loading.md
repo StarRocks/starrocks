@@ -54,13 +54,22 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ## ユーザー、ロール、権限
 
+### `authorization_enable_query_profile_access_check`
+
+- デフォルト：false
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：キャッシュされた query profile の読み取りを制限するかどうか。`true` に設定すると、SHOW PROFILELIST、ANALYZE PROFILE、`get_query_profile` 関数、`/api/profile` および `/api/query/progress` HTTP エンドポイント、ならびに `/query` および `/query_profile` Web UI ページは、そのクエリを実行したユーザー、または SYSTEM レベルの OPERATE 権限を持つユーザーにのみ profile を返します。ユーザーが記録されていない profile（例：EXPORT ジョブや Stream Load）は、OPERATE 権限を持つ場合のみ読み取れます。`/api/query_detail` および `/api/v2/query_detail` エンドポイントはすべてのクエリを一覧に含めますが、同じルールに従って `profile` フィールド、およびその profile から生成された `explain` フィールドを省略します。`authorization_enable_admin_user_protection` も有効な場合、`root` が実行したクエリの profile は `root` 自身のみが読み取れます。`false`（デフォルト）の場合、認証済みのすべてのユーザーがすべての profile を読み取れます。これは以前のバージョンと同じ動作です。各 FE は自身が保持する profile に対してのみこのチェックを行います。クラスター全体でアクセスを制限するには、すべての FE をこの項目をサポートするバージョンにアップグレードした後、各 FE の `fe.conf` にこの項目を設定してください。有効にする際は、さらに次の 2 点に注意してください。1 つは、権限判定に呼び出し元の識別情報が必要なため `/api/query/progress` が匿名リクエストを受け付けなくなり、このエンドポイントを匿名でポーリングしていた処理が `401` を受け取るようになることです。もう 1 つは、`query_id` に対応する profile がセッションの接続先 FE にキャッシュされていない場合、`get_query_profile()` に OPERATE 権限が必要になることです。他の FE から profile を取得する RPC は呼び出し元の識別情報を持たず対向側で認可できないため、このチェックが有効な間、FE をまたぐ取得は OPERATE 権限を持つユーザーに限られます。
+- 導入時期：v4.1
+
 ### `enable_task_info_mask_credential`
 
 - デフォルト：true
 - タイプ：Boolean
 - 単位：-
 - 変更可能：Yes
-- 説明：true の場合、StarRocks は `information_schema.tasks` および `information_schema.task_runs` で返される前に、タスク SQL 定義から資格情報を編集します。これは、DEFINITION 列に SqlCredentialRedactor.redact を適用することで行われます。`information_schema.task_runs` では、定義がタスク実行ステータスから来るか、空の場合にタスク定義ルックアップから来るかに関係なく、同じ編集が適用されます。false の場合、生のタスク定義が返されます (資格情報が公開される可能性があります)。マスキングは CPU/文字列処理作業であり、タスクまたは `task_runs` の数が大きい場合は時間がかかる場合があります。非編集定義が必要であり、セキュリティリスクを受け入れる場合にのみ無効にしてください。
+- 説明：true の場合、StarRocks は `information_schema.tasks` および `information_schema.task_runs` で返される前に、タスク SQL 定義から資格情報を編集します。これは、DEFINITION 列に SqlCredentialRedactor.redact を適用することで行われます。`information_schema.task_runs` では、定義がタスク実行ステータスから来るか、空の場合にタスク定義ルックアップから来るかに関係なく、同じ編集が適用されます。完了したタスク実行を `_statistics_.task_run_history` にアーカイブする前にも同じ編集が適用されるため、履歴テーブルに資格情報が平文で保存されることはありません。false の場合、生のタスク定義が返され、そのままアーカイブされます (資格情報が公開される可能性があります)。マスキングは CPU/文字列処理作業であり、タスクまたは `task_runs` の数が大きい場合は時間がかかる場合があります。非編集定義が必要であり、セキュリティリスクを受け入れる場合にのみ無効にしてください。
 - 導入時期：v3.5.6
 
 ### `privilege_max_role_depth`
@@ -81,63 +90,25 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：ユーザーが持つことができるロールの最大数。
 - 導入時期：v3.0.0
 
+### `ranger_hive_catalog_prefix_enabled`
+
+- デフォルト：false
+- タイプ：Boolean
+- Unit: -
+- 変更可能：Yes
+- 説明：Ranger Hive Service (`ranger.plugin.hive.service.name`) を使用する External Catalog のプロパティ `ranger.plugin.hive.catalog_prefix.enabled` のデフォルト値。有効値が `true` の場合、StarRocks は Ranger に送る `database` リソースとして素のデータベース名ではなく `<catalog_name><separator><database_name>` を使用し、1 つの Ranger Hive Service を共有する複数の Catalog が同名のデータベースで衝突しないようにします。Catalog 側でこのプロパティを明示的に設定した場合はそちらが優先されます。変更は、それを受け取ったすべての FE で即時に有効になります。
+- 導入時期：v4.2
+
+### `ranger_hive_catalog_prefix_separator`
+
+- デフォルト：_
+- タイプ：String
+- Unit: -
+- 変更可能：Yes
+- 説明：`ranger_hive_catalog_prefix_enabled` (または Catalog プロパティ `ranger.plugin.hive.catalog_prefix.enabled`) が `true` の場合に、Catalog 名とデータベース名の間に挿入する区切り文字。1 つの Ranger Hive Service を共有するすべての Catalog で同じ区切り文字を使う必要があるため、この項目はグローバルにのみ設定できます。
+- 導入時期：v4.2
+
 ## クエリエンジン
-
-### `ai_default_chat_endpoint`
-
-- デフォルト：空文字列
-- タイプ：String
-- 単位：-
-- 変更可能：Yes
-- 説明：SYSTEM `ai_complete` 呼び出しが使用する完全な HTTPS POST URL。URL にはホストが必要で、ユーザー情報、クエリ文字列、フラグメント、制御文字を含めることはできません。ポートを明示しない場合は HTTPS のデフォルトポートが使用され、明示する場合は 1 から 65535 の範囲で指定する必要があります。値が空の場合、endpoint を設定するまで SYSTEM `ai_complete` の解析は失敗します。変更は FE の再起動なしで動的に反映されますが、変更後に新しく解析および計画されたクエリにのみ適用されます。すでに構築されたプランは、計画時に取得した endpoint、model、provider のスナップショットを保持します。API key は FE 構成項目ではありません。各 BE が `AI_FUNCTION_MODEL_API_KEY` をローカルで読み取り、FE はクエリプランでキーを送信しません。AI クエリを実行するすべての BE で `AI_FUNCTION_MODEL_ENDPOINT` をこの URL と完全に同一の値に設定し、BE のローカル認証情報を管理者が承認した endpoint にバインドする必要があります。そのため FE endpoint を変更した場合は、この環境変数も更新し、新しい AI クエリを実行する前に対象 BE を再起動する必要があります。
-- 導入時期：-
-
-### `ai_default_chat_model`
-
-- デフォルト：空文字列
-- タイプ：String
-- 単位：-
-- 変更可能：Yes
-- 説明：prompt のみを指定する SYSTEM `ai_complete` 形式で使用するデフォルトモデル。この値には C0 制御文字（`U+0000` から `U+001F`）または DEL（`U+007F`）を含めることはできません。すべての呼び出しで空白ではないモデルを明示的に指定する場合、この値は空のままにできます。変更は FE の再起動なしで動的に反映されますが、変更後に新しく解析および計画されたクエリにのみ適用されます。すでに構築されたプランは、計画時に取得した endpoint、model、provider のスナップショットを保持します。
-- 導入時期：-
-
-### `ai_default_chat_provider`
-
-- デフォルト：空文字列
-- タイプ：String
-- 単位：-
-- 有効な値：`openai_compatible`
-- 変更可能：Yes
-- 説明：SYSTEM `ai_complete` が使用する provider プロトコル。値は正確に `openai_compatible` でなければならず、空の値や制御文字を含む追加文字がある場合は解析に失敗します。変更は FE の再起動なしで動的に反映されますが、変更後に新しく解析および計画されたクエリにのみ適用されます。すでに構築されたプランは、計画時に取得した endpoint、model、provider のスナップショットを保持します。
-- 導入時期：-
-
-### `ai_default_embedding_endpoint`
-
-- デフォルト：空文字列
-- タイプ：String
-- 単位：-
-- 変更可能：Yes
-- 説明：SYSTEM `ai_embed` 用の完全な HTTPS POST URL。チャットエンドポイントとは独立して設定する必要があります。ホストが必須で、ユーザー情報、クエリ文字列、フラグメント、制御文字は禁止です。明示するポートは 1 から 65535 です。変更に FE の再起動は不要で、新しく解析・計画されるクエリに適用されます。既存のプランはスナップショットを保持します。実行する各 BE は `AI_FUNCTION_EMBEDDING_ENDPOINT` を完全に同一の URL に設定し、`AI_FUNCTION_EMBEDDING_API_KEY` をローカルで用意します。どちらかの BE 環境変数を変更した後は対象 BE の再起動が必要です。認証情報は FE 設定ではなく、プランには含まれません。[ai_embed](../../../sql-reference/sql-functions/ai-functions/ai_embed.md) を参照してください。
-- 導入時期：-
-
-### `ai_default_embedding_model`
-
-- デフォルト：空文字列
-- タイプ：String
-- 単位：-
-- 変更可能：Yes
-- 説明：モデルを明示しない SYSTEM `ai_embed` 呼び出しのデフォルトモデル。その場合は空白でない値が必須で、C0 制御文字と DEL は禁止です。すべての埋め込み呼び出しでモデルを明示する場合は空のままにできます。チャットのデフォルトモデルにはフォールバックしません。変更に FE の再起動は不要で、新しく解析・計画されるクエリに適用されます。既存のプランはスナップショットを保持します。
-- 導入時期：-
-
-### `ai_default_embedding_provider`
-
-- デフォルト：空文字列
-- タイプ：String
-- 単位：-
-- 有効な値：`openai_compatible`
-- 変更可能：Yes
-- 説明：SYSTEM `ai_embed` のプロバイダープロトコル。正確に `openai_compatible` を指定する必要があります。デフォルトの空値では SYSTEM 埋め込み呼び出しは使用できず、チャットのプロバイダー設定も再利用しません。変更に FE の再起動は不要で、新しく解析・計画されるクエリに適用されます。既存のプランはスナップショットを保持します。
-- 導入時期：-
 
 ### `brpc_send_plan_fragment_timeout_ms`
 
@@ -173,6 +144,41 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 単位：-
 - 変更可能：Yes
 - 説明：外部テーブル（Iceberg）の統計情報収集における補助的なスキャンごとの推定行数予算です。統計スキャンは、スキャンした推定行数がこの予算に達した時点で早期に停止します。split ごとの行数は推定しかできない（レコード数はファイル単位で記録され、split 単位ではない）ため、これは主要な制御ではなく補助的なソフト予算です。デフォルト値は `connector_table_query_trigger_analyze_small_table_rows` と揃えられています。`0` 以下の値はこの次元が無制限であることを意味します。`ANALYZE TABLE ... PROPERTIES("scan_rows_cap" = "...")` によりステートメント単位で上書きできます。
+- 導入時期：v4.1
+
+### `connector_table_analyze_query_timeout`
+
+- デフォルト：360
+- タイプ：Long
+- 単位：秒
+- 変更可能：Yes
+- 説明：外部テーブルの統計情報収集クエリ 1 本あたりの最大実行時間です。統計収集は (パーティション, 列グループ) ごとにクエリを発行し、各クエリは上記のスキャン予算の範囲で 1 パーティションを読み取って固定サイズのスケッチを生成するため、通常は 1 秒未満で返ります。この上限がない場合、各クエリは収集ジョブ全体の予算である `statistic_collect_query_timeout` の残り時間をそのまま引き継ぐため、過負荷の BE に詰まったクエリ 1 本が予算を使い切り、それ以降のパーティションがまったく収集されなくなる可能性があります。コールドストレージや遠隔のオブジェクトストレージで、制限付きスキャンでも時間がかかる場合はこの値を大きくしてください。`0` 以下の値は個別の上限を無効にし、クエリが再びジョブの残り予算全体を使用できるようになります。実際に適用されるタイムアウトは、常にこの値とジョブの残り予算のうち小さい方です。
+- 導入時期：v4.1
+
+### `connector_table_analyze_min_column_coverage_ratio`
+
+- デフォルト：0.5
+- タイプ：Double
+- 変更可能：Yes
+- 説明：ある列の統計情報を記録するために必要な最低カバレッジ、すなわち外部テーブルの統計情報収集が要求したパーティションのうち実際に収集できた割合の下限です。途中で打ち切られた収集（一部のクエリが許容されてスキップされた場合や、ジョブが途中で失敗した場合）でも、読み取れたパーティションの行は書き込まれ、いくつのパーティションを要求したかも記録されるため、読み取り側は正しくスケールできます。しかしカバレッジが一定を下回ると、それは割に合わなくなります。行数は収集できたパーティションから外挿できますが、NDV は外挿されません。そして NDV こそ、結合カーディナリティ推定が最も敏感に反応する入力です。パーティションの 20 分の 1 しか収集できていない列は、実際の約 20 分の 1 の NDV を事実として optimizer に渡すことになります。この比率を下回る列にはメタデータを記録せず、optimizer はコネクタ自身のテーブルメタデータにフォールバックします。正確な行数と NDV なし、つまり自信を持った誤った値ではなくデフォルトの選択率が使われます。テーブル全体ではなく収集が要求した分を分母として測るため、サンプリングであるというだけでカバレッジ不足とは判定されません。`0` 以下の値は、収集できた分をそのまま記録します。
+- 導入時期：v4.1
+
+### `connector_table_analyze_memory_backoff_budget_second`
+
+- デフォルト：300
+- タイプ：Long
+- 単位：秒
+- 変更可能：Yes
+- 説明：外部テーブルの統計情報収集ジョブ 1 件が、BE のメモリ解放を待つために費やせる合計時間です。BE プロセス全体のメモリ超過によって収集クエリが拒否された場合、その不足は他の処理が原因で自然に解消するため、失敗したパーティションとして数えるのではなく、一定時間待ってから再試行します。ただしこれは短いスパイクに限って成立します。メモリ不足が継続している場合はすべてのクエリが拒否されるため、この上限がないとジョブは `statistic_collect_query_timeout` の予算全体をスリープに費やし、その間 `connector_table_query_trigger_analyze_max_running_task_num` のスロットを 1 つ占有し続けます。統計は何も収集されず、他のテーブルの収集も妨げられます。予算を使い切るとジョブは待機をやめ、失敗は再試行が導入される前と同様に `statistic_full_statistics_failure_tolerance_ratio` にカウントされ、クラスタが回復した後に再度トリガーできるよう早めに終了します。`0` 以下の値は待機時間を無制限にし、`statistic_collect_query_timeout` のみで制限されます。
+- 導入時期：v4.1
+
+### `connector_table_query_trigger_analyze_failure_backoff_max_second`
+
+- デフォルト：1800
+- タイプ：Long
+- 単位：秒
+- 変更可能：Yes
+- 説明：クエリによってトリガーされる analyze が失敗し続けているテーブルを、再試行するまで最大どれだけ放置するかを指定します。失敗した収集はメタデータをまったくコミットしないため、収集しようとしていた統計は欠けたままとなり、次のクエリが再び収集を要求します。するとスケジューラは 1 tick 後、つまり `connector_table_query_trigger_task_schedule_interval` 秒ごとに同じジョブを実行し、失敗が続く限りこれが繰り返されます。上記の interval 系の設定はこれを防げません。それらは失敗したジョブが書き込まなかったメタデータと比較しているためです。連続して失敗するたびに放置時間は 2 倍になり、1 分から始まってこの上限で止まります。収集が 1 回成功すればリセットされます。手動の `ANALYZE` が抑制されることはありません。`0` 以下の値はバックオフを無効にし、スケジュールの tick ごとに再試行する動作に戻します。
 - 導入時期：v4.1
 
 ### `connector_table_query_trigger_analyze_large_table_interval`
@@ -419,6 +425,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：スキーマ変更または基底テーブル (ビュー) の削除と再作成によって非アクティブになった非同期マテリアライズドビューを、システムが自動的にチェックして再アクティブ化する機能を有効にするかどうか。この機能は、ユーザーが手動で非アクティブに設定したマテリアライズドビューを再アクティブ化しないことに注意してください。
 - 導入時期：v3.1.6
 
+### `enable_mv_automatic_inactive_by_base_table_changes`
+
+- デフォルト：true
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：基底テーブル (ビュー) が削除された場合、スキーマ変更が行われた場合、またはビューが再定義された場合に、それに基づく非同期マテリアライズドビューを非アクティブに設定するかどうか。基底テーブルの名前変更または SWAP、および基底マテリアライズドビューの名前変更では、この項目の値に関係なく、それに基づくマテリアライズドビューは常に非アクティブに設定されます。
+- 導入時期：v3.3.10, v3.4.1, v3.5.0
+
 ### `enable_mv_automatic_repairing_for_broken_base_tables`
 
 - デフォルト：true
@@ -550,6 +565,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 単位：-
 - 変更可能：No
 - 説明：UDF を有効にするかどうか。
+- 導入時期：-
+
+### `enable_virtual_columns`
+
+- デフォルト：true
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：ネイティブテーブルで `_tablet_id_` などの仮想カラムを提供するかどうか。仮想カラムはクエリ実行時に計算される読み取り専用のメタデータカラムで、格納されません。`false` に設定すると、仮想カラムを参照するクエリはカラムを解決できずにエラーとなります。詳細は [仮想カラム](../../../table_design/virtual_columns.md) を参照してください。
 - 導入時期：-
 
 ### `expr_children_limit`
@@ -1146,6 +1170,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能：Yes
 - 説明：トランザクション完了中の db およびテーブルロック取得のデフォルトタイムアウト。
 - 導入時期：v4.0.0, v3.5.8
+
+### `history_job_keep_max_num`
+
+- デフォルト：10000
+- タイプ：Int
+- 単位：-
+- 変更可能：Yes
+- 説明：FE がメモリに保持し、SHOW ALTER TABLE に表示する、完了またはキャンセルされた ALTER ジョブの最大数。スキーマ変更ジョブと最適化ジョブは 1 つの上限を共有し、ロールアップジョブには別の上限が適用されます。上限を超えると、`history_job_keep_max_second` で設定された保持期間内であっても、完了時刻が早いジョブから順に削除されます。実行中のロードがジョブの変更前のスキーマをまだ使用している可能性がある間、または共有データクラスターでクラスタースナップショットがジョブをまだ必要とする間は、そのジョブは保持されます。そのため、ジョブ数が一時的に上限を超えることがあります。`0` 以下の値を指定すると、この上限は無効になります。
+- 導入時期：-
 
 ### `history_job_keep_max_second`
 

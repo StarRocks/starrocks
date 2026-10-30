@@ -108,6 +108,7 @@ set(PIPELINE_ADAPTERS_SRCS
 
 set(PIPELINE_OPERATORS_BATCH_SRCS
     pipeline/ai/ai_chunk_buffer.cpp
+    pipeline/ai/ai_provider_config_parser.cpp
     pipeline/ai/ai_project_factory.cpp
     pipeline/ai/ai_project_operator.cpp
     pipeline/ai/ai_project_processor.cpp
@@ -215,6 +216,7 @@ set(PIPELINE_EXTENSIONS_SRCS
     pipeline/nljoin/spillable_nljoin_build_operator.cpp
     pipeline/nljoin/spillable_nljoin_probe_operator.cpp
     pipeline/sort/spillable_partition_sort_sink_operator.cpp
+    pipeline/hashjoin/hash_join_build_chunk_slicer.cpp
     pipeline/hashjoin/spillable_hash_join_build_operator.cpp
     pipeline/hashjoin/spillable_hash_join_probe_operator.cpp
     pipeline/adaptive/collect_stats_sink_operator.cpp

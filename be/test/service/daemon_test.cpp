@@ -43,7 +43,7 @@ TEST(DumpMemoryTrackerTest, DumpsEveryMemTracker) {
 
     std::istringstream expected_fields(
             "process query_pool load metadata compaction schema_change page_cache update passthrough clone "
-            "consistency datacache jit brpc_iobuf replication vector_index jemalloc_active jemalloc_allocated "
+            "consistency datacache jit brpc_iobuf replication vector_index jvm jemalloc_active jemalloc_allocated "
             "jemalloc_metadata jemalloc_rss");
     size_t pos = 0;
     for (std::string field; expected_fields >> field;) {

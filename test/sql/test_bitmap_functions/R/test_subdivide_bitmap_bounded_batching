@@ -1,0 +1,138 @@
+-- name: test_subdivide_bitmap_bounded_batching
+CREATE TABLE sbb_${uuid0} (
+    `id` int(11) NULL COMMENT "",
+    `b` bitmap BITMAP_UNION NULL COMMENT ""
+)
+AGGREGATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO sbb_${uuid0} SELECT 1, bitmap_agg(generate_series) FROM TABLE(generate_series(1, 10));
+-- result:
+-- !result
+INSERT INTO sbb_${uuid0} SELECT 2, bitmap_agg(generate_series) FROM TABLE(generate_series(11, 20));
+-- result:
+-- !result
+INSERT INTO sbb_${uuid0} SELECT 3, bitmap_agg(generate_series) FROM TABLE(generate_series(21, 30));
+-- result:
+-- !result
+INSERT INTO sbb_${uuid0} SELECT 4, bitmap_agg(generate_series) FROM TABLE(generate_series(31, 40));
+-- result:
+-- !result
+SET pipeline_dop = 1;
+-- result:
+-- !result
+SET enable_profile = true;
+-- result:
+-- !result
+SET enable_async_profile = false;
+-- result:
+-- !result
+SET chunk_size = 2;
+-- result:
+-- !result
+SELECT count(1), sum(bitmap_count(subdivide_bitmap)), sum(bitmap_min(subdivide_bitmap))
+FROM sbb_${uuid0}, subdivide_bitmap(b, 1);
+-- result:
+40	40	820
+-- !result
+SELECT CAST(regexp_extract(get_query_profile(last_query_id()), 'TableFunctionExecCount: ([0-9]+)', 1) AS BIGINT) >= 20;
+-- result:
+1
+-- !result
+SELECT count(1) FROM sbb_${uuid0}, subdivide_bitmap(b, 1);
+-- result:
+40
+-- !result
+SELECT CAST(regexp_extract(get_query_profile(last_query_id()), 'TableFunctionExecCount: ([0-9]+)', 1) AS BIGINT) >= 20;
+-- result:
+1
+-- !result
+SET chunk_size = 3;
+-- result:
+-- !result
+SELECT count(1), sum(bitmap_count(subdivide_bitmap)) FROM sbb_${uuid0}, subdivide_bitmap(b, 1) WHERE id = 1;
+-- result:
+10	10
+-- !result
+SELECT CAST(regexp_extract(get_query_profile(last_query_id()), 'TableFunctionExecCount: ([0-9]+)', 1) AS BIGINT) >= 4;
+-- result:
+1
+-- !result
+SET chunk_size = 2;
+-- result:
+-- !result
+SELECT id, bitmap_to_string(subdivide_bitmap) FROM sbb_${uuid0}, subdivide_bitmap(b, 4) ORDER BY id, 2;
+-- result:
+1	1,2,3,4
+1	5,6,7,8
+1	9,10
+2	11,12,13,14
+2	15,16,17,18
+2	19,20
+3	21,22,23,24
+3	25,26,27,28
+3	29,30
+4	31,32,33,34
+4	35,36,37,38
+4	39,40
+-- !result
+SET chunk_size = 4096;
+-- result:
+-- !result
+SELECT id, bitmap_to_string(subdivide_bitmap) FROM sbb_${uuid0}, subdivide_bitmap(b, 4) ORDER BY id, 2;
+-- result:
+1	1,2,3,4
+1	5,6,7,8
+1	9,10
+2	11,12,13,14
+2	15,16,17,18
+2	19,20
+3	21,22,23,24
+3	25,26,27,28
+3	29,30
+4	31,32,33,34
+4	35,36,37,38
+4	39,40
+-- !result
+INSERT INTO sbb_${uuid0} SELECT 5, bitmap_empty();
+-- result:
+-- !result
+INSERT INTO sbb_${uuid0} SELECT 6, NULL;
+-- result:
+-- !result
+SET chunk_size = 2;
+-- result:
+-- !result
+SELECT count(1) FROM sbb_${uuid0}, subdivide_bitmap(b, 0);
+-- result:
+0
+-- !result
+SELECT id, bitmap_count(subdivide_bitmap) FROM sbb_${uuid0}, subdivide_bitmap(b, 100) ORDER BY id;
+-- result:
+1	10
+2	10
+3	10
+4	10
+5	0
+-- !result
+SELECT id, bitmap_count(subdivide_bitmap) FROM sbb_${uuid0}, subdivide_bitmap(b, CAST(18446744073709551616 AS LARGEINT)) ORDER BY id;
+-- result:
+1	10
+2	10
+3	10
+4	10
+5	0
+-- !result
+SELECT id, bitmap_count(subdivide_bitmap) FROM sbb_${uuid0}, subdivide_bitmap(b, 9223372036854775807) ORDER BY id;
+-- result:
+1	10
+2	10
+3	10
+4	10
+5	0
+-- !result
+DROP TABLE sbb_${uuid0};
+-- result:
+-- !result

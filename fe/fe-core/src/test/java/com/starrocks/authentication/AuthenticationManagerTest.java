@@ -19,6 +19,7 @@ import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.mysql.MysqlPassword;
+import com.starrocks.mysql.MysqlProto;
 import com.starrocks.persist.AlterUserInfo;
 import com.starrocks.persist.CreateUserInfo;
 import com.starrocks.persist.OperationType;
@@ -96,8 +97,8 @@ public class AuthenticationManagerTest {
 
         AuthenticationMgr masterManager = new AuthenticationMgr();
         Assertions.assertThrows(AuthenticationException.class, () ->
-                AuthenticationHandler.authenticate(ctx, testUserWithIp.getUser(), testUserWithIp.getHost(), scramble));
-
+                AuthenticationHandler.authenticate(ctx,
+                        MysqlProto.handshakeCredentials(testUserWithIp.getUser(), scramble, null, testUserWithIp.getHost())));
         Assertions.assertFalse(masterManager.doesUserExist(testUser));
         Assertions.assertFalse(masterManager.doesUserExist(testUserWithIp));
         UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
@@ -134,7 +135,8 @@ public class AuthenticationManagerTest {
                 masterManager.getBestMatchedUserIdentity(testUser.getUser(), "10.1.1.2");
         PlainPasswordAuthenticationProvider provider = new PlainPasswordAuthenticationProvider(entry.getValue().getPassword());
         Assertions.assertThrows(AuthenticationException.class, () ->
-                provider.authenticate(ctx.getAccessControlContext(), entry.getKey(), scramble));
+                provider.authenticate(ctx.getAccessControlContext(), entry.getKey(),
+                        AuthCredentials.ofNativeScramble(entry.getKey().getUser(), scramble, null)));
 
         // start to replay
         AuthenticationMgr followerManager = new AuthenticationMgr();
@@ -178,7 +180,8 @@ public class AuthenticationManagerTest {
         Map.Entry<UserIdentity, UserAuthenticationInfo> entry1 =
                 followerManager.getBestMatchedUserIdentity(testUser.getUser(), "10.1.1.2");
         Assertions.assertThrows(AuthenticationException.class, () ->
-                provider.authenticate(ctx.getAccessControlContext(), entry1.getKey(), scramble));
+                provider.authenticate(ctx.getAccessControlContext(), entry1.getKey(),
+                        AuthCredentials.ofNativeScramble(entry1.getKey().getUser(), scramble, null)));
 
         // purely loaded from image
         AuthenticationMgr imageManager = new AuthenticationMgr();
@@ -191,7 +194,8 @@ public class AuthenticationManagerTest {
         Map.Entry<UserIdentity, UserAuthenticationInfo> entry2 =
                 followerManager.getBestMatchedUserIdentity(testUser.getUser(), "10.1.1.2");
         Assertions.assertThrows(AuthenticationException.class, () ->
-                provider.authenticate(ctx.getAccessControlContext(), entry2.getKey(), scramble));
+                provider.authenticate(ctx.getAccessControlContext(), entry2.getKey(),
+                        AuthCredentials.ofNativeScramble(entry2.getKey().getUser(), scramble, null)));
     }
 
     @Test
@@ -349,7 +353,7 @@ public class AuthenticationManagerTest {
 
         AuthenticationMgr manager = ctx.getGlobalStateMgr().getAuthenticationMgr();
         Assertions.assertThrows(AuthenticationException.class, () -> AuthenticationHandler.authenticate(ctx,
-                testUser.getUser(), testUser.getHost(), scramble));
+                MysqlProto.handshakeCredentials(testUser.getUser(), scramble, null, testUser.getHost())));
         Assertions.assertFalse(manager.doesUserExist(testUser));
         Assertions.assertFalse(manager.doesUserExist(testUserWithIp));
 
@@ -361,20 +365,21 @@ public class AuthenticationManagerTest {
         stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         DDLStmtExecutor.execute(stmt, ctx);
         Assertions.assertThrows(AuthenticationException.class, () -> AuthenticationHandler.authenticate(ctx,
-                testUser.getUser(), testUser.getHost(), scramble));
+                MysqlProto.handshakeCredentials(testUser.getUser(), scramble, null, testUser.getHost())));
         Assertions.assertTrue(manager.doesUserExist(testUserWithIp));
 
         sql = "alter user test identified by 'abc'";
         stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         DDLStmtExecutor.execute(stmt, ctx);
         Assertions.assertEquals(testUser,
-                AuthenticationHandler.authenticate(ctx, testUser.getUser(), testUser.getHost(), scramble));
+                AuthenticationHandler.authenticate(ctx,
+                        MysqlProto.handshakeCredentials(testUser.getUser(), scramble, null, testUser.getHost())));
         Assertions.assertTrue(manager.doesUserExist(testUser));
 
         StatementBase dropStmt = UtFrameUtils.parseStmtWithNewParser("drop user test", ctx);
         DDLStmtExecutor.execute(dropStmt, ctx);
         Assertions.assertThrows(AuthenticationException.class, () -> AuthenticationHandler.authenticate(ctx,
-                testUser.getUser(), testUser.getHost(), scramble));
+                MysqlProto.handshakeCredentials(testUser.getUser(), scramble, null, testUser.getHost())));
         Assertions.assertFalse(manager.doesUserExist(testUser));
 
         // can drop twice
@@ -507,7 +512,7 @@ public class AuthenticationManagerTest {
         masterManager.createUser(createStmt);
         Assertions.assertTrue(masterManager.doesUserExist(testUser));
         Assertions.assertEquals(testUser, AuthenticationHandler.authenticate(ctx,
-                testUser.getUser(), "10.1.1.1", new byte[0]));
+                MysqlProto.handshakeCredentials(testUser.getUser(), new byte[0], null, "10.1.1.1")));
 
         // 3. alter user
         sql = "alter user test identified by 'abc'";
@@ -516,7 +521,7 @@ public class AuthenticationManagerTest {
         masterManager.alterUser(userIdentity, new UserAuthenticationInfo(alterUserStmt.getUser(),
                 alterUserStmt.getAuthOption()), null);
         Assertions.assertEquals(testUser, AuthenticationHandler.authenticate(ctx,
-                testUser.getUser(), "10.1.1.1", scramble));
+                MysqlProto.handshakeCredentials(testUser.getUser(), scramble, null, "10.1.1.1")));
 
         // 3.1 update user property
         sql = "set property for 'test' 'max_user_connections' = '555'";
@@ -599,7 +604,8 @@ public class AuthenticationManagerTest {
         Assertions.assertTrue(manager.doesUserExist(testUserWithHost));
         Assertions.assertEquals(new HashSet<String>(Arrays.asList("host01")), manager.getAllHostnames());
         Assertions.assertThrows(AuthenticationException.class, () ->
-                AuthenticationHandler.authenticate(ctx, "user_with_host", "10.1.1.1", scramble));
+                AuthenticationHandler.authenticate(ctx,
+                        MysqlProto.handshakeCredentials("user_with_host", scramble, null, "10.1.1.1")));
 
         // update host -> ip list
         Map<String, Set<String>> hostToIpList = new HashMap<>();
@@ -608,11 +614,14 @@ public class AuthenticationManagerTest {
 
         // check login
         Assertions.assertThrows(AuthenticationException.class, () ->
-                AuthenticationHandler.authenticate(ctx, "user_with_host", "10.1.1.1", scramble));
+                AuthenticationHandler.authenticate(ctx,
+                        MysqlProto.handshakeCredentials("user_with_host", scramble, null, "10.1.1.1")));
         Assertions.assertEquals(testUserWithHost,
-                AuthenticationHandler.authenticate(ctx, "user_with_host", "10.1.1.2", scramble));
+                AuthenticationHandler.authenticate(ctx,
+                        MysqlProto.handshakeCredentials("user_with_host", scramble, null, "10.1.1.2")));
         Assertions.assertThrows(AuthenticationException.class, () ->
-                AuthenticationHandler.authenticate(ctx, "user_with_host", "10.1.1.3", scramble));
+                AuthenticationHandler.authenticate(ctx,
+                        MysqlProto.handshakeCredentials("user_with_host", scramble, null, "10.1.1.3")));
 
         // update host -> ip list
         hostToIpList = new HashMap<>();
@@ -622,11 +631,14 @@ public class AuthenticationManagerTest {
 
         // check login
         Assertions.assertEquals(testUserWithHost,
-                AuthenticationHandler.authenticate(ctx, "user_with_host", "10.1.1.1", scramble));
+                AuthenticationHandler.authenticate(ctx,
+                        MysqlProto.handshakeCredentials("user_with_host", scramble, null, "10.1.1.1")));
         Assertions.assertEquals(testUserWithHost,
-                AuthenticationHandler.authenticate(ctx, "user_with_host", "10.1.1.2", scramble));
+                AuthenticationHandler.authenticate(ctx,
+                        MysqlProto.handshakeCredentials("user_with_host", scramble, null, "10.1.1.2")));
         Assertions.assertThrows(AuthenticationException.class, () ->
-                AuthenticationHandler.authenticate(ctx, "user_with_host", "10.1.1.3", scramble));
+                AuthenticationHandler.authenticate(ctx,
+                        MysqlProto.handshakeCredentials("user_with_host", scramble, null, "10.1.1.3")));
 
         // create a user with ip
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
@@ -637,7 +649,8 @@ public class AuthenticationManagerTest {
 
         // login matches ip
         Assertions.assertEquals(testUserWithIp,
-                AuthenticationHandler.authenticate(ctx, "user_with_host", "10.1.1.1", scramble));
+                AuthenticationHandler.authenticate(ctx,
+                        MysqlProto.handshakeCredentials("user_with_host", scramble, null, "10.1.1.1")));
 
         // create a user with %
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
@@ -649,16 +662,20 @@ public class AuthenticationManagerTest {
         Assertions.assertTrue(manager.doesUserExist(testUserWithAll));
 
         Assertions.assertThrows(AuthenticationException.class, () ->
-                AuthenticationHandler.authenticate(ctx, "user_with_host", "10.1.1.1", scramble2));
+                AuthenticationHandler.authenticate(ctx,
+                        MysqlProto.handshakeCredentials("user_with_host", scramble2, null, "10.1.1.1")));
         Assertions.assertThrows(AuthenticationException.class, () ->
-                AuthenticationHandler.authenticate(ctx, "user_with_host", "10.1.1.2", scramble2));
+                AuthenticationHandler.authenticate(ctx,
+                        MysqlProto.handshakeCredentials("user_with_host", scramble2, null, "10.1.1.2")));
 
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "alter user user_with_host@'%' identified by 'abc'", ctx), ctx);
         Assertions.assertEquals(testUserWithIp,
-                AuthenticationHandler.authenticate(ctx, "user_with_host", "10.1.1.1", scramble));
+                AuthenticationHandler.authenticate(ctx,
+                        MysqlProto.handshakeCredentials("user_with_host", scramble, null, "10.1.1.1")));
         Assertions.assertEquals(testUserWithHost,
-                AuthenticationHandler.authenticate(ctx, "user_with_host", "10.1.1.2", scramble));
+                AuthenticationHandler.authenticate(ctx,
+                        MysqlProto.handshakeCredentials("user_with_host", scramble, null, "10.1.1.2")));
     }
 
     @Test

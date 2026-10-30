@@ -95,8 +95,13 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
             LOG.warn("table {} is dropped, ignore", tableId);
             return;
         }
+        // Persisted source type survives a timed-out client or loss of the DeleteJob callback.
+        if (txnState.getSourceType() == TransactionState.LoadJobSourceType.DELETE) {
+            table.setHasDelete();
+        }
         List<ColumnId> validDictCacheColumns = Lists.newArrayList();
         List<Long> dictCollectedVersions = Lists.newArrayList();
+        List<Long> dictContentIdentities = Lists.newArrayList();
 
         long maxPartitionVersionTime = -1;
 
@@ -202,6 +207,7 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
             }
             if (!partitionCommitInfo.getValidDictCacheColumns().isEmpty()) {
                 validDictCacheColumns = partitionCommitInfo.getValidDictCacheColumns();
+                dictContentIdentities = partitionCommitInfo.getDictContentIdentities();
             }
             if (!partitionCommitInfo.getDictCollectedVersions().isEmpty()) {
                 dictCollectedVersions = partitionCommitInfo.getDictCollectedVersions();
@@ -222,11 +228,12 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
         }
 
         if (!GlobalStateMgr.isCheckpointThread() && dictCollectedVersions.size() == validDictCacheColumns.size()) {
+            boolean hasContentIdentities = !dictContentIdentities.isEmpty();
             for (int i = 0; i < validDictCacheColumns.size(); i++) {
                 ColumnId columnName = validDictCacheColumns.get(i);
-                long collectedVersion = dictCollectedVersions.get(i);
-                IDictManager.getInstance()
-                        .updateGlobalDict(table, columnName, collectedVersion, maxPartitionVersionTime);
+                Long contentIdentity = hasContentIdentities ? dictContentIdentities.get(i) : null;
+                IDictManager.getInstance().updateGlobalDict(table, columnName, dictCollectedVersions.get(i),
+                        maxPartitionVersionTime, contentIdentity);
             }
         }
     }

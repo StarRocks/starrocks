@@ -39,9 +39,11 @@ from .datatype import (
     SMALLINT,
     STRING,
     STRUCT,
+    TIME,
     TINYINT,
     VARBINARY,
     VARCHAR,
+    VARIANT,
 )
 from .sql.dml import (
     AmazonS3,
@@ -67,10 +69,10 @@ from .sql.dml import (
 __all__ = (
     "BOOLEAN", "TINYINT", "SMALLINT", "INTEGER", "BIGINT", "LARGEINT",
     "DECIMAL", "DOUBLE", "FLOAT",
-    "DATETIME", "DATE",
+    "DATETIME", "DATE", "TIME",
     "CHAR", "VARCHAR", "STRING", "BINARY", "VARBINARY",
     "HLL", "BITMAP", "PERCENTILE",
-    "ARRAY", "MAP", "STRUCT", "JSON",
+    "ARRAY", "MAP", "STRUCT", "JSON", "VARIANT",
 
     "InsertIntoFiles",
     "FilesTarget",

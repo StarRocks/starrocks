@@ -46,6 +46,8 @@ INSERT INTO t_generated_column_complex_rewrite_2 VALUES (1);
 INSERT INTO t_generated_column_complex_rewrite_2 VALUES (2);
 -- result:
 -- !result
+[UC]ANALYZE FULL TABLE t_generated_column_complex_rewrite_1 WITH SYNC MODE;
+[UC]ANALYZE FULL TABLE t_generated_column_complex_rewrite_2 WITH SYNC MODE;
 function: assert_explain_not_contains('SELECT CONCAT(CAST(id AS STRING), "_abc") FROM t_generated_column_complex_rewrite_1', "abc")
 -- result:
 None
@@ -285,6 +287,7 @@ PROPERTIES (
 INSERT INTO t_generated_column_complex_rewrite_3 VALUES (1);
 -- result:
 -- !result
+[UC]ANALYZE FULL TABLE t_generated_column_complex_rewrite_3 WITH SYNC MODE;
 function: assert_explain_contains('SELECT COUNT(*) FROM t_generated_column_complex_rewrite_3 WHERE cast(id + 10 as string) IS NOT NULL', 'col')
 -- result:
 None

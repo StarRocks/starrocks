@@ -17,13 +17,12 @@ package com.starrocks.planner;
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.context.ai.AIProvider;
 import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.AIModelConfigs;
-import com.starrocks.sql.common.AIModelConfigs.SystemChatConfig;
-import com.starrocks.thrift.TAIModelSource;
 import com.starrocks.thrift.TAIProjectNode;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
@@ -41,23 +40,16 @@ import java.util.Set;
 
 /** FE plan boundary for AI expression evaluation. */
 public final class AIProjectNode extends ProjectNode {
-    private final Map<String, AIModelConfigs.ModelConfig> modelConfigs;
+    private final Map<String, AIProvider> providers;
 
     public AIProjectNode(PlanNodeId id, TupleDescriptor tupleDescriptor, PlanNode child,
                          Map<SlotId, Expr> slotMap, Map<SlotId, Expr> commonSlotMap,
-                         SystemChatConfig systemChatConfig) {
-        this(id, tupleDescriptor, child, slotMap, commonSlotMap,
-                Map.of(AIModelConfigs.SYSTEM_CHAT_CONFIG_ID, AIModelConfigs.fromSystemChat(systemChatConfig)));
-    }
-
-    public AIProjectNode(PlanNodeId id, TupleDescriptor tupleDescriptor, PlanNode child,
-                         Map<SlotId, Expr> slotMap, Map<SlotId, Expr> commonSlotMap,
-                         Map<String, AIModelConfigs.ModelConfig> modelConfigs) {
-        this(id, tupleDescriptor, child, copyExpressionMaps(slotMap, commonSlotMap), modelConfigs);
+                         Map<String, AIProvider> providers) {
+        this(id, tupleDescriptor, child, copyExpressionMaps(slotMap, commonSlotMap), providers);
     }
 
     private AIProjectNode(PlanNodeId id, TupleDescriptor tupleDescriptor, PlanNode child,
-                          ExpressionMaps expressionMaps, Map<String, AIModelConfigs.ModelConfig> modelConfigs) {
+                          ExpressionMaps expressionMaps, Map<String, AIProvider> providers) {
         super(id, tupleDescriptor, child, expressionMaps.slotMap(), expressionMaps.commonSlotMap());
         planNodeName = "AIProject";
 
@@ -72,7 +64,7 @@ public final class AIProjectNode extends ProjectNode {
                 return;
             }
             Preconditions.checkState(expression instanceof FunctionCallExpr call
-                            && call.getFn() != null && call.getFn().isAi(),
+                            && call.getFn() != null && call.getFn().isAI(),
                     "AIProject output expressions must be identity slots or AI calls");
             aiOutputSlots.add(slot);
             int previousAICallCount = aiCalls.size();
@@ -87,40 +79,23 @@ public final class AIProjectNode extends ProjectNode {
         Preconditions.checkState(getCommonSlotMap().values().stream()
                         .noneMatch(expression -> referencesAnySlot(expression, aiOutputSlots)),
                 "AIProject common expressions must not depend on AI outputs");
-        this.modelConfigs = Map.copyOf(modelConfigs);
+        Map<String, AIProvider> copies = new LinkedHashMap<>();
+        providers.forEach((key, provider) -> copies.put(key, new AIProvider(provider)));
+        this.providers = Map.copyOf(copies);
         Set<String> usedConfigIds = new HashSet<>();
         for (FunctionCallExpr call : aiCalls) {
-            String configId = call.getAiModelConfigId();
-            Preconditions.checkState(configId != null && this.modelConfigs.containsKey(configId),
-                    "AIProject requires a model configuration for each AI call");
-            AIModelConfigs.ModelConfig config = this.modelConfigs.get(configId);
-            Preconditions.checkState(config.source() == call.getFn().getAiModelSource(),
-                    "AIProject model source does not match the AI function");
-            if (config.source() == TAIModelSource.PROVIDER) {
-                Preconditions.checkState(!AIModelConfigs.SYSTEM_CHAT_CONFIG_ID.equals(configId)
-                                && !AIModelConfigs.SYSTEM_EMBEDDING_CONFIG_ID.equals(configId),
-                        "Named AI providers must not use SYSTEM configuration IDs");
-            } else {
-                Preconditions.checkState(AIModelConfigs.systemConfigId(call.getFn()).equals(configId),
-                        "AIProject AI call has an invalid SYSTEM configuration ID");
-            }
+            String configId = call.getAIProviderId();
+            Preconditions.checkState(configId != null && this.providers.containsKey(configId),
+                    "AIProject requires an AI provider for each AI call");
+            AIProvider config = this.providers.get(configId);
             usedConfigIds.add(configId);
-            boolean embedding = AIModelConfigs.isTextEmbedding(call.getFn());
-            Preconditions.checkState((embedding ? "TEXT_EMBEDDING" : "CHAT").equals(config.capability()),
-                    "AIProject model capability does not match the AI function");
-            if (call.getFn().getAiModelSource() == TAIModelSource.SYSTEM) {
-                AIModelConfigs.DefaultModelRequirement requirement = AIModelConfigs.hasExplicitModel(call.getFn())
-                        ? AIModelConfigs.DefaultModelRequirement.OPTIONAL : AIModelConfigs.DefaultModelRequirement.REQUIRED;
-                if (embedding) {
-                    AIModelConfigs.validateSystemEmbedding(config, requirement);
-                } else {
-                    AIModelConfigs.validateSystemChat(
-                            new SystemChatConfig(config.endpoint(), config.model(), config.provider()), requirement);
-                }
-            }
+            Preconditions.checkState(configId.equals(config.getId()),
+                    "AIProject provider ID must match its mapping key");
+            Preconditions.checkState(AIModelConfigs.parseProviderType(call.getFn()) == config.getType(),
+                    "AIProject provider type does not match the AI function");
         }
-        Preconditions.checkState(usedConfigIds.equals(this.modelConfigs.keySet()),
-                "AIProject must contain only used model configurations");
+        Preconditions.checkState(usedConfigIds.equals(this.providers.keySet()),
+                "AIProject must contain only used AI providers");
     }
 
     @Override
@@ -132,8 +107,8 @@ public final class AIProjectNode extends ProjectNode {
         aiProject.setCommon_slot_map(new HashMap<>());
         getCommonSlotMap().forEach((slot, expression) ->
                 aiProject.putToCommon_slot_map(slot.asInt(), ExprToThrift.treeToThrift(expression)));
-        aiProject.setAi_model_configs(new HashMap<>());
-        modelConfigs.forEach((id, config) -> aiProject.putToAi_model_configs(id, config.toThrift()));
+        aiProject.setAi_provider_mapping(new HashMap<>());
+        providers.forEach((id, config) -> aiProject.putToAi_provider_mapping(id, config.toThrift()));
         message.setNode_type(TPlanNodeType.AI_PROJECT_NODE);
         message.setAi_project_node(aiProject);
     }
@@ -163,7 +138,7 @@ public final class AIProjectNode extends ProjectNode {
     }
 
     private static void collectAICalls(Expr expression, List<FunctionCallExpr> calls) {
-        if (expression instanceof FunctionCallExpr call && call.getFn() != null && call.getFn().isAi()) {
+        if (expression instanceof FunctionCallExpr call && call.getFn() != null && call.getFn().isAI()) {
             calls.add(call);
         }
         expression.getChildren().forEach(child -> collectAICalls(child, calls));
@@ -195,7 +170,7 @@ public final class AIProjectNode extends ProjectNode {
     private static boolean isNonReusableExpression(Expr expression) {
         if (expression instanceof FunctionCallExpr call && call.getFn() != null) {
             Function function = call.getFn();
-            if (function.isAi() || FunctionSet.allNonDeterministicFunctions.contains(
+            if (function.isAI() || FunctionSet.allNonDeterministicFunctions.contains(
                     function.functionName().toLowerCase(Locale.ROOT))) {
                 return true;
             }

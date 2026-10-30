@@ -1,0 +1,89 @@
+-- name: test_iceberg_trino_branch_dml
+-- StarRocks deletes, updates and merges rows on a branch while main moves on; both engines read the branch and main back.
+trino: CREATE SCHEMA iceberg.trino_branch_dml_${uuid0} WITH (location = 'oss://${oss_bucket}/trino_branch_dml_${uuid0}.db');
+trino: CREATE TABLE iceberg.trino_branch_dml_${uuid0}.t (id integer, v varchar, p integer) WITH (format = 'PARQUET', format_version = 2, partitioning = ARRAY['p']);
+trino: INSERT INTO iceberg.trino_branch_dml_${uuid0}.t VALUES (1, 'a', 1), (2, 'b', 1), (3, 'c', 2), (4, 'd', 2);
+create external catalog ice_cat_${uuid0} properties ("type" = "iceberg", "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+);
+alter table ice_cat_${uuid0}.trino_branch_dml_${uuid0}.t create branch b1;
+alter table ice_cat_${uuid0}.trino_branch_dml_${uuid0}.t create tag tag1;
+insert into ice_cat_${uuid0}.trino_branch_dml_${uuid0}.t values (5, 'e', 3);
+delete from ice_cat_${uuid0}.trino_branch_dml_${uuid0}.t for version as of b1 where id = 1;
+update ice_cat_${uuid0}.trino_branch_dml_${uuid0}.t for version as of b1 set v = 'b2' where id = 2;
+merge into ice_cat_${uuid0}.trino_branch_dml_${uuid0}.t for version as of b1 as t
+    using (select 3 as id, 'c2' as v, 2 as p union all select 6, 'f', 3) as s on t.id = s.id
+    when matched then update set v = s.v
+    when not matched then insert values (s.id, s.v, s.p);
+delete from ice_cat_${uuid0}.trino_branch_dml_${uuid0}.t for version as of b1 where p = 2 and id = 4;
+select * from ice_cat_${uuid0}.trino_branch_dml_${uuid0}.t for version as of 'b1' order by id;
+select * from ice_cat_${uuid0}.trino_branch_dml_${uuid0}.t order by id;
+select * from ice_cat_${uuid0}.trino_branch_dml_${uuid0}.t for version as of 'tag1' order by id;
+trino: SELECT * FROM iceberg.trino_branch_dml_${uuid0}.t FOR VERSION AS OF 'b1' ORDER BY id;
+trino: SELECT * FROM iceberg.trino_branch_dml_${uuid0}.t ORDER BY id;
+-- a tag or an unknown name cannot be written, and the rejected statements leave no snapshot behind
+delete from ice_cat_${uuid0}.trino_branch_dml_${uuid0}.t for version as of tag1 where id = 1;
+update ice_cat_${uuid0}.trino_branch_dml_${uuid0}.t for version as of no_such_branch set v = 'x' where id = 1;
+select count(*) from ice_cat_${uuid0}.trino_branch_dml_${uuid0}.t$snapshots;
+drop catalog ice_cat_${uuid0};
+trino: DROP TABLE iceberg.trino_branch_dml_${uuid0}.t;
+trino: DROP SCHEMA iceberg.trino_branch_dml_${uuid0};
+
+-- name: test_iceberg_trino_branch_dml_after_schema_change
+-- A column is dropped and re-added under the same name after the branch head. The branch is read with the current
+-- schema, where the re-added column is NULL in the old rows, so a DELETE on it must not match the old values.
+trino: CREATE SCHEMA iceberg.trino_branch_schema_${uuid0} WITH (location = 'oss://${oss_bucket}/trino_branch_schema_${uuid0}.db');
+trino: CREATE TABLE iceberg.trino_branch_schema_${uuid0}.t (id integer, c varchar) WITH (format = 'PARQUET', format_version = 2);
+trino: INSERT INTO iceberg.trino_branch_schema_${uuid0}.t VALUES (1, 'x'), (2, 'x'), (3, 'y');
+create external catalog ice_cat_${uuid0} properties ("type" = "iceberg", "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+);
+alter table ice_cat_${uuid0}.trino_branch_schema_${uuid0}.t create branch b1;
+alter table ice_cat_${uuid0}.trino_branch_schema_${uuid0}.t drop column c;
+alter table ice_cat_${uuid0}.trino_branch_schema_${uuid0}.t add column c varchar;
+delete from ice_cat_${uuid0}.trino_branch_schema_${uuid0}.t for version as of b1 where c = 'x';
+select * from ice_cat_${uuid0}.trino_branch_schema_${uuid0}.t for version as of 'b1' order by id;
+update ice_cat_${uuid0}.trino_branch_schema_${uuid0}.t for version as of b1 set c = 'z' where id = 1;
+delete from ice_cat_${uuid0}.trino_branch_schema_${uuid0}.t for version as of b1 where c is null and id = 3;
+select * from ice_cat_${uuid0}.trino_branch_schema_${uuid0}.t for version as of 'b1' order by id;
+select * from ice_cat_${uuid0}.trino_branch_schema_${uuid0}.t order by id;
+trino: SELECT * FROM iceberg.trino_branch_schema_${uuid0}.t FOR VERSION AS OF 'b1' ORDER BY id;
+trino: SELECT * FROM iceberg.trino_branch_schema_${uuid0}.t ORDER BY id;
+drop catalog ice_cat_${uuid0};
+trino: DROP TABLE iceberg.trino_branch_schema_${uuid0}.t;
+trino: DROP SCHEMA iceberg.trino_branch_schema_${uuid0};
+
+-- name: test_iceberg_trino_branch_dml_after_partition_evolution
+-- The table is partitioned after the branch head, so the branch holds only unpartitioned files. DML on the branch
+-- scans them and writes new files with the current partition spec, as Iceberg does for a branch.
+trino: CREATE SCHEMA iceberg.trino_branch_spec_${uuid0} WITH (location = 'oss://${oss_bucket}/trino_branch_spec_${uuid0}.db');
+trino: CREATE TABLE iceberg.trino_branch_spec_${uuid0}.t (id integer, v varchar, p integer) WITH (format = 'PARQUET', format_version = 2);
+trino: INSERT INTO iceberg.trino_branch_spec_${uuid0}.t VALUES (1, 'a', 1), (2, 'b', 1), (3, 'c', 2), (4, 'd', 2);
+create external catalog ice_cat_${uuid0} properties ("type" = "iceberg", "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+);
+alter table ice_cat_${uuid0}.trino_branch_spec_${uuid0}.t create branch b1;
+alter table ice_cat_${uuid0}.trino_branch_spec_${uuid0}.t add partition column p;
+merge into ice_cat_${uuid0}.trino_branch_spec_${uuid0}.t for version as of b1 as t
+    using (select 1 as id, 'a2' as v, 1 as p union all select 5, 'e', 3) as s on t.id = s.id
+    when matched then update set v = s.v
+    when not matched then insert values (s.id, s.v, s.p);
+update ice_cat_${uuid0}.trino_branch_spec_${uuid0}.t for version as of b1 set v = 'c2' where id = 3;
+delete from ice_cat_${uuid0}.trino_branch_spec_${uuid0}.t for version as of b1 where id = 4;
+select * from ice_cat_${uuid0}.trino_branch_spec_${uuid0}.t for version as of 'b1' order by id;
+select * from ice_cat_${uuid0}.trino_branch_spec_${uuid0}.t for version as of 'b1' where p = 1 order by id;
+select * from ice_cat_${uuid0}.trino_branch_spec_${uuid0}.t order by id;
+trino: SELECT * FROM iceberg.trino_branch_spec_${uuid0}.t FOR VERSION AS OF 'b1' ORDER BY id;
+trino: SELECT * FROM iceberg.trino_branch_spec_${uuid0}.t ORDER BY id;
+drop catalog ice_cat_${uuid0};
+trino: DROP TABLE iceberg.trino_branch_spec_${uuid0}.t;
+trino: DROP SCHEMA iceberg.trino_branch_spec_${uuid0};

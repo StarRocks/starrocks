@@ -23,6 +23,8 @@ import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.http.rest.RestBaseAction;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.Authorizer;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 
@@ -45,6 +47,7 @@ public class ProfileActionV2 extends RestBaseAction {
 
     @Override
     protected void executeWithoutPassword(BaseRequest request, BaseResponse response) throws AccessDeniedException {
+        // enable_http_auth's OPERATE requirement predates, and is independent of, the profile access check below.
         requireOperateIfHttpAuthEnabled();
 
         String authorization = request.getAuthorizationHeader();
@@ -60,16 +63,23 @@ public class ProfileActionV2 extends RestBaseAction {
             return;
         }
 
-        String queryProfileStr = ProfileManager.getInstance().getProfile(queryId);
-
-        if (queryProfileStr != null) {
-            sendSuccessResponse(response, queryProfileStr, request);
-            return;
+        ProfileManager.ProfileElement element = ProfileManager.getInstance().getProfileElement(queryId);
+        if (element != null) {
+            // Same rule as SHOW PROFILELIST and ANALYZE PROFILE: the owner may read their own profile, anyone
+            // else needs SYSTEM OPERATE.
+            Authorizer.checkQueryProfileAccess(ConnectContext.get(), element);
+            String queryProfileStr = element.getProfileString();
+            if (queryProfileStr != null) {
+                sendSuccessResponse(response, queryProfileStr, request);
+                return;
+            }
         }
 
         if (isRequestAll) {
             // If the query profile is not found in the local fe's ProfileManager,
-            // we will query other frontend nodes to get the query profile.
+            // we will query other frontend nodes to get the query profile. The request is relayed with the
+            // caller's own Authorization header, so the frontend that holds the profile applies the access
+            // rule itself.
             String queryPath = String.format(QUERY_PLAN_URI, queryId);
             List<String> profileList =
                     fetchResultFromOtherFrontendNodes(queryPath, authorization, HttpMethod.GET, false);

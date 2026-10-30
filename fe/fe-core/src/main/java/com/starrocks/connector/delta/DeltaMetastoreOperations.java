@@ -63,4 +63,8 @@ public class DeltaMetastoreOperations {
     public void invalidateAll() {
         this.metastore.invalidateAll();
     }
+
+    public void invalidateTable(String dbName, String tableName) {
+        this.metastore.invalidateTable(dbName, tableName);
+    }
 }

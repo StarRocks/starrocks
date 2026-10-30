@@ -240,7 +240,7 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
      * @throws IllegalArgumentException when {@code oldTabletIdToRanges} is empty or an entry's
      *         range count is outside {@code [2, tablet_reshard_max_split_count]}.
      * @throws StarRocksException when table-level preconditions fail (not cloud-native, not
-     *         range-distribution, not in NORMAL state, or a colocate peer is unstable), or
+     *         range-distribution, in an incompatible alter state, or a colocate peer is unstable), or
      *         catalog lookup fails for any input old tablet id.
      */
     public static TabletReshardJob forExternalBoundaries(Database db, OlapTable table,
@@ -259,7 +259,7 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
         Map<Long, ReshardingPhysicalPartition> reshardingPhysicalPartitions = new HashMap<>();
 
         try (AutoCloseableLock lock = new AutoCloseableLock(db.getId(), table.getId(), LockType.READ)) {
-            checkTableNormalState(db, table);
+            checkTableReshardState(db, table);
 
             // Group input entries by (physicalPartition, materializedIndex) so each
             // ReshardingMaterializedIndex carries all of its targets in one pass.
@@ -388,10 +388,11 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
     }
 
     /**
-     * In-lock guard: the table must be in NORMAL state to build a reshard job.
+     * In-lock guard: other reshard jobs may occupy disjoint physical partitions.
      */
-    private static void checkTableNormalState(Database db, OlapTable table) throws StarRocksException {
-        if (table.getState() != OlapTable.OlapTableState.NORMAL) {
+    private static void checkTableReshardState(Database db, OlapTable table) throws StarRocksException {
+        if (table.getState() != OlapTable.OlapTableState.NORMAL
+                && table.getState() != OlapTable.OlapTableState.TABLET_RESHARD) {
             throw new StarRocksException("Unexpected table state " + table.getState()
                     + " in table " + db.getFullName() + '.' + table.getName());
         }
@@ -530,7 +531,7 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
                 splitTabletClause.getTabletList() == null);
 
         try (AutoCloseableLock lock = new AutoCloseableLock(db.getId(), table.getId(), LockType.READ)) {
-            checkTableNormalState(db, table);
+            checkTableReshardState(db, table);
 
             // A split whose children must be UNSHARE-rewritten is bounded twice: how far one tablet may
             // fan out (read amplification per generation) and how many tablets one job may take (how long
@@ -801,7 +802,7 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
 
         Map<Long, ReshardingPhysicalPartition> reshardingPhysicalPartitions = new HashMap<>();
         try (AutoCloseableLock lock = new AutoCloseableLock(db.getId(), table.getId(), LockType.READ)) {
-            checkTableNormalState(db, table);
+            checkTableReshardState(db, table);
             for (Map.Entry<Long, Map<Long, Map<Long, List<TabletRange>>>> partitionEntry : alignmentMap.entrySet()) {
                 long physicalPartitionId = partitionEntry.getKey();
                 PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);

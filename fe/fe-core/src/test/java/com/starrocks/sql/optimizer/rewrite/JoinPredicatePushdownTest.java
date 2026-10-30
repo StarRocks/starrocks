@@ -140,15 +140,17 @@ public class JoinPredicatePushdownTest extends PlanTestBase {
                 "from test.t0 left outer join test.t1 on v1 = v4 " +
                 "asof left outer join test.t2 on v5 = v7 and v6 >= v8 where v9 = 10";
         String plan = getFragmentPlan(query);
-        PlanTestBase.assertContains(plan, "8:HASH JOIN\n" +
+        // the filter on t2 applies to the row the ASOF join picked, so it stays above the join
+        PlanTestBase.assertContains(plan, "7:HASH JOIN\n" +
                 "  |  join op: ASOF INNER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 5: v5 = 7: v7\n" +
-                "  |  asof join conjunct: 6: v6 >= 8: v8");
+                "  |  asof join conjunct: 6: v6 >= 8: v8\n" +
+                "  |  other predicates: 9: v9 = 10");
         PlanTestBase.assertContains(plan, "5:OlapScanNode\n" +
                 "     TABLE: t2\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 9: v9 = 10");
+                "     PREDICATES: 7: v7 IS NOT NULL\n");
 
         String query2 = "select v1, v2, v5, v8 " +
                 "from test.t0 asof left outer join test.t1 on v1 = v4 and v2 > v5 " +
@@ -160,12 +162,13 @@ public class JoinPredicatePushdownTest extends PlanTestBase {
                 "  |  equal join conjunct: 5: v5 = 7: v7\n" +
                 "  |  \n" +
                 "  |----8:EXCHANGE");
+        // the NULL rejection of v5 comes from the join above; it is not recorded past an ASOF join, since it would
+        // also turn outer joins inside the ASOF join's right side into inner ones, so the ASOF join stays outer
         PlanTestBase.assertContains(plan2, "4:HASH JOIN\n" +
-                "  |  join op: ASOF INNER JOIN (BROADCAST)\n" +
+                "  |  join op: ASOF LEFT OUTER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 1: v1 = 4: v4\n" +
                 "  |  asof join conjunct: 2: v2 > 5: v5");
-        PlanTestBase.assertNotContains(plan2, "LEFT OUTER JOIN");
     }
 
     @Test
@@ -235,7 +238,7 @@ public class JoinPredicatePushdownTest extends PlanTestBase {
                 "  2:OlapScanNode\n" +
                 "     TABLE: t1\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 4: v4 > 2");
+                "     PREDICATES: 4: v4 IS NOT NULL, 4: v4 > 2");
 
         sql = "select * from t0 asof join t1 on v1 = v4 and v2 > v5 join t2 on v4 = v7 " +
                 "where all_match(x -> x > 1, [v1]) and v7 > 2";
@@ -246,7 +249,7 @@ public class JoinPredicatePushdownTest extends PlanTestBase {
                 "  3:OlapScanNode\n" +
                 "     TABLE: t1\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 4: v4 > 2");
+                "     PREDICATES: 4: v4 IS NOT NULL, 4: v4 > 2");
     }
     @Test
     public void testJoinORToUnionWithCTEAndMultiDistinct() throws Exception {

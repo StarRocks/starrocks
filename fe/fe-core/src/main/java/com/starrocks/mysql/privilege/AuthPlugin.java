@@ -16,11 +16,13 @@ package com.starrocks.mysql.privilege;
 
 import com.google.re2j.Pattern;
 import com.starrocks.authentication.AuthenticationProvider;
+import com.starrocks.authentication.GroupSource;
 import com.starrocks.authentication.JWTAuthenticationProvider;
 import com.starrocks.authentication.LDAPAuthProvider;
 import com.starrocks.authentication.OAuth2AuthenticationProvider;
 import com.starrocks.authentication.OAuth2Context;
 import com.starrocks.authentication.PlainPasswordAuthenticationProvider;
+import com.starrocks.authentication.SimpleLDAPSecurityIntegration;
 import com.starrocks.common.Config;
 import com.starrocks.mysql.MysqlPassword;
 import org.json.JSONObject;
@@ -56,7 +58,14 @@ public class AuthPlugin {
                             Config.authentication_ldap_simple_bind_base_dn,
                             Config.authentication_ldap_simple_user_search_attr,
                             authString,
-                            Config.authentication_ldap_simple_bind_dn_pattern);
+                            Config.authentication_ldap_simple_bind_dn_pattern,
+                            // Pre-created LDAP users do not go through a security integration, so the
+                            // cluster-wide FE config is the only source for these two. Note that the
+                            // `AS '<dn>'` form (authString != null) is excluded from memberOf inside
+                            // LDAPAuthProvider, not here.
+                            GroupSource.parseOrDefault(Config.authentication_ldap_simple_group_source,
+                                    SimpleLDAPSecurityIntegration.AUTHENTICATION_LDAP_SIMPLE_GROUP_SOURCE),
+                            Config.authentication_ldap_simple_memberof_attr);
                 }
 
                 case AUTHENTICATION_JWT -> {

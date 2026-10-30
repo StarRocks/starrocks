@@ -1,0 +1,76 @@
+-- name: test_json_subfield_no_catalog_pollution
+-- The v2 JSON path rewrite used to register the synthesized extended column on the OlapTable through
+-- Table.addColumn(). The comment there claimed that was safe because planning always runs against a
+-- copied table, but that only holds for a plain SELECT: DML does not copy its source table, so
+-- INSERT ... SELECT and materialized view refresh both mutated the live catalog instance.
+--
+-- (1) InsertPlanner takes outputFullSchema from targetTable.getFullSchema(), which is a live
+--     reference. A self-referencing insert grew that list mid-optimize, so the sink tuple ended up
+--     with one more slot than there were output exprs and the statement failed with "number of exprs
+--     is not same with slots". Retrying succeeded, at the price of shipping a phantom always-NULL
+--     column on every load.
+-- (2) The registered column also doubled as a cross-scan dedup registry keyed by name alone. A second
+--     scan reading the same path with a different type reused the first column and inherited its
+--     type, so a self-join filtering on both the int and the string form of one path returned no rows.
+--
+-- Neither depends on flat_json: the table below has no flat_json.* property at all.
+create table t (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1 properties("replication_num"="1");
+insert into t values
+  (1, parse_json('{"x":1,"y":"s1"}')),
+  (2, parse_json('{"x":"s2","y":"s2"}')),
+  (3, parse_json('{"x":3,"y":"s3"}'));
+create table dst (k int, v varchar(100)) duplicate key(k)
+  distributed by hash(k) buckets 1 properties("replication_num"="1");
+set cbo_json_v2_rewrite = true;
+-- A plain SELECT plans against AnalyzerUtils.copyTable's copy and must leave no trace: reading $.x as
+-- an int here must not change how the very next statement reads it as a string.
+select k, get_json_int(j, '$.x') as as_int from t order by k;
+select k, get_json_string(j, '$.x') as as_str from t order by k;
+-- Both readings, with the rewrite off, before anything has touched the catalog. This is the
+-- reference the two statements above have to match, and the two after the poisoning insert as well.
+set cbo_json_v2_rewrite = false;
+select k, get_json_int(j, '$.x') as as_int from t order by k;
+select k, get_json_string(j, '$.x') as as_str from t order by k;
+set cbo_json_v2_rewrite = true;
+-- DML does not copy its source table. This cross-table insert is the most ordinary way to hit the
+-- leak -- it reports no error at all, it just pins $.x to BIGINT on the shared catalog object, after
+-- which every reader of that path gets NULL for the non-integer row.
+insert into dst select k, cast(get_json_int(j, '$.x') as varchar) from t;
+-- That insert is itself entirely correct -- get_json_int over a non-integer value is NULL by
+-- definition -- and it reports nothing unusual. What it silently did is pin $.x to BIGINT on the
+-- source table, so the damage only shows up in the statements that come after it.
+select k, v from dst order by k;
+select k, get_json_string(j, '$.x') as as_str from t order by k;
+select count(*) as str_cnt from t where get_json_string(j, '$.x') = 's2';
+-- An aggregate over the string form reads the pinned column's bytes rather than the string it should
+-- have seen: with $.x pinned to BIGINT, sum(length(...)) summed lengths taken off the integer column
+-- instead of off '1' / 's2' / '3'.
+select sum(length(get_json_string(j, '$.x'))) as sum_len from t;
+-- Control for the three reads above, taken at the poisoned point rather than only at the end of the
+-- file: the rewrite must agree with its switched-off self on every one of them.
+set cbo_json_v2_rewrite = false;
+select k, get_json_string(j, '$.x') as as_str from t order by k;
+select count(*) as str_cnt from t where get_json_string(j, '$.x') = 's2';
+select sum(length(get_json_string(j, '$.x'))) as sum_len from t;
+set cbo_json_v2_rewrite = true;
+-- The self-referencing insert must succeed on the very first attempt.
+insert into t select k, j from t where get_json_int(j, '$.x') = 1;
+select count(*) from t;
+-- Two scans of one table reading $.x as int and as string each keep their own type.
+select count(*) from t a join t b on a.k = b.k
+  where get_json_int(a.j, '$.x') = 1 and get_json_string(b.j, '$.x') = '1';
+-- The same shape reached through an inlined CTE.
+set cbo_cte_reuse = false;
+select count(*) from (
+  with c as (select k, j from t where k < 100)
+  select c1.k from c c1 join c c2 on c1.k = c2.k
+  where get_json_int(c1.j, '$.x') = 1 and get_json_string(c2.j, '$.x') = '1') x;
+-- Control: with the rewrite off both answers must be identical.
+set cbo_json_v2_rewrite = false;
+select count(*) from t a join t b on a.k = b.k
+  where get_json_int(a.j, '$.x') = 1 and get_json_string(b.j, '$.x') = '1';
+select count(*) from (
+  with c as (select k, j from t where k < 100)
+  select c1.k from c c1 join c c2 on c1.k = c2.k
+  where get_json_int(c1.j, '$.x') = 1 and get_json_string(c2.j, '$.x') = '1') x;

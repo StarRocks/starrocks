@@ -45,7 +45,7 @@ public:
     // install a finish callback before execute(). Valid only after prepare() succeeds.
     pipeline::FragmentContextPtr fragment_ctx() const { return _fragment_ctx; }
 
-    static Status append_incremental_scan_ranges(ExecEnv* exec_env, const TExecPlanFragmentParams& request,
+    static Status append_incremental_scan_ranges(ExecEnv* exec_env, TExecPlanFragmentParams&& request,
                                                  TExecPlanFragmentResult* response);
 
     // Register the partition_value of each scan range into its HiveTableDescriptor's

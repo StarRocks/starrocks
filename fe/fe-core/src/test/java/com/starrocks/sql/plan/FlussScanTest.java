@@ -36,6 +36,7 @@ import com.starrocks.planner.FlussScanNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -47,7 +48,9 @@ import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.StringType;
+import com.starrocks.utframe.LockProbe;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
@@ -182,6 +185,55 @@ public class FlussScanTest extends PlanTestBase {
         Assertions.assertEquals(3, params.getPartitionKeys().size());
     }
 
+    /**
+     * The combination the lock report left unmeasured: a statement that reads Fluss together with an
+     * internal table. Fluss lives in an external catalog, so it is never in the lock set and abstains
+     * from the copy-safety verdict; the planner therefore drops the lock before it asks the connector
+     * for statistics and splits. Pinned end to end here because the report's own conclusion about
+     * {@code computeFlussScanNode} was structural -- "same shape as the other compute*ScanNode sites"
+     * -- and never run.
+     */
+    @Test
+    public void testFlussMetadataIsNotFetchedUnderTheLock() throws Exception {
+        // The mixed statement has to be planned from the internal catalog, as a real one would be:
+        // it is the internal table that brings the lock, and setUp above left fluss0 current.
+        connectContext.changeCatalogDb("default_catalog.test");
+        try {
+            LockProbe probe = probeConnectorCalls();
+            getFragmentPlan("select t.v1, e.id from test.t0 t "
+                    + "join fluss0.fluss_db.log_events e on t.v1 = e.id");
+            probe.assertNothingUnderTheLock("planning contacted fluss");
+        } finally {
+            connectContext.changeCatalogDb(CATALOG + "." + DB);
+        }
+    }
+
+    /**
+     * Whether any connector call made while planning ran with an FE metadata lock held, per entry point.
+     * Only statistics and file lists are probed, from any thread.
+     */
+    private LockProbe probeConnectorCalls() {
+        LockProbe probe = LockProbe.onAnyThread();
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Statistics getTableStatistics(Invocation invocation, OptimizerContext session, String catalogName,
+                                                 Table table, Map<ColumnRefOperator, Column> columns,
+                                                 List<PartitionKey> partitionKeys, ScalarOperator predicate,
+                                                 long limit, TvrVersionRange versionRange) {
+                probe.record("getTableStatistics:" + table.getName());
+                return invocation.proceed(session, catalogName, table, columns, partitionKeys, predicate, limit,
+                        versionRange);
+            }
+
+            @Mock
+            public List<RemoteFileInfo> getRemoteFiles(Invocation invocation, Table table, GetRemoteFilesParams params) {
+                probe.record("getRemoteFiles:" + table.getName());
+                return invocation.proceed(table, params);
+            }
+        };
+        return probe;
+    }
+
     private static String toPartitionName(PartitionKey partitionKey) {
         return PartitionUtil.toHivePartitionName(ImmutableList.of("category"), partitionKey);
     }
@@ -295,7 +347,8 @@ public class FlussScanTest extends PlanTestBase {
         if (partitioned) {
             descriptorBuilder.partitionedBy("category");
         }
-        return TableInfo.of(TablePath.of(DB, tableName), 42L, 7, descriptorBuilder.build(), 1000L, 2000L);
+        return TableInfo.of(TablePath.of(DB, tableName), 42L, 7, descriptorBuilder.build(),
+                null, 1000L, 2000L);
     }
 
     private static class FakeConnection implements Connection {
@@ -317,6 +370,11 @@ public class FlussScanTest extends PlanTestBase {
 
         @Override
         public org.apache.fluss.client.table.Table getTable(TablePath tablePath) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public org.apache.fluss.client.table.MultiTable getMultiTable() {
             throw new UnsupportedOperationException();
         }
 

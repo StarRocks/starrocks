@@ -14,7 +14,10 @@
 
 package com.starrocks.sql.plan;
 
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.starrocks.common.Pair;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import org.junit.jupiter.api.Assertions;
@@ -385,5 +388,27 @@ public class QueryDumpExternalCatalogReplayTest extends ReplayFromDumpTestBase {
                 getCostPlanFragment(getDumpInfoFromFile("query_dump/mv_base_iceberg"));
         Assertions.assertTrue(replayPair.second.contains("OlapScanNode"));
         Assertions.assertTrue(replayPair.second.contains("table: mv_denorm_issue_cd_info_complete"));
+    }
+
+    @Test
+    public void testDumpRoundTripsAnalyzedRowCountsAndFormatVersion() {
+        // external_column_row_count and external_table_format_version survive serialize -> deserialize, which is
+        // what lets replay recompute an ANALYZE-sourced iceberg scan row count and rebuild a V3 table.
+        QueryDumpInfo dumpInfo = new QueryDumpInfo(connectContext);
+        dumpInfo.setOriginStmt("select 1");
+        dumpInfo.addExternalColumnRowCount("tpcds.store_sales", "ss_item_sk", 3612656355L);
+        dumpInfo.addExternalColumnRowCount("tpcds.store_sales", "ss_sold_date_sk", 2879987999L);
+        dumpInfo.addExternalTableFormatVersion("tpcds.store_sales", 3);
+
+        String json = GsonUtils.GSON.toJson(dumpInfo, QueryDumpInfo.class);
+        JsonObject dump = JsonParser.parseString(json).getAsJsonObject();
+        Assertions.assertEquals(3612656355L, dump.getAsJsonObject("external_column_row_count")
+                .getAsJsonObject("tpcds.store_sales").get("ss_item_sk").getAsLong(), json);
+        Assertions.assertEquals(3, dump.getAsJsonObject("external_table_format_version")
+                .get("tpcds.store_sales").getAsInt(), json);
+
+        QueryDumpInfo replayed = getDumpInfoFromJson(json);
+        Assertions.assertEquals(dumpInfo.getExternalColumnRowCountMap(), replayed.getExternalColumnRowCountMap());
+        Assertions.assertEquals(dumpInfo.getExternalTableFormatVersionMap(), replayed.getExternalTableFormatVersionMap());
     }
 }

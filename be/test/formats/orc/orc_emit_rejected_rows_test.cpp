@@ -37,6 +37,7 @@
 #include "gen_cpp/InternalService_types.h"
 #include "rapidjson/document.h"
 #include "runtime/runtime_state.h"
+#include "testutil/column_test_helper.h"
 
 namespace starrocks {
 
@@ -59,13 +60,8 @@ std::unique_ptr<RuntimeState> make_load_state() {
 
 // Build a Chunk with two rows: (int64=1, int64=2).
 std::shared_ptr<Chunk> build_two_row_chunk(SlotId col_a_id = 1, SlotId col_b_id = 2) {
-    auto col_a = Int64Column::create();
-    col_a->append(10);
-    col_a->append(20);
-
-    auto col_b = Int64Column::create();
-    col_b->append(100);
-    col_b->append(200);
+    auto col_a = ColumnTestHelper::build_column<int64_t>({10, 20});
+    auto col_b = ColumnTestHelper::build_column<int64_t>({100, 200});
 
     auto chunk = std::make_shared<Chunk>();
     chunk->append_column(std::move(col_a), col_a_id);
@@ -194,8 +190,7 @@ TEST(OrcEmitRejectedRowsTest, NullSlotDescriptorFallsBackToPositionalColName) {
     // RejectedRecordWriter::pick_name falls back to "col_<idx>" so the row is
     // still capturable. Verify that with col_names={""}
     // the JSON uses "col_0" (positional fallback), not an empty key.
-    auto col = Int64Column::create();
-    col->append(42);
+    auto col = ColumnTestHelper::build_column<int64_t>({42});
     auto chunk = std::make_shared<Chunk>();
     chunk->append_column(std::move(col), 1);
 
@@ -239,8 +234,7 @@ TEST(OrcEmitRejectedRowsTest, SingleRejectedRowWithNamedSlots) {
     // Use the build_json_from_chunk path directly to validate the column name
     // logic (nullptr -> "") and non-null slot (not constructible in UT, so
     // we use col_names directly for assertion).
-    auto col = BinaryColumn::create();
-    col->append("hello");
+    auto col = ColumnTestHelper::build_column<Slice>({"hello"});
     auto chunk = std::make_shared<Chunk>();
     chunk->append_column(std::move(col), 5);
 

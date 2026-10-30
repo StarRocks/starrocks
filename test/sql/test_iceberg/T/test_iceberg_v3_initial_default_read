@@ -1,0 +1,41 @@
+-- name: testIcebergV3InitialDefaultRead
+-- Rows written before columns are added read the columns' initial-defaults, and predicates on those columns see
+-- the defaults (also when the file is read in several chunks).
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_iceberg_v3_initial_default_read/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+
+create external catalog `ice_def_read${uuid0}`
+properties (
+"type"  =  "iceberg",
+"iceberg.catalog.type"  =  "hadoop",
+"iceberg.catalog.warehouse"="oss://${oss_bucket}/test_iceberg_v3_initial_default_read/${uuid0}"
+);
+
+create database ice_def_read${uuid0}.ice_def_db${uuid0};
+
+create table ice_def_read${uuid0}.ice_def_db${uuid0}.t (
+    id int
+) properties (
+    "format-version" = "3"
+);
+
+insert into ice_def_read${uuid0}.ice_def_db${uuid0}.t values (1), (2), (3), (4), (5);
+
+alter table ice_def_read${uuid0}.ice_def_db${uuid0}.t add column c int default "7";
+alter table ice_def_read${uuid0}.ice_def_db${uuid0}.t add column dt datetime default "2024-06-15 10:30:00";
+alter table ice_def_read${uuid0}.ice_def_db${uuid0}.t add column e string default "";
+
+insert into ice_def_read${uuid0}.ice_def_db${uuid0}.t values (6, 8, '2024-07-01 12:00:00', 'z');
+
+select id, c, dt, e from ice_def_read${uuid0}.ice_def_db${uuid0}.t order by id;
+select id from ice_def_read${uuid0}.ice_def_db${uuid0}.t where c = 7 order by id;
+select id from ice_def_read${uuid0}.ice_def_db${uuid0}.t where dt = '2024-06-15 10:30:00' order by id;
+select id from ice_def_read${uuid0}.ice_def_db${uuid0}.t where e = '' order by id;
+set chunk_size = 2;
+select id from ice_def_read${uuid0}.ice_def_db${uuid0}.t where c = 7 order by id;
+select count(*), min(c), max(c) from ice_def_read${uuid0}.ice_def_db${uuid0}.t where c >= 7;
+set chunk_size = 4096;
+
+drop catalog ice_def_read${uuid0};
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_v3_initial_default_read/${uuid0} >/dev/null || echo "exit 0" >/dev/null

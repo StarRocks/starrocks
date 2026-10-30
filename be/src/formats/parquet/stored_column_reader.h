@@ -118,9 +118,35 @@ protected:
     // for OptionalColumn, we will override it.
     virtual void _append_default_levels(size_t row_nums) {}
 
+    // Record that `num_levels` levels of the current page (already delimited by _convert_row_to_value) are passed
+    // over without being materialized. Decoders are not moved here; the next selected read skips them in
+    // _skip_deferred(). The caller must call this before decreasing _num_values_left_in_cur_page.
+    virtual void _defer_skip(size_t num_levels) { _levels_to_skip += num_levels; }
+
+    // Convert _levels_to_skip into _values_to_skip by consuming the levels from the level decoder.
+    // The page must be loaded. For RequiredColumn, levels are values.
+    virtual Status _skip_deferred_levels() {
+        _values_to_skip += _levels_to_skip;
+        _levels_to_skip = 0;
+        return Status::OK();
+    }
+
+    // Position the decoders of the current page at the read cursor: load the page if needed and skip
+    // everything recorded by _defer_skip().
+    Status _skip_deferred();
+
+    void _reset_deferred_skip() {
+        _levels_to_skip = 0;
+        _values_to_skip = 0;
+    }
+
     std::unique_ptr<ColumnChunkReader> _reader;
     size_t _num_values_left_in_cur_page = 0;
-    size_t _num_values_skip_in_cur_page = 0;
+    // Pending skips of the current page, see _defer_skip(). Both are reset when a new page is entered.
+    // Levels passed over but not consumed from the level decoder yet.
+    size_t _levels_to_skip = 0;
+    // Values whose levels are consumed but which are not skipped in the value decoder yet.
+    size_t _values_to_skip = 0;
     const ColumnReaderOptions& _opts;
     bool _cur_page_loaded = false;
     uint64_t _read_cursor = _opts.first_row_index;
@@ -139,13 +165,10 @@ private:
     // only convert in the current page, the return is the num of values that will be used and
     // the input target row pointer is changed to the result row that can be dealt in current page.
     virtual StatusOr<size_t> _convert_row_to_value(size_t* row);
-    // to skip values bases no levels we need to collect_not_null_values when decoding levels,
-    // for required column, we don't need levels information,
-    // for optional column, we collect levels information lazily,
-    // for repeated column, we collect levels information after _convert_row_to_value which had decoded the levels.
-    virtual void _collect_not_null_values(size_t num_levels, bool lazy_flag) {}
 
-    virtual Status _lazy_skip_values(uint64_t begin) = 0;
+    // Read `num_values` levels (and their values) of the current page into dst. If append_default is set, the
+    // segment is not selected: only default values (and levels) are appended, the skip is recorded by the caller
+    // with _defer_skip().
     virtual Status _read_values_on_levels(size_t num_values, starrocks::parquet::ColumnContentType content_type,
                                           starrocks::Column* dst, bool append_default,
                                           const FilterData* filter = nullptr) = 0;

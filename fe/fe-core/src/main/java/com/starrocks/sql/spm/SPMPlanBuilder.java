@@ -17,6 +17,7 @@ package com.starrocks.sql.spm;
 import com.starrocks.common.DdlException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.PlannerMetaLocker;
 import com.starrocks.sql.analyzer.ResolvedAIFunctionDetector;
@@ -89,7 +90,7 @@ public class SPMPlanBuilder {
         return new BaselinePlan(bindSql, bindSqlDigest, bindSqlHash, planStmtSQL, costs);
     }
 
-    // don't need lock, because we don't need to modify table stats
+    // runs off the private copies analyze() took, so no lock is needed
     public void generatePlan() {
         SessionVariable backupVariable = session.getSessionVariable();
         SessionVariable cloneVariable = null;
@@ -168,6 +169,13 @@ public class SPMPlanBuilder {
             if (b != null) {
                 Analyzer.analyze(b, session);
             }
+            // generatePlan() runs the whole optimizer -- partition pruning, statistics, tablet selection -- and
+            // without the lock it would iterate the partition maps a concurrent ADD / DROP PARTITION or INSERT
+            // OVERWRITE is rewriting, failing CREATE BASELINE with a ConcurrentModificationException. Plan off
+            // private copies instead, taken the way StatementPlanner takes them, so the tables behind a view or
+            // a policy are copied under their own lock too. A copy may be stale by the time it is planned; that
+            // is fine, the baseline is only a hint the query it binds is planned against again.
+            StatementPlanner.copyOlapTablesAndUnlock(p, session, locker);
         }
         if (ResolvedAIFunctionDetector.contains(p)
                 || (b != null && ResolvedAIFunctionDetector.contains(b))) {

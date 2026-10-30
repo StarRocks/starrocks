@@ -35,7 +35,7 @@ StarRocks 支持通过以下方式从 Azure 导入数据：
 
 ### 获取资源访问配置
 
-本文的示例使用基于 Shared Key 的认证方式。为确保您能顺利访问存储在 ADLS Gen2 中的数据，建议您参照“[Azure Data Lake Storage Gen2 > Shared Key (access key of storage account)](../../integrations/csp_auth/authenticate_to_azure_storage.md#基于-shared-key-认证鉴权) 中的介绍，理解该认证方式下需要配置哪些认证参数。
+本文的示例使用基于 Shared Key 的认证方式。为确保您能顺利访问存储在 ADLS Gen2 中的数据，建议您参照“[Azure Data Lake Storage Gen2 > 基于 Shared Key 认证鉴权](../../integrations/csp_auth/authenticate_to_azure_storage.md#基于-shared-key-认证鉴权-1)”中的介绍，理解该认证方式下需要配置哪些认证参数。
 
 概括来说，如果选择基于 Shared Key 的认证方式，您需要提前获取以下资源信息：
 

@@ -204,11 +204,14 @@ private:
 
     // row group meta
     const tparquet::RowGroup* _row_group_metadata = nullptr;
+    int _row_group_number = 0;
     int64_t _row_group_first_row = 0;
     SkipRowsContextPtr _skip_rows_ctx;
 
     // column readers for column chunk in row group
     std::unordered_map<SlotId, std::unique_ptr<ColumnReader>> _column_readers;
+    // Own the initial-default values the FixedValueColumnReaders of not existed columns point into.
+    std::vector<ColumnPtr> _not_existed_default_columns;
 
     // Column materialization layer over ColumnReaders. Predicate classification
     // still lives in GroupReader until the next refactor steps.

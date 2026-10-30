@@ -18,6 +18,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.util.concurrent.lock.BlockingCallValidator;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.events.MetastoreNotificationFetchException;
@@ -67,15 +68,28 @@ public class HiveMetaClient {
 
     private final HiveConf conf;
 
+    /**
+     * Only for diagnostics: it is what the blocking-call guard reports, so a slow lock held across an HMS
+     * request names the catalog whose latency it is bound to instead of just "hive-metastore". Null where
+     * the client is built without one, which is every test and nothing in production.
+     */
+    private final String catalogName;
+
     // Required for creating an instance of RetryingMetaStoreClient.
     private static final HiveMetaHookLoader DUMMY_HOOK_LOADER = tbl -> null;
 
     public HiveMetaClient(HiveConf conf) {
+        this(conf, null);
+    }
+
+    public HiveMetaClient(HiveConf conf, String catalogName) {
         this.conf = conf;
+        this.catalogName = catalogName;
         this.maxPoolSize = conf.getInt(HIVE_METASTORE_CONNECTION_POOL_SIZE, MAX_HMS_CONNECTION_POOL_SIZE_DEFAULT);
     }
 
-    public static HiveMetaClient createHiveMetaClient(HdfsEnvironment env, Map<String, String> properties) {
+    public static HiveMetaClient createHiveMetaClient(String catalogName, HdfsEnvironment env,
+                                                      Map<String, String> properties) {
         HiveConf conf = new HiveConf();
         conf.addResource(env.getConfiguration());
         properties.forEach(conf::set);
@@ -87,7 +101,7 @@ public class HiveMetaClient {
                 String.valueOf(MAX_HMS_CONNECTION_POOL_SIZE_DEFAULT));
         conf.set(MetastoreConf.ConfVars.CLIENT_SOCKET_TIMEOUT.getHiveName(), hmsTimeout);
         conf.set(HIVE_METASTORE_CONNECTION_POOL_SIZE, poolSize);
-        return new HiveMetaClient(conf);
+        return new HiveMetaClient(conf, catalogName);
     }
 
     public class RecyclableClient {
@@ -138,6 +152,9 @@ public class HiveMetaClient {
     }
 
     private RecyclableClient getClient() throws MetaException {
+        // Every path to the metastore comes through here -- callRPC and the direct
+        // getPartitionsByNames alike -- and a pool miss constructs a client, which connects.
+        BlockingCallValidator.validateNotUnderLock("hive-metastore", catalogName);
         // The MetaStoreClient c'tor relies on knowing the Hadoop version by asking
         // org.apache.hadoop.util.VersionInfo. The VersionInfo class relies on opening
         // the 'common-version-info.properties' file as a resource from hadoop-common*.jar

@@ -41,17 +41,40 @@ public class ColumnStatsMeta {
     @SerializedName("allPartitionSize")
     private int allPartitionSize;
 
+    // How many partitions the collection that wrote this entry set out to read, against which
+    // sampledPartitions is the number it managed to read. The two differ when a collection was cut short -
+    // some queries were tolerated away, or the job failed outright after collecting part of the table - and
+    // the gap is the only durable record that the column is not as covered as it was meant to be. Without
+    // it a partial collection looks exactly like a complete one to the scheduler, which then skips the
+    // column for as long as the table itself does not change (see
+    // StatisticsCollectJobFactory#needCollectStatsColumns): on a table that is never written again, "never
+    // again" is how long the missing partitions stay missing.
+    //
+    // 0 on entries written before this was recorded, and on entries that carry no partition set at all
+    // (AnalyzeType.FULL): both mean "nothing here says the coverage is short", so they are left alone.
+    // Deliberately a count and not, say, a format-specific version marker - every connector has partitions,
+    // and nothing else about them needs to be understood to tell a partial collection from a whole one.
+    @SerializedName("requestedPartitionCount")
+    private int requestedPartitionCount;
+
     public ColumnStatsMeta(String columnName, StatsConstants.AnalyzeType type, LocalDateTime updateTime) {
         this(columnName, type, updateTime, new HashSet<>(), -1);
     }
 
     public ColumnStatsMeta(String columnName, StatsConstants.AnalyzeType type, LocalDateTime updateTime,
                            Set<Long> sampledPartitionsHashValue, int allPartitionSize) {
+        this(columnName, type, updateTime, sampledPartitionsHashValue, allPartitionSize, 0);
+    }
+
+    public ColumnStatsMeta(String columnName, StatsConstants.AnalyzeType type, LocalDateTime updateTime,
+                           Set<Long> sampledPartitionsHashValue, int allPartitionSize,
+                           int requestedPartitionCount) {
         this.columnName = columnName;
         this.type = type;
         this.updateTime = updateTime;
         this.sampledPartitionsHashValue = sampledPartitionsHashValue;
         this.allPartitionSize = allPartitionSize;
+        this.requestedPartitionCount = requestedPartitionCount;
     }
 
     public String getColumnName() {
@@ -86,10 +109,33 @@ public class ColumnStatsMeta {
         return allPartitionSize;
     }
 
+    public int getRequestedPartitionCount() {
+        return requestedPartitionCount;
+    }
+
+    /**
+     * Whether the collection that wrote this entry left partitions of its own request uncollected, so the
+     * column should be collected again even if nothing about the table has changed since.
+     *
+     * <p>FULL entries are complete by definition - they describe the whole table and carry no partition
+     * set - and entries written before requestedPartitionCount existed say nothing either way, so both
+     * answer false and keep their previous scheduling behaviour.
+     */
+    public boolean isCoverageIncomplete() {
+        return type != StatsConstants.AnalyzeType.FULL
+                && requestedPartitionCount > 0
+                && sampledPartitionsHashValue != null
+                && sampledPartitionsHashValue.size() < requestedPartitionCount;
+    }
+
     public String simpleString(boolean isExternalTable) {
         if (isExternalTable && type == StatsConstants.AnalyzeType.SAMPLE && sampledPartitionsHashValue != null) {
-            return String.format("(%s,%s,sampled_partition_size=%d,all_partition_size=%d)", columnName, type,
-                    sampledPartitionsHashValue.size(), allPartitionSize);
+            // The requested count is only worth showing when it says the collection fell short of it -
+            // that is the one case an operator has to act on, or at least understand.
+            String incomplete = isCoverageIncomplete()
+                    ? String.format(",incomplete_of=%d", requestedPartitionCount) : "";
+            return String.format("(%s,%s,sampled_partition_size=%d,all_partition_size=%d%s)", columnName, type,
+                    sampledPartitionsHashValue.size(), allPartitionSize, incomplete);
         } else {
             return String.format("(%s,%s)", columnName, type.toString());
         }

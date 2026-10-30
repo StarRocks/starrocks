@@ -35,6 +35,8 @@ import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.plan.ScalarOperatorToExpr;
 import com.starrocks.type.InvalidType;
+import com.starrocks.type.StructField;
+import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
 import org.roaringbitmap.RoaringBitmap;
 
@@ -153,6 +155,31 @@ public class ExprUtils {
         } else {
             return null;
         }
+    }
+
+    /** Expose the root column to load/INSERT substitution while keeping analyzed struct field access. */
+    public static Expr rewriteStructFieldSlotRefs(Expr expr) {
+        ExprSubstitutionMap replacements = new ExprSubstitutionMap();
+        boolean changed = false;
+        for (SlotRef slot : collectAllSlotRefs(expr)) {
+            if (slot.getUsedStructFieldPos() == null || slot.getUsedStructFieldPos().isEmpty()
+                    || !slot.getTrueOriginType().isStructType()) {
+                continue;
+            }
+            Type type = slot.getOriginType();
+            List<String> names = new ArrayList<>();
+            for (int position : slot.getUsedStructFieldPos()) {
+                StructField field = ((StructType) type).getField(position);
+                names.add(field.getName());
+                type = field.getType();
+            }
+            SlotRef root = new SlotRef(slot.getTblName(), slot.getLabel());
+            root.setType(slot.getOriginType());
+            root.setNullable(slot.isNullable());
+            replacements.put(slot, new SubfieldExpr(root, slot.getType(), names));
+            changed = true;
+        }
+        return changed ? ExprSubstitutionVisitor.rewrite(expr, replacements) : expr;
     }
 
     public static List<SlotRef> collectAllSlotRefs(Expr expr) {

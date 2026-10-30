@@ -38,11 +38,11 @@
 #include "storage/lake/join_path.h"
 #include "storage/lake/lake_proto_normalizer.h"
 #include "storage/lake/metacache.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/tablet_reshard.h"
 #include "storage/lake/txn_log.h"
-#include "storage/lake/update_manager.h"
 #include "storage/storage_metrics.h"
 #include "types/type_descriptor.h"
 
@@ -73,8 +73,9 @@ public:
 
         _location_provider = std::make_unique<FixedLocationProvider>(kTestDir);
         _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
-        _update_manager = std::make_unique<lake::UpdateManager>(_location_provider, _mem_tracker.get());
-        _tablet_manager = std::make_unique<lake::TabletManager>(_location_provider, _update_manager.get(), 1638400000);
+        _primary_key_manager = std::make_unique<lake::PrimaryKeyManager>(_location_provider, _mem_tracker.get());
+        _tablet_manager =
+                std::make_unique<lake::TabletManager>(_location_provider, _primary_key_manager.get(), 1638400000);
     }
 
     void TearDown() { (void)FileSystem::Default()->delete_dir_recursive(kTestDir); }
@@ -135,7 +136,6 @@ protected:
 
         int preflight_opens = 0;
         int source_sizes = 0;
-        int get_del_vec_calls = 0;
         int range_reads = 0;
         int writer_opens = 0;
         int append_chunks = 0;
@@ -144,7 +144,6 @@ protected:
         sync->DisableProcessing();
         sync->SetCallBack("write_compacted_delvec_pages:preflight_source_open", [&](void*) { ++preflight_opens; });
         sync->SetCallBack("write_compacted_delvec_pages:source_size", [&](void*) { ++source_sizes; });
-        sync->SetCallBack("merge_delvecs:before_get_del_vec", [&](void*) { ++get_del_vec_calls; });
         sync->SetCallBack("write_compacted_delvec_pages:read_chunk_size", [&](void*) { ++range_reads; });
         sync->SetCallBack("write_compacted_delvec_pages:writer_open", [&](void*) { ++writer_opens; });
         sync->SetCallBack("append_delvec_bytes_bounded:chunk_size", [&](void*) { ++append_chunks; });
@@ -173,13 +172,13 @@ protected:
         EXPECT_EQ(before_offsets, offsets);
         EXPECT_EQ(expected_preflight_opens, preflight_opens);
         EXPECT_EQ(expected_source_sizes, source_sizes);
-        EXPECT_EQ(0, get_del_vec_calls);
         EXPECT_EQ(0, range_reads);
         EXPECT_EQ(0, writer_opens);
         EXPECT_EQ(0, append_chunks);
     }
 
-    std::shared_ptr<TabletMetadataPB> make_shared_delvec_source(int64_t tablet_id, int segment_count) {
+    // A merge takes only sources that own their files alone, so each source gets its own segment files and rowset.
+    std::shared_ptr<TabletMetadataPB> make_delvec_source(int64_t tablet_id, int segment_count) {
         auto metadata = std::make_shared<TabletMetadataPB>();
         metadata->set_id(tablet_id);
         metadata->set_version(1);
@@ -192,14 +191,13 @@ protected:
         rowset->set_num_rows(10 * segment_count);
         rowset->set_data_size(100 * segment_count);
         rowset->mutable_uid()->set_hi(0x1234);
-        rowset->mutable_uid()->set_lo(0x5678);
+        rowset->mutable_uid()->set_lo(tablet_id);
         for (int i = 0; i < segment_count; ++i) {
             auto* segment = rowset->add_segment_metas();
-            segment->set_filename(fmt::format("atomic_shared_{}.dat", i));
+            segment->set_filename(fmt::format("atomic_{}_{}.dat", tablet_id, i));
             segment->set_size(100);
             segment->set_num_rows(10);
             segment->set_segment_idx(i);
-            segment->set_shared(true);
         }
         return metadata;
     }
@@ -250,7 +248,7 @@ protected:
     std::shared_ptr<lake::LocationProvider> _location_provider;
     std::unique_ptr<TabletManager> _tablet_manager;
     std::unique_ptr<MemTracker> _mem_tracker;
-    std::unique_ptr<UpdateManager> _update_manager;
+    std::unique_ptr<PrimaryKeyManager> _primary_key_manager;
 };
 
 TEST_F(MetaFileTest, test_meta_rw) {
@@ -991,8 +989,8 @@ TEST_F(MetaFileTest, test_delvec_output_append_failure_is_atomic) {
     const int64_t child_a = next_id();
     const int64_t child_b = next_id();
     const int64_t merged_tablet = next_id();
-    auto meta_a = make_shared_delvec_source(child_a, /*segment_count=*/1);
-    auto meta_b = make_shared_delvec_source(child_b, /*segment_count=*/1);
+    auto meta_a = make_delvec_source(child_a, /*segment_count=*/1);
+    auto meta_b = make_delvec_source(child_b, /*segment_count=*/1);
     DelVector delvec_a;
     const uint32_t deleted_a = 4;
     delvec_a.init(/*version=*/10, &deleted_a, 1);
@@ -1027,7 +1025,7 @@ TEST_F(MetaFileTest, test_delvec_output_close_failure_is_atomic) {
     DelVector direct_raw_delvec;
     const uint32_t direct_raw_deleted = 1;
     direct_raw_delvec.init(/*version=*/10, &direct_raw_deleted, 1);
-    auto direct_metadata = make_shared_delvec_source(next_id(), /*segment_count=*/1);
+    auto direct_metadata = make_delvec_source(next_id(), /*segment_count=*/1);
     auto direct_source = add_test_delvec(direct_metadata.get(), direct_metadata->id(), /*version=*/10,
                                          /*segment_id=*/1, "close_atomic_direct.delvec", direct_raw_delvec.save());
     DelVector direct_union_delvec;
@@ -1048,8 +1046,8 @@ TEST_F(MetaFileTest, test_delvec_output_close_failure_is_atomic) {
     const int64_t child_a = next_id();
     const int64_t child_b = next_id();
     const int64_t merged_tablet = next_id();
-    auto meta_a = make_shared_delvec_source(child_a, /*segment_count=*/2);
-    auto meta_b = make_shared_delvec_source(child_b, /*segment_count=*/2);
+    auto meta_a = make_delvec_source(child_a, /*segment_count=*/2);
+    auto meta_b = make_delvec_source(child_b, /*segment_count=*/2);
     DelVector plain_single;
     const uint32_t plain_deleted = 2;
     plain_single.init(/*version=*/10, &plain_deleted, 1);
@@ -1697,6 +1695,85 @@ TEST_F(MetaFileTest, test_compaction_conflict_checker_with_sparse_segment_id) {
     op_compaction.mutable_output_rowset()->add_segment_metas()->set_filename("out.dat");
 
     EXPECT_TRUE(CompactionUpdateConflictChecker::conflict_check(op_compaction, 111, *metadata, &builder));
+}
+
+// A compaction whose input segment was rewritten by a newer partial column update is published as a no-op,
+// after which the tablet metadata references none of the files it wrote. Each of them must become an orphan,
+// or only a full vacuum could reclaim it -- except an output sstable that reuses an input sstable's file,
+// which the primary index still holds.
+TEST_F(MetaFileTest, test_compaction_conflict_orphans_output_files) {
+    const int64_t tablet_id = 32021;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    // Publishes |op_compaction| to a tablet whose input segment a partial column update rewrote at
+    // version 19, after the compaction read version 18, and returns the orphan files by name.
+    auto publish_with_conflict = [&](const TxnLogPB_OpCompaction& op_compaction) {
+        auto metadata = std::make_shared<TabletMetadata>();
+        metadata->set_id(tablet_id);
+        metadata->set_version(20);
+        metadata->set_next_rowset_id(300);
+        auto* input_rowset = metadata->add_rowsets();
+        input_rowset->set_id(210);
+        input_rowset->add_segment_metas()->set_filename("a.dat");
+        DeltaColumnGroupVerPB dcg;
+        dcg.add_versions(19);
+        (*metadata->mutable_dcg_meta()->mutable_dcgs())[210] = dcg;
+
+        MetaFileBuilder builder(*tablet, metadata);
+        EXPECT_TRUE(CompactionUpdateConflictChecker::conflict_check(op_compaction, 999, *metadata, &builder));
+        std::map<std::string, FileMetaPB> orphans;
+        for (const auto& file : metadata->orphan_files()) {
+            EXPECT_EQ(20, file.version()) << file.name();
+            EXPECT_TRUE(orphans.emplace(file.name(), file).second) << "duplicate orphan " << file.name();
+        }
+        return orphans;
+    };
+    auto names = [](const std::map<std::string, FileMetaPB>& files) {
+        std::set<std::string> result;
+        for (const auto& [name, file] : files) {
+            result.insert(name);
+        }
+        return result;
+    };
+
+    TxnLogPB_OpCompaction op_compaction;
+    op_compaction.add_input_rowsets(210);
+    op_compaction.set_compact_version(18);
+    op_compaction.mutable_output_rowset()->add_segment_metas()->set_filename("out.dat");
+    op_compaction.mutable_lcrm_file()->set_name("out.lcrm");
+    op_compaction.mutable_lcrm_file()->set_size(80);
+    auto* sst = op_compaction.add_ssts();
+    sst->set_name("out.sst");
+    sst->set_size(100);
+    sst->set_shared(true);
+    // The primary index compaction merged "in.sst" into "merged.sst" and kept "moved.sst" as is.
+    op_compaction.add_input_sstables()->set_filename("in.sst");
+    op_compaction.add_input_sstables()->set_filename("moved.sst");
+    auto* merged = op_compaction.add_output_sstables();
+    merged->set_filename("merged.sst");
+    merged->set_filesize(200);
+    op_compaction.add_output_sstables()->set_filename("moved.sst");
+    auto orphans = publish_with_conflict(op_compaction);
+    EXPECT_EQ((std::set<std::string>{"out.dat", "out.lcrm", "out.sst", "merged.sst"}), names(orphans));
+    EXPECT_EQ(80, orphans["out.lcrm"].size());
+    EXPECT_EQ(100, orphans["out.sst"].size());
+    EXPECT_TRUE(orphans["out.sst"].shared());
+    EXPECT_EQ(200, orphans["merged.sst"].size());
+    EXPECT_FALSE(orphans["merged.sst"].shared());
+
+    // A log written by an older BE carries the primary index compaction output in output_sstable.
+    TxnLogPB_OpCompaction legacy_op_compaction;
+    legacy_op_compaction.add_input_rowsets(210);
+    legacy_op_compaction.set_compact_version(18);
+    legacy_op_compaction.mutable_output_rowset()->add_segment_metas()->set_filename("legacy.dat");
+    legacy_op_compaction.add_input_sstables()->set_filename("in.sst");
+    auto* legacy = legacy_op_compaction.mutable_output_sstable();
+    legacy->set_filename("legacy.sst");
+    legacy->set_filesize(300);
+    legacy->set_shared(true);
+    orphans = publish_with_conflict(legacy_op_compaction);
+    EXPECT_EQ((std::set<std::string>{"legacy.dat", "legacy.sst"}), names(orphans));
+    EXPECT_EQ(300, orphans["legacy.sst"].size());
+    EXPECT_TRUE(orphans["legacy.sst"].shared());
 }
 
 TEST_F(MetaFileTest, test_trim_partial_compaction_last_input_rowset) {
@@ -3180,11 +3257,13 @@ TEST_F(MetaFileTest, test_batch_apply_opwrite_rewrite_keeps_other_bundled_segmen
     EXPECT_EQ(300, rowset.segment_metas(0).size());
     ASSERT_TRUE(rowset.segment_metas(0).has_bundle_file_offset());
     EXPECT_EQ(0, rowset.segment_metas(0).bundle_file_offset());
+    EXPECT_TRUE(rowset.segment_metas(0).synthetic_bundle_file_offset());
     // The plain write's segment: still at its offset inside its bundle file.
     EXPECT_EQ("bundle2.dat", rowset.segment_metas(1).filename());
     EXPECT_EQ(200, rowset.segment_metas(1).size());
     ASSERT_TRUE(rowset.segment_metas(1).has_bundle_file_offset());
     EXPECT_EQ(4096, rowset.segment_metas(1).bundle_file_offset());
+    EXPECT_FALSE(rowset.segment_metas(1).synthetic_bundle_file_offset());
 
     // The legacy offset array a rolled-back BE reads can encode the rowset: every segment has an offset.
     RowsetMetadataPB legacy(rowset);

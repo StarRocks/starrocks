@@ -224,7 +224,7 @@ public class NativeAnalyzeJob implements AnalyzeJob, Writable {
         setStatus(StatsConstants.ScheduleStatus.RUNNING);
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().updateAnalyzeJobWithoutLog(this);
 
-        boolean hasFailedCollectJob = false;
+        AnalyzeStatus firstFailure = null;
         for (StatisticsCollectJob statsJob : jobs) {
             if (!StatisticAutoCollector.checkoutAnalyzeTime()) {
                 break;
@@ -236,22 +236,23 @@ public class NativeAnalyzeJob implements AnalyzeJob, Writable {
             GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
 
             statisticExecutor.collectStatistics(statsConnectContext, statsJob, analyzeStatus, true, true /* resetWarehouse */);
-            if (analyzeStatus.getStatus().equals(StatsConstants.ScheduleStatus.FAILED)) {
-                setStatus(StatsConstants.ScheduleStatus.FAILED);
-                setWorkTime(LocalDateTime.now());
-                setReason(analyzeStatus.getReason());
-                GlobalStateMgr.getCurrentState().getAnalyzeMgr().updateAnalyzeJobWithLog(this);
-                hasFailedCollectJob = true;
+            if (firstFailure == null && analyzeStatus.getStatus().equals(StatsConstants.ScheduleStatus.FAILED)) {
+                firstFailure = analyzeStatus;
+            }
+            if (analyzeStatus.isCancelled()) {
                 break;
             }
         }
 
-        if (!hasFailedCollectJob) {
+        if (firstFailure == null) {
             setStatus(ScheduleStatus.FINISH);
             setReason("");
-            setWorkTime(LocalDateTime.now());
-            GlobalStateMgr.getCurrentState().getAnalyzeMgr().updateAnalyzeJobWithLog(this);
+        } else {
+            setStatus(ScheduleStatus.FAILED);
+            setReason(firstFailure.getReason());
         }
+        setWorkTime(LocalDateTime.now());
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().updateAnalyzeJobWithLog(this);
     }
 
     @Override

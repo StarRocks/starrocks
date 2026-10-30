@@ -297,6 +297,22 @@ public class OnPredicateMoveAroundRuleTest extends PlanTestBase {
        assertContains(plan2, "PREDICATES: 1: v1 >= 2, 3: v3 IS NOT NULL, 1: v1 > 1, 1: v1 < 4");
     }
 
+    // `<=>` carries a left predicate to the right side only for an Iceberg equality-delete anti join (covered by
+    // the sql-test test_iceberg_eq_delete_rf_pruning). Elsewhere the left domain may miss the NULLs an outer join
+    // pads in, and `<=>` matches them: c's NULL keys must still remove a's rows without a match in b.
+    @Test
+    public void testNullSafeEqualKeepsRightRows() throws Exception {
+        String sql = "select * from (select * from t0 where v1 in (1, 2)) t0 left anti join t1 on t0.v1 <=> t1.v4";
+        assertNotContains(getFragmentPlan(sql), "4: v4 IN (1, 2)");
+
+        sql = "select * from t0 left join (select * from t1 where v4 > 0) b on t0.v1 = b.v4 " +
+                "left anti join t2 on b.v4 <=> t2.v7";
+        assertNotContains(getFragmentPlan(sql), "7: v7 > 0");
+
+        sql = "select * from (select * from t0 where v1 in (1, 2)) t0 join t1 on t0.v1 <=> t1.v4";
+        assertNotContains(getFragmentPlan(sql), "4: v4 IN (1, 2)");
+    }
+
     @ParameterizedTest(name = "sql_{index}: {0}.")
     @MethodSource("asofJoinComplexJoinCases")
     void testAsofComplexJoinCases(String sql, int expect) throws Exception {

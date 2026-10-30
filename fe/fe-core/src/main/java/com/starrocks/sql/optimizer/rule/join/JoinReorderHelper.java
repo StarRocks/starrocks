@@ -73,6 +73,25 @@ public class JoinReorderHelper {
     }
 
 
+    /**
+     * A non-deterministic join predicate (e.g. rand() > 0.5) is evaluated once per row of its join. Moving it to a
+     * join with more or fewer rows changes the result, so such joins must not be reordered.
+     */
+    public static boolean hasNonDeterministicPredicate(LogicalJoinOperator joinOperator) {
+        return hasNonDeterministicConjunct(joinOperator.getOnPredicate(), true) ||
+                hasNonDeterministicConjunct(joinOperator.getPredicate(), true);
+    }
+
+    /**
+     * Whether the join has a non-deterministic conjunct, ignoring the ones that use no column when
+     * {@code includeColumnless} is false.
+     */
+    public static boolean hasNonDeterministicConjunct(ScalarOperator predicate, boolean includeColumnless) {
+        return Utils.extractConjuncts(predicate).stream()
+                .anyMatch(conjunct -> Utils.hasNonDeterministicFunc(conjunct) &&
+                        (includeColumnless || !conjunct.getUsedColumns().isEmpty()));
+    }
+
     public static boolean isAssoc(OptExpression bottomJoinExpr, OptExpression topJoinExpr) {
         LogicalJoinOperator topJoin = (LogicalJoinOperator) topJoinExpr.getOp();
         ScalarOperator topJoinOnCondition = topJoin.getOnPredicate();

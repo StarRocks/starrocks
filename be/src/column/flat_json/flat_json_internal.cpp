@@ -14,12 +14,14 @@
 
 #include "column/flat_json/flat_json_internal.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <string_view>
 
 #include "base/string/slice.h"
 #include "base/string/string_parser.hpp"
+#include "column/column_helper.h"
 #include "column/json_column.h"
 #include "column/json_converter.h"
 #include "column/nullable_column.h"
@@ -147,8 +149,13 @@ void merge_number(vpack::Builder* builder, const std::string_view& name, const C
     const auto data = col->immutable_data().data();
 
     if constexpr (TYPE == LogicalType::TYPE_LARGEINT) {
-        // the value is from json, must be uint64_t
-        builder->addUnchecked(name.data(), name.size(), vpack::Value((uint64_t)data[idx]));
+        // The value is a JSON integer: unsigned past INT64_MAX, or negative where an older deriver met negative
+        // integers with such values at LARGEINT. Writing a negative one as uint64_t would change it.
+        if (data[idx] < 0) {
+            builder->addUnchecked(name.data(), name.size(), vpack::Value(static_cast<int64_t>(data[idx])));
+        } else {
+            builder->addUnchecked(name.data(), name.size(), vpack::Value(static_cast<uint64_t>(data[idx])));
+        }
     } else {
         builder->addUnchecked(name.data(), name.size(), vpack::Value(data[idx]));
     }
@@ -244,6 +251,42 @@ const FlatJsonHashMap<LogicalType, JsonFlatMergeFunc> JSON_MERGE_FUNC {
 uint8_t get_compatibility_type(vpack::ValueType type1, uint8_t type2) {
     auto iter = JSON_TYPE_BITS.find(type1);
     return iter != JSON_TYPE_BITS.end() ? type2 & iter->second : JSON_BASE_TYPE_BITS;
+}
+
+void JsonValueStats::update(const Column& column) {
+    if (column.only_null()) {
+        return;
+    }
+    const auto* json = down_cast<const JsonColumn*>(ColumnHelper::get_data_column(&column));
+    for (size_t i = 0; i < column.size(); i++) {
+        if (column.is_null(i)) {
+            continue;
+        }
+        // Same as JsonPathDeriver::_visit_json_paths for a value at a path.
+        const auto v = json->get_object(column.is_constant() ? 0 : i)->to_vslice();
+        const auto type = v.type();
+        values++;
+        json_type = get_compatibility_type(type, json_type);
+        base_type_count += JSON_BASE_TYPE.count(type);
+        if (type == vpack::ValueType::UInt) {
+            max_uint = std::max(max_uint, v.getUIntUnchecked());
+        } else if (type == vpack::ValueType::Int || type == vpack::ValueType::SmallInt) {
+            const int64_t value = v.getInt();
+            if (value < 0) {
+                min_int = std::min(min_int, value);
+            } else {
+                max_uint = std::max(max_uint, static_cast<uint64_t>(value));
+            }
+        }
+    }
+}
+
+void JsonValueStats::merge(const JsonValueStats& other) {
+    json_type &= other.json_type;
+    values += other.values;
+    base_type_count += other.base_type_count;
+    max_uint = std::max(max_uint, other.max_uint);
+    min_int = std::min(min_int, other.min_int);
 }
 
 } // namespace flat_json

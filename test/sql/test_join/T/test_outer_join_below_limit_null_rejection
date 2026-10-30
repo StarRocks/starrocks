@@ -1,0 +1,14 @@
+-- name: test_outer_join_below_limit_null_rejection
+CREATE DATABASE db_${uuid0};
+USE db_${uuid0};
+CREATE TABLE f (id int, k int, s int) DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 3 PROPERTIES ("replication_num" = "1");
+CREATE TABLE r (id int, k int) DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 3 PROPERTIES ("replication_num" = "1");
+CREATE TABLE d (id int, s int) DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 3 PROPERTIES ("replication_num" = "1");
+INSERT INTO f VALUES (1, 1, 10), (2, 2, NULL), (3, 3, 20);
+INSERT INTO r VALUES (1, 1), (2, 2), (3, 4), (4, NULL);
+INSERT INTO d VALUES (1, 10), (2, 20);
+select t.s, t.k from (select f.s, r.k from r left join f on r.k = f.k where r.k > 0) t join d on t.s = d.s order by t.k;
+function: assert_explain_contains('select t.s, t.k from (select f.s, r.k from r left join f on r.k = f.k where r.k > 0 and r.k <> 2 order by r.k desc limit 1) t join d on t.s = d.s', 'OUTER JOIN')
+select t.s, t.k from (select f.s, r.k from r left join f on r.k = f.k where r.k > 0 and r.k <> 2 order by r.k desc limit 1) t join d on t.s = d.s;
+select t.s, t.c from (select f.s, r.k, count(*) over () c from r left join f on r.k = f.k where r.k > 0) t join d on t.s = d.s;
+DROP DATABASE db_${uuid0};

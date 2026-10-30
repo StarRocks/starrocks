@@ -73,6 +73,7 @@ import com.starrocks.catalog.PartitionAccessTimePersister;
 import com.starrocks.catalog.RefreshDictionaryCacheTaskDaemon;
 import com.starrocks.catalog.ResourceGroupMgr;
 import com.starrocks.catalog.ResourceMgr;
+import com.starrocks.catalog.SyncMaterializedViewRecoveryException;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.TabletInvertedIndex;
@@ -334,6 +335,7 @@ public class GlobalStateMgr {
     private final BatchWriteMgr batchWriteMgr;
     private final ExportMgr exportMgr;
     private final MaterializedViewMgr materializedViewMgr;
+    private final MvStartupActivationCoordinator mvStartupActivationCoordinator = new MvStartupActivationCoordinator();
 
     private final ConsistencyChecker consistencyChecker;
     private BackupHandler backupHandler;
@@ -2279,15 +2281,22 @@ public class GlobalStateMgr {
 
         imageLoader.checkCheckSum();
 
-        try {
-            postLoadImage();
-        } catch (Exception t) {
-            LOG.warn("there is an exception during processing after load image. exception:", t);
-        }
+        postLoadImageWithRecoveryPolicy();
 
         long loadImageEndTime = System.currentTimeMillis();
         this.imageJournalId = imageLoader.getImageJournalId();
         LOG.info("finished to load image in " + (loadImageEndTime - loadImageStartTime) + " ms");
+    }
+
+    @VisibleForTesting
+    void postLoadImageWithRecoveryPolicy() {
+        try {
+            postLoadImage();
+        } catch (SyncMaterializedViewRecoveryException e) {
+            throw e;
+        } catch (Exception t) {
+            LOG.warn("there is an exception during processing after load image. exception:", t);
+        }
     }
 
     private void postLoadImage() {
@@ -2316,6 +2325,9 @@ public class GlobalStateMgr {
                     }
                 } catch (Throwable e) {
                     LOG.error("reload table failed: {}", table, e);
+                    if (e instanceof SyncMaterializedViewRecoveryException recoveryException) {
+                        throw recoveryException;
+                    }
                 }
             }
         }
@@ -2331,28 +2343,52 @@ public class GlobalStateMgr {
             }
         }
 
+        // only load image async when FE restart and it's not checkpoint thread to avoid changing original behavior.
+        boolean isReloadAsync = Config.enable_mv_post_image_reload_cache && !isCheckpointThread();
+        if (!isReloadAsync) {
+            reloadMvsSynchronously(allMVs, startMillis);
+            return;
+        }
+
+        // Asynchronous reload: hand the mvs over to the startup coordinator, which activates them layer by layer so
+        // that an mv only starts once every mv it is built on has finished -- submitted all at once, upper mvs could
+        // occupy every mv-plan-cache thread waiting for base mvs queued behind them. The layers are built before any
+        // mv is reloaded, since a reload may rewrite an mv's base table infos. Nothing is awaited here on purpose:
+        // this runs on the image loading thread and journal replay only starts after it returns.
+        List<List<MaterializedView>> layers = MaterializedViewDependencyGraph.buildTopologicalLayers(allMVs);
+        long topoBuildDuration = System.currentTimeMillis() - startMillis;
+        for (MaterializedView mv : allMVs) {
+            mv.prepareForStartupActivation();
+        }
+        int largestLayer = layers.stream().mapToInt(List::size).max().orElse(0);
+        LOG.info("handing {} materialized views in {} topological layers to the startup activation coordinator, " +
+                "largest layer: {}, topo build cost(ms): {}", allMVs.size(), layers.size(), largestLayer,
+                topoBuildDuration);
+        mvStartupActivationCoordinator.schedule(layers, MaterializedView::activateOnStartup);
+
+        LOG.info("finish handing over all materialized views for startup activation in {}ms, total mv count: {}",
+                System.currentTimeMillis() - startMillis, allMVs.size());
+    }
+
+    private void reloadMvsSynchronously(List<MaterializedView> allMVs, long startMillis) {
         // Process in topological order
         List<MaterializedView> topoOrder = Config.enable_mv_post_image_reload_cache ?
                 MaterializedViewDependencyGraph.buildTopologicalOrder(allMVs) : allMVs;
         long topoBuildDuration = System.currentTimeMillis() - startMillis;
-
-        // only load image async when FE restart and it's not checkpoint thread to avoid changing original behavior.
-        boolean isReloadAsync = Config.enable_mv_post_image_reload_cache && !isCheckpointThread();
         int size = topoOrder.size();
         for (int i = 0; i < size; i++) {
             MaterializedView mv = topoOrder.get(i);
             String dbName = Optional.ofNullable(localMetastore.getDb(mv.getDbId()))
                     .map(Database::getFullName)
                     .orElse(String.valueOf(mv.getDbId()));
-            LOG.info("start to reload mv {}/{}: {}.{} after load image, isReloadAsync:{}",
-                    i + 1, size, dbName, mv.getName(), isReloadAsync);
-            // set `postLoadImage` flag to true to indicate that this is called after image loading
-            mv.onReload(isReloadAsync);
+            LOG.info("start to reload mv {}/{}: {}.{} after load image, isReloadAsync:false",
+                    i + 1, size, dbName, mv.getName());
+            mv.onReload(false);
         }
 
         long duration = System.currentTimeMillis() - startMillis;
         LOG.info("finish processing all tables' related materialized views in {}ms, " +
-                "isReLoadAsync:{}, total mv count: {}, topo mv order:{}, topo build cost(ms):{}", duration, isReloadAsync,
+                "isReLoadAsync:false, total mv count: {}, topo mv order:{}, topo build cost(ms):{}", duration,
                 allMVs.size(), topoOrder.size(), topoBuildDuration);
     }
 
@@ -2525,9 +2561,9 @@ public class GlobalStateMgr {
                 globalTransactionMgr.abortTimeoutTxns();
 
                 try {
-                    loadMgr.cancelResidualJob();
+                    loadMgr.endResidualInsertJobs();
                 } catch (Throwable t) {
-                    LOG.warn("load manager cancel residual job failed", t);
+                    LOG.warn("load manager end residual insert jobs failed", t);
                 }
             }
         };
@@ -3414,6 +3450,10 @@ public class GlobalStateMgr {
      */
     public Function getFunction(Function desc, Function.CompareMode mode) {
         return functionSet.getFunction(desc, mode);
+    }
+
+    public String getGrantableAIFunctionFamily(String name) {
+        return functionSet.getGrantableAIFunctionFamily(name);
     }
 
     public boolean isAggregateFunction(String functionName) {

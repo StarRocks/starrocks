@@ -19,6 +19,7 @@
 
 #include "base/phmap/phmap.h"
 #include "exprs/mock_vectorized_expr.h"
+#include "testutil/column_test_helper.h"
 
 namespace starrocks {
 class HyperLogLogFunctionsTest : public ::testing::Test {
@@ -50,11 +51,7 @@ TEST_F(HyperLogLogFunctionsTest, hllHashTest) {
     {
         Columns columns;
 
-        auto col1 = BinaryColumn::create();
-        col1->append(Slice("test1"));
-        col1->append(Slice("test2"));
-        col1->append(Slice("test3"));
-        col1->append(Slice("test1"));
+        auto col1 = ColumnTestHelper::build_column<Slice>({"test1", "test2", "test3", "test1"});
 
         columns.emplace_back(std::move(col1));
 

@@ -357,7 +357,7 @@ Status ParquetScanner::open_next_reader() {
         // broken any future TVF that compares the anchor's mtime against
         // the live file's mtime.
         _conv_ctx.file_mtime_ms = range_desc.__isset.modification_time ? range_desc.modification_time : -1;
-        auto parquet_file = std::make_shared<ParquetChunkFile>(file, 0, _counter);
+        auto parquet_file = std::make_shared<ParquetChunkFile>(file, 0, _counter, _state);
         auto parquet_reader = std::make_shared<ParquetReaderWrap>(std::move(parquet_file), _num_of_columns_from_file,
                                                                   range_desc.start_offset, range_desc.size);
         if (_scan_range.params.__isset.flexible_column_mapping && _scan_range.params.flexible_column_mapping) {
@@ -396,7 +396,7 @@ Status ParquetScanner::get_schema(std::vector<SlotDescriptor>* schema) {
         return st;
     }
     _conv_ctx.current_file = file->filename();
-    auto parquet_file = std::make_shared<ParquetChunkFile>(file, 0, _counter);
+    auto parquet_file = std::make_shared<ParquetChunkFile>(file, 0, _counter, _state);
     auto parquet_reader = std::make_shared<ParquetReaderWrap>(std::move(parquet_file), _num_of_columns_from_file,
                                                               range_desc.start_offset, range_desc.size);
     return parquet_reader->get_schema(schema);

@@ -72,7 +72,7 @@ public class PruneAIProjectColumnsRule extends TransformationRule {
         if (slots.equals(project.getColumnRefMap()) && common.equals(project.getCommonSubOperatorMap())) {
             return List.of();
         }
-        if (slots.values().stream().noneMatch(AiFunctionExtractor::isAICall)) {
+        if (slots.values().stream().noneMatch(AIFunctionExtractor::isAICall)) {
             if (slots.isEmpty()) {
                 return List.of(input.inputAt(0));
             }
