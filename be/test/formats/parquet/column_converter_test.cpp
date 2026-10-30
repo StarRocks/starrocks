@@ -444,7 +444,7 @@ TEST_F(ColumnConverterTest, FLBATest) {
         }
         {
             // FIXED_LEN_BYTE_ARRAY (UUID) -> VARBINARY: raw 16 bytes pass through without conversion
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARBINARY);
+            const TypeDescriptor col_type = TYPE_VARBINARY_DESC;
             check(file_path, col_type, col_name, "['abcDeFGhijkLmnOp']", expected_rows);
         }
     }

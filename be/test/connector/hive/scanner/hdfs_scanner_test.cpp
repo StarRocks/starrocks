@@ -1860,16 +1860,11 @@ Stripes:
     Stream: column 16 section DATA start: 401 length 0
  */
 TEST_F(HdfsScannerTest, TestOrcZeroSizeStream) {
-    SlotDesc slot_descs[] = {{"col_boolean", TYPE_BOOLEAN_DESC},
-                             {"col_int", TYPE_INT_DESC},
-                             {"col_long", TYPE_BIGINT_DESC},
-                             {"col_float", TYPE_FLOAT_DESC},
-                             {"col_double", TYPE_DOUBLE_DESC},
-                             {"col_date", TYPE_DATE_DESC},
-                             {"col_timestamp", TYPE_DATETIME_DESC},
-                             {"col_string", TYPE_VARCHAR_DESC},
-                             {"col_binary", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARBINARY)},
-                             {""}};
+    SlotDesc slot_descs[] = {{"col_boolean", TYPE_BOOLEAN_DESC},    {"col_int", TYPE_INT_DESC},
+                             {"col_long", TYPE_BIGINT_DESC},        {"col_float", TYPE_FLOAT_DESC},
+                             {"col_double", TYPE_DOUBLE_DESC},      {"col_date", TYPE_DATE_DESC},
+                             {"col_timestamp", TYPE_DATETIME_DESC}, {"col_string", TYPE_VARCHAR_DESC},
+                             {"col_binary", TYPE_VARBINARY_DESC},   {""}};
 
     const std::string input_orc_file = "./be/test/exec/test_data/orc_scanner/orc_zero_size_stream.orc";
 
