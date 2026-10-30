@@ -99,9 +99,9 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.function.LongPredicate;
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
@@ -152,14 +152,6 @@ public class DatabaseTransactionMgr {
 
     // store committed transactions' dependency relationships
     private final TransactionGraph transactionGraph = new TransactionGraph();
-
-    // head txn id -> size of a lake publish batch that failed. The retry from that head publishes at most
-    // that many txns. Txns committed since come after them in the graph, so the retry rebuilds the same
-    // batch and every partition keeps the new version of the failed attempt instead of growing with them.
-    // An entry is added under the read lock and only for a running head, and removed under the write lock
-    // when the head reaches a final status, on whichever path (batch or single-txn publish, abort, replay),
-    // so none outlives its head txn. In memory only: losing it on failover just lets the retry batch grow.
-    private final Map<Long, Integer> frozenPublishBatchSizes = new ConcurrentHashMap<>();
 
     /*
      * `labelToTxnIds` is used for checking if label already used. map label to transaction id
@@ -1028,28 +1020,34 @@ public class DatabaseTransactionMgr {
     private record PartitionCommitState(long version, List<Long> loadedIndexIds) {
     }
 
+    private boolean hasSentPublishTask(long txnId) {
+        TransactionState state = idToRunningTransactionState.get(txnId);
+        return state != null && state.hasSendTask();
+    }
+
     public List<TransactionStateBatch> getReadyToPublishTxnListBatch() {
         List<TransactionStateBatch> result = new ArrayList<>();
         readLock();
 
         try {
-            if (!Config.lake_enable_batch_publish_retry_freeze && !frozenPublishBatchSizes.isEmpty()) {
-                // The policy was turned off: every batch, frozen ones included, is rebuilt as before.
-                frozenPublishBatchSizes.clear();
-            }
             List<Long> txnIds = transactionGraph.getTxnsWithoutDependency();
             for (long txnId : txnIds) {
-                int minBatchSize = Config.lake_batch_publish_min_version_num;
-                int maxBatchSize = Config.lake_batch_publish_max_version_num;
-                Integer frozenSize = frozenPublishBatchSizes.get(txnId);
-                if (frozenSize != null) {
-                    // Retry a failed batch with no more txns than it had.
-                    maxBatchSize = Math.min(frozenSize, maxBatchSize);
-                    minBatchSize = Math.min(minBatchSize, maxBatchSize);
-                }
-                List<Long> txnsWithDependency = getTxnsWithTxnDependencyBatch(minBatchSize, maxBatchSize, txnId);
-                if (frozenSize != null) {
-                    LOG.debug("retry frozen lake publish batch db:{} txns:{}", dbId, txnsWithDependency);
+                // A head that was already sent belongs to a publish attempt that did not finish. Retry it with
+                // only the txns of that attempt, the only ones sent: taking in txns committed since would move
+                // every partition's new version and waste what the attempt already published. Such a retry is
+                // as big as the attempt was, even below lake_batch_publish_min_version_num.
+                TransactionState head = idToRunningTransactionState.get(txnId);
+                boolean retryLastAttempt = Config.lake_enable_batch_publish_retry_freeze
+                        && head != null && head.hasSendTask();
+                int minBatchSize = retryLastAttempt ? 1 : Config.lake_batch_publish_min_version_num;
+                LongPredicate canJoin = retryLastAttempt ? this::hasSentPublishTask : id -> true;
+                List<Long> txnsWithDependency;
+                if (Config.lake_enable_batch_publish_multi_table) {
+                    txnsWithDependency = transactionGraph.getTxnsWithTxnDependencyBatchMultiTable(
+                            minBatchSize, Config.lake_batch_publish_max_version_num, txnId, canJoin);
+                } else {
+                    txnsWithDependency = transactionGraph.getTxnsWithTxnDependencyBatch(
+                            minBatchSize, Config.lake_batch_publish_max_version_num, txnId, canJoin);
                 }
                 List<TransactionState> states = txnsWithDependency.stream().map(idToRunningTransactionState::get)
                         .filter(Objects::nonNull)
@@ -1129,43 +1127,6 @@ public class DatabaseTransactionMgr {
             readUnlock();
         }
         return result;
-    }
-
-    private List<Long> getTxnsWithTxnDependencyBatch(int minBatchSize, int maxBatchSize, long txnId) {
-        if (Config.lake_enable_batch_publish_multi_table) {
-            return transactionGraph.getTxnsWithTxnDependencyBatchMultiTable(minBatchSize, maxBatchSize, txnId);
-        }
-        return transactionGraph.getTxnsWithTxnDependencyBatch(minBatchSize, maxBatchSize, txnId);
-    }
-
-    // Called when a lake publish batch failed: its retry must not take in more txns, so that every
-    // partition's new version stays the same. See frozenPublishBatchSizes.
-    public void freezePublishBatch(List<Long> txnIds) {
-        if (!Config.lake_enable_batch_publish_retry_freeze) {
-            return;
-        }
-        long headTxnId = txnIds.get(0);
-        Integer previous;
-        // Under the lock that applies final statuses: a head that has already finished is never frozen,
-        // since nothing would remove its entry afterwards.
-        readLock();
-        try {
-            if (!idToRunningTransactionState.containsKey(headTxnId)) {
-                return;
-            }
-            previous = frozenPublishBatchSizes.put(headTxnId, txnIds.size());
-        } finally {
-            readUnlock();
-        }
-        if (previous == null || previous != txnIds.size()) {
-            MetricRepo.COUNTER_LAKE_PUBLISH_BATCH_FROZEN.increase(1L);
-            LOG.info("freeze lake publish batch db:{} txns:{}", dbId, txnIds);
-        }
-    }
-
-    @VisibleForTesting
-    Integer getFrozenPublishBatchSize(long headTxnId) {
-        return frozenPublishBatchSizes.get(headTxnId);
     }
 
     private static boolean canCommitEmptyKafkaRoutineLoad(TransactionState transactionState,
@@ -1785,7 +1746,6 @@ public class DatabaseTransactionMgr {
                         .removeFromStartupActiveCompactionTransactionMap(transactionState.getTransactionId());
             }
             transactionGraph.remove(transactionState.getTransactionId());
-            frozenPublishBatchSizes.remove(transactionState.getTransactionId());
             // A transaction may reach a final status more than once (a duplicated finish, a replayed edit
             // log, an image load). The deque is what removeExpiredTxns walks and it must hold every
             // transaction exactly once: a second entry is popped after its label mapping was already
@@ -1839,7 +1799,6 @@ public class DatabaseTransactionMgr {
                         .removeFromStartupActiveCompactionTransactionMap(transactionState.getTransactionId());
             }
             transactionGraph.remove(transactionState.getTransactionId());
-            frozenPublishBatchSizes.remove(transactionState.getTransactionId());
             // See unprotectUpsertTransactionState(): enqueue a transaction at most once.
             if (idToFinalStatusTransactionState.put(transactionState.getTransactionId(), transactionState) == null) {
                 finalStatusTransactionStateDeque.add(transactionState);

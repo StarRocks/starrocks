@@ -969,8 +969,7 @@ public class PublishVersionDaemonTest {
             AtomicInteger publishCalls = new AtomicInteger();
             PublishVersionDaemon daemon = new PublishVersionDaemon() {
                 @Override
-                CompletableFuture<Void> publishLakeTransactionAsync(TransactionState txnState,
-                                                                    boolean freezeBatchOnFailure) {
+                CompletableFuture<Void> publishLakeTransactionAsync(TransactionState txnState) {
                     Assertions.assertSame(state, txnState);
                     publishCalls.incrementAndGet();
                     partition.markPublishFailed(System.currentTimeMillis());
@@ -1014,8 +1013,7 @@ public class PublishVersionDaemonTest {
             AtomicInteger publishCalls = new AtomicInteger();
             PublishVersionDaemon daemon = new PublishVersionDaemon() {
                 @Override
-                CompletableFuture<Void> publishLakeTransactionAsync(TransactionState txnState,
-                                                                    boolean freezeBatchOnFailure) {
+                CompletableFuture<Void> publishLakeTransactionAsync(TransactionState txnState) {
                     publishCalls.incrementAndGet();
                     return CompletableFuture.completedFuture(null);
                 }

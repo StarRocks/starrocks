@@ -350,16 +350,30 @@ public class TransactionGraphTest {
     }
 
     @Test
-    public void testMultiTableBatchFollowsCommitOrder() {
-        // Txn ids are assigned at begin, nodes are added at commit: txn 20 began before txn 30 but
-        // committed after it. The walk from txn 10 must pick its successors in commit order, so a
-        // batch [10, 30] built before txn 20 committed is built the same way after it.
+    public void testBatchOnlyTakesTxnsThatCanJoin() {
         TransactionGraph graph = new TransactionGraph();
-        graph.add(10, Lists.newArrayList(1L, 2L));
-        graph.add(30, Lists.newArrayList(1L));
-        assertEquals(Lists.newArrayList(10L, 30L), graph.getTxnsWithTxnDependencyBatchMultiTable(1, 2, 10));
-        graph.add(20, Lists.newArrayList(2L));
-        assertEquals(Lists.newArrayList(10L, 30L), graph.getTxnsWithTxnDependencyBatchMultiTable(1, 2, 10));
+        for (long txnId = 1; txnId <= 4; txnId++) {
+            graph.add(txnId, Lists.newArrayList(1L));
+        }
+        assertEquals(Lists.newArrayList(1L, 2L), graph.getTxnsWithTxnDependencyBatch(1, 10, 1, id -> id <= 2));
+
+        // Multi-table: commit Y {C}, H {A, B}, X {A, C}, Z {B}. X depends on Y outside the batch, so the batch
+        // from H is [H, Z]. Once Y is gone X qualifies and comes first, but a walk that only takes H and Z
+        // still gives [H, Z].
+        long y = 1;
+        long h = 2;
+        long x = 3;
+        long z = 4;
+        TransactionGraph multi = new TransactionGraph();
+        multi.add(y, Lists.newArrayList(3L));
+        multi.add(h, Lists.newArrayList(1L, 2L));
+        multi.add(x, Lists.newArrayList(1L, 3L));
+        multi.add(z, Lists.newArrayList(2L));
+        assertEquals(Lists.newArrayList(h, z), multi.getTxnsWithTxnDependencyBatchMultiTable(1, 10, h));
+        multi.remove(y);
+        assertEquals(Lists.newArrayList(h, x), multi.getTxnsWithTxnDependencyBatchMultiTable(1, 10, h));
+        assertEquals(Lists.newArrayList(h, z),
+                multi.getTxnsWithTxnDependencyBatchMultiTable(1, 10, h, id -> id == h || id == z));
     }
 
     @Test

@@ -890,14 +890,6 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         return dbTransactionMgr.finishTransactionBatch(stateBatch, errorReplicaIds);
     }
 
-    public void freezePublishBatch(long dbId, List<Long> txnIds) {
-        DatabaseTransactionMgr dbTransactionMgr = dbIdToDatabaseTransactionMgrs.get(dbId);
-        // The db may have been dropped while its batch was publishing; nothing is left to retry.
-        if (dbTransactionMgr != null) {
-            dbTransactionMgr.freezePublishBatch(txnIds);
-        }
-    }
-
     public TransactionState finishTransactionNew(TransactionState txnState, Set<Long> publishErrorReplicas) throws
             StarRocksException {
         DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(txnState.getDbId());
