@@ -29,6 +29,7 @@
 #include "storage/tablet_range.h"
 #include "storage/tablet_schema.h"
 #include "storage_primitive/primary_key_encoder.h"
+#include "testutil/column_test_helper.h"
 #include "types/type_descriptor.h"
 
 namespace starrocks::lake {
@@ -853,11 +854,9 @@ TEST(TabletRangeHelperTest, test_sst_seek_range_null_as_min_on_non_nullable_pk) 
 
     auto encode_key = [&](int32_t v1, int32_t v2) {
         auto chunk = std::make_unique<Chunk>();
-        auto col1 = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false);
-        col1->append_datum(Datum(v1));
+        auto col1 = ColumnTestHelper::build_column<int32_t>({v1});
         chunk->append_column(std::move(col1), (SlotId)0);
-        auto col2 = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false);
-        col2->append_datum(Datum(v2));
+        auto col2 = ColumnTestHelper::build_column<int32_t>({v2});
         chunk->append_column(std::move(col2), (SlotId)1);
 
         MutableColumnPtr pk_column;

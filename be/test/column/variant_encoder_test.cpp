@@ -33,6 +33,7 @@
 #include "column/struct_column.h"
 #include "column/variant_column.h"
 #include "gutil/casts.h"
+#include "testutil/column_test_helper.h"
 #include "types/type_descriptor.h"
 #include "types/variant.h"
 
@@ -133,10 +134,7 @@ PARALLEL_TEST(VariantEncoderTest, encode_array_with_variant_children) {
 }
 
 PARALLEL_TEST(VariantEncoderTest, encode_map_with_variant_values_and_empty_row) {
-    auto key_data = BinaryColumn::create();
-    key_data->append_datum(Datum(Slice("left")));
-    key_data->append_datum(Datum(Slice("right")));
-    key_data->append_datum(Datum(Slice("null_child")));
+    auto key_data = ColumnTestHelper::build_column<Slice>({"left", "right", "null_child"});
     auto key_nulls = NullColumn::create(3, DATUM_NOT_NULL);
     auto keys = NullableColumn::create(std::move(key_data), std::move(key_nulls));
     auto values = make_nullable_variant_column({std::string(R"({"a":1})"), std::string(R"({"b":2})"), std::nullopt});
@@ -148,9 +146,7 @@ PARALLEL_TEST(VariantEncoderTest, encode_map_with_variant_values_and_empty_row) 
 }
 
 PARALLEL_TEST(VariantEncoderTest, encode_map_with_varbinary_keys_and_variant_values) {
-    auto key_data = BinaryColumn::create();
-    key_data->append_datum(Datum(Slice("left")));
-    key_data->append_datum(Datum(Slice("right")));
+    auto key_data = ColumnTestHelper::build_column<Slice>({"left", "right"});
     auto key_nulls = NullColumn::create(2, DATUM_NOT_NULL);
     auto keys = NullableColumn::create(std::move(key_data), std::move(key_nulls));
     auto values = make_nullable_variant_column({std::string("1"), std::string("2")});

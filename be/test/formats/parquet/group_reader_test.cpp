@@ -40,6 +40,7 @@
 #include "runtime/descriptor_helper.h"
 #include "runtime/runtime_state.h"
 #include "storage_primitive/column_expr_predicate.h"
+#include "testutil/column_test_helper.h"
 #include "testutil/exprs_test_helper.h"
 
 namespace starrocks::parquet {
@@ -1128,8 +1129,7 @@ TEST_F(GroupReaderTest, FixedValueColumnReaderTest) {
 }
 
 TEST_F(GroupReaderTest, ParquetUtilsGetNonNullDataColumnAndRowConstNullable) {
-    auto data = Int32Column::create();
-    data->append(123);
+    auto data = ColumnTestHelper::build_column<int32_t>({123});
     auto nulls = NullColumn::create();
     nulls->append(0);
     auto nullable = NullableColumn::create(std::move(data), std::move(nulls));
@@ -1144,8 +1144,7 @@ TEST_F(GroupReaderTest, ParquetUtilsGetNonNullDataColumnAndRowConstNullable) {
 
     const Column* null_out_column = nullptr;
     size_t null_out_row = 0;
-    auto null_data = Int32Column::create();
-    null_data->append(7);
+    auto null_data = ColumnTestHelper::build_column<int32_t>({7});
     auto all_nulls = NullColumn::create();
     all_nulls->append(1);
     auto all_null_nullable = NullableColumn::create(std::move(null_data), std::move(all_nulls));
@@ -1155,16 +1154,14 @@ TEST_F(GroupReaderTest, ParquetUtilsGetNonNullDataColumnAndRowConstNullable) {
 }
 
 TEST_F(GroupReaderTest, ParquetUtilsHasNonNullValueConstNullable) {
-    auto data = Int32Column::create();
-    data->append(10);
+    auto data = ColumnTestHelper::build_column<int32_t>({10});
     auto nulls = NullColumn::create();
     nulls->append(0);
     auto nullable = NullableColumn::create(std::move(data), std::move(nulls));
     auto const_nullable = ConstColumn::create(nullable, 8);
     ASSERT_TRUE(ParquetUtils::has_non_null_value(const_nullable.get(), 8));
 
-    auto null_data = Int32Column::create();
-    null_data->append(10);
+    auto null_data = ColumnTestHelper::build_column<int32_t>({10});
     auto all_nulls = NullColumn::create();
     all_nulls->append(1);
     auto all_null_nullable = NullableColumn::create(std::move(null_data), std::move(all_nulls));
@@ -1173,24 +1170,21 @@ TEST_F(GroupReaderTest, ParquetUtilsHasNonNullValueConstNullable) {
 }
 
 TEST_F(GroupReaderTest, ParquetUtilsHasNonNullBinaryValueBranches) {
-    auto str_data = BinaryColumn::create();
-    str_data->append(Slice("abc"));
+    auto str_data = ColumnTestHelper::build_column<Slice>({"abc"});
     auto str_nulls = NullColumn::create();
     str_nulls->append(0);
     auto str_nullable = NullableColumn::create(std::move(str_data), std::move(str_nulls));
     auto const_binary = ConstColumn::create(str_nullable, 3);
     ASSERT_TRUE(ParquetUtils::has_non_null_binary_value(const_binary.get(), 3));
 
-    auto null_str_data = BinaryColumn::create();
-    null_str_data->append(Slice("abc"));
+    auto null_str_data = ColumnTestHelper::build_column<Slice>({"abc"});
     auto null_str_nulls = NullColumn::create();
     null_str_nulls->append(1);
     auto null_str_nullable = NullableColumn::create(std::move(null_str_data), std::move(null_str_nulls));
     auto const_null_binary = ConstColumn::create(null_str_nullable, 3);
     ASSERT_FALSE(ParquetUtils::has_non_null_binary_value(const_null_binary.get(), 3));
 
-    auto int_data = Int32Column::create();
-    int_data->append(1);
+    auto int_data = ColumnTestHelper::build_column<int32_t>({1});
     auto int_nulls = NullColumn::create();
     int_nulls->append(0);
     auto int_nullable = NullableColumn::create(std::move(int_data), std::move(int_nulls));

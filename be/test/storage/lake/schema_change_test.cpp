@@ -41,6 +41,7 @@
 #include "storage/lake/test_util.h"
 #include "storage/lake/versioned_tablet.h"
 #include "storage/metadata_util.h"
+#include "testutil/column_test_helper.h"
 
 namespace starrocks::lake {
 
@@ -2321,16 +2322,11 @@ TEST_F(SchemaChangeBaseTabletReadSchemaTest, test_fallback_to_tablet_metadata_sc
     auto base_tablet_schema = TabletSchema::create(base_metadata->schema());
     auto base_schema = std::make_shared<VSchema>(ChunkHelper::convert_schema(base_tablet_schema));
 
-    auto c0 = Int32Column::create();
-    auto c1 = BinaryColumn::create();
-    auto c2 = Int32Column::create();
-    auto c3 = Int32Column::create();
-    auto c4 = Int32Column::create();
-    c0->append_datum(Datum(1));
-    c1->append_datum(Datum("test"));
-    c2->append_datum(Datum(100));
-    c3->append_datum(Datum(200));
-    c4->append_datum(Datum(300));
+    auto c0 = ColumnTestHelper::build_column<int32_t>({1});
+    auto c1 = ColumnTestHelper::build_column<Slice>({"test"});
+    auto c2 = ColumnTestHelper::build_column<int32_t>({100});
+    auto c3 = ColumnTestHelper::build_column<int32_t>({200});
+    auto c4 = ColumnTestHelper::build_column<int32_t>({300});
 
     VChunk chunk0({std::move(c0), std::move(c1), std::move(c2), std::move(c3), std::move(c4)}, base_schema);
     uint32_t indexes[1] = {0};
@@ -2831,16 +2827,11 @@ TEST_F(SchemaChangeBaseTabletReadSchemaTest, test_sorted_schema_change_skips_sch
     auto base_tablet_schema = TabletSchema::create(base_metadata->schema());
     auto base_schema = std::make_shared<VSchema>(ChunkHelper::convert_schema(base_tablet_schema));
 
-    auto col_c0 = Int32Column::create();
-    auto col_c1 = BinaryColumn::create();
-    auto col_c2 = Int32Column::create();
-    auto col_c3 = Int32Column::create();
-    auto col_c4 = Int32Column::create();
-    col_c0->append_datum(Datum(1));
-    col_c1->append_datum(Datum(Slice("row0")));
-    col_c2->append_datum(Datum(100));
-    col_c3->append_datum(Datum(1000));
-    col_c4->append_datum(Datum(10));
+    auto col_c0 = ColumnTestHelper::build_column<int32_t>({1});
+    auto col_c1 = ColumnTestHelper::build_column<Slice>({"row0"});
+    auto col_c2 = ColumnTestHelper::build_column<int32_t>({100});
+    auto col_c3 = ColumnTestHelper::build_column<int32_t>({1000});
+    auto col_c4 = ColumnTestHelper::build_column<int32_t>({10});
     VChunk chunk0({std::move(col_c0), std::move(col_c1), std::move(col_c2), std::move(col_c3), std::move(col_c4)},
                   base_schema);
     uint32_t indexes[1] = {0};
@@ -2979,21 +2970,11 @@ TEST_F(SchemaChangeBaseTabletReadSchemaTest, delete_predicate_rowset_is_not_conv
     auto base_schema = std::make_shared<VSchema>(ChunkHelper::convert_schema(base_tablet_schema));
 
     // Two data rows: c2 = 100 survives, c2 = 200 is deleted below.
-    auto c0 = Int32Column::create();
-    auto c1 = BinaryColumn::create();
-    auto c2 = Int32Column::create();
-    auto c3 = Int32Column::create();
-    auto c4 = Int32Column::create();
-    c0->append_datum(Datum(1));
-    c1->append_datum(Datum("keep"));
-    c2->append_datum(Datum(100));
-    c3->append_datum(Datum(1));
-    c4->append_datum(Datum(1));
-    c0->append_datum(Datum(2));
-    c1->append_datum(Datum("drop"));
-    c2->append_datum(Datum(200));
-    c3->append_datum(Datum(2));
-    c4->append_datum(Datum(2));
+    auto c0 = ColumnTestHelper::build_column<int32_t>({1, 2});
+    auto c1 = ColumnTestHelper::build_column<Slice>({"keep", "drop"});
+    auto c2 = ColumnTestHelper::build_column<int32_t>({100, 200});
+    auto c3 = ColumnTestHelper::build_column<int32_t>({1, 2});
+    auto c4 = ColumnTestHelper::build_column<int32_t>({1, 2});
 
     VChunk chunk({std::move(c0), std::move(c1), std::move(c2), std::move(c3), std::move(c4)}, base_schema);
     uint32_t indexes[2] = {0, 1};
@@ -3097,16 +3078,11 @@ TEST_F(SchemaChangeBaseTabletReadSchemaTest, fully_deleted_rowset_contributes_no
     auto base_schema = std::make_shared<VSchema>(ChunkHelper::convert_schema(base_tablet_schema));
 
     // A single row, which the delete below removes entirely.
-    auto c0 = Int32Column::create();
-    auto c1 = BinaryColumn::create();
-    auto c2 = Int32Column::create();
-    auto c3 = Int32Column::create();
-    auto c4 = Int32Column::create();
-    c0->append_datum(Datum(1));
-    c1->append_datum(Datum("gone"));
-    c2->append_datum(Datum(42));
-    c3->append_datum(Datum(1));
-    c4->append_datum(Datum(1));
+    auto c0 = ColumnTestHelper::build_column<int32_t>({1});
+    auto c1 = ColumnTestHelper::build_column<Slice>({"gone"});
+    auto c2 = ColumnTestHelper::build_column<int32_t>({42});
+    auto c3 = ColumnTestHelper::build_column<int32_t>({1});
+    auto c4 = ColumnTestHelper::build_column<int32_t>({1});
 
     VChunk chunk({std::move(c0), std::move(c1), std::move(c2), std::move(c3), std::move(c4)}, base_schema);
     uint32_t indexes[1] = {0};

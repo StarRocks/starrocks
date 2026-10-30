@@ -74,6 +74,7 @@
 #include "storage/variant_tuple.h"
 #include "storage_primitive/primary_key_encoder.h"
 #include "testutil/chunk_assert.h"
+#include "testutil/column_test_helper.h"
 
 namespace starrocks::lake {
 
@@ -259,8 +260,7 @@ public:
 
     std::string encoded_primary_key(int32_t key) {
         auto chunk = std::make_unique<Chunk>();
-        auto column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false);
-        column->append_datum(Datum(key));
+        auto column = ColumnTestHelper::build_column<int32_t>({key});
         chunk->append_column(std::move(column), 0);
 
         std::vector<ColumnId> pk_columns = {0};

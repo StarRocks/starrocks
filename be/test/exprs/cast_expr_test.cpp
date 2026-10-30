@@ -34,6 +34,7 @@
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/runtime_state.h"
+#include "testutil/column_test_helper.h"
 #include "types/date_value.h"
 #include "types/datetime_value.h"
 #include "types/datum.h"
@@ -3099,9 +3100,7 @@ TEST_F(VectorizedCastExprTest, struct_to_struct_position_cast_different_names) {
 
 // Verifies primitive scalar values encode to variant JSON payloads correctly.
 TEST_F(VectorizedCastExprTest, int_cast_to_variant) {
-    auto column = Int32Column::create();
-    column->append(123);
-    column->append(-7);
+    auto column = ColumnTestHelper::build_column<int32_t>({123, -7});
 
     ColumnPtr result = cast_to_variant(TypeDescriptor(TYPE_INT), column);
     auto json0 = variant_json_at(result, 0);

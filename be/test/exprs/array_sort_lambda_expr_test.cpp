@@ -35,6 +35,7 @@
 #include "exprs/lambda_function.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "runtime/runtime_state.h"
+#include "testutil/column_test_helper.h"
 #include "types/datum.h"
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
@@ -329,9 +330,7 @@ TEST_F(ArraySortLambdaExprTest, nested_array_map_in_comparator_captures_arg) {
     ASSERT_OK(ExprExecutor::open(ctxs, &_runtime_state));
 
     auto chunk = std::make_shared<Chunk>();
-    auto rows = Int32Column::create();
-    rows->append(0);
-    rows->append(1);
+    auto rows = ColumnTestHelper::build_column<int32_t>({0, 1});
     chunk->append_column(std::move(rows), 1);
     ColumnPtr result = expr->evaluate(&ctx, chunk.get()); // must not crash
     ASSERT_EQ(2, result->size());

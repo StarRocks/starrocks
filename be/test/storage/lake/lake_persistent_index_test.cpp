@@ -73,6 +73,7 @@
 #include "storage/storage_metrics.h"
 #include "storage_primitive/primary_key_encoder.h"
 #include "test_util.h"
+#include "testutil/column_test_helper.h"
 #include "types/datum.h"
 
 namespace starrocks::lake {
@@ -1505,8 +1506,7 @@ TEST_F(LakePersistentIndexTest, test_range_single_int_pk_end_to_end) {
 
     auto encode_key = [&](int32_t v) {
         auto chunk = std::make_unique<Chunk>();
-        auto col = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false);
-        col->append_datum(Datum(v));
+        auto col = ColumnTestHelper::build_column<int32_t>({v});
         chunk->append_column(std::move(col), (SlotId)0);
 
         MutableColumnPtr pk_column;
@@ -1689,8 +1689,7 @@ TEST_F(LakePersistentIndexTest, test_tablet_range_single_column_pk) {
 
     auto encode_key = [&](int32_t v) {
         auto chunk = std::make_unique<Chunk>();
-        auto col = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false);
-        col->append_datum(Datum(v));
+        auto col = ColumnTestHelper::build_column<int32_t>({v});
         chunk->append_column(std::move(col), (SlotId)0);
 
         MutableColumnPtr pk_column;
@@ -1734,8 +1733,7 @@ TEST_F(LakePersistentIndexTest, test_tablet_range_multi_column_pk) {
 
     auto encode_key = [&](int32_t v1, const std::string& v2) {
         auto chunk = std::make_unique<Chunk>();
-        auto col1 = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false);
-        col1->append_datum(Datum(v1));
+        auto col1 = ColumnTestHelper::build_column<int32_t>({v1});
         chunk->append_column(std::move(col1), (SlotId)0);
 
         auto col2 = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false);
@@ -1797,11 +1795,9 @@ TEST_F(LakePersistentIndexTest, test_tablet_range_null_as_min_on_non_nullable_pk
 
     auto encode_key = [&](int32_t v1, int32_t v2) {
         auto chunk = std::make_unique<Chunk>();
-        auto col1 = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false);
-        col1->append_datum(Datum(v1));
+        auto col1 = ColumnTestHelper::build_column<int32_t>({v1});
         chunk->append_column(std::move(col1), (SlotId)0);
-        auto col2 = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false);
-        col2->append_datum(Datum(v2));
+        auto col2 = ColumnTestHelper::build_column<int32_t>({v2});
         chunk->append_column(std::move(col2), (SlotId)1);
 
         MutableColumnPtr pk_column;
