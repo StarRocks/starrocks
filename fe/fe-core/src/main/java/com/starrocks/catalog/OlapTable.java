@@ -1510,8 +1510,9 @@ public class OlapTable extends Table {
 
             removePartitionFromInnerState(partition);
         } else {
-            // if `partitionRetentionPeriod` is not valid, fallback to drop partition forcefully
-            dropPartition(dbId, partitionName, true);
+            // if `partitionRetentionPeriod` is not valid, fallback to drop partition forcefully.
+            // Call the private variant: MaterializedView overrides the public one to call back here.
+            dropPartition(dbId, partitionName, true, false);
         }
     }
 
