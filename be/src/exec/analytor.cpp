@@ -307,11 +307,9 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
                 // "in" means "ignore nulls", we use first_value_in/last_value_in instead of first_value/last_value
                 // to find right AggregateFunction to support ignore nulls.
                 real_fn_name += "_in";
-                // `lag`/`lead ... IGNORE NULLS` can stream: lag only looks backward; lead waits for
-                // enough future non-nulls (see `is_window_result_ready`) then evicts finished prefixes.
-                // `first_value`/`last_value` IGNORE NULLS still materialize the whole partition.
-                const bool is_streamable_ignore_nulls = (fname == "lag" || fname == "lead");
-                if (!(is_streamable_ignore_nulls && config::pipeline_analytic_enable_ignore_nulls_streaming)) {
+                // All supported IGNORE NULLS functions can stream, subject to frame-level requirements.
+                // Keep the config-controlled materializing fallback.
+                if (!config::pipeline_analytic_enable_ignore_nulls_streaming) {
                     _need_partition_materializing = true;
                 }
             }
