@@ -29,6 +29,7 @@ import java.util.Locale;
  *       OpenRouter, ...) expose.</li>
  *   <li>ANTHROPIC — Anthropic Messages API.</li>
  *   <li>COHERE — Cohere-compatible {@code /rerank} (Cohere, Jina, Voyage, OpenRouter, local TEI).</li>
+ *   <li>DASHSCOPE_RERANK — DashScope native text reranking API.</li>
  * </ul>
  *
  * <p>Any protocol may be declared on any provider type; the type only decides the default. Every
@@ -38,7 +39,8 @@ import java.util.Locale;
 public enum AIProviderProtocol {
     OPENAI,
     ANTHROPIC,
-    COHERE;
+    COHERE,
+    DASHSCOPE_RERANK;
 
     public static AIProviderProtocol fromString(String s) {
         if (Strings.isNullOrEmpty(s)) {
@@ -48,7 +50,7 @@ public enum AIProviderProtocol {
             return valueOf(s.trim().toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException e) {
             throw new IllegalArgumentException(
-                    "invalid AI provider protocol '" + s + "'; expected one of openai, anthropic, cohere");
+                    "invalid AI provider protocol '" + s + "'; expected one of openai, anthropic, cohere, dashscope_rerank");
         }
     }
 

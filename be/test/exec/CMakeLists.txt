@@ -145,6 +145,7 @@ set(AI_PROJECT_PIPELINE_TEST_FILES
     ${BE_TEST_JNI_ENV_STUB}
     ai_project_node_test.cpp
     pipeline/ai/ai_project_pipeline_test.cpp
+    pipeline/ai/ai_provider_config_parser_test.cpp
 )
 
 add_executable(ai_project_pipeline_test ${AI_PROJECT_PIPELINE_TEST_FILES})

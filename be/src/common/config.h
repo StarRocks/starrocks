@@ -2676,6 +2676,7 @@ CONF_mInt32(ai_function_max_retries_on_throttle, "5");
 CONF_mString(ai_function_on_error, "ignore");
 CONF_mInt32(ai_function_rate_limit_qps_chat, "128");
 CONF_mInt32(ai_function_rate_limit_qps_embedding, "128");
+CONF_mInt32(ai_function_rate_limit_qps_rerank, "4");
 CONF_mInt32(ai_function_max_inflight, "512");
 
 CONF_mBool(enable_pipeline_driver_parallel_prepare, "true");

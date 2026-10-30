@@ -75,6 +75,22 @@ void expect_redacted(const Status& status, std::initializer_list<std::string> se
     }
 }
 
+TEST(AIProviderOptionsBuilderTest, RerankRequiresExactPositiveTopNAndProtectsInputFields) {
+    for (const auto text : {R"({"top_n":1})", R"({"top_n":2.0})", R"({"top_n":2147483647})", "{}"}) {
+        auto json = make_json(text);
+        EXPECT_TRUE(build_ai_provider_options(*json, TypeDescriptor(TYPE_JSON), 0, AICapability::RERANK).ok());
+    }
+    for (const auto text :
+         {R"({"top_n":null})", R"({"top_n":true})", R"({"top_n":"1"})", R"({"top_n":0})", R"({"top_n":1.5})",
+          R"({"top_n":2147483648})", R"({"query":"hidden"})", R"({"documents":[]})", R"({"input":{}})",
+          R"({"parameters":{}})", R"({"model":"hidden"})", R"({"endpoint":"hidden"})"}) {
+        auto json = make_json(text);
+        auto options = build_ai_provider_options(*json, TypeDescriptor(TYPE_JSON), 0, AICapability::RERANK);
+        ASSERT_FALSE(options.ok()) << text;
+        EXPECT_EQ(std::string::npos, options.status().to_string().find("hidden"));
+    }
+}
+
 TEST(AIProviderOptionsBuilderTest, EmptyObjectAndSqlNullProduceEmptyOptions) {
     auto json = make_json("{}");
     auto empty = build_ai_provider_options(*json, TypeDescriptor(TYPE_JSON), 0);

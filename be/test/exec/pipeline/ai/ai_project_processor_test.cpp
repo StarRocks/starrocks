@@ -157,6 +157,8 @@ public:
             input_row.model = "model";
             input_row.prompt = prompts.get_slice(row).to_string();
             input_row.media = media;
+            input_row.rerank = rerank;
+            input_row.local_result = local_result;
             output.input.rows.emplace_back(std::move(input_row));
         }
         prepared.ai_outputs.emplace_back(std::move(output));
@@ -172,6 +174,8 @@ public:
     bool output_chunk_contains_ai_slot = false;
     std::vector<AIFunctionRowAction> row_actions;
     std::optional<AIMediaInput> media;
+    std::optional<AIRerankInput> rerank;
+    std::optional<AIProviderValue> local_result;
     size_t prepare_calls = 0;
     std::vector<int32_t> observed_driver_sequences;
     std::vector<size_t> observed_rows;
@@ -283,6 +287,7 @@ public:
         auto handle_state = std::make_shared<ManualHandleState>();
         handle_states.emplace_back(handle_state);
         submitted_prompts.emplace_back(request.prompt);
+        if (request.rerank != nullptr) submitted_rerank.emplace_back(*request.rerank);
         if (request.media != nullptr) {
             submitted_media.emplace_back(*request.media);
         }
@@ -388,6 +393,7 @@ public:
     size_t submit_calls = 0;
     std::vector<std::string> submitted_prompts;
     std::vector<AIMediaInput> submitted_media;
+    std::vector<AIRerankInput> submitted_rerank;
     std::vector<std::shared_ptr<ManualHandleState>> handle_states;
     std::unordered_map<uint64_t, Pending> pending;
 
@@ -526,6 +532,40 @@ std::string ai_value(const ChunkPtr& chunk, size_t row) {
     EXPECT_FALSE(nullable.is_null(row));
     const auto& data = down_cast<const BinaryColumn&>(*nullable.data_column());
     return data.get_slice(row).to_string();
+}
+
+TEST(AIProjectProcessorTest, RerankLocalSuccessAndNullDoNotDispatchAndKeepRowOrder) {
+    auto buffer = make_input_buffer();
+    auto projection = std::make_shared<RecordingProjection>();
+    projection->result_type = TypeDescriptor::create_array_type(TypeDescriptor::create_struct_type(
+            {"index", "relevance_score"}, {TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_DOUBLE)}));
+    projection->result_kind = AIFunctionResultKind::RERANK;
+    projection->row_actions = {AIFunctionRowAction::DISPATCH, AIFunctionRowAction::LOCAL_RESULT,
+                               AIFunctionRowAction::SQL_NULL};
+    projection->rerank = AIRerankInput{"q", {"same", "", "same"}};
+    projection->local_result = AIRerankResult{};
+    auto submitter = std::make_shared<ManualTaskSubmitter>();
+    auto processor = make_processor(buffer, projection, submitter);
+    ASSERT_NE(nullptr, processor);
+    put_and_finish(buffer, make_input_chunk(0, 3));
+    RuntimeState state;
+    ASSERT_OK(processor->try_process(&state, 0));
+    ASSERT_EQ(1, submitter->submitted_rerank.size());
+    EXPECT_EQ(3, submitter->submitted_rerank[0].documents.size());
+    ASSERT_EQ(1, submitter->submit_calls);
+    submitter->succeed_value("prompt-0", AIRerankResult{{2, 0.123456789012345}});
+    auto result = processor->pull_chunk(&state, 0);
+    ASSERT_TRUE(result.ok()) << result.status();
+    ASSERT_NE(nullptr, result.value());
+    const auto& output = ai_column(result.value());
+    EXPECT_EQ(2, output.get(0).get_array()[0].get_struct()[0].get_int32());
+    EXPECT_FALSE(output.is_null(1));
+    EXPECT_TRUE(output.get(1).get_array().empty());
+    EXPECT_TRUE(output.is_null(2));
+    EXPECT_FALSE(processor->pending_finish(0));
+    EXPECT_EQ(1, processor->statistics(0).task_count);
+    EXPECT_EQ(1, processor->statistics(0).request_count);
+    EXPECT_EQ(0, processor->statistics(0).error_count);
 }
 
 TEST(AIProjectProcessorTest, MaterializesEmbeddingWithNullableElementsAndSqlNullRows) {
@@ -925,7 +965,7 @@ TEST(AIProjectProcessorTest, IgnoreTurnsOnlySanitizedRowFailureIntoNull) {
     EXPECT_TRUE(processor->status(0).ok());
 }
 
-TEST(AIProjectProcessorTest, LocalResourceRowFailurePreservesIgnoreAndFailCompatibility) {
+TEST(AIProjectProcessorTest, LocalResourceRowFailureIsFatalUnderEitherErrorPolicy) {
     for (const std::string on_error : {"ignore", "fail"}) {
         SCOPED_TRACE(on_error);
         auto buffer = make_input_buffer();
@@ -943,26 +983,19 @@ TEST(AIProjectProcessorTest, LocalResourceRowFailurePreservesIgnoreAndFailCompat
         ASSERT_FALSE(processor->pending_finish(0));
 
         auto output = processor->pull_chunk(&state, 0);
-        if (on_error == "ignore") {
-            ASSERT_TRUE(output.ok()) << output.status();
-            ASSERT_NE(nullptr, output.value());
-            ASSERT_EQ(3, output.value()->num_rows());
-            EXPECT_EQ("result-0", ai_value(output.value(), 0));
-            EXPECT_TRUE(ai_column(output.value()).is_null(1));
-            EXPECT_EQ("result-2", ai_value(output.value(), 2));
-            EXPECT_OK(processor->status(0));
-        } else {
-            EXPECT_FALSE(output.ok());
-            EXPECT_FALSE(processor->status(0).ok());
-        }
+        EXPECT_FALSE(output.ok());
+        EXPECT_FALSE(processor->status(0).ok());
         EXPECT_OK(processor->set_source_finished(0));
     }
 }
 
-TEST(AIProjectProcessorTest, LocalResourceSubmitFailurePreservesIgnoreAndFailCompatibility) {
+TEST(AIProjectProcessorTest, LocalResourceSubmitFailureIsFatalUnderEitherErrorPolicy) {
     const std::vector<Status> failures = {
             Status::MemoryLimitExceeded(std::string(kSecretExceptionSentinel)),
             Status::ResourceBusy(std::string(kSecretExceptionSentinel)),
+            Status::MemoryAllocFailed(std::string(kSecretExceptionSentinel)),
+            Status::CapacityLimitExceed(std::string(kSecretExceptionSentinel)),
+            Status::InternalError(std::string(kSecretExceptionSentinel)),
     };
     for (const auto& failure : failures) {
         SCOPED_TRACE(failure.code());
@@ -980,17 +1013,9 @@ TEST(AIProjectProcessorTest, LocalResourceSubmitFailurePreservesIgnoreAndFailCom
             ASSERT_OK(processor->try_process(&state, 0));
             ASSERT_FALSE(processor->pending_finish(0));
             auto output = processor->pull_chunk(&state, 0);
-            if (on_error == "ignore") {
-                ASSERT_TRUE(output.ok()) << output.status();
-                ASSERT_NE(nullptr, output.value());
-                ASSERT_EQ(1, output.value()->num_rows());
-                EXPECT_TRUE(ai_column(output.value()).is_null(0));
-                EXPECT_OK(processor->status(0));
-            } else {
-                ASSERT_FALSE(output.ok());
-                EXPECT_FALSE(processor->status(0).ok());
-                EXPECT_EQ(std::string::npos, output.status().to_string().find(kSecretExceptionSentinel));
-            }
+            ASSERT_FALSE(output.ok());
+            EXPECT_FALSE(processor->status(0).ok());
+            EXPECT_EQ(std::string::npos, output.status().to_string().find(kSecretExceptionSentinel));
             EXPECT_OK(processor->set_source_finished(0));
         }
     }

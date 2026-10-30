@@ -43,6 +43,9 @@ set(PLATFORM_FILES
   llm/ai_http_client.cpp
   llm/ai_metrics.cpp
   llm/ai_media_input.cpp
+  llm/cohere_rerank_provider.cpp
+  llm/dashscope_rerank_provider.cpp
+  llm/ai_rerank.cpp
   llm/ai_provider.cpp
   llm/ai_provider_options.cpp
   llm/ai_rate_limiter.cpp

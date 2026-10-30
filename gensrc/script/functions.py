@@ -1779,6 +1779,18 @@ vectorized_functions = [
     # ai functions
     # AIProject functions keep the standard declaration layout. The backend symbol is nullptr
     # because AIProject executes them asynchronously using AI metadata, not scalar function pointers.
+    [200170, 'ai_rerank', True, False,
+     ('ARRAY', ('STRUCT', (('index', 'INT'), ('relevance_score', 'DOUBLE')))),
+     ['VARCHAR', 'ARRAY_VARCHAR', 'VARCHAR', 'VARCHAR', 'JSON'], 'nullptr', {
+         'named_args': [
+             {'name': 'query'},
+             {'name': 'documents'},
+             {'name': 'provider', 'default': ''},
+             {'name': 'model', 'default': ''},
+             {'name': 'options', 'default': {}},
+         ],
+         'ai': ai_metadata('RERANK', 'NONE', 'RERANK', inputs=('query', 'documents'))
+     }],
     [200000, 'ai_complete', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'VARCHAR', 'JSON'],
      'nullptr', {
          'named_args': [
