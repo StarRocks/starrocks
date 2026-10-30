@@ -213,6 +213,21 @@ public class PartitionCommitInfoTest {
     }
 
     @Test
+    public void testDoubleWriteSurvivesJsonRoundTrip() {
+        // A follower replays the commit of a double write from the journal: it must see the flag the leader set, or
+        // its applyCommitLog moves the next version of the temp partition differently from the leader's.
+        PartitionCommitInfo doubleWrite = new PartitionCommitInfo(PID, 101, 0);
+        doubleWrite.setIsDoubleWrite(true);
+        Assertions.assertTrue(
+                GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(doubleWrite), PartitionCommitInfo.class).isDoubleWrite());
+        Assertions.assertTrue(copyViaTransactionState(doubleWrite).isDoubleWrite());
+
+        PartitionCommitInfo normal = new PartitionCommitInfo(PID, 101, 0);
+        Assertions.assertFalse(
+                GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(normal), PartitionCommitInfo.class).isDoubleWrite());
+    }
+
+    @Test
     public void testShadowRewriteTxnUsesSourceType() {
         // Shadow-rewrite partitions use sentinel version -1; the guard is now on
         // TransactionState.isShadowRewrite() (sourceType == SHADOW_REWRITE), not on a

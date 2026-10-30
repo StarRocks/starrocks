@@ -116,6 +116,11 @@ public class PartitionCommitInfo implements Writable {
     // Leaving it unsynchronized keeps such a mistake loud instead of silently truncating stats.
     private final Map<Long, TabletStatPB> tabletStats = new HashMap<>();
 
+    // Persisted: replaying a double write's commit has to move the next version of the temp partition to the version
+    // after it, as the leader did (OlapTableTxnLogApplier.applyCommitLog), not just one past its own; a follower that
+    // took the other branch would carry a next version below the visible one into the partition the optimize swaps in,
+    // and stall every load to it once it leads.
+    @SerializedName(value = "isDoubleWrite")
     private boolean isDoubleWrite = false;
 
     // Paces the "fail to publish partition" error log for this partition. Deliberately not

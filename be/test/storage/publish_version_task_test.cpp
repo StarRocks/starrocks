@@ -743,6 +743,94 @@ TEST_F(PublishVersionTaskTest, test_publish_version_tablet_dropped) {
     ASSERT_EQ(0, finish_task_request.error_tablet_ids.size());
 }
 
+// A double write of an online optimize is published to a temp partition with a version above a hole (the rewrite
+// fills it later), so a sync publish must not wait for it to be applied: the tablet is left out of the versions the
+// publish version manager waits for, while a normal publish of the same tablet is in them.
+TEST_F(PublishVersionTaskTest, test_publish_double_write_not_waited_by_sync_publish) {
+    const int64_t tablet_id = 54322;
+    const int64_t partition_id = 21;
+    const int32_t schema_hash = 3333;
+
+    TCreateTabletReq request;
+    set_default_create_tablet_request(&request);
+    request.tablet_id = tablet_id;
+    request.__set_partition_id(partition_id);
+    request.tablet_schema.schema_hash = schema_hash;
+    ASSERT_TRUE(StorageEngine::instance()->create_tablet(request).ok());
+    auto* tablet_manager = StorageEngine::instance()->tablet_manager();
+    ASSERT_TRUE(tablet_manager->get_tablet(tablet_id) != nullptr);
+
+    TupleDescriptor* tuple_desc = _create_tuple_desc();
+    auto write_txn = [&](int64_t txn_id) {
+        DeltaWriterOptions writer_options;
+        writer_options.tablet_id = tablet_id;
+        writer_options.schema_hash = schema_hash;
+        writer_options.txn_id = txn_id;
+        writer_options.partition_id = partition_id;
+        writer_options.load_id.set_hi(txn_id);
+        writer_options.load_id.set_lo(txn_id);
+        writer_options.replica_state = Primary;
+        writer_options.slots = &tuple_desc->slots();
+        MemTracker mem_checker(1024 * 1024 * 1024);
+        auto writer_status = DeltaWriter::open(writer_options, &mem_checker);
+        ASSERT_TRUE(writer_status.ok()) << writer_status.status();
+        auto delta_writer = std::move(writer_status.value());
+        auto chunk = RuntimeChunkHelper::new_chunk(tuple_desc->slots(), 8);
+        std::vector<uint32_t> indexes;
+        std::vector<std::string> keys;
+        for (size_t i = 0; i < 8; ++i) {
+            indexes.push_back(i);
+            keys.push_back("dw" + std::to_string(txn_id) + "_" + std::to_string(i));
+        }
+        for (size_t i = 0; i < 8; ++i) {
+            auto cols = chunk->columns();
+            cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
+            cols[1]->as_mutable_ptr()->append_datum(Datum(Slice(keys[i])));
+            cols[2]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
+        }
+        ASSERT_TRUE(delta_writer->write(*chunk, indexes.data(), 0, indexes.size()).ok());
+        ASSERT_TRUE(delta_writer->close().ok());
+        ASSERT_TRUE(delta_writer->commit().ok());
+    };
+    write_txn(8890);
+    write_txn(8891);
+
+    auto token = ExecEnv::GetInstance()
+                         ->agent_server()
+                         ->get_thread_pool(TTaskType::PUBLISH_VERSION)
+                         ->new_token(ThreadPool::ExecutionMode::CONCURRENT);
+    auto publish = [&](int64_t txn_id, int64_t version, bool is_double_write, TFinishTaskRequest* finish_task_request) {
+        std::unordered_set<DataDir*> affected_dirs;
+        TPublishVersionRequest publish_version_req;
+        publish_version_req.transaction_id = txn_id;
+        publish_version_req.enable_sync_publish = true;
+        TPartitionVersionInfo pvinfo;
+        pvinfo.partition_id = partition_id;
+        pvinfo.version = version;
+        pvinfo.__set_is_double_write(is_double_write);
+        publish_version_req.partition_version_infos.push_back(pvinfo);
+        run_publish_version_task(token.get(), publish_version_req, *finish_task_request, affected_dirs, 0);
+    };
+
+    // The tablet is at version 1: the double write of version 3 waits for version 2.
+    TFinishTaskRequest double_write_finish;
+    publish(8890, 3, true, &double_write_finish);
+    ASSERT_EQ(0, double_write_finish.error_tablet_ids.size());
+    ASSERT_EQ(0, double_write_finish.tablet_publish_versions.size());
+    ASSERT_EQ(1, double_write_finish.tablet_versions.size());
+
+    TFinishTaskRequest normal_finish;
+    publish(8891, 2, false, &normal_finish);
+    ASSERT_EQ(0, normal_finish.error_tablet_ids.size());
+    ASSERT_EQ(1, normal_finish.tablet_publish_versions.size());
+    ASSERT_EQ(tablet_id, normal_finish.tablet_publish_versions[0].tablet_id);
+    ASSERT_EQ(2, normal_finish.tablet_publish_versions[0].version);
+    ASSERT_EQ(3, tablet_manager->get_tablet(tablet_id)->max_continuous_version());
+
+    ASSERT_TRUE(tablet_manager->drop_tablet(tablet_id, kDeleteFiles).ok());
+    (void)tablet_manager->delete_shutdown_tablet(tablet_id);
+}
+
 TEST_F(PublishVersionTaskTest, test_publish_version_replication_failed) {
     // Prepare a replication txn via remote_snapshot so that publish on replication path fails
     TRemoteSnapshotRequest remote_snapshot_request;
