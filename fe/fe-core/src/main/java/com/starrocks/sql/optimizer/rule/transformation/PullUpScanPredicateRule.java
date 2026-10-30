@@ -63,6 +63,14 @@ public class PullUpScanPredicateRule extends TransformationRule {
 
     private ScalarOperator replaceScalarOperator(ScalarOperator root,
                                                  Map<ScalarOperator, ColumnRefOperator> columnRefMap) {
+        // Never replace a constant with a column. Reading a column is no cheaper than a literal, and some
+        // positions only accept constants: the value list of a const IN-predicate is evaluated without a
+        // chunk on the BE, so `x IN (0, 1)` rewritten to `x IN (0, auto_fill_col)` (the scan projection of
+        // a count(*) carries `auto_fill_col := TINYINT 1`) crashes VectorizedInConstPredicate::open().
+        if (root.isConstant()) {
+            return root;
+        }
+
         if (columnRefMap.containsKey(root)) {
             return columnRefMap.get(root);
         }
@@ -70,9 +78,7 @@ public class PullUpScanPredicateRule extends TransformationRule {
         // Do not rewrite anything inside a lambda function body. A lambda body is evaluated in the
         // lambda's local context, where only the lambda arguments and captured columns exist. Replacing
         // a sub-expression there with a reference to an outer (scan projection) column produces a column
-        // ref that cannot be resolved in the lambda's local chunk at runtime. For a constant that lives
-        // inside a const IN-predicate (e.g. `x IN (CAST(1 AS BIGINT), 2)`), this rewrites a literal into a
-        // ColumnRef, which crashes VectorizedInConstPredicate::open() on the BE. This mirrors
+        // ref that cannot be resolved in the lambda's local chunk at runtime. This mirrors
         // SubfieldCollector#visitLambdaFunctionOperator, which likewise never descends into lambdas.
         if (root instanceof LambdaFunctionOperator) {
             return root;
