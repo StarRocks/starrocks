@@ -1,0 +1,10 @@
+{
+  "source_commit": "d78fb065ca12119d55750d12a0c9a1aa6fe0562d",
+  "toolchain_tag": "main-20260707",
+  "inputs_sha256": "7a11d0580a4e20ed689f18d0ab7c4840c64b48da039a35b54fc9f946e1bd8cb8",
+  "images": {
+    "ubuntu": "starrocks/dev-env-ubuntu@sha256:5b918a26c21f46038f82c17db7d9879a9a8a7bbecb6aee920da86313c66df3ee",
+    "rocky9": "starrocks/dev-env-rocky9@sha256:c05f0e7be2fcfeadbd70137ff03781675925add2931af68fa806f77d24a57645"
+  },
+  "verification": "Published amd64/arm64 image labels identify source_commit. Existing thirdparty recipes and env.sh match main d60f9ae1178651f430bb0307077882ec6a91cec5. The only toolchain-source difference adds clangd; the selected toolchain image remains main-20260707. This fingerprint includes the reviewed Lance-only additions to vars.sh, build-thirdparty.sh and package-manifest.sh; existing dependency recipes remain unchanged. The fingerprint normalizes only the standalone pprof URL/checksum assignments; the reuse path always refreshes pprof through its existing checksummed download/install recipe. No C++ library version or build input is excluded by this normalization."
+}
