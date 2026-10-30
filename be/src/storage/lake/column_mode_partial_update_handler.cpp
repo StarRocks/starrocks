@@ -163,6 +163,9 @@ StatusOr<int64_t> ColumnModePartialUpdateHandler::_calc_upt_memory_usage_per_row
             continue;
         }
         num_rows_upt += segment->num_rows();
+        // Building many readers of one segment updates its metacache charge once, not once per reader.
+        segment->turn_on_batch_update_cache_size();
+        DeferOp end_batch([&] { segment->turn_off_batch_update_cache_size(); });
         // Sum every column that is actually present in the partial-update segment, including PK
         // columns. This intentionally retains the conservative shared-nothing accounting even when
         // the source segment is processed one update-column group at a time.

@@ -653,8 +653,21 @@ StatusOr<ColumnReader*> Segment::_get_or_create_column_reader(const LazyColumnRe
             return Status::Corruption(strings::Substitute("Bad segment file $0: failed to parse meta of column $1",
                                                           _segment_file_info.path, column.unique_id));
         }
-        const int32_t field_index = _tablet_schema->field_index(column.unique_id);
-        DCHECK_GE(field_index, 0);
+        int32_t field_index = _tablet_schema->field_index(column.unique_id);
+        if (field_index < 0) {
+            // The unique id index can miss a column of the schema: the hidden row-store column appended by
+            // TabletSchema::_build_current_tablet_schema() is not in it.
+            for (size_t i = 0, n = _tablet_schema->num_columns(); i < n; ++i) {
+                if (_tablet_schema->column(i).unique_id() == column.unique_id) {
+                    field_index = static_cast<int32_t>(i);
+                    break;
+                }
+            }
+        }
+        if (field_index < 0) {
+            return Status::InternalError(strings::Substitute("Segment $0 has no schema column with unique id $1",
+                                                             _segment_file_info.path, column.unique_id));
+        }
         ASSIGN_OR_RETURN(auto reader,
                          ColumnReader::create(&meta, const_cast<Segment*>(this), &_tablet_schema->column(field_index)));
         column.reader.store(reader.release(), std::memory_order_release);

@@ -326,7 +326,7 @@ StatusOr<int32_t> HorizontalCompactionTask::calculate_chunk_size() {
         // could not hold (segment-range / partial compaction) or that has given holding up reports
         // zero, and one whose held set is still pinned by the get_segments_checked() memo after a
         // fallback keeps reporting it -- which is exactly what the read buffers must be sized around.
-        held_segments_bytes += rowset->held_segments_bytes();
+        // Measured after the loop below, which builds the readers of the columns it touches.
         for (auto& segment : segments) {
             // A null placeholder slot means a segment produced no reader (e.g. a lost segment dropped by
             // experimental_lake_ignore_lost_segment). This chunk-size estimate is position-agnostic, so
@@ -336,6 +336,9 @@ StatusOr<int32_t> HorizontalCompactionTask::calculate_chunk_size() {
                              << _tablet.id() << ", rowset: " << rowset->id();
                 continue;
             }
+            // Building many readers of one segment updates its metacache charge once, not once per reader.
+            segment->turn_on_batch_update_cache_size();
+            DeferOp end_batch([&] { segment->turn_off_batch_update_cache_size(); });
             for (size_t i = 0; i < segment->num_columns(); ++i) {
                 auto uid = _tablet_schema->column(i).unique_id();
                 ASSIGN_OR_RETURN(const auto* column_reader, segment->column_with_uid(uid));
@@ -345,6 +348,7 @@ StatusOr<int32_t> HorizontalCompactionTask::calculate_chunk_size() {
                 total_mem_footprint += column_reader->total_mem_footprint();
             }
         }
+        held_segments_bytes += rowset->held_segments_bytes();
     }
 
     // The held input set stays resident for the whole task, so it comes out of the same per-worker

@@ -930,4 +930,23 @@ TEST_F(SegmentReaderWriterTest, TestWideFooterReadInTwoParts) {
     EXPECT_EQ(1, num_built_column_readers(*reopened));
 }
 
+// TabletSchema::_build_current_tablet_schema() appends the hidden row-store column without adding it to the
+// unique id index. Building that column's reader must still find its schema column.
+TEST_F(SegmentReaderWriterTest, TestColumnMissingFromUniqueIdIndex) {
+    std::shared_ptr<TabletSchema> schema = TabletSchemaHelper::create_tablet_schema(
+            {create_int_key_pb(1), create_int_value_pb(2), create_int_value_pb(3)});
+    SegmentWriterOptions opts;
+    shared_ptr<Segment> segment;
+    build_segment(opts, schema, schema, 20, DefaultIntGenerator, &segment);
+
+    std::shared_ptr<TabletSchema> read_schema = TabletSchemaHelper::create_tablet_schema(
+            {create_int_key_pb(1), create_int_value_pb(2), create_int_value_pb(3)});
+    read_schema->_unique_id_to_index.erase(3);
+    ASSERT_EQ(-1, read_schema->field_index(3));
+    ASSIGN_OR_ABORT(auto reopened, Segment::open(_fs, FileInfo{segment->file_name()}, 0, read_schema));
+    ASSIGN_OR_ABORT(auto reader, reopened->column_with_uid(3));
+    ASSERT_NE(nullptr, reader);
+    EXPECT_EQ(TYPE_INT, reader->column_type());
+}
+
 } // namespace starrocks
