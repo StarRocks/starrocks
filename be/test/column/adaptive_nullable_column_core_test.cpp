@@ -109,10 +109,7 @@ TEST(AdaptiveNullableColumnCoreTest, CompactSerializationMaterializesFirst) {
         const uint8_t* end = dst->deserialize_compact_and_append(buf);
         EXPECT_EQ(AdaptiveNullableColumn::State::kMaterialized, dst->state());
         EXPECT_EQ(buf + written, end);
-        ASSERT_EQ(2u, dst->size());
-        EXPECT_TRUE(dst->is_null(0));
-        EXPECT_FALSE(dst->is_null(1));
-        EXPECT_EQ(Slice("abcdefgh"), dst->get(1).get_slice());
+        ASSERT_EQ("[NULL, 'abcdefgh']", dst->debug_string());
     }
 }
 

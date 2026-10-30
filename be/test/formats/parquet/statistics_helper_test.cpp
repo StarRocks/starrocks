@@ -69,11 +69,7 @@ TEST_F(StatisticsHelperTest, DecodeBooleanIgnoresPaddingBits) {
 
     ASSERT_TRUE(StatisticsHelper::decode_value_into_column(column, values, null_pages, type, &field, "UTC").ok());
 
-    ASSERT_EQ(4, column->size());
-    EXPECT_EQ(0, column->get(0).get_uint8());
-    EXPECT_EQ(1, column->get(1).get_uint8());
-    EXPECT_EQ(0, column->get(2).get_uint8());
-    EXPECT_EQ(1, column->get(3).get_uint8());
+    ASSERT_EQ("[0, 1, 0, 1]", column->debug_string());
 }
 
 TEST_F(StatisticsHelperTest, DecodeBooleanNullPage) {
@@ -88,10 +84,7 @@ TEST_F(StatisticsHelperTest, DecodeBooleanNullPage) {
 
     ASSERT_TRUE(StatisticsHelper::decode_value_into_column(column, values, null_pages, type, &field, "UTC").ok());
 
-    ASSERT_EQ(2, column->size());
-    EXPECT_TRUE(column->is_null(0));
-    EXPECT_FALSE(column->is_null(1));
-    EXPECT_EQ(1, column->get(1).get_uint8());
+    ASSERT_EQ("[NULL, 1]", column->debug_string());
 }
 
 TEST_F(StatisticsHelperTest, DecodeBooleanEmptyValueReturnsCorruption) {

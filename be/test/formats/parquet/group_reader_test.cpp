@@ -2432,11 +2432,7 @@ TEST_F(GroupReaderTest, TestIcebergRowIdWithoutFirstRowIdUsesRowPositionForLooku
 
     ColumnPtr column = ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT), true);
     ASSERT_OK(group_reader->_column_readers[100]->read_range(Range<uint64_t>(7, 11), nullptr, column));
-    ASSERT_EQ(4, column->size());
-    ASSERT_EQ(7, column->get(0).get_int64());
-    ASSERT_EQ(8, column->get(1).get_int64());
-    ASSERT_EQ(9, column->get(2).get_int64());
-    ASSERT_EQ(10, column->get(3).get_int64());
+    ASSERT_EQ("[7, 8, 9, 10]", column->debug_string());
 }
 
 TEST_F(GroupReaderTest, TestIcebergRowIdSecondRowGroupUsesFileLevelFirstRowId) {
@@ -2468,11 +2464,7 @@ TEST_F(GroupReaderTest, TestIcebergRowIdSecondRowGroupUsesFileLevelFirstRowId) {
 
     ColumnPtr column = ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT), true);
     ASSERT_OK(group_reader->_column_readers[100]->read_range(Range<uint64_t>(7, 11), nullptr, column));
-    ASSERT_EQ(4, column->size());
-    ASSERT_EQ(1007, column->get(0).get_int64());
-    ASSERT_EQ(1008, column->get(1).get_int64());
-    ASSERT_EQ(1009, column->get(2).get_int64());
-    ASSERT_EQ(1010, column->get(3).get_int64());
+    ASSERT_EQ("[1007, 1008, 1009, 1010]", column->debug_string());
 }
 
 TEST_F(GroupReaderTest, TestIcebergLastUpdatedSequenceNumberColumnReaderCreation) {
@@ -2824,9 +2816,7 @@ TEST_F(GroupReaderTest, VariantVirtualColumnMapsPrefixAndLeafPathsIndependently)
     ASSERT_OK(fill_dst_chunk_without_projected(group_reader, read_chunk, &dst_chunk));
 
     const auto& leaf_result = dst_chunk->get_column_by_slot_id(leaf_slot->id());
-    ASSERT_EQ(2, leaf_result->size());
-    EXPECT_EQ(11, leaf_result->get(0).get_int64());
-    EXPECT_EQ(22, leaf_result->get(1).get_int64());
+    ASSERT_EQ("[11, 22]", leaf_result->debug_string());
 
     const auto& prefix_result = dst_chunk->get_column_by_slot_id(prefix_slot->id());
     ASSERT_EQ(2, prefix_result->size());
@@ -2866,9 +2856,7 @@ TEST_F(GroupReaderTest, FillDstChunkProjectsVirtualColumnFromPhysicalSourceSlot)
 
     ASSERT_OK(fill_dst_chunk_without_projected(group_reader, read_chunk, &dst_chunk));
     const auto& result = dst_chunk->get_column_by_slot_id(virtual_slot->id());
-    ASSERT_EQ(2, result->size());
-    EXPECT_EQ(11, result->get(0).get_int64());
-    EXPECT_EQ(22, result->get(1).get_int64());
+    ASSERT_EQ("[11, 22]", result->debug_string());
 }
 
 TEST_F(GroupReaderTest, FillDstChunkProjectsVirtualColumnReturnsNullForNullAndMissingLeafRows) {
@@ -2900,9 +2888,7 @@ TEST_F(GroupReaderTest, FillDstChunkProjectsVirtualColumnReturnsNullForNullAndMi
 
     ASSERT_OK(fill_dst_chunk_without_projected(group_reader, read_chunk, &dst_chunk));
     const auto& result = dst_chunk->get_column_by_slot_id(virtual_slot->id());
-    ASSERT_EQ(2, result->size());
-    EXPECT_TRUE(result->is_null(0));
-    EXPECT_TRUE(result->is_null(1));
+    ASSERT_EQ("[NULL, NULL]", result->debug_string());
 }
 
 TEST_F(GroupReaderTest, FillDstChunkProjectsExactTypedVirtualColumnRespectsSourceNullMask) {
@@ -2933,9 +2919,7 @@ TEST_F(GroupReaderTest, FillDstChunkProjectsExactTypedVirtualColumnRespectsSourc
 
     ASSERT_OK(fill_dst_chunk_without_projected(group_reader, read_chunk, &dst_chunk));
     const auto& result = dst_chunk->get_column_by_slot_id(virtual_slot->id());
-    ASSERT_EQ(2, result->size());
-    EXPECT_TRUE(result->is_null(0));
-    EXPECT_EQ(22, result->get(1).get_int64());
+    ASSERT_EQ("[NULL, 22]", result->debug_string());
 }
 
 TEST_F(GroupReaderTest, FillDstChunkProjectsExactTypedDecimalVirtualColumn) {
@@ -3070,9 +3054,7 @@ TEST_F(GroupReaderTest, FillDstChunkProjectsVirtualColumnFromHiddenVariantSource
 
     ASSERT_OK(fill_dst_chunk_without_projected(group_reader, read_chunk, &dst_chunk));
     const auto& result = dst_chunk->get_column_by_slot_id(virtual_slot->id());
-    ASSERT_EQ(2, result->size());
-    EXPECT_EQ(11, result->get(0).get_int64());
-    EXPECT_EQ(22, result->get(1).get_int64());
+    ASSERT_EQ("[11, 22]", result->debug_string());
 }
 
 TEST_F(GroupReaderTest, FillDstChunkProjectsVirtualColumnWhenVirtualSlotPrecedesSourceSlot) {
@@ -3115,9 +3097,7 @@ TEST_F(GroupReaderTest, FillDstChunkProjectsVirtualColumnWhenVirtualSlotPrecedes
     ASSERT_OK(fill_dst_chunk_without_projected(group_reader, read_chunk, &dst_chunk));
 
     const auto& projected = dst_chunk->get_column_by_slot_id(virtual_slot->id());
-    ASSERT_EQ(2, projected->size());
-    EXPECT_EQ(11, projected->get(0).get_int64());
-    EXPECT_EQ(22, projected->get(1).get_int64());
+    ASSERT_EQ("[11, 22]", projected->debug_string());
 
     const auto& source = dst_chunk->get_column_by_slot_id(source_slot->id());
     ASSERT_EQ(2, source->size());
