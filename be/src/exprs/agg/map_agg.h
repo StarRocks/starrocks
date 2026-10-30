@@ -28,6 +28,7 @@
 #include "exprs/function_helper.h"
 #include "gutil/casts.h"
 #include "runtime/mem_pool.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 
@@ -39,16 +40,29 @@ struct MapAggAggregateFunctionState : public AggregateFunctionEmptyState {
     MyHashMap hash_map;
     // Use column to store the values in case that the reference of the Slices disappears.
     MutableColumnPtr value_column;
+    bool use_datum = false;
+
+    void append_value(const Column& column, const Column& source, size_t row, bool is_constant) {
+        if (use_datum) {
+            value_column->append_datum(column.get(row));
+        } else {
+            value_column->append(source, is_constant ? 0 : row, 1);
+        }
+    }
 
     void update(MemPool* mem_pool, const KeyColumnType& arg_key_column, const Column& arg_value_column, size_t offset,
                 size_t count) {
+        const bool is_constant = !use_datum && arg_value_column.is_constant();
+        const auto* source = &arg_value_column;
+        if (is_constant && !source->only_null()) {
+            source = down_cast<const ConstColumn*>(source)->data_column().get();
+        }
         if constexpr (!lt_is_string<KT>) {
             auto key_datas = arg_key_column.immutable_data();
             for (int i = offset; i < offset + count; i++) {
                 auto key = key_datas[i];
                 if (!hash_map.contains(key)) {
-                    auto value = arg_value_column.get(i);
-                    value_column->append_datum(value);
+                    append_value(arg_value_column, *source, i, is_constant);
                     hash_map.emplace(key, value_column->size() - 1);
                 }
             }
@@ -59,8 +73,7 @@ struct MapAggAggregateFunctionState : public AggregateFunctionEmptyState {
                 if (!hash_map.contains(key)) {
                     uint8_t* pos = mem_pool->allocate(key.size);
                     memcpy(pos, key.data, key.size);
-                    auto value = arg_value_column.get(i);
-                    value_column->append_datum(value);
+                    append_value(arg_value_column, *source, i, is_constant);
                     hash_map.emplace(Slice(pos, key.size), value_column->size() - 1);
                 }
             }
@@ -77,6 +90,7 @@ public:
     void create(FunctionContext* ctx, AggDataPtr __restrict ptr) const override {
         auto* state = new (ptr) MapAggAggregateFunctionState<KT, MyHashMap>;
         state->value_column = FunctionHelper::create_column(*ctx->get_arg_type(1), true);
+        state->use_datum = get_size_of_fixed_length_type(ctx->get_arg_type(1)->type) != 0;
     }
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
@@ -106,17 +120,17 @@ public:
 
         auto elem_size = state_impl.hash_map.size();
         auto* key_column = down_cast<KeyColumnType*>(ColumnHelper::get_data_column(map_column->keys_column_raw_ptr()));
-        if constexpr (lt_is_string<KT>) {
-            for (const auto& entry : state_impl.hash_map) {
+        Buffer<uint32_t> indexes;
+        indexes.reserve(elem_size);
+        for (const auto& entry : state_impl.hash_map) {
+            if constexpr (lt_is_string<KT>) {
                 key_column->append(Slice(entry.first.data, entry.first.size));
-                map_column->values_column_raw_ptr()->append_datum(state_impl.value_column->get(entry.second));
-            }
-        } else {
-            for (const auto& entry : state_impl.hash_map) {
+            } else {
                 key_column->append(entry.first);
-                map_column->values_column_raw_ptr()->append_datum(state_impl.value_column->get(entry.second));
             }
+            indexes.push_back(entry.second);
         }
+        map_column->values_column_raw_ptr()->append_selective(*state_impl.value_column, indexes.data(), 0, elem_size);
 
         if (to->is_nullable()) {
             down_cast<NullableColumn*>(to)->null_column_data().emplace_back(0);
