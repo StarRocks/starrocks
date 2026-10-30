@@ -132,4 +132,19 @@ public class DecimalCastPlanTest extends PlanTestNoneDBBase {
             sv.setSqlMode(sqlMode);
         }
     }
+
+    @Test
+    public void testPastPrecisionConstantIsLeftToTheBeWithErrorIfOverflow() throws Exception {
+        String sql = "SELECT CAST('9999' AS DECIMAL(3, 0))";
+        assertNotContains(getFragmentPlan(sql), "CAST('9999' AS DECIMAL");
+        // With ERROR_IF_OVERFLOW the BE raises an error for 9999, so the FE doesn't fold the cast to NULL
+        SessionVariable sv = connectContext.getSessionVariable();
+        long sqlMode = sv.getSqlMode();
+        try {
+            sv.setSqlMode(sqlMode | SqlModeHelper.MODE_ERROR_IF_OVERFLOW);
+            assertContains(getFragmentPlan(sql), "CAST('9999' AS DECIMAL");
+        } finally {
+            sv.setSqlMode(sqlMode);
+        }
+    }
 }
