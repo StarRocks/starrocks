@@ -3724,8 +3724,8 @@ TEST_F(TimeFunctionsTest, timeSliceFloorTest) {
     tc->append(TimestampValue::create(2022, 9, 9, 8, 8, 16));
     tc->append(TimestampValue::create(2022, 11, 3, 23, 41, 37));
 
-    std::vector<FunctionContext::TypeDesc> arg_types = {TypeDescriptor::from_logical_type(TYPE_DATETIME)};
-    auto return_type = TypeDescriptor::from_logical_type(TYPE_DATETIME);
+    std::vector<FunctionContext::TypeDesc> arg_types = {TYPE_DATETIME_DESC};
+    auto return_type = TYPE_DATETIME_DESC;
     std::unique_ptr<FunctionContext> time_slice_context(
             FunctionContext::create_test_context(std::move(arg_types), return_type));
 
@@ -4071,8 +4071,8 @@ TEST_F(TimeFunctionsTest, timeSliceCeilTest) {
     tc->append(TimestampValue::create(2022, 9, 9, 8, 8, 16));
     tc->append(TimestampValue::create(2022, 11, 3, 23, 41, 37));
 
-    std::vector<FunctionContext::TypeDesc> arg_types = {TypeDescriptor::from_logical_type(TYPE_DATETIME)};
-    auto return_type = TypeDescriptor::from_logical_type(TYPE_DATETIME);
+    std::vector<FunctionContext::TypeDesc> arg_types = {TYPE_DATETIME_DESC};
+    auto return_type = TYPE_DATETIME_DESC;
     std::unique_ptr<FunctionContext> time_slice_context(
             FunctionContext::create_test_context(std::move(arg_types), return_type));
 
@@ -4123,8 +4123,8 @@ TEST_F(TimeFunctionsTest, timeSliceTestWithThrowExceptions) {
     auto tc = TimestampColumn::create();
     tc->append(TimestampValue::create(0000, 1, 1, 0, 0, 0));
 
-    std::vector<FunctionContext::TypeDesc> arg_types = {TypeDescriptor::from_logical_type(TYPE_DATETIME)};
-    auto return_type = TypeDescriptor::from_logical_type(TYPE_DATETIME);
+    std::vector<FunctionContext::TypeDesc> arg_types = {TYPE_DATETIME_DESC};
+    auto return_type = TYPE_DATETIME_DESC;
     std::unique_ptr<FunctionContext> time_slice_context(
             FunctionContext::create_test_context(std::move(arg_types), return_type));
 
@@ -4171,8 +4171,8 @@ TEST_F(TimeFunctionsTest, DateSliceFloorTest) {
     tc->append(DateValue::create(2022, 9, 9));
     tc->append(DateValue::create(2022, 11, 3));
 
-    std::vector<FunctionContext::TypeDesc> arg_types = {TypeDescriptor::from_logical_type(TYPE_DATE)};
-    auto return_type = TypeDescriptor::from_logical_type(TYPE_DATE);
+    std::vector<FunctionContext::TypeDesc> arg_types = {TYPE_DATE_DESC};
+    auto return_type = TYPE_DATE_DESC;
     std::unique_ptr<FunctionContext> time_slice_context(
             FunctionContext::create_test_context(std::move(arg_types), return_type));
 
@@ -4391,8 +4391,8 @@ TEST_F(TimeFunctionsTest, DateSliceCeilTest) {
     tc->append(DateValue::create(2022, 9, 9));
     tc->append(DateValue::create(2022, 11, 3));
 
-    std::vector<FunctionContext::TypeDesc> arg_types = {TypeDescriptor::from_logical_type(TYPE_DATE)};
-    auto return_type = TypeDescriptor::from_logical_type(TYPE_DATE);
+    std::vector<FunctionContext::TypeDesc> arg_types = {TYPE_DATE_DESC};
+    auto return_type = TYPE_DATE_DESC;
     std::unique_ptr<FunctionContext> time_slice_context(
             FunctionContext::create_test_context(std::move(arg_types), return_type));
 

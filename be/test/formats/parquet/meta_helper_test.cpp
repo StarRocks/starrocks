@@ -237,7 +237,7 @@ TEST(ParquetMetaHelperTest, StructSubfieldWithoutFieldIdIsMatchedByName) {
     col.field_id = 10;
     col.children = {a, b};
 
-    TypeDescriptor int_type = TypeDescriptor::from_logical_type(TYPE_INT);
+    TypeDescriptor int_type = TYPE_INT_DESC;
     ParquetMetaHelper helper(/*file_metadata=*/nullptr, /*case_sensitive=*/true);
 
     // x (id 7) is not in the file, b has no id and is matched by name.

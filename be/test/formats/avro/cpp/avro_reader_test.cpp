@@ -562,14 +562,14 @@ TEST_F(AvroReaderTest, test_direct_path_scalar_conversion_matrix) {
     std::string filename = "direct_reader_matrix.avro";
 
     std::vector<SlotDescriptor> descs;
-    descs.emplace_back(1, "bool_from_int", TypeDescriptor::from_logical_type(TYPE_BOOLEAN));
-    descs.emplace_back(2, "bool_from_long", TypeDescriptor::from_logical_type(TYPE_BOOLEAN));
-    descs.emplace_back(3, "bool_from_float", TypeDescriptor::from_logical_type(TYPE_BOOLEAN));
-    descs.emplace_back(4, "bool_from_double", TypeDescriptor::from_logical_type(TYPE_BOOLEAN));
-    descs.emplace_back(5, "int_from_bool", TypeDescriptor::from_logical_type(TYPE_INT));
+    descs.emplace_back(1, "bool_from_int", TYPE_BOOLEAN_DESC);
+    descs.emplace_back(2, "bool_from_long", TYPE_BOOLEAN_DESC);
+    descs.emplace_back(3, "bool_from_float", TYPE_BOOLEAN_DESC);
+    descs.emplace_back(4, "bool_from_double", TYPE_BOOLEAN_DESC);
+    descs.emplace_back(5, "int_from_bool", TYPE_INT_DESC);
     descs.emplace_back(6, "enum_as_string", TYPE_VARCHAR_DESC);
     descs.emplace_back(7, "fixed_as_string", TYPE_VARCHAR_DESC);
-    descs.emplace_back(8, "nullable_int", TypeDescriptor::from_logical_type(TYPE_INT));
+    descs.emplace_back(8, "nullable_int", TYPE_INT_DESC);
     std::vector<SlotDescriptor*> slot_descs;
     for (auto& desc : descs) {
         slot_descs.emplace_back(&desc);
@@ -598,7 +598,7 @@ TEST_F(AvroReaderTest, test_direct_path_missing_column_as_null) {
     std::string filename = "multiblock.avro";
 
     std::vector<SlotDescriptor> descs;
-    descs.emplace_back(1, "id", TypeDescriptor::from_logical_type(TYPE_INT));
+    descs.emplace_back(1, "id", TYPE_INT_DESC);
     descs.emplace_back(2, "missing_col", TYPE_VARCHAR_DESC);
     std::vector<SlotDescriptor*> slot_descs = {&descs[0], &descs[1]};
     create_column_readers(slot_descs, _timezone, false);
@@ -626,7 +626,7 @@ TEST_F(AvroReaderTest, test_direct_path_data_quality_error_drains_remaining_fiel
     std::string filename = "primitive.avro";
 
     std::vector<SlotDescriptor> descs;
-    descs.emplace_back(3, "long_field", TypeDescriptor::from_logical_type(TYPE_INT));
+    descs.emplace_back(3, "long_field", TYPE_INT_DESC);
     descs.emplace_back(7, "string_field", TYPE_VARCHAR_DESC);
     std::vector<SlotDescriptor*> slot_descs = {&descs[0], &descs[1]};
     create_column_readers(slot_descs, _timezone, false);
@@ -658,7 +658,7 @@ TEST_F(AvroReaderTest, test_external_reader_schema_default_field) {
     })";
 
     std::vector<SlotDescriptor> descs;
-    descs.emplace_back(100, "added_field", TypeDescriptor::from_logical_type(TYPE_INT));
+    descs.emplace_back(100, "added_field", TYPE_INT_DESC);
     std::vector<SlotDescriptor*> slot_descs = {&descs[0]};
     create_column_readers(slot_descs, _timezone, false);
 
@@ -1013,9 +1013,9 @@ TEST_F(AvroReaderTest, test_direct_path_error_recovery_multi_row) {
     const std::string filename = "direct_reader_matrix.avro";
 
     std::vector<SlotDescriptor> descs;
-    descs.emplace_back(1, "bool_from_int", TypeDescriptor::from_logical_type(TYPE_BOOLEAN));
+    descs.emplace_back(1, "bool_from_int", TYPE_BOOLEAN_DESC);
     descs.emplace_back(7, "enum_as_string", TypeDescriptor::create_varchar_type(3));
-    descs.emplace_back(8, "nullable_int", TypeDescriptor::from_logical_type(TYPE_INT));
+    descs.emplace_back(8, "nullable_int", TYPE_INT_DESC);
     std::vector<SlotDescriptor*> slot_descs;
     for (auto& desc : descs) {
         slot_descs.emplace_back(&desc);

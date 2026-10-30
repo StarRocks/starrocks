@@ -36,6 +36,7 @@
 #include "runtime/descriptor_helper.h"
 #include "runtime/runtime_state.h"
 #include "testutil/column_test_helper.h"
+#include "testutil/type_test_helper.h"
 
 namespace starrocks::parquet {
 
@@ -196,33 +197,33 @@ static TypeDescriptor make_map_type(const TypeDescriptor& key, const TypeDescrip
 
 TEST_F(FileWriterTest, TestWriteIntegralTypes) {
     std::vector<TypeDescriptor> type_descs{
-            TypeDescriptor::from_logical_type(TYPE_TINYINT),
-            TypeDescriptor::from_logical_type(TYPE_SMALLINT),
-            TypeDescriptor::from_logical_type(TYPE_INT),
-            TypeDescriptor::from_logical_type(TYPE_BIGINT),
+            TYPE_TINYINT_DESC,
+            TYPE_SMALLINT_DESC,
+            TYPE_INT_DESC,
+            TYPE_BIGINT_DESC,
     };
 
     auto chunk = std::make_shared<Chunk>();
     {
-        auto col0 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_TINYINT), true);
+        auto col0 = ColumnHelper::create_column(TYPE_TINYINT_DESC, true);
         std::vector<int8_t> int8_nums{INT8_MIN, INT8_MAX, 0, 1};
         auto count = col0->append_numbers(int8_nums.data(), size(int8_nums) * sizeof(int8_t));
         ASSERT_EQ(4, count);
         chunk->append_column(std::move(col0), chunk->num_columns());
 
-        auto col1 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_SMALLINT), true);
+        auto col1 = ColumnHelper::create_column(TYPE_SMALLINT_DESC, true);
         std::vector<int16_t> int16_nums{INT16_MIN, INT16_MAX, 0, 1};
         count = col1->append_numbers(int16_nums.data(), size(int16_nums) * sizeof(int16_t));
         ASSERT_EQ(4, count);
         chunk->append_column(std::move(col1), chunk->num_columns());
 
-        auto col2 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_INT), true);
+        auto col2 = ColumnHelper::create_column(TYPE_INT_DESC, true);
         std::vector<int32_t> int32_nums{INT32_MIN, INT32_MAX, 0, 1};
         count = col2->append_numbers(int32_nums.data(), size(int32_nums) * sizeof(int32_t));
         ASSERT_EQ(4, count);
         chunk->append_column(std::move(col2), chunk->num_columns());
 
-        auto col3 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_BIGINT), true);
+        auto col3 = ColumnHelper::create_column(TYPE_BIGINT_DESC, true);
         std::vector<int64_t> int64_nums{INT64_MIN, INT64_MAX, 0, 1};
         count = col3->append_numbers(int64_nums.data(), size(int64_nums) * sizeof(int64_t));
         ASSERT_EQ(4, count);
@@ -282,7 +283,7 @@ TEST_F(FileWriterTest, TestWriteDecimal) {
 }
 
 TEST_F(FileWriterTest, TestWriteBoolean) {
-    auto type_bool = TypeDescriptor::from_logical_type(TYPE_BOOLEAN);
+    auto type_bool = TYPE_BOOLEAN_DESC;
     std::vector<TypeDescriptor> type_descs{type_bool};
 
     auto chunk = std::make_shared<Chunk>();
@@ -310,7 +311,7 @@ TEST_F(FileWriterTest, TestWriteBoolean) {
 }
 
 TEST_F(FileWriterTest, TestWriteFloat) {
-    auto type_float = TypeDescriptor::from_logical_type(TYPE_FLOAT);
+    auto type_float = TYPE_FLOAT_DESC;
     std::vector<TypeDescriptor> type_descs{type_float};
 
     auto chunk = std::make_shared<Chunk>();
@@ -339,7 +340,7 @@ TEST_F(FileWriterTest, TestWriteFloat) {
 }
 
 TEST_F(FileWriterTest, TestWriteDouble) {
-    auto type_float = TypeDescriptor::from_logical_type(TYPE_DOUBLE);
+    auto type_float = TYPE_DOUBLE_DESC;
     std::vector<TypeDescriptor> type_descs{type_float};
 
     auto chunk = std::make_shared<Chunk>();
@@ -368,7 +369,7 @@ TEST_F(FileWriterTest, TestWriteDouble) {
 }
 
 TEST_F(FileWriterTest, TestWriteDate) {
-    auto type_date = TypeDescriptor::from_logical_type(TYPE_DATE);
+    auto type_date = TYPE_DATE_DESC;
     std::vector<TypeDescriptor> type_descs{type_date};
 
     auto chunk = std::make_shared<Chunk>();
@@ -406,7 +407,7 @@ TEST_F(FileWriterTest, TestWriteDate) {
 }
 
 TEST_F(FileWriterTest, TestWriteDatetime) {
-    auto type_datetime = TypeDescriptor::from_logical_type(TYPE_DATETIME);
+    auto type_datetime = TYPE_DATETIME_DESC;
     std::vector<TypeDescriptor> type_descs{type_datetime};
 
     auto chunk = std::make_shared<Chunk>();
@@ -445,7 +446,7 @@ TEST_F(FileWriterTest, TestWriteDatetime) {
 }
 
 TEST_F(FileWriterTest, TestWriteVarchar) {
-    auto type_varchar = TypeDescriptor::from_logical_type(TYPE_VARCHAR);
+    auto type_varchar = TYPE_VARCHAR_DESC;
     std::vector<TypeDescriptor> type_descs{type_varchar};
 
     auto chunk = std::make_shared<Chunk>();
@@ -475,7 +476,7 @@ TEST_F(FileWriterTest, TestWriteVarchar) {
 TEST_F(FileWriterTest, TestWriteArray) {
     // type_descs
     std::vector<TypeDescriptor> type_descs;
-    auto type_int = TypeDescriptor::from_logical_type(TYPE_INT);
+    auto type_int = TYPE_INT_DESC;
     auto type_int_array = TypeDescriptor::from_logical_type(TYPE_ARRAY);
     type_int_array.children.push_back(type_int);
     type_descs.push_back(type_int_array);
@@ -519,7 +520,7 @@ TEST_F(FileWriterTest, TestWriteArray) {
 TEST_F(FileWriterTest, TestWriteArrayNullWithOffset) {
     // type_descs
     std::vector<TypeDescriptor> type_descs;
-    auto type_int = TypeDescriptor::from_logical_type(TYPE_INT);
+    auto type_int = TYPE_INT_DESC;
     auto type_int_array = TypeDescriptor::from_logical_type(TYPE_ARRAY);
     type_int_array.children.push_back(type_int);
     type_descs.push_back(type_int_array);
@@ -565,9 +566,9 @@ TEST_F(FileWriterTest, TestWriteArrayNullWithOffset) {
 TEST_F(FileWriterTest, TestWriteStruct) {
     // type_descs
     std::vector<TypeDescriptor> type_descs;
-    auto type_int_a = TypeDescriptor::from_logical_type(TYPE_SMALLINT);
-    auto type_int_b = TypeDescriptor::from_logical_type(TYPE_INT);
-    auto type_int_c = TypeDescriptor::from_logical_type(TYPE_BIGINT);
+    auto type_int_a = TYPE_SMALLINT_DESC;
+    auto type_int_b = TYPE_INT_DESC;
+    auto type_int_c = TYPE_BIGINT_DESC;
     auto type_int_struct = TypeDescriptor::from_logical_type(TYPE_STRUCT);
     type_int_struct.children = {type_int_a, type_int_b, type_int_c};
     type_int_struct.field_names = {"a", "b", "c"};
@@ -622,8 +623,8 @@ TEST_F(FileWriterTest, TestWriteStruct) {
 TEST_F(FileWriterTest, TestWriteMap) {
     // type_descs
     std::vector<TypeDescriptor> type_descs;
-    auto type_int_key = TypeDescriptor::from_logical_type(TYPE_INT);
-    auto type_int_value = TypeDescriptor::from_logical_type(TYPE_INT);
+    auto type_int_key = TYPE_INT_DESC;
+    auto type_int_value = TYPE_INT_DESC;
     auto type_int_map = TypeDescriptor::from_logical_type(TYPE_MAP);
     type_int_map.children.push_back(type_int_key);
     type_int_map.children.push_back(type_int_value);
@@ -678,8 +679,8 @@ TEST_F(FileWriterTest, TestWriteMap) {
 TEST_F(FileWriterTest, TestWriteMapNullWithOffsetSingleEntry) {
     // type_descs
     std::vector<TypeDescriptor> type_descs;
-    auto type_int_key = TypeDescriptor::from_logical_type(TYPE_INT);
-    auto type_int_value = TypeDescriptor::from_logical_type(TYPE_INT);
+    auto type_int_key = TYPE_INT_DESC;
+    auto type_int_value = TYPE_INT_DESC;
     auto type_int_map = TypeDescriptor::from_logical_type(TYPE_MAP);
     type_int_map.children.push_back(type_int_key);
     type_int_map.children.push_back(type_int_value);
@@ -731,7 +732,7 @@ TEST_F(FileWriterTest, TestWriteMapNullWithOffsetSingleEntry) {
 TEST_F(FileWriterTest, TestWriteNestedArray) {
     // type_descs
     std::vector<TypeDescriptor> type_descs;
-    auto type_int = TypeDescriptor::from_logical_type(TYPE_INT);
+    auto type_int = TYPE_INT_DESC;
     auto type_int_array = TypeDescriptor::from_logical_type(TYPE_ARRAY);
     auto type_int_array_array = TypeDescriptor::from_logical_type(TYPE_ARRAY);
     type_int_array.children.push_back(type_int);
@@ -786,7 +787,7 @@ TEST_F(FileWriterTest, TestWriteNestedArray) {
 }
 
 TEST_F(FileWriterTest, TestWriteMapNullWithOffset) {
-    auto type_int = TypeDescriptor::from_logical_type(TYPE_INT);
+    auto type_int = TYPE_INT_DESC;
     std::vector<TypeDescriptor> type_descs{make_map_type(type_int, type_int)};
 
     // NULL (owns {7 -> 70}), {1 -> 10}, NULL (owns {8 -> 80, NULL -> NULL}), {}, {2 -> 20}
@@ -809,7 +810,7 @@ TEST_F(FileWriterTest, TestWriteMapNullWithOffset) {
 }
 
 TEST_F(FileWriterTest, TestWriteNestedArrayNullWithOffset) {
-    auto type_int = TypeDescriptor::from_logical_type(TYPE_INT);
+    auto type_int = TYPE_INT_DESC;
     std::vector<TypeDescriptor> type_descs{make_array_type(make_array_type(type_int))};
 
     // [[1], NULL (owns [5, 6]), [2, 3]], NULL (owns [[7]]), [[4]]
@@ -831,7 +832,7 @@ TEST_F(FileWriterTest, TestWriteNestedArrayNullWithOffset) {
 }
 
 TEST_F(FileWriterTest, TestWriteMapOfArrayNullWithOffset) {
-    auto type_int = TypeDescriptor::from_logical_type(TYPE_INT);
+    auto type_int = TYPE_INT_DESC;
     std::vector<TypeDescriptor> type_descs{make_map_type(type_int, make_array_type(type_int))};
 
     // {1 -> [10, 11]}, NULL (owns {2 -> [20]}), {3 -> NULL (owns [30]), 4 -> []}
@@ -854,7 +855,7 @@ TEST_F(FileWriterTest, TestWriteMapOfArrayNullWithOffset) {
 }
 
 TEST_F(FileWriterTest, TestWriteArrayOfStructOfArrayNullWithOffset) {
-    auto type_int = TypeDescriptor::from_logical_type(TYPE_INT);
+    auto type_int = TYPE_INT_DESC;
     auto type_struct = TypeDescriptor::from_logical_type(TYPE_STRUCT);
     type_struct.children = {type_int, make_array_type(type_int)};
     type_struct.field_names = {"a", "l"};
@@ -885,7 +886,7 @@ TEST_F(FileWriterTest, TestWriteArrayOfStructOfArrayNullWithOffset) {
 }
 
 TEST_F(FileWriterTest, TestWriteStructOfMapNullWithOffset) {
-    auto type_int = TypeDescriptor::from_logical_type(TYPE_INT);
+    auto type_int = TYPE_INT_DESC;
     auto type_struct = TypeDescriptor::from_logical_type(TYPE_STRUCT);
     type_struct.children = {make_map_type(type_int, type_int)};
     type_struct.field_names = {"m"};
@@ -944,8 +945,8 @@ TEST_F(FileWriterTest, TestWriteVarbinary) {
 TEST_F(FileWriterTest, TestFieldIdWithStruct) {
     std::vector<TypeDescriptor> type_descs;
     auto type_int_struct = TypeDescriptor::from_logical_type(TYPE_STRUCT);
-    auto type_int_a = TypeDescriptor::from_logical_type(TYPE_SMALLINT);
-    auto type_int_b = TypeDescriptor::from_logical_type(TYPE_INT);
+    auto type_int_a = TYPE_SMALLINT_DESC;
+    auto type_int_b = TYPE_INT_DESC;
 
     type_int_struct.children = {type_int_a, type_int_b};
     type_int_struct.field_names = {"a", "b"};
@@ -976,7 +977,7 @@ TEST_F(FileWriterTest, TestFieldIdWithStruct) {
 }
 
 TEST_F(FileWriterTest, TestWriteJson) {
-    auto type_json = TypeDescriptor::from_logical_type(TYPE_JSON);
+    auto type_json = TYPE_JSON_DESC;
     std::vector<TypeDescriptor> type_descs{type_json};
 
     // nullable column

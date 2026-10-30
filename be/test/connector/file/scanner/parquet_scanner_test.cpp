@@ -304,21 +304,21 @@ private:
 
     SlotTypeDescInfoArray select_columns(const std::vector<std::string>& column_names, bool is_nullable) {
         auto slot_map = std::unordered_map<std::string, TypeDescriptor>{
-                {"col_date", TypeDescriptor::from_logical_type(TYPE_DATE)},
-                {"col_datetime", TypeDescriptor::from_logical_type(TYPE_DATETIME)},
-                {"col_char", TypeDescriptor::from_logical_type(TYPE_CHAR)},
-                {"col_varchar", TypeDescriptor::from_logical_type(TYPE_VARCHAR)},
-                {"col_boolean", TypeDescriptor::from_logical_type(TYPE_BOOLEAN)},
-                {"col_tinyint", TypeDescriptor::from_logical_type(TYPE_TINYINT)},
-                {"col_smallint", TypeDescriptor::from_logical_type(TYPE_SMALLINT)},
-                {"col_int", TypeDescriptor::from_logical_type(TYPE_INT)},
-                {"col_bigint", TypeDescriptor::from_logical_type(TYPE_BIGINT)},
+                {"col_date", TYPE_DATE_DESC},
+                {"col_datetime", TYPE_DATETIME_DESC},
+                {"col_char", TYPE_CHAR_DESC},
+                {"col_varchar", TYPE_VARCHAR_DESC},
+                {"col_boolean", TYPE_BOOLEAN_DESC},
+                {"col_tinyint", TYPE_TINYINT_DESC},
+                {"col_smallint", TYPE_SMALLINT_DESC},
+                {"col_int", TYPE_INT_DESC},
+                {"col_bigint", TYPE_BIGINT_DESC},
                 {"col_decimal_p6s2", TypeDescriptor::from_logical_type(TYPE_DECIMAL32, -1, 6, 2)},
                 {"col_decimal_p14s5", TypeDescriptor::from_logical_type(TYPE_DECIMAL64, -1, 14, 5)},
                 {"col_decimal_p27s9", TypeDescriptor::from_logical_type(TYPE_DECIMALV2, -1, 27, 9)},
 
-                {"col_int_null", TypeDescriptor::from_logical_type(TYPE_INT)},
-                {"col_string_null", TypeDescriptor::from_logical_type(TYPE_VARCHAR)},
+                {"col_int_null", TYPE_INT_DESC},
+                {"col_string_null", TYPE_VARCHAR_DESC},
 
                 {"col_json_int8", TypeDescriptor::create_json_type()},
                 {"col_json_int16", TypeDescriptor::create_json_type()},
@@ -347,12 +347,12 @@ private:
                 {"col_json_struct_struct", TypeDescriptor::create_json_type()},
 
                 // Convert struct->JSON->string
-                {"col_json_struct_string", TypeDescriptor::from_logical_type(TYPE_VARCHAR)},
+                {"col_json_struct_string", TYPE_VARCHAR_DESC},
                 {"col_json_json_string", TypeDescriptor::create_json_type()},
-                {"issue_17693_c0", TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_VARCHAR))},
-                {"issue_17822_c0", TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_VARCHAR))},
-                {"nested_array_c0", TypeDescriptor::create_array_type(TypeDescriptor::create_array_type(
-                                            TypeDescriptor::from_logical_type(TYPE_VARCHAR)))},
+                {"issue_17693_c0", TypeDescriptor::create_array_type(TYPE_VARCHAR_DESC)},
+                {"issue_17822_c0", TypeDescriptor::create_array_type(TYPE_VARCHAR_DESC)},
+                {"nested_array_c0",
+                 TypeDescriptor::create_array_type(TypeDescriptor::create_array_type(TYPE_VARCHAR_DESC))},
                 {"col_map", TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TYPE_VARCHAR_DESC)}};
         SlotTypeDescInfoArray slot_infos;
         slot_infos.reserve(column_names.size());
@@ -381,7 +381,7 @@ private:
 
         auto src_slot_infos = select_columns(columns_from_file, is_nullable);
         for (const auto& i : columns_from_path) {
-            src_slot_infos.emplace_back(i, TypeDescriptor::from_logical_type(TYPE_VARCHAR), is_nullable);
+            src_slot_infos.emplace_back(i, TYPE_VARCHAR_DESC, is_nullable);
         }
 
         auto dst_slot_infos = select_columns(column_names, is_nullable);
@@ -862,8 +862,8 @@ TEST_F(ParquetScannerTest, test_parquet_data_with_1_column_from_path) {
     std::vector<std::string> columns_from_file = {
             "col_datetime", "col_char",   "col_varchar",      "col_boolean",       "col_tinyint",      "col_smallint",
             "col_int",      "col_bigint", "col_decimal_p6s2", "col_decimal_p14s5", "col_decimal_p27s9"};
-    auto varchar_type = TypeDescriptor::from_logical_type(TYPE_VARCHAR);
-    auto date_type = TypeDescriptor::from_logical_type(TYPE_DATE);
+    auto varchar_type = TYPE_VARCHAR_DESC;
+    auto date_type = TYPE_DATE_DESC;
     std::vector<std::string> columns_from_path = {"col_date"};
     std::vector<std::string> column_values = {"2021-03-22"};
     auto column_ref_expr = create_column_ref(11, varchar_type, true);
@@ -881,9 +881,9 @@ TEST_F(ParquetScannerTest, test_parquet_data_with_2_column_from_path) {
     std::vector<std::string> columns_from_path = {"col_date", "col_datetime"};
     std::vector<std::string> column_values = {"2021-02-22", "2020-12-20 22:56:04"};
 
-    auto varchar_type = TypeDescriptor::from_logical_type(TYPE_VARCHAR);
-    auto date_type = TypeDescriptor::from_logical_type(TYPE_DATE);
-    auto datetime_type = TypeDescriptor::from_logical_type(TYPE_DATETIME);
+    auto varchar_type = TYPE_VARCHAR_DESC;
+    auto date_type = TYPE_DATE_DESC;
+    auto datetime_type = TYPE_DATETIME_DESC;
 
     auto column_ref_expr10 = create_column_ref(10, varchar_type, true);
     auto column_ref_expr11 = create_column_ref(11, varchar_type, true);
@@ -906,9 +906,9 @@ TEST_F(ParquetScannerTest, test_parquet_data_with_3_column_from_path) {
                                                   "col_decimal_p6s2", "col_decimal_p14s5", "col_decimal_p27s9"};
     std::vector<std::string> columns_from_path = {"col_date", "col_datetime", "col_char"};
 
-    auto varchar_type = TypeDescriptor::from_logical_type(TYPE_VARCHAR);
-    auto date_type = TypeDescriptor::from_logical_type(TYPE_DATE);
-    auto datetime_type = TypeDescriptor::from_logical_type(TYPE_DATETIME);
+    auto varchar_type = TYPE_VARCHAR_DESC;
+    auto date_type = TYPE_DATE_DESC;
+    auto datetime_type = TYPE_DATETIME_DESC;
 
     auto column_ref_expr9 = create_column_ref(9, varchar_type, true);
     auto column_ref_expr10 = create_column_ref(10, varchar_type, true);
@@ -1304,11 +1304,9 @@ TEST_F(ParquetScannerTest, int96_timestamp_nested_session_timezone_shift) {
     create_nested_int96_parquet("int96_nested.parquet", kMicros, &parquet_file_name);
 
     const SlotTypeDescInfoArray slot_infos{
-            {"col_dt_top", TypeDescriptor::from_logical_type(TYPE_DATETIME), true},
-            {"col_arr_dt", TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_DATETIME)), true},
-            {"col_arr_arr_dt",
-             TypeDescriptor::create_array_type(
-                     TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_DATETIME))),
+            {"col_dt_top", TYPE_DATETIME_DESC, true},
+            {"col_arr_dt", TypeDescriptor::create_array_type(TYPE_DATETIME_DESC), true},
+            {"col_arr_arr_dt", TypeDescriptor::create_array_type(TypeDescriptor::create_array_type(TYPE_DATETIME_DESC)),
              true}};
 
     auto read_first_row = [&](const std::string& timezone) -> ChunkPtr {
@@ -1360,9 +1358,7 @@ TEST_F(ParquetScannerTest, int96_timestamp_mixed_nested_no_over_tagging) {
     create_mixed_int96_int64_struct_parquet("int96_mixed_struct.parquet", kMicros, &parquet_file_name);
     DeferOp defer([&]() { std::filesystem::remove(parquet_file_name); });
 
-    auto type_struct = TypeDescriptor::create_struct_type(
-            {"a", "b"},
-            {TypeDescriptor::from_logical_type(TYPE_DATETIME), TypeDescriptor::from_logical_type(TYPE_DATETIME)});
+    auto type_struct = TypeDescriptor::create_struct_type({"a", "b"}, {TYPE_DATETIME_DESC, TYPE_DATETIME_DESC});
     const SlotTypeDescInfoArray slot_infos{{"s", type_struct, true}};
 
     auto read_first_row = [&](const std::string& timezone) -> std::string {
@@ -1407,8 +1403,7 @@ TEST_F(ParquetScannerTest, int96_timestamp_map_value_session_timezone_shift) {
     create_map_int96_parquet("int96_map.parquet", kMicros, &parquet_file_name);
     DeferOp defer([&]() { std::filesystem::remove(parquet_file_name); });
 
-    auto type_map =
-            TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TypeDescriptor::from_logical_type(TYPE_DATETIME));
+    auto type_map = TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TYPE_DATETIME_DESC);
     const SlotTypeDescInfoArray slot_infos{{"col_map", type_map, true}};
 
     auto read_first_row = [&](const std::string& timezone) -> std::string {
@@ -1439,48 +1434,37 @@ TEST_F(ParquetScannerTest, int96_timestamp_map_value_session_timezone_shift) {
 
 TEST_F(ParquetScannerTest, get_file_schema) {
     const std::vector<std::pair<std::string, std::vector<std::pair<std::string, TypeDescriptor>>>> test_cases = {
-            {test_exec_dir + "/test_data/parquet_data/int96_timestamp.parquet",
-             {{"col_datetime", TypeDescriptor::from_logical_type(TYPE_DATETIME)}}},
+            {test_exec_dir + "/test_data/parquet_data/int96_timestamp.parquet", {{"col_datetime", TYPE_DATETIME_DESC}}},
             {test_exec_dir + "/test_data/parquet_data/data_json.parquet",
-             {{"col_json_int8", TypeDescriptor::from_logical_type(TYPE_INT)},
-              {"col_json_int16", TypeDescriptor::from_logical_type(TYPE_INT)},
-              {"col_json_int32", TypeDescriptor::from_logical_type(TYPE_INT)},
-              {"col_json_int64", TypeDescriptor::from_logical_type(TYPE_BIGINT)},
-              {"col_json_uint8", TypeDescriptor::from_logical_type(TYPE_SMALLINT)},
-              {"col_json_uint16", TypeDescriptor::from_logical_type(TYPE_INT)},
-              {"col_json_uint32", TypeDescriptor::from_logical_type(TYPE_BIGINT)},
-              {"col_json_uint64", TypeDescriptor::from_logical_type(TYPE_BIGINT)},
-              {"col_json_timestamp", TypeDescriptor::from_logical_type(TYPE_DATETIME)},
-              {"col_json_timestamp_not_normalized", TypeDescriptor::from_logical_type(TYPE_DATETIME)},
-              {"col_json_float32", TypeDescriptor::from_logical_type(TYPE_FLOAT)},
-              {"col_json_float64", TypeDescriptor::from_logical_type(TYPE_DOUBLE)},
-              {"col_json_bool", TypeDescriptor::from_logical_type(TYPE_BOOLEAN)},
+             {{"col_json_int8", TYPE_INT_DESC},
+              {"col_json_int16", TYPE_INT_DESC},
+              {"col_json_int32", TYPE_INT_DESC},
+              {"col_json_int64", TYPE_BIGINT_DESC},
+              {"col_json_uint8", TYPE_SMALLINT_DESC},
+              {"col_json_uint16", TYPE_INT_DESC},
+              {"col_json_uint32", TYPE_BIGINT_DESC},
+              {"col_json_uint64", TYPE_BIGINT_DESC},
+              {"col_json_timestamp", TYPE_DATETIME_DESC},
+              {"col_json_timestamp_not_normalized", TYPE_DATETIME_DESC},
+              {"col_json_float32", TYPE_FLOAT_DESC},
+              {"col_json_float64", TYPE_DOUBLE_DESC},
+              {"col_json_bool", TYPE_BOOLEAN_DESC},
               {"col_json_string", TYPE_VARCHAR_DESC},
-              {"col_json_list", TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_INT))},
-              {"col_json_map", TypeDescriptor::create_map_type(TypeDescriptor::from_logical_type(TYPE_VARCHAR),
-                                                               TypeDescriptor::from_logical_type(TYPE_INT))},
-              {"col_json_map_timestamp",
-               TypeDescriptor::create_map_type(TypeDescriptor::from_logical_type(TYPE_DATETIME),
-                                               TypeDescriptor::from_logical_type(TYPE_INT))},
-              {"col_json_struct",
-               TypeDescriptor::create_struct_type({"s0", "s1"},
-                                                  {TypeDescriptor::from_logical_type(TYPE_INT), TYPE_VARCHAR_DESC})},
-              {"col_json_list_list", TypeDescriptor::create_array_type(TypeDescriptor::create_array_type(
-                                             TypeDescriptor::from_logical_type(TYPE_INT)))},
-              {"col_json_map_list", TypeDescriptor::create_map_type(
-                                            TYPE_VARCHAR_DESC, TypeDescriptor::create_array_type(
-                                                                       TypeDescriptor::from_logical_type(TYPE_INT)))},
-              {"col_json_list_struct",
-               TypeDescriptor::create_array_type(TypeDescriptor::create_struct_type(
-                       {"s0", "s1"}, {TypeDescriptor::from_logical_type(TYPE_INT), TYPE_VARCHAR_DESC}))},
+              {"col_json_list", TypeDescriptor::create_array_type(TYPE_INT_DESC)},
+              {"col_json_map", TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TYPE_INT_DESC)},
+              {"col_json_map_timestamp", TypeDescriptor::create_map_type(TYPE_DATETIME_DESC, TYPE_INT_DESC)},
+              {"col_json_struct", TypeDescriptor::create_struct_type({"s0", "s1"}, {TYPE_INT_DESC, TYPE_VARCHAR_DESC})},
+              {"col_json_list_list",
+               TypeDescriptor::create_array_type(TypeDescriptor::create_array_type(TYPE_INT_DESC))},
+              {"col_json_map_list",
+               TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TypeDescriptor::create_array_type(TYPE_INT_DESC))},
+              {"col_json_list_struct", TypeDescriptor::create_array_type(TypeDescriptor::create_struct_type(
+                                               {"s0", "s1"}, {TYPE_INT_DESC, TYPE_VARCHAR_DESC}))},
               {"col_json_struct_struct",
                TypeDescriptor::create_struct_type(
-                       {"s0", "s1"},
-                       {TypeDescriptor::from_logical_type(TYPE_INT),
-                        TypeDescriptor::create_struct_type({"s2"}, {TypeDescriptor::from_logical_type(TYPE_INT)})})},
+                       {"s0", "s1"}, {TYPE_INT_DESC, TypeDescriptor::create_struct_type({"s2"}, {TYPE_INT_DESC})})},
               {"col_json_struct_string",
-               TypeDescriptor::create_struct_type({"s0", "s1"},
-                                                  {TypeDescriptor::from_logical_type(TYPE_INT), TYPE_VARCHAR_DESC})},
+               TypeDescriptor::create_struct_type({"s0", "s1"}, {TYPE_INT_DESC, TYPE_VARCHAR_DESC})},
               {"col_json_json_string", TYPE_VARCHAR_DESC}}},
             {test_exec_dir + "/test_data/parquet_data/decimal.parquet",
              {{"col_decimal32", TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 9, 2)},
@@ -1488,22 +1472,18 @@ TEST_F(ParquetScannerTest, get_file_schema) {
               {"col_decimal128_byte_array", TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 38, 2)},
               {"col_decimal128_fixed_len_byte_array", TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 38, 2)}}},
             {test_exec_dir + "/test_data/parquet_data/nested.parquet",
-             {{"col_int", TypeDescriptor::from_logical_type(TYPE_BIGINT)},
-              {"col_list_int", TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_INT))},
-              {"col_list_list_int", TypeDescriptor::create_array_type(TypeDescriptor::create_array_type(
-                                            TypeDescriptor::from_logical_type(TYPE_INT)))},
-              {"col_map_string_int",
-               TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TypeDescriptor::from_logical_type(TYPE_INT))},
+             {{"col_int", TYPE_BIGINT_DESC},
+              {"col_list_int", TypeDescriptor::create_array_type(TYPE_INT_DESC)},
+              {"col_list_list_int",
+               TypeDescriptor::create_array_type(TypeDescriptor::create_array_type(TYPE_INT_DESC))},
+              {"col_map_string_int", TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TYPE_INT_DESC)},
               {"col_map_map_string_int",
-               TypeDescriptor::create_map_type(
-                       TYPE_VARCHAR_DESC, TypeDescriptor::create_map_type(
-                                                  TYPE_VARCHAR_DESC, TypeDescriptor::from_logical_type(TYPE_INT)))},
-              {"col_list_map_string_int", TypeDescriptor::create_array_type(TypeDescriptor::create_map_type(
-                                                  TYPE_VARCHAR_DESC, TypeDescriptor::from_logical_type(TYPE_INT)))},
+               TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC,
+                                               TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TYPE_INT_DESC))},
+              {"col_list_map_string_int",
+               TypeDescriptor::create_array_type(TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TYPE_INT_DESC))},
               {"col_map_string_list_int",
-               TypeDescriptor::create_map_type(
-                       TYPE_VARCHAR_DESC,
-                       TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_INT)))}}}};
+               TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TypeDescriptor::create_array_type(TYPE_INT_DESC))}}}};
 
     for (const auto& test_case : test_cases) {
         check_schema(test_case.first, test_case.second);
@@ -1599,8 +1579,7 @@ TEST_F(ParquetScannerTest, test_missing_column_with_small_chunk_size) {
                                      {"Center", "Edge", "Middle", "Center", "North"}, &parquet_file_name);
     DeferOp defer([&]() { std::filesystem::remove(parquet_file_name); });
 
-    SlotTypeDescInfoArray slot_infos = {{"zone", TYPE_VARCHAR_DESC, true},
-                                        {"missing_col", TypeDescriptor::from_logical_type(TYPE_INT), true}};
+    SlotTypeDescInfoArray slot_infos = {{"zone", TYPE_VARCHAR_DESC, true}, {"missing_col", TYPE_INT_DESC, true}};
     auto ranges = generate_ranges({parquet_file_name}, slot_infos.size(), {});
     auto* desc_tbl = DescTblHelper::generate_desc_tbl(_runtime_state, _obj_pool, {slot_infos, {}});
     auto scanner = create_parquet_scanner("UTC", desc_tbl, {}, ranges, 2, /*flexible_column_mapping=*/true);

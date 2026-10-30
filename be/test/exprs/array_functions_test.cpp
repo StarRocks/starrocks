@@ -5346,11 +5346,10 @@ TEST_F(ArrayFunctionsTest, null_or_empty) {
 // Tests for time series array generation functions
 TEST_F(ArrayFunctionsTest, array_generate_date_with_year_unit) {
     // Test DATE type with YEAR unit
-    std::vector<FunctionContext::TypeDesc> arg_types = {
-            TypeDescriptor::from_logical_type(TYPE_DATE), TypeDescriptor::from_logical_type(TYPE_DATE),
-            TypeDescriptor::from_logical_type(TYPE_INT), TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
-    auto ctx = FunctionContext::create_test_context(
-            std::move(arg_types), TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_DATE)));
+    std::vector<FunctionContext::TypeDesc> arg_types = {TYPE_DATE_DESC, TYPE_DATE_DESC, TYPE_INT_DESC,
+                                                        TYPE_VARCHAR_DESC};
+    auto ctx = FunctionContext::create_test_context(std::move(arg_types),
+                                                    TypeDescriptor::create_array_type(TYPE_DATE_DESC));
 
     // Set constant column for time unit
     auto unit_column = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("year"), 1);
@@ -5411,11 +5410,10 @@ TEST_F(ArrayFunctionsTest, array_generate_date_with_year_unit) {
 
 TEST_F(ArrayFunctionsTest, array_generate_date_with_month_unit) {
     // Test DATE type with MONTH unit
-    std::vector<FunctionContext::TypeDesc> arg_types = {
-            TypeDescriptor::from_logical_type(TYPE_DATE), TypeDescriptor::from_logical_type(TYPE_DATE),
-            TypeDescriptor::from_logical_type(TYPE_INT), TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
-    auto ctx = FunctionContext::create_test_context(
-            std::move(arg_types), TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_DATE)));
+    std::vector<FunctionContext::TypeDesc> arg_types = {TYPE_DATE_DESC, TYPE_DATE_DESC, TYPE_INT_DESC,
+                                                        TYPE_VARCHAR_DESC};
+    auto ctx = FunctionContext::create_test_context(std::move(arg_types),
+                                                    TypeDescriptor::create_array_type(TYPE_DATE_DESC));
 
     auto unit_column = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("month"), 1);
     ctx->set_constant_columns({nullptr, nullptr, nullptr, unit_column});
@@ -5450,11 +5448,10 @@ TEST_F(ArrayFunctionsTest, array_generate_date_with_month_unit) {
 
 TEST_F(ArrayFunctionsTest, array_generate_date_with_day_unit) {
     // Test DATE type with DAY unit
-    std::vector<FunctionContext::TypeDesc> arg_types = {
-            TypeDescriptor::from_logical_type(TYPE_DATE), TypeDescriptor::from_logical_type(TYPE_DATE),
-            TypeDescriptor::from_logical_type(TYPE_INT), TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
-    auto ctx = FunctionContext::create_test_context(
-            std::move(arg_types), TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_DATE)));
+    std::vector<FunctionContext::TypeDesc> arg_types = {TYPE_DATE_DESC, TYPE_DATE_DESC, TYPE_INT_DESC,
+                                                        TYPE_VARCHAR_DESC};
+    auto ctx = FunctionContext::create_test_context(std::move(arg_types),
+                                                    TypeDescriptor::create_array_type(TYPE_DATE_DESC));
 
     auto unit_column = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("day"), 1);
     ctx->set_constant_columns({nullptr, nullptr, nullptr, unit_column});
@@ -5490,11 +5487,10 @@ TEST_F(ArrayFunctionsTest, array_generate_date_with_day_unit) {
 
 TEST_F(ArrayFunctionsTest, array_generate_datetime_with_hour_unit) {
     // Test DATETIME type with HOUR unit
-    std::vector<FunctionContext::TypeDesc> arg_types = {
-            TypeDescriptor::from_logical_type(TYPE_DATETIME), TypeDescriptor::from_logical_type(TYPE_DATETIME),
-            TypeDescriptor::from_logical_type(TYPE_INT), TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
-    auto ctx = FunctionContext::create_test_context(
-            std::move(arg_types), TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_DATETIME)));
+    std::vector<FunctionContext::TypeDesc> arg_types = {TYPE_DATETIME_DESC, TYPE_DATETIME_DESC, TYPE_INT_DESC,
+                                                        TYPE_VARCHAR_DESC};
+    auto ctx = FunctionContext::create_test_context(std::move(arg_types),
+                                                    TypeDescriptor::create_array_type(TYPE_DATETIME_DESC));
 
     auto unit_column = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("hour"), 1);
     ctx->set_constant_columns({nullptr, nullptr, nullptr, unit_column});
@@ -5528,11 +5524,10 @@ TEST_F(ArrayFunctionsTest, array_generate_datetime_with_hour_unit) {
 
 TEST_F(ArrayFunctionsTest, array_generate_datetime_with_minute_unit) {
     // Test DATETIME type with MINUTE unit
-    std::vector<FunctionContext::TypeDesc> arg_types = {
-            TypeDescriptor::from_logical_type(TYPE_DATETIME), TypeDescriptor::from_logical_type(TYPE_DATETIME),
-            TypeDescriptor::from_logical_type(TYPE_INT), TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
-    auto ctx = FunctionContext::create_test_context(
-            std::move(arg_types), TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_DATETIME)));
+    std::vector<FunctionContext::TypeDesc> arg_types = {TYPE_DATETIME_DESC, TYPE_DATETIME_DESC, TYPE_INT_DESC,
+                                                        TYPE_VARCHAR_DESC};
+    auto ctx = FunctionContext::create_test_context(std::move(arg_types),
+                                                    TypeDescriptor::create_array_type(TYPE_DATETIME_DESC));
 
     auto unit_column = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("minute"), 1);
     ctx->set_constant_columns({nullptr, nullptr, nullptr, unit_column});
@@ -5569,11 +5564,10 @@ TEST_F(ArrayFunctionsTest, array_generate_datetime_with_minute_unit) {
 
 TEST_F(ArrayFunctionsTest, array_generate_datetime_with_second_unit) {
     // Test DATETIME type with SECOND unit
-    std::vector<FunctionContext::TypeDesc> arg_types = {
-            TypeDescriptor::from_logical_type(TYPE_DATETIME), TypeDescriptor::from_logical_type(TYPE_DATETIME),
-            TypeDescriptor::from_logical_type(TYPE_INT), TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
-    auto ctx = FunctionContext::create_test_context(
-            std::move(arg_types), TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_DATETIME)));
+    std::vector<FunctionContext::TypeDesc> arg_types = {TYPE_DATETIME_DESC, TYPE_DATETIME_DESC, TYPE_INT_DESC,
+                                                        TYPE_VARCHAR_DESC};
+    auto ctx = FunctionContext::create_test_context(std::move(arg_types),
+                                                    TypeDescriptor::create_array_type(TYPE_DATETIME_DESC));
 
     auto unit_column = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("second"), 1);
     ctx->set_constant_columns({nullptr, nullptr, nullptr, unit_column});
@@ -5608,11 +5602,10 @@ TEST_F(ArrayFunctionsTest, array_generate_datetime_with_second_unit) {
 
 TEST_F(ArrayFunctionsTest, array_generate_date_with_null_values) {
     // Test DATE type with NULL values
-    std::vector<FunctionContext::TypeDesc> arg_types = {
-            TypeDescriptor::from_logical_type(TYPE_DATE), TypeDescriptor::from_logical_type(TYPE_DATE),
-            TypeDescriptor::from_logical_type(TYPE_INT), TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
-    auto ctx = FunctionContext::create_test_context(
-            std::move(arg_types), TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_DATE)));
+    std::vector<FunctionContext::TypeDesc> arg_types = {TYPE_DATE_DESC, TYPE_DATE_DESC, TYPE_INT_DESC,
+                                                        TYPE_VARCHAR_DESC};
+    auto ctx = FunctionContext::create_test_context(std::move(arg_types),
+                                                    TypeDescriptor::create_array_type(TYPE_DATE_DESC));
 
     auto unit_column = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("day"), 1);
     ctx->set_constant_columns({nullptr, nullptr, nullptr, unit_column});
@@ -5669,11 +5662,10 @@ TEST_F(ArrayFunctionsTest, array_generate_date_with_null_values) {
 
 TEST_F(ArrayFunctionsTest, array_generate_date_with_week_quarter_units) {
     // Test DATE type with WEEK and QUARTER units
-    std::vector<FunctionContext::TypeDesc> arg_types = {
-            TypeDescriptor::from_logical_type(TYPE_DATE), TypeDescriptor::from_logical_type(TYPE_DATE),
-            TypeDescriptor::from_logical_type(TYPE_INT), TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
-    auto ctx = FunctionContext::create_test_context(
-            std::move(arg_types), TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_DATE)));
+    std::vector<FunctionContext::TypeDesc> arg_types = {TYPE_DATE_DESC, TYPE_DATE_DESC, TYPE_INT_DESC,
+                                                        TYPE_VARCHAR_DESC};
+    auto ctx = FunctionContext::create_test_context(std::move(arg_types),
+                                                    TypeDescriptor::create_array_type(TYPE_DATE_DESC));
 
     // Test WEEK unit
     auto unit_column = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("week"), 1);
@@ -5709,11 +5701,10 @@ TEST_F(ArrayFunctionsTest, array_generate_date_with_week_quarter_units) {
 
 TEST_F(ArrayFunctionsTest, array_generate_datetime_with_year_unit) {
     // Test DATETIME type with YEAR unit
-    std::vector<FunctionContext::TypeDesc> arg_types = {
-            TypeDescriptor::from_logical_type(TYPE_DATETIME), TypeDescriptor::from_logical_type(TYPE_DATETIME),
-            TypeDescriptor::from_logical_type(TYPE_INT), TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
-    auto ctx = FunctionContext::create_test_context(
-            std::move(arg_types), TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_DATETIME)));
+    std::vector<FunctionContext::TypeDesc> arg_types = {TYPE_DATETIME_DESC, TYPE_DATETIME_DESC, TYPE_INT_DESC,
+                                                        TYPE_VARCHAR_DESC};
+    auto ctx = FunctionContext::create_test_context(std::move(arg_types),
+                                                    TypeDescriptor::create_array_type(TYPE_DATETIME_DESC));
 
     auto unit_column = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("year"), 1);
     ctx->set_constant_columns({nullptr, nullptr, nullptr, unit_column});
@@ -5748,11 +5739,10 @@ TEST_F(ArrayFunctionsTest, array_generate_datetime_with_year_unit) {
 
 TEST_F(ArrayFunctionsTest, array_generate_datetime_with_month_unit) {
     // Test DATETIME type with MONTH unit
-    std::vector<FunctionContext::TypeDesc> arg_types = {
-            TypeDescriptor::from_logical_type(TYPE_DATETIME), TypeDescriptor::from_logical_type(TYPE_DATETIME),
-            TypeDescriptor::from_logical_type(TYPE_INT), TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
-    auto ctx = FunctionContext::create_test_context(
-            std::move(arg_types), TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_DATETIME)));
+    std::vector<FunctionContext::TypeDesc> arg_types = {TYPE_DATETIME_DESC, TYPE_DATETIME_DESC, TYPE_INT_DESC,
+                                                        TYPE_VARCHAR_DESC};
+    auto ctx = FunctionContext::create_test_context(std::move(arg_types),
+                                                    TypeDescriptor::create_array_type(TYPE_DATETIME_DESC));
 
     auto unit_column = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("month"), 1);
     ctx->set_constant_columns({nullptr, nullptr, nullptr, unit_column});
@@ -5787,11 +5777,10 @@ TEST_F(ArrayFunctionsTest, array_generate_datetime_with_month_unit) {
 
 TEST_F(ArrayFunctionsTest, array_generate_datetime_with_day_unit) {
     // Test DATETIME type with DAY unit
-    std::vector<FunctionContext::TypeDesc> arg_types = {
-            TypeDescriptor::from_logical_type(TYPE_DATETIME), TypeDescriptor::from_logical_type(TYPE_DATETIME),
-            TypeDescriptor::from_logical_type(TYPE_INT), TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
-    auto ctx = FunctionContext::create_test_context(
-            std::move(arg_types), TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_DATETIME)));
+    std::vector<FunctionContext::TypeDesc> arg_types = {TYPE_DATETIME_DESC, TYPE_DATETIME_DESC, TYPE_INT_DESC,
+                                                        TYPE_VARCHAR_DESC};
+    auto ctx = FunctionContext::create_test_context(std::move(arg_types),
+                                                    TypeDescriptor::create_array_type(TYPE_DATETIME_DESC));
 
     auto unit_column = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("day"), 1);
     ctx->set_constant_columns({nullptr, nullptr, nullptr, unit_column});
@@ -5825,11 +5814,10 @@ TEST_F(ArrayFunctionsTest, array_generate_datetime_with_day_unit) {
 
 TEST_F(ArrayFunctionsTest, array_generate_datetime_with_week_unit) {
     // Test DATETIME type with WEEK unit
-    std::vector<FunctionContext::TypeDesc> arg_types = {
-            TypeDescriptor::from_logical_type(TYPE_DATETIME), TypeDescriptor::from_logical_type(TYPE_DATETIME),
-            TypeDescriptor::from_logical_type(TYPE_INT), TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
-    auto ctx = FunctionContext::create_test_context(
-            std::move(arg_types), TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_DATETIME)));
+    std::vector<FunctionContext::TypeDesc> arg_types = {TYPE_DATETIME_DESC, TYPE_DATETIME_DESC, TYPE_INT_DESC,
+                                                        TYPE_VARCHAR_DESC};
+    auto ctx = FunctionContext::create_test_context(std::move(arg_types),
+                                                    TypeDescriptor::create_array_type(TYPE_DATETIME_DESC));
 
     auto unit_column = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("week"), 1);
     ctx->set_constant_columns({nullptr, nullptr, nullptr, unit_column});
@@ -5864,11 +5852,10 @@ TEST_F(ArrayFunctionsTest, array_generate_datetime_with_week_unit) {
 
 TEST_F(ArrayFunctionsTest, array_generate_datetime_with_millisecond_unit) {
     // Test DATETIME type with MILLISECOND unit
-    std::vector<FunctionContext::TypeDesc> arg_types = {
-            TypeDescriptor::from_logical_type(TYPE_DATETIME), TypeDescriptor::from_logical_type(TYPE_DATETIME),
-            TypeDescriptor::from_logical_type(TYPE_INT), TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
-    auto ctx = FunctionContext::create_test_context(
-            std::move(arg_types), TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_DATETIME)));
+    std::vector<FunctionContext::TypeDesc> arg_types = {TYPE_DATETIME_DESC, TYPE_DATETIME_DESC, TYPE_INT_DESC,
+                                                        TYPE_VARCHAR_DESC};
+    auto ctx = FunctionContext::create_test_context(std::move(arg_types),
+                                                    TypeDescriptor::create_array_type(TYPE_DATETIME_DESC));
 
     auto unit_column = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("millisecond"), 1);
     ctx->set_constant_columns({nullptr, nullptr, nullptr, unit_column});
@@ -5916,11 +5903,10 @@ TEST_F(ArrayFunctionsTest, array_generate_datetime_with_millisecond_unit) {
 
 TEST_F(ArrayFunctionsTest, array_generate_datetime_with_microsecond_unit) {
     // Test DATETIME type with MICROSECOND unit
-    std::vector<FunctionContext::TypeDesc> arg_types = {
-            TypeDescriptor::from_logical_type(TYPE_DATETIME), TypeDescriptor::from_logical_type(TYPE_DATETIME),
-            TypeDescriptor::from_logical_type(TYPE_INT), TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
-    auto ctx = FunctionContext::create_test_context(
-            std::move(arg_types), TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_DATETIME)));
+    std::vector<FunctionContext::TypeDesc> arg_types = {TYPE_DATETIME_DESC, TYPE_DATETIME_DESC, TYPE_INT_DESC,
+                                                        TYPE_VARCHAR_DESC};
+    auto ctx = FunctionContext::create_test_context(std::move(arg_types),
+                                                    TypeDescriptor::create_array_type(TYPE_DATETIME_DESC));
 
     auto unit_column = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("microsecond"), 1);
     ctx->set_constant_columns({nullptr, nullptr, nullptr, unit_column});
