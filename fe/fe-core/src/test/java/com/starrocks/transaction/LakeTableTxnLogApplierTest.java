@@ -15,15 +15,37 @@
 package com.starrocks.transaction;
 
 import com.google.common.collect.Lists;
+<<<<<<< HEAD
+=======
+import com.starrocks.alter.reshard.TabletReshardJobMgr;
+import com.starrocks.catalog.ColumnId;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.OlapTable;
+>>>>>>> 4d43676 ([BugFix] Prevent incorrect global dictionary renewal across FEs (#79511))
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.compaction.CompactionTxnCommitAttachment;
+<<<<<<< HEAD
+=======
+import com.starrocks.proto.TabletStatPB;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.optimizer.statistics.IDictManager;
+import com.starrocks.thrift.TStorageMedium;
+>>>>>>> 4d43676 ([BugFix] Prevent incorrect global dictionary renewal across FEs (#79511))
 import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.mockito.MockedStatic;
+import org.mockito.Mockito;
 
+<<<<<<< HEAD
+=======
+import java.util.Arrays;
+import java.util.HashMap;
+>>>>>>> 4d43676 ([BugFix] Prevent incorrect global dictionary renewal across FEs (#79511))
 import java.util.List;
 
 public class LakeTableTxnLogApplierTest extends LakeTableTestHelper {
@@ -49,6 +71,33 @@ public class LakeTableTxnLogApplierTest extends LakeTableTestHelper {
         Assertions.assertEquals(partitionCommitInfo.getVersionTime(),
                 table.getPartition(partitionId).getDefaultPhysicalPartition()
                         .getVisibleVersionTime());
+    }
+
+    @Test
+    public void testDictionaryIdentityFallbackForWholeList() {
+        for (List<Long> identities : Arrays.<List<Long>>asList(null, List.of(), List.of(0L, -7L))) {
+            LakeTable table = buildLakeTable();
+            TransactionState state = newTransactionState();
+            state.setTransactionStatus(TransactionStatus.VISIBLE);
+            ColumnId a = ColumnId.create("a");
+            ColumnId b = ColumnId.create("b");
+            PartitionCommitInfo partition = new PartitionCommitInfo(physicalPartitionId, 2, 200,
+                    List.of(), List.of(a, b), List.of(100L, 101L));
+            if (identities != null) {
+                partition.setDictContentIdentities(identities);
+            }
+            TableCommitInfo commit = new TableCommitInfo(tableId);
+            commit.addPartitionCommitInfo(partition);
+            IDictManager manager = Mockito.mock(IDictManager.class);
+            try (MockedStatic<IDictManager> mocked = Mockito.mockStatic(IDictManager.class)) {
+                mocked.when(IDictManager::getInstance).thenReturn(manager);
+                new LakeTableTxnLogApplier(table).applyVisibleLog(state, commit, null);
+                boolean hasIdentity = identities != null && !identities.isEmpty();
+                Mockito.verify(manager).updateGlobalDict(table, a, 100L, 200L, hasIdentity ? 0L : null);
+                Mockito.verify(manager).updateGlobalDict(table, b, 101L, 200L, hasIdentity ? -7L : null);
+                Mockito.verifyNoMoreInteractions(manager);
+            }
+        }
     }
 
     @Test

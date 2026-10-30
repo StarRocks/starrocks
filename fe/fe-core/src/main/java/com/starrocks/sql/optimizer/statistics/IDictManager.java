@@ -27,7 +27,8 @@ public interface IDictManager {
     // itself: a view's base tables may live in a database the statement never names.
     boolean hasGlobalDict(OlapTable table, ColumnId columnName, long versionTime);
 
-    void updateGlobalDict(OlapTable table, ColumnId columnName, long collectedVersion, long versionTime);
+    void updateGlobalDict(OlapTable table, ColumnId columnName, long collectedVersion,
+                          long versionTime, Long contentIdentity);
 
     boolean hasGlobalDict(long tableId, ColumnId columnName);
 

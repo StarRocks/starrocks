@@ -44,7 +44,8 @@ public class MockDictManager implements IDictManager {
     }
 
     @Override
-    public void updateGlobalDict(OlapTable table, ColumnId columnName, long collectedVersion, long versionTime) {
+    public void updateGlobalDict(OlapTable table, ColumnId columnName, long collectedVersion,
+                                 long versionTime, Long contentIdentity) {
     }
 
     @Override
