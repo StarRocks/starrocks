@@ -29,7 +29,7 @@ TEST_F(StatisticsHelperTest, DecodeBooleanMinMax) {
     ParquetField field;
     field.physical_type = tparquet::Type::type::BOOLEAN;
 
-    TypeDescriptor type = TypeDescriptor::from_logical_type(LogicalType::TYPE_BOOLEAN);
+    TypeDescriptor type = TYPE_BOOLEAN_DESC;
 
     MutableColumnPtr min_column = ColumnHelper::create_column(type, true);
     MutableColumnPtr max_column = ColumnHelper::create_column(type, true);
@@ -56,7 +56,7 @@ TEST_F(StatisticsHelperTest, DecodeBooleanIgnoresPaddingBits) {
     ParquetField field;
     field.physical_type = tparquet::Type::type::BOOLEAN;
 
-    TypeDescriptor type = TypeDescriptor::from_logical_type(LogicalType::TYPE_BOOLEAN);
+    TypeDescriptor type = TYPE_BOOLEAN_DESC;
     MutableColumnPtr column = ColumnHelper::create_column(type, true);
 
     // PLAIN BOOLEAN encoding is bit-packed LSB first, so only bit 0 carries the value.
@@ -76,7 +76,7 @@ TEST_F(StatisticsHelperTest, DecodeBooleanNullPage) {
     ParquetField field;
     field.physical_type = tparquet::Type::type::BOOLEAN;
 
-    TypeDescriptor type = TypeDescriptor::from_logical_type(LogicalType::TYPE_BOOLEAN);
+    TypeDescriptor type = TYPE_BOOLEAN_DESC;
     MutableColumnPtr column = ColumnHelper::create_column(type, true);
 
     std::vector<std::string> values{std::string(), std::string("\x01", 1)};
@@ -91,7 +91,7 @@ TEST_F(StatisticsHelperTest, DecodeBooleanEmptyValueReturnsCorruption) {
     ParquetField field;
     field.physical_type = tparquet::Type::type::BOOLEAN;
 
-    TypeDescriptor type = TypeDescriptor::from_logical_type(LogicalType::TYPE_BOOLEAN);
+    TypeDescriptor type = TYPE_BOOLEAN_DESC;
     MutableColumnPtr column = ColumnHelper::create_column(type, true);
 
     std::vector<std::string> values{std::string()};

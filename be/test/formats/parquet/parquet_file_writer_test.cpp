@@ -481,7 +481,7 @@ TEST(ParquetLevelBuilderTest, DatetimeOffsetsMatchReference) {
                                     "c0", ::parquet::Repetition::OPTIONAL,
                                     ::parquet::LogicalType::Timestamp(false, ::parquet::LogicalType::TimeUnit::MICROS),
                                     ::parquet::Type::INT64);
-            parquet::LevelBuilder builder(TypeDescriptor::from_logical_type(TYPE_DATETIME), node, zone, false, int96);
+            parquet::LevelBuilder builder(TYPE_DATETIME_DESC, node, zone, false, int96);
             ASSERT_OK(builder.init());
             bool called = false;
             ASSERT_OK(builder.write(parquet::LevelBuilderContext(n), column, [&](const parquet::LevelBuilderResult& r) {

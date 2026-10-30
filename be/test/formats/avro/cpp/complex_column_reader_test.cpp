@@ -227,7 +227,7 @@ TEST_F(ComplexColumnReaderTest, test_map_nullable_timestamp_values) {
 }
 
 TEST_F(ComplexColumnReaderTest, test_adaptive_reader_rejects_non_adaptive_column) {
-    auto type_desc = TypeDescriptor::from_logical_type(TYPE_INT);
+    auto type_desc = TYPE_INT_DESC;
     auto reader = get_column_reader(type_desc, false);
     auto column = ColumnHelper::create_column(type_desc, true, false, 0, false);
     avro::GenericDatum datum(int32_t{10});
@@ -340,10 +340,10 @@ TEST_F(ComplexColumnReaderTest, test_struct_unknown_field_type_skips_field_decod
     }
     auto datum = avro::GenericDatum(record_schema, record_datum);
 
-    TypeDescriptor reader_type_desc = TypeDescriptor::create_struct_type(
-            {"int_col", "ts_col"}, {TypeDescriptor::from_logical_type(TYPE_INT), TypeDescriptor(TYPE_UNKNOWN)});
-    TypeDescriptor column_type_desc = TypeDescriptor::create_struct_type(
-            {"int_col", "ts_col"}, {TypeDescriptor::from_logical_type(TYPE_INT), TypeDescriptor{TYPE_NULL}});
+    TypeDescriptor reader_type_desc =
+            TypeDescriptor::create_struct_type({"int_col", "ts_col"}, {TYPE_INT_DESC, TypeDescriptor(TYPE_UNKNOWN)});
+    TypeDescriptor column_type_desc =
+            TypeDescriptor::create_struct_type({"int_col", "ts_col"}, {TYPE_INT_DESC, TypeDescriptor{TYPE_NULL}});
     auto column = create_adaptive_nullable_column(column_type_desc);
     auto reader = get_column_reader(reader_type_desc, false);
 

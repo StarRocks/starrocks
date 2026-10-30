@@ -94,8 +94,8 @@ TEST_F(ColumnHelperTest, align_return_type) {
     auto nullable_column = create_nullable_column();
     auto not_null_column = create_column();
     auto col_size = not_null_column->size();
-    nullable_column->append(*ColumnHelper::align_return_type(
-            std::move(not_null_column), TypeDescriptor::from_logical_type(TYPE_VARCHAR), col_size, true));
+    nullable_column->append(
+            *ColumnHelper::align_return_type(std::move(not_null_column), TYPE_VARCHAR_DESC, col_size, true));
     ASSERT_TRUE(nullable_column->is_nullable());
     ASSERT_FALSE(nullable_column->is_constant());
 }
