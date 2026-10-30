@@ -70,7 +70,7 @@ protected:
 };
 
 TEST_F(ColumnHelperTest, mark_binary_columns_skips_const_null) {
-    const auto binary_type = TypeDescriptor::from_logical_type(TYPE_VARBINARY);
+    const auto binary_type = TYPE_VARBINARY_DESC;
     for (const auto& type : {binary_type, TypeDescriptor::create_array_type(binary_type)}) {
         ColumnPtr column = ColumnHelper::create_const_null_column(1);
         ColumnHelper::mark_binary_columns(column, type);

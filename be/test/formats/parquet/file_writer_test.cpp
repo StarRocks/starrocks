@@ -915,7 +915,7 @@ TEST_F(FileWriterTest, TestWriteStructOfMapNullWithOffset) {
 }
 
 TEST_F(FileWriterTest, TestWriteVarbinary) {
-    auto type_varbinary = TypeDescriptor::from_logical_type(TYPE_VARBINARY);
+    auto type_varbinary = TYPE_VARBINARY_DESC;
     std::vector<TypeDescriptor> type_descs{type_varbinary};
 
     auto chunk = std::make_shared<Chunk>();
