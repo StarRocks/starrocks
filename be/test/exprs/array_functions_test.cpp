@@ -116,10 +116,6 @@ protected:
     template <typename CppType>
     void _check_array(const Buffer<CppType>& check_values, const DatumArray& value);
 
-    template <typename CppType>
-    void _check_array_nullable(const Buffer<CppType>& check_values, const Buffer<uint8_t>& nulls,
-                               const DatumArray& value);
-
     FunctionContext _ctx;
 };
 
@@ -161,33 +157,6 @@ void ArrayFunctionsTest::_check_array(const Buffer<CppType>& check_values, const
     } else if constexpr (std::is_same_v<CppType, Slice>) {
         for (size_t i = 0; i < value.size(); i++) {
             ASSERT_EQ(check_values[i], value[i].get_slice());
-        }
-    } else {
-        ASSERT_TRUE(false);
-    }
-}
-
-template <typename CppType>
-void ArrayFunctionsTest::_check_array_nullable(const Buffer<CppType>& check_values, const Buffer<uint8_t>& nulls,
-                                               const DatumArray& value) {
-    ASSERT_EQ(check_values.size(), value.size());
-    if constexpr (std::is_same_v<CppType, int32_t>) {
-        for (size_t i = 0; i < value.size(); i++) {
-            if (nulls[i]) {
-                ASSERT_TRUE(value[i].is_null());
-            } else {
-                ASSERT_FALSE(value[i].is_null());
-                ASSERT_EQ(check_values[i], value[i].get_int32());
-            }
-        }
-    } else if constexpr (std::is_same_v<CppType, Slice>) {
-        for (size_t i = 0; i < value.size(); i++) {
-            if (nulls[i]) {
-                ASSERT_TRUE(value[i].is_null());
-            } else {
-                ASSERT_FALSE(value[i].is_null());
-                ASSERT_EQ(check_values[i], value[i].get_slice());
-            }
         }
     } else {
         ASSERT_TRUE(false);
@@ -2928,9 +2897,9 @@ TEST_F(ArrayFunctionsTest, array_reverse_int) {
     auto dest_column = reverse.process(nullptr, {src_column});
 
     ASSERT_EQ(dest_column->size(), 3);
-    _check_array<int32_t>({6, 3, 5}, dest_column->get(0).get_array());
-    _check_array<int32_t>({8, 7, 3, 2}, dest_column->get(1).get_array());
-    _check_array<int32_t>({1, 2, 3, 4}, dest_column->get(2).get_array());
+    ASSERT_EQ("[6,3,5]", dest_column->debug_item(0));
+    ASSERT_EQ("[8,7,3,2]", dest_column->debug_item(1));
+    ASSERT_EQ("[1,2,3,4]", dest_column->debug_item(2));
 }
 
 TEST_F(ArrayFunctionsTest, array_reverse_string) {
@@ -2942,9 +2911,9 @@ TEST_F(ArrayFunctionsTest, array_reverse_string) {
     auto dest_column = reverse.process(nullptr, {src_column});
 
     ASSERT_EQ(dest_column->size(), 3);
-    _check_array<Slice>({"4325", "66", "352"}, dest_column->get(0).get_array());
-    _check_array<Slice>({"43251", "8", "99", "235"}, dest_column->get(1).get_array());
-    _check_array<Slice>({"112", "22", "33", "44"}, dest_column->get(2).get_array());
+    ASSERT_EQ("['4325','66','352']", dest_column->debug_item(0));
+    ASSERT_EQ("['43251','8','99','235']", dest_column->debug_item(1));
+    ASSERT_EQ("['112','22','33','44']", dest_column->debug_item(2));
 }
 
 TEST_F(ArrayFunctionsTest, array_reverse_nullable_elements) {
@@ -2958,9 +2927,9 @@ TEST_F(ArrayFunctionsTest, array_reverse_nullable_elements) {
     auto dest_column = reverse.process(nullptr, {src_column});
 
     ASSERT_EQ(dest_column->size(), 3);
-    _check_array_nullable<int32_t>({6, 3, 0, 5}, {0, 0, 1, 0}, dest_column->get(0).get_array());
-    _check_array_nullable<int32_t>({0, 0, 3, 2}, {1, 1, 0, 0}, dest_column->get(1).get_array());
-    _check_array_nullable<int32_t>({0, 0, 0, 0}, {1, 1, 1, 1}, dest_column->get(2).get_array());
+    ASSERT_EQ("[6,3,NULL,5]", dest_column->debug_item(0));
+    ASSERT_EQ("[NULL,NULL,3,2]", dest_column->debug_item(1));
+    ASSERT_EQ("[NULL,NULL,NULL,NULL]", dest_column->debug_item(2));
 }
 
 TEST_F(ArrayFunctionsTest, array_reverse_nullable_array) {
@@ -2972,9 +2941,9 @@ TEST_F(ArrayFunctionsTest, array_reverse_nullable_array) {
     auto dest_column = reverse.process(nullptr, {src_column});
 
     ASSERT_EQ(dest_column->size(), 3);
-    _check_array_nullable<int32_t>({6, 3, 0, 5}, {0, 0, 1, 0}, dest_column->get(0).get_array());
+    ASSERT_EQ("[6,3,NULL,5]", dest_column->debug_item(0));
     ASSERT_TRUE(dest_column->get(1).is_null());
-    _check_array_nullable<int32_t>({0, 0, 0, 0}, {1, 1, 1, 1}, dest_column->get(2).get_array());
+    ASSERT_EQ("[NULL,NULL,NULL,NULL]", dest_column->debug_item(2));
 }
 
 TEST_F(ArrayFunctionsTest, array_reverse_only_null) {
@@ -3032,9 +3001,9 @@ TEST_F(ArrayFunctionsTest, array_difference_boolean) {
     auto dest_column = call_array_difference(TYPE_BOOLEAN, src_column);
 
     ASSERT_EQ(dest_column->size(), 3);
-    _check_array<int64_t>({0, -2, 3}, dest_column->get(0).get_array());
-    _check_array<int64_t>({0, 1, 4, 1}, dest_column->get(1).get_array());
-    _check_array<int64_t>({0, -1, -1, -1}, dest_column->get(2).get_array());
+    ASSERT_EQ("[0,-2,3]", dest_column->debug_item(0));
+    ASSERT_EQ("[0,1,4,1]", dest_column->debug_item(1));
+    ASSERT_EQ("[0,-1,-1,-1]", dest_column->debug_item(2));
 }
 
 TEST_F(ArrayFunctionsTest, array_difference_boolean_with_entry_null) {
@@ -3071,9 +3040,9 @@ TEST_F(ArrayFunctionsTest, array_difference_int) {
     auto dest_column = call_array_difference(TYPE_INT, src_column);
 
     ASSERT_EQ(dest_column->size(), 3);
-    _check_array<int64_t>({0, -2, 3}, dest_column->get(0).get_array());
-    _check_array<int64_t>({0, 1, 4, 1}, dest_column->get(1).get_array());
-    _check_array<int64_t>({0, -1, -1, -1}, dest_column->get(2).get_array());
+    ASSERT_EQ("[0,-2,3]", dest_column->debug_item(0));
+    ASSERT_EQ("[0,1,4,1]", dest_column->debug_item(1));
+    ASSERT_EQ("[0,-1,-1,-1]", dest_column->debug_item(2));
 }
 
 TEST_F(ArrayFunctionsTest, array_difference_int_overflow) {
@@ -3086,8 +3055,8 @@ TEST_F(ArrayFunctionsTest, array_difference_int_overflow) {
     auto dest_column = call_array_difference(TYPE_INT, src_column);
 
     ASSERT_EQ(dest_column->size(), 2);
-    _check_array<int64_t>({0, -4294967295}, dest_column->get(0).get_array());
-    _check_array<int64_t>({0, 4294967295}, dest_column->get(1).get_array());
+    ASSERT_EQ("[0,-4294967295]", dest_column->debug_item(0));
+    ASSERT_EQ("[0,4294967295]", dest_column->debug_item(1));
 }
 
 TEST_F(ArrayFunctionsTest, array_difference_int_with_entry_null) {
@@ -3122,9 +3091,9 @@ TEST_F(ArrayFunctionsTest, array_difference_bigint) {
     auto dest_column = call_array_difference(TYPE_BIGINT, src_column);
 
     ASSERT_EQ(dest_column->size(), 3);
-    _check_array<int64_t>({(int64_t)0, (int64_t)-2, (int64_t)3}, dest_column->get(0).get_array());
-    _check_array<int64_t>({(int64_t)0, (int64_t)1, (int64_t)4, (int64_t)1}, dest_column->get(1).get_array());
-    _check_array<int64_t>({(int64_t)0, (int64_t)-1, (int64_t)-1, (int64_t)-1}, dest_column->get(2).get_array());
+    ASSERT_EQ("[0,-2,3]", dest_column->debug_item(0));
+    ASSERT_EQ("[0,1,4,1]", dest_column->debug_item(1));
+    ASSERT_EQ("[0,-1,-1,-1]", dest_column->debug_item(2));
 }
 
 TEST_F(ArrayFunctionsTest, array_difference_bigint_with_entry_null) {
@@ -3159,9 +3128,9 @@ TEST_F(ArrayFunctionsTest, array_difference_double) {
     auto dest_column = call_array_difference(TYPE_DOUBLE, src_column);
 
     ASSERT_EQ(dest_column->size(), 3);
-    _check_array<double>({(double)0, (double)-2, (double)3}, dest_column->get(0).get_array());
-    _check_array<double>({(double)0, (double)1, (double)4, (double)1}, dest_column->get(1).get_array());
-    _check_array<double>({(double)0, (double)-1, (double)-1, (double)-1}, dest_column->get(2).get_array());
+    ASSERT_EQ("[0,-2,3]", dest_column->debug_item(0));
+    ASSERT_EQ("[0,1,4,1]", dest_column->debug_item(1));
+    ASSERT_EQ("[0,-1,-1,-1]", dest_column->debug_item(2));
 }
 
 TEST_F(ArrayFunctionsTest, array_slice_int) {
@@ -3181,15 +3150,15 @@ TEST_F(ArrayFunctionsTest, array_slice_int) {
     auto dest_column = ArrayFunctions::array_slice(nullptr, {src_column, offset_column, length_column}).value();
 
     ASSERT_EQ(dest_column->size(), 8);
-    _check_array<int32_t>({(int32_t)5}, dest_column->get(0).get_array());
-    _check_array<int32_t>({(int32_t)3, (int32_t)7, (int32_t)8}, dest_column->get(1).get_array());
-    _check_array<int32_t>({(int32_t)2, (int32_t)1}, dest_column->get(2).get_array());
+    ASSERT_EQ("[5]", dest_column->debug_item(0));
+    ASSERT_EQ("[3,7,8]", dest_column->debug_item(1));
+    ASSERT_EQ("[2,1]", dest_column->debug_item(2));
     ASSERT_TRUE(dest_column->get(3).is_null());
     ASSERT_TRUE(dest_column->get(4).get_array()[0].is_null());
     ASSERT_EQ(2, dest_column->get(4).get_array()[1].get_int32());
-    _check_array<int32_t>({(int32_t)4, (int32_t)5}, dest_column->get(5).get_array());
-    _check_array<int32_t>({(int32_t)1}, dest_column->get(6).get_array());
-    _check_array<int32_t>({}, dest_column->get(7).get_array());
+    ASSERT_EQ("[4,5]", dest_column->debug_item(5));
+    ASSERT_EQ("[1]", dest_column->debug_item(6));
+    ASSERT_EQ("[]", dest_column->debug_item(7));
 }
 
 TEST_F(ArrayFunctionsTest, array_slice_bigint) {
@@ -3203,9 +3172,9 @@ TEST_F(ArrayFunctionsTest, array_slice_bigint) {
     auto dest_column = ArrayFunctions::array_slice(nullptr, {src_column, offset_column, length_column}).value();
 
     ASSERT_EQ(dest_column->size(), 5);
-    _check_array<int64_t>({(int64_t)5}, dest_column->get(0).get_array());
-    _check_array<int64_t>({(int64_t)3, (int64_t)7, (int64_t)8}, dest_column->get(1).get_array());
-    _check_array<int64_t>({(int64_t)2, (int64_t)1}, dest_column->get(2).get_array());
+    ASSERT_EQ("[5]", dest_column->debug_item(0));
+    ASSERT_EQ("[3,7,8]", dest_column->debug_item(1));
+    ASSERT_EQ("[2,1]", dest_column->debug_item(2));
     ASSERT_TRUE(dest_column->get(3).is_null());
     ASSERT_TRUE(dest_column->get(4).get_array()[0].is_null());
     ASSERT_EQ(2, dest_column->get(4).get_array()[1].get_int64());
@@ -3222,9 +3191,9 @@ TEST_F(ArrayFunctionsTest, array_slice_float) {
     auto dest_column = ArrayFunctions::array_slice(nullptr, {src_column, offset_column, length_column}).value();
 
     ASSERT_EQ(dest_column->size(), 5);
-    _check_array<float>({(float)5}, dest_column->get(0).get_array());
-    _check_array<float>({(float)3, (float)7, (float)8}, dest_column->get(1).get_array());
-    _check_array<float>({(float)2, (float)1}, dest_column->get(2).get_array());
+    ASSERT_EQ("[5]", dest_column->debug_item(0));
+    ASSERT_EQ("[3,7,8]", dest_column->debug_item(1));
+    ASSERT_EQ("[2,1]", dest_column->debug_item(2));
     ASSERT_TRUE(dest_column->get(3).is_null());
     ASSERT_TRUE(dest_column->get(4).get_array()[0].is_null());
     ASSERT_EQ(2, dest_column->get(4).get_array()[1].get_float());
@@ -3241,9 +3210,9 @@ TEST_F(ArrayFunctionsTest, array_slice_double) {
     auto dest_column = ArrayFunctions::array_slice(nullptr, {src_column, offset_column, length_column}).value();
 
     ASSERT_EQ(dest_column->size(), 5);
-    _check_array<double>({(double)5}, dest_column->get(0).get_array());
-    _check_array<double>({(double)3, (double)7, (double)8}, dest_column->get(1).get_array());
-    _check_array<double>({(double)2, (double)1}, dest_column->get(2).get_array());
+    ASSERT_EQ("[5]", dest_column->debug_item(0));
+    ASSERT_EQ("[3,7,8]", dest_column->debug_item(1));
+    ASSERT_EQ("[2,1]", dest_column->debug_item(2));
     ASSERT_TRUE(dest_column->get(3).is_null());
     ASSERT_TRUE(dest_column->get(4).get_array()[0].is_null());
     ASSERT_EQ(2, dest_column->get(4).get_array()[1].get_double());
@@ -3263,9 +3232,9 @@ TEST_F(ArrayFunctionsTest, array_slice_varchar) {
     auto dest_column = ArrayFunctions::array_slice(nullptr, {src_column, offset_column, length_column}).value();
 
     ASSERT_EQ(dest_column->size(), 5);
-    _check_array<Slice>({Slice("5")}, dest_column->get(0).get_array());
-    _check_array<Slice>({Slice("3"), Slice("7"), Slice("8")}, dest_column->get(1).get_array());
-    _check_array<Slice>({Slice("2"), Slice("1")}, dest_column->get(2).get_array());
+    ASSERT_EQ("['5']", dest_column->debug_item(0));
+    ASSERT_EQ("['3','7','8']", dest_column->debug_item(1));
+    ASSERT_EQ("['2','1']", dest_column->debug_item(2));
     ASSERT_TRUE(dest_column->get(3).is_null());
     ASSERT_TRUE(dest_column->get(4).get_array()[0].is_null());
     ASSERT_EQ(Slice("2"), dest_column->get(4).get_array()[1].get_slice());
@@ -3281,9 +3250,9 @@ TEST_F(ArrayFunctionsTest, array_slice_bigint_only_offset) {
     auto dest_column = ArrayFunctions::array_slice(nullptr, {src_column, offset_column}).value();
 
     ASSERT_EQ(dest_column->size(), 5);
-    _check_array<int64_t>({(int64_t)5, (int64_t)3, (int64_t)6}, dest_column->get(0).get_array());
-    _check_array<int64_t>({(int64_t)3, (int64_t)7, (int64_t)8}, dest_column->get(1).get_array());
-    _check_array<int64_t>({(int64_t)2, (int64_t)1}, dest_column->get(2).get_array());
+    ASSERT_EQ("[5,3,6]", dest_column->debug_item(0));
+    ASSERT_EQ("[3,7,8]", dest_column->debug_item(1));
+    ASSERT_EQ("[2,1]", dest_column->debug_item(2));
     ASSERT_TRUE(dest_column->get(3).is_null());
     ASSERT_TRUE(dest_column->get(4).get_array()[0].is_null());
     ASSERT_EQ(2, dest_column->get(4).get_array()[1].get_int64());
@@ -3300,9 +3269,9 @@ TEST_F(ArrayFunctionsTest, array_slice_double_only_offset) {
     auto dest_column = ArrayFunctions::array_slice(nullptr, {src_column, offset_column}).value();
 
     ASSERT_EQ(dest_column->size(), 5);
-    _check_array<double>({(double)5, (double)3, (double)6}, dest_column->get(0).get_array());
-    _check_array<double>({(double)3, (double)7, (double)8}, dest_column->get(1).get_array());
-    _check_array<double>({(double)2, (double)1}, dest_column->get(2).get_array());
+    ASSERT_EQ("[5,3,6]", dest_column->debug_item(0));
+    ASSERT_EQ("[3,7,8]", dest_column->debug_item(1));
+    ASSERT_EQ("[2,1]", dest_column->debug_item(2));
     ASSERT_TRUE(dest_column->get(3).is_null());
     ASSERT_TRUE(dest_column->get(4).get_array()[0].is_null());
     ASSERT_EQ(2, dest_column->get(4).get_array()[1].get_double());
@@ -3322,9 +3291,9 @@ TEST_F(ArrayFunctionsTest, array_slice_varchar_only_offset) {
     auto dest_column = ArrayFunctions::array_slice(nullptr, {src_column, offset_column}).value();
 
     ASSERT_EQ(dest_column->size(), 5);
-    _check_array<Slice>({Slice("5"), Slice("3"), Slice("6")}, dest_column->get(0).get_array());
-    _check_array<Slice>({Slice("3"), Slice("7"), Slice("8")}, dest_column->get(1).get_array());
-    _check_array<Slice>({Slice("2"), Slice("1")}, dest_column->get(2).get_array());
+    ASSERT_EQ("['5','3','6']", dest_column->debug_item(0));
+    ASSERT_EQ("['3','7','8']", dest_column->debug_item(1));
+    ASSERT_EQ("['2','1']", dest_column->debug_item(2));
     ASSERT_TRUE(dest_column->get(3).is_null());
     ASSERT_TRUE(dest_column->get(4).get_array()[0].is_null());
     ASSERT_EQ(Slice("2"), dest_column->get(4).get_array()[1].get_slice());
@@ -3344,11 +3313,9 @@ TEST_F(ArrayFunctionsTest, array_concat_tinyint) {
     auto dest_column = ArrayFunctions::concat(nullptr, {src_column, src_column2, src_column3}).value();
 
     ASSERT_EQ(dest_column->size(), 5);
-    _check_array<int8_t>({(int8_t)5, (int8_t)3, (int8_t)6, (int8_t)5, (int8_t)6, (int8_t)5},
-                         dest_column->get(0).get_array());
-    _check_array<int8_t>({(int8_t)8, (int8_t)2, (int8_t)2, (int8_t)8}, dest_column->get(1).get_array());
-    _check_array<int8_t>({(int8_t)4, (int8_t)4, (int8_t)3, (int8_t)2, (int8_t)1, (int8_t)2, (int8_t)1},
-                         dest_column->get(2).get_array());
+    ASSERT_EQ("[5,3,6,5,6,5]", dest_column->debug_item(0));
+    ASSERT_EQ("[8,2,2,8]", dest_column->debug_item(1));
+    ASSERT_EQ("[4,4,3,2,1,2,1]", dest_column->debug_item(2));
 
     ASSERT_TRUE(dest_column->get(3).is_null());
 
@@ -3375,11 +3342,9 @@ TEST_F(ArrayFunctionsTest, array_concat_tinyint_not_nullable) {
     auto dest_column = ArrayFunctions::concat(nullptr, {src_column, src_column2, src_column3}).value();
 
     ASSERT_EQ(dest_column->size(), 4);
-    _check_array<int8_t>({(int8_t)5, (int8_t)3, (int8_t)6, (int8_t)5, (int8_t)6, (int8_t)5},
-                         dest_column->get(0).get_array());
-    _check_array<int8_t>({(int8_t)8, (int8_t)2, (int8_t)2, (int8_t)8}, dest_column->get(1).get_array());
-    _check_array<int8_t>({(int8_t)4, (int8_t)4, (int8_t)3, (int8_t)2, (int8_t)1, (int8_t)2, (int8_t)1},
-                         dest_column->get(2).get_array());
+    ASSERT_EQ("[5,3,6,5,6,5]", dest_column->debug_item(0));
+    ASSERT_EQ("[8,2,2,8]", dest_column->debug_item(1));
+    ASSERT_EQ("[4,4,3,2,1,2,1]", dest_column->debug_item(2));
 
     ASSERT_EQ(4, dest_column->get(3).get_array()[0].get_int8());
     ASSERT_EQ(1, dest_column->get(3).get_array()[1].get_int8());
@@ -3404,11 +3369,9 @@ TEST_F(ArrayFunctionsTest, array_concat_bigint) {
     auto dest_column = ArrayFunctions::concat(nullptr, {src_column, src_column2, src_column3}).value();
 
     ASSERT_EQ(dest_column->size(), 5);
-    _check_array<int64_t>({(int64_t)5, (int64_t)3, (int64_t)6, (int64_t)5, (int64_t)6, (int64_t)5},
-                          dest_column->get(0).get_array());
-    _check_array<int64_t>({(int64_t)8, (int64_t)2, (int64_t)2, (int64_t)8}, dest_column->get(1).get_array());
-    _check_array<int64_t>({(int64_t)4, (int64_t)4, (int64_t)3, (int64_t)2, (int64_t)1, (int64_t)2, (int64_t)1},
-                          dest_column->get(2).get_array());
+    ASSERT_EQ("[5,3,6,5,6,5]", dest_column->debug_item(0));
+    ASSERT_EQ("[8,2,2,8]", dest_column->debug_item(1));
+    ASSERT_EQ("[4,4,3,2,1,2,1]", dest_column->debug_item(2));
 
     ASSERT_TRUE(dest_column->get(3).is_null());
 
@@ -3435,11 +3398,9 @@ TEST_F(ArrayFunctionsTest, array_concat_bigint_not_nullable) {
     auto dest_column = ArrayFunctions::concat(nullptr, {src_column, src_column2, src_column3}).value();
 
     ASSERT_EQ(dest_column->size(), 4);
-    _check_array<int64_t>({(int64_t)5, (int64_t)3, (int64_t)6, (int64_t)5, (int64_t)6, (int64_t)5},
-                          dest_column->get(0).get_array());
-    _check_array<int64_t>({(int64_t)8, (int64_t)2, (int64_t)2, (int64_t)8}, dest_column->get(1).get_array());
-    _check_array<int64_t>({(int64_t)4, (int64_t)4, (int64_t)3, (int64_t)2, (int64_t)1, (int64_t)2, (int64_t)1},
-                          dest_column->get(2).get_array());
+    ASSERT_EQ("[5,3,6,5,6,5]", dest_column->debug_item(0));
+    ASSERT_EQ("[8,2,2,8]", dest_column->debug_item(1));
+    ASSERT_EQ("[4,4,3,2,1,2,1]", dest_column->debug_item(2));
 
     ASSERT_EQ(4, dest_column->get(3).get_array()[0].get_int64());
     ASSERT_EQ(1, dest_column->get(3).get_array()[1].get_int64());
@@ -3464,11 +3425,9 @@ TEST_F(ArrayFunctionsTest, array_concat_double) {
     auto dest_column = ArrayFunctions::concat(nullptr, {src_column, src_column2, src_column3}).value();
 
     ASSERT_EQ(dest_column->size(), 5);
-    _check_array<double>({(double)5, (double)3, (double)6, (double)5, (double)6, (double)5},
-                         dest_column->get(0).get_array());
-    _check_array<double>({(double)8, (double)2, (double)2, (double)8}, dest_column->get(1).get_array());
-    _check_array<double>({(double)4, (double)4, (double)3, (double)2, (double)1, (double)2, (double)1},
-                         dest_column->get(2).get_array());
+    ASSERT_EQ("[5,3,6,5,6,5]", dest_column->debug_item(0));
+    ASSERT_EQ("[8,2,2,8]", dest_column->debug_item(1));
+    ASSERT_EQ("[4,4,3,2,1,2,1]", dest_column->debug_item(2));
 
     ASSERT_TRUE(dest_column->get(3).is_null());
 
@@ -3495,11 +3454,9 @@ TEST_F(ArrayFunctionsTest, array_concat_double_not_nullable) {
     auto dest_column = ArrayFunctions::concat(nullptr, {src_column, src_column2, src_column3}).value();
 
     ASSERT_EQ(dest_column->size(), 4);
-    _check_array<double>({(double)5, (double)3, (double)6, (double)5, (double)6, (double)5},
-                         dest_column->get(0).get_array());
-    _check_array<double>({(double)8, (double)2, (double)2, (double)8}, dest_column->get(1).get_array());
-    _check_array<double>({(double)4, (double)4, (double)3, (double)2, (double)1, (double)2, (double)1},
-                         dest_column->get(2).get_array());
+    ASSERT_EQ("[5,3,6,5,6,5]", dest_column->debug_item(0));
+    ASSERT_EQ("[8,2,2,8]", dest_column->debug_item(1));
+    ASSERT_EQ("[4,4,3,2,1,2,1]", dest_column->debug_item(2));
 
     ASSERT_EQ(4, dest_column->get(3).get_array()[0].get_double());
     ASSERT_EQ(1, dest_column->get(3).get_array()[1].get_double());
@@ -3524,11 +3481,9 @@ TEST_F(ArrayFunctionsTest, array_concat_varchar) {
     auto dest_column = ArrayFunctions::concat(nullptr, {src_column, src_column2, src_column3}).value();
 
     ASSERT_EQ(dest_column->size(), 5);
-    _check_array<Slice>({Slice("5"), Slice("3"), Slice("6"), Slice("5"), Slice("6"), Slice("5")},
-                        dest_column->get(0).get_array());
-    _check_array<Slice>({Slice("8"), Slice("2"), Slice("2"), Slice("8")}, dest_column->get(1).get_array());
-    _check_array<Slice>({Slice("4"), Slice("4"), Slice("3"), Slice("2"), Slice("1"), Slice("2"), Slice("1")},
-                        dest_column->get(2).get_array());
+    ASSERT_EQ("['5','3','6','5','6','5']", dest_column->debug_item(0));
+    ASSERT_EQ("['8','2','2','8']", dest_column->debug_item(1));
+    ASSERT_EQ("['4','4','3','2','1','2','1']", dest_column->debug_item(2));
 
     ASSERT_TRUE(dest_column->get(3).is_null());
 
@@ -3555,11 +3510,9 @@ TEST_F(ArrayFunctionsTest, array_concat_varchar_not_nullable) {
     auto dest_column = ArrayFunctions::concat(nullptr, {src_column, src_column2, src_column3}).value();
 
     ASSERT_EQ(dest_column->size(), 4);
-    _check_array<Slice>({Slice("5"), Slice("3"), Slice("6"), Slice("5"), Slice("6"), Slice("5")},
-                        dest_column->get(0).get_array());
-    _check_array<Slice>({Slice("8"), Slice("2"), Slice("2"), Slice("8")}, dest_column->get(1).get_array());
-    _check_array<Slice>({Slice("4"), Slice("4"), Slice("3"), Slice("2"), Slice("1"), Slice("2"), Slice("1")},
-                        dest_column->get(2).get_array());
+    ASSERT_EQ("['5','3','6','5','6','5']", dest_column->debug_item(0));
+    ASSERT_EQ("['8','2','2','8']", dest_column->debug_item(1));
+    ASSERT_EQ("['4','4','3','2','1','2','1']", dest_column->debug_item(2));
 
     ASSERT_EQ(Slice("4"), dest_column->get(3).get_array()[0].get_slice());
     ASSERT_EQ(Slice("1"), dest_column->get(3).get_array()[1].get_slice());
@@ -3798,9 +3751,9 @@ TEST_F(ArrayFunctionsTest, array_intersect_int) {
     auto dest_column = intersect.process(nullptr, {src_column, src_column2, src_column3});
 
     ASSERT_EQ(dest_column->size(), 4);
-    _check_array<int32_t>({(int32_t)(5)}, dest_column->get(0).get_array());
-    _check_array<int32_t>({}, dest_column->get(1).get_array());
-    _check_array<int32_t>({(int32_t)(4), (int32_t)(1)}, dest_column->get(2).get_array());
+    ASSERT_EQ("[5]", dest_column->debug_item(0));
+    ASSERT_EQ("[]", dest_column->debug_item(1));
+    ASSERT_EQ("[4,1]", dest_column->debug_item(2));
     ASSERT_TRUE(dest_column->get(3).is_null());
 }
 
@@ -3818,8 +3771,8 @@ TEST_F(ArrayFunctionsTest, array_intersect_int_with_not_null) {
     auto dest_column = intersect.process(nullptr, {src_column, src_column2, src_column3});
 
     ASSERT_EQ(dest_column->size(), 4);
-    _check_array<int32_t>({(int32_t)(5)}, dest_column->get(0).get_array());
-    _check_array<int32_t>({}, dest_column->get(1).get_array());
+    ASSERT_EQ("[5]", dest_column->debug_item(0));
+    ASSERT_EQ("[]", dest_column->debug_item(1));
 
     {
         std::unordered_set<int32_t> set_expect = {4, 1};
@@ -3862,9 +3815,9 @@ TEST_F(ArrayFunctionsTest, array_intersect_varchar) {
     auto dest_column = intersect.process(nullptr, {src_column, src_column2, src_column3});
 
     ASSERT_EQ(dest_column->size(), 4);
-    _check_array<Slice>({Slice("5")}, dest_column->get(0).get_array());
-    _check_array<Slice>({}, dest_column->get(1).get_array());
-    _check_array<Slice>({Slice("4"), Slice("1")}, dest_column->get(2).get_array());
+    ASSERT_EQ("['5']", dest_column->debug_item(0));
+    ASSERT_EQ("[]", dest_column->debug_item(1));
+    ASSERT_EQ("['4','1']", dest_column->debug_item(2));
     ASSERT_TRUE(dest_column->get(3).is_null());
 }
 
@@ -3882,8 +3835,8 @@ TEST_F(ArrayFunctionsTest, array_intersect_varchar_with_not_null) {
     auto dest_column = intersect.process(nullptr, {src_column, src_column2, src_column3});
 
     ASSERT_EQ(dest_column->size(), 4);
-    _check_array<Slice>({Slice("5")}, dest_column->get(0).get_array());
-    _check_array<Slice>({}, dest_column->get(1).get_array());
+    ASSERT_EQ("['5']", dest_column->debug_item(0));
+    ASSERT_EQ("[]", dest_column->debug_item(1));
 
     {
         std::unordered_set<std::string> set_expect = {"4", "1"};
@@ -4092,11 +4045,11 @@ TEST_F(ArrayFunctionsTest, array_filter_tinyint_with_nullable) {
 
     ASSERT_TRUE(dest_column->is_nullable());
     ASSERT_EQ(dest_column->size(), 5);
-    _check_array<int8_t>({(int8_t)(5), (int8_t)(6)}, dest_column->get(0).get_array());
+    ASSERT_EQ("[5,6]", dest_column->debug_item(0));
     ASSERT_TRUE(dest_column->get(1).get_array().empty());
     ASSERT_TRUE(dest_column->get(2).get_array().empty());
     ASSERT_TRUE(dest_column->get(3).is_null());
-    _check_array<int8_t>({(int8_t)(4)}, dest_column->get(4).get_array());
+    ASSERT_EQ("[4]", dest_column->debug_item(4));
 }
 
 TEST_F(ArrayFunctionsTest, array_filter_tinyint) {
@@ -4116,8 +4069,8 @@ TEST_F(ArrayFunctionsTest, array_filter_tinyint) {
     ASSERT_TRUE(!dest_column->is_nullable());
     ASSERT_EQ(dest_column->size(), 5);
 
-    _check_array<int8_t>({(int8_t)(3)}, dest_column->get(0).get_array());
-    _check_array<int8_t>({(int8_t)(8)}, dest_column->get(1).get_array());
+    ASSERT_EQ("[3]", dest_column->debug_item(0));
+    ASSERT_EQ("[8]", dest_column->debug_item(1));
     ASSERT_TRUE(dest_column->get(2).get_array().empty());
     ASSERT_TRUE(dest_column->get(3).get_array().empty());
     ASSERT_TRUE(dest_column->get(4).get_array().empty());
@@ -4139,8 +4092,8 @@ TEST_F(ArrayFunctionsTest, array_filter_tinyint_with_nullable_notnull) {
 
     ASSERT_TRUE(dest_column->is_nullable());
     ASSERT_EQ(dest_column->size(), 5);
-    _check_array<int8_t>({(int8_t)(3)}, dest_column->get(0).get_array());
-    _check_array<int8_t>({(int8_t)(8)}, dest_column->get(1).get_array());
+    ASSERT_EQ("[3]", dest_column->debug_item(0));
+    ASSERT_EQ("[8]", dest_column->debug_item(1));
     ASSERT_TRUE(dest_column->get(2).get_array().empty());
     ASSERT_TRUE(dest_column->get(3).is_null());
     ASSERT_TRUE(dest_column->get(4).get_array().empty());
@@ -4163,11 +4116,11 @@ TEST_F(ArrayFunctionsTest, array_filter_tinyint_notnull_nullable) {
     ASSERT_TRUE(!dest_column->is_nullable());
     ASSERT_EQ(dest_column->size(), 5);
 
-    _check_array<int8_t>({(int8_t)(5), (int8_t)(6)}, dest_column->get(0).get_array());
+    ASSERT_EQ("[5,6]", dest_column->debug_item(0));
     ASSERT_TRUE(dest_column->get(1).get_array().empty());
     ASSERT_TRUE(dest_column->get(2).get_array().empty());
     ASSERT_TRUE(dest_column->get(3).get_array().empty());
-    _check_array<int8_t>({(int8_t)(4)}, dest_column->get(4).get_array());
+    ASSERT_EQ("[4]", dest_column->debug_item(4));
 }
 
 TEST_F(ArrayFunctionsTest, array_filter_bigint_with_nullable) {
@@ -4186,11 +4139,11 @@ TEST_F(ArrayFunctionsTest, array_filter_bigint_with_nullable) {
 
     ASSERT_TRUE(dest_column->is_nullable());
     ASSERT_EQ(dest_column->size(), 5);
-    _check_array<int64_t>({(int64_t)(5), (int64_t)(6)}, dest_column->get(0).get_array());
+    ASSERT_EQ("[5,6]", dest_column->debug_item(0));
     ASSERT_TRUE(dest_column->get(1).get_array().empty());
     ASSERT_TRUE(dest_column->get(2).get_array().empty());
     ASSERT_TRUE(dest_column->get(3).is_null());
-    _check_array<int64_t>({(int64_t)(4)}, dest_column->get(4).get_array());
+    ASSERT_EQ("[4]", dest_column->debug_item(4));
 }
 
 TEST_F(ArrayFunctionsTest, array_filter_bigint) {
@@ -4210,8 +4163,8 @@ TEST_F(ArrayFunctionsTest, array_filter_bigint) {
     ASSERT_TRUE(!dest_column->is_nullable());
     ASSERT_EQ(dest_column->size(), 5);
 
-    _check_array<int64_t>({(int64_t)(3)}, dest_column->get(0).get_array());
-    _check_array<int64_t>({(int64_t)(8)}, dest_column->get(1).get_array());
+    ASSERT_EQ("[3]", dest_column->debug_item(0));
+    ASSERT_EQ("[8]", dest_column->debug_item(1));
     ASSERT_TRUE(dest_column->get(2).get_array().empty());
     ASSERT_TRUE(dest_column->get(3).get_array().empty());
     ASSERT_TRUE(dest_column->get(4).get_array().empty());
@@ -4233,11 +4186,11 @@ TEST_F(ArrayFunctionsTest, array_filter_double_with_nullable) {
 
     ASSERT_TRUE(dest_column->is_nullable());
     ASSERT_EQ(dest_column->size(), 5);
-    _check_array<double>({(double)(5), (double)(6)}, dest_column->get(0).get_array());
+    ASSERT_EQ("[5,6]", dest_column->debug_item(0));
     ASSERT_TRUE(dest_column->get(1).get_array().empty());
     ASSERT_TRUE(dest_column->get(2).get_array().empty());
     ASSERT_TRUE(dest_column->get(3).is_null());
-    _check_array<double>({(double)(4)}, dest_column->get(4).get_array());
+    ASSERT_EQ("[4]", dest_column->debug_item(4));
 }
 
 TEST_F(ArrayFunctionsTest, array_filter_double) {
@@ -4257,8 +4210,8 @@ TEST_F(ArrayFunctionsTest, array_filter_double) {
     ASSERT_TRUE(!dest_column->is_nullable());
     ASSERT_EQ(dest_column->size(), 5);
 
-    _check_array<double>({(double)(3)}, dest_column->get(0).get_array());
-    _check_array<double>({(double)(8)}, dest_column->get(1).get_array());
+    ASSERT_EQ("[3]", dest_column->debug_item(0));
+    ASSERT_EQ("[8]", dest_column->debug_item(1));
     ASSERT_TRUE(dest_column->get(2).get_array().empty());
     ASSERT_TRUE(dest_column->get(3).get_array().empty());
     ASSERT_TRUE(dest_column->get(4).get_array().empty());
@@ -4280,11 +4233,11 @@ TEST_F(ArrayFunctionsTest, array_filter_varchar_with_nullable) {
 
     ASSERT_TRUE(dest_column->is_nullable());
     ASSERT_EQ(dest_column->size(), 5);
-    _check_array<Slice>({Slice("5"), Slice("6")}, dest_column->get(0).get_array());
+    ASSERT_EQ("['5','6']", dest_column->debug_item(0));
     ASSERT_TRUE(dest_column->get(1).get_array().empty());
     ASSERT_TRUE(dest_column->get(2).get_array().empty());
     ASSERT_TRUE(dest_column->get(3).is_null());
-    _check_array<Slice>({Slice("4")}, dest_column->get(4).get_array());
+    ASSERT_EQ("['4']", dest_column->debug_item(4));
 }
 
 TEST_F(ArrayFunctionsTest, array_filter_varchar) {
@@ -4304,8 +4257,8 @@ TEST_F(ArrayFunctionsTest, array_filter_varchar) {
     ASSERT_TRUE(!dest_column->is_nullable());
     ASSERT_EQ(dest_column->size(), 5);
 
-    _check_array<Slice>({Slice("3")}, dest_column->get(0).get_array());
-    _check_array<Slice>({Slice("8")}, dest_column->get(1).get_array());
+    ASSERT_EQ("['3']", dest_column->debug_item(0));
+    ASSERT_EQ("['8']", dest_column->debug_item(1));
     ASSERT_TRUE(dest_column->get(2).get_array().empty());
     ASSERT_TRUE(dest_column->get(3).get_array().empty());
     ASSERT_TRUE(dest_column->get(4).get_array().empty());
@@ -4397,16 +4350,16 @@ TEST_F(ArrayFunctionsTest, array_sortby_tinyint_with_nullable) {
 
         ASSERT_TRUE(dest_column->is_nullable());
         ASSERT_EQ(dest_column->size(), 10);
-        _check_array<int8_t>({(int8_t)(4), (int8_t)(5), (int8_t)(3)}, dest_column->get(0).get_array());
+        ASSERT_EQ("[4,5,3]", dest_column->debug_item(0));
         ASSERT_TRUE(dest_column->get(1).is_null());
-        _check_array<int8_t>({(int8_t)(2), (int8_t)(4)}, dest_column->get(2).get_array());
+        ASSERT_EQ("[2,4]", dest_column->debug_item(2));
         ASSERT_TRUE(dest_column->get(3).is_null());
         ASSERT_TRUE(dest_column->get(4).get_array().empty());
         ASSERT_TRUE(dest_column->get(5).is_null());
         ASSERT_TRUE(dest_column->get(6).get_array().empty());
         ASSERT_TRUE(dest_column->get(7).get_array()[0].is_null());
         ASSERT_EQ(dest_column->get(7).get_array()[1].get_int8(), (int8_t)(-23));
-        _check_array<int8_t>({(int8_t)(23), (int8_t)(43)}, dest_column->get(8).get_array());
+        ASSERT_EQ("[23,43]", dest_column->debug_item(8));
         ASSERT_TRUE(dest_column->get(9).get_array()[0].is_null());
         ASSERT_EQ(dest_column->get(9).get_array()[1].get_int8(), (int8_t)(43));
         ASSERT_EQ(dest_column->get(9).get_array()[2].get_int8(), (int8_t)(23));
@@ -4417,14 +4370,14 @@ TEST_F(ArrayFunctionsTest, array_sortby_tinyint_with_nullable) {
 
         ASSERT_TRUE(dest_column->is_nullable());
         ASSERT_EQ(dest_column->size(), 10);
-        _check_array<int8_t>({(int8_t)(82), (int8_t)(1), (int8_t)(4)}, dest_column->get(0).get_array());
-        _check_array<int8_t>({(int8_t)(23)}, dest_column->get(1).get_array());
+        ASSERT_EQ("[82,1,4]", dest_column->debug_item(0));
+        ASSERT_EQ("[23]", dest_column->debug_item(1));
         ASSERT_TRUE(dest_column->get(2).is_null());
         ASSERT_TRUE(dest_column->get(3).is_null());
         ASSERT_TRUE(dest_column->get(4).get_array().empty());
         ASSERT_TRUE(dest_column->get(5).get_array().empty());
         ASSERT_TRUE(dest_column->get(6).is_null());
-        _check_array<int8_t>({(int8_t)(3), (int8_t)(6)}, dest_column->get(7).get_array());
+        ASSERT_EQ("[3,6]", dest_column->debug_item(7));
         ASSERT_TRUE(dest_column->get(8).get_array()[0].is_null());
         ASSERT_EQ(dest_column->get(8).get_array()[1].get_int8(), (int8_t)(-23));
         ASSERT_TRUE(dest_column->get(9).get_array()[0].is_null());
@@ -4447,10 +4400,10 @@ TEST_F(ArrayFunctionsTest, array_sortby_tinyint) {
         ASSERT_TRUE(!dest_column->is_nullable());
         ASSERT_EQ(dest_column->size(), 6);
 
-        _check_array<int8_t>({(int8_t)(5), (int8_t)(6), (int8_t)(3)}, dest_column->get(0).get_array());
-        _check_array<int8_t>({(int8_t)(6), (int8_t)(3), (int8_t)(5)}, dest_column->get(1).get_array());
+        ASSERT_EQ("[5,6,3]", dest_column->debug_item(0));
+        ASSERT_EQ("[6,3,5]", dest_column->debug_item(1));
         ASSERT_TRUE(dest_column->get(2).get_array().empty());
-        _check_array<int8_t>({(int8_t)(125), (int8_t)(123)}, dest_column->get(3).get_array());
+        ASSERT_EQ("[125,123]", dest_column->debug_item(3));
         ASSERT_TRUE(dest_column->get(4).get_array()[0].is_null());
         ASSERT_EQ(dest_column->get(5).get_array()[0].get_int8(), (int8_t)(4));
         ASSERT_TRUE(dest_column->get(5).get_array()[1].is_null());
@@ -4462,8 +4415,8 @@ TEST_F(ArrayFunctionsTest, array_sortby_tinyint) {
         ASSERT_TRUE(!dest_column->is_nullable());
         ASSERT_EQ(dest_column->size(), 6);
 
-        _check_array<int8_t>({(int8_t)(73), (int8_t)(3), (int8_t)(30)}, dest_column->get(0).get_array());
-        _check_array<int8_t>({(int8_t)(2), (int8_t)(3), (int8_t)(1)}, dest_column->get(1).get_array());
+        ASSERT_EQ("[73,3,30]", dest_column->debug_item(0));
+        ASSERT_EQ("[2,3,1]", dest_column->debug_item(1));
         ASSERT_TRUE(dest_column->get(2).get_array().empty());
         ASSERT_EQ(dest_column->get(3).get_array()[0].get_int8(), (int8_t)(-43));
         ASSERT_TRUE(dest_column->get(3).get_array()[1].is_null());
@@ -4503,16 +4456,16 @@ TEST_F(ArrayFunctionsTest, array_sortby_tinyint_with_nullable_notnull) {
 
         ASSERT_TRUE(dest_column->is_nullable());
         ASSERT_EQ(dest_column->size(), 10);
-        _check_array<int8_t>({(int8_t)(4), (int8_t)(5), (int8_t)(3)}, dest_column->get(0).get_array());
+        ASSERT_EQ("[4,5,3]", dest_column->debug_item(0));
         ASSERT_TRUE(dest_column->get(1).is_null());
-        _check_array<int8_t>({(int8_t)(4), (int8_t)(2)}, dest_column->get(2).get_array());
+        ASSERT_EQ("[4,2]", dest_column->debug_item(2));
         ASSERT_TRUE(dest_column->get(3).is_null());
         ASSERT_TRUE(dest_column->get(4).get_array().empty());
         ASSERT_TRUE(dest_column->get(5).is_null());
         ASSERT_TRUE(dest_column->get(6).get_array().empty());
         ASSERT_TRUE(dest_column->get(7).get_array()[0].is_null());
         ASSERT_TRUE(dest_column->get(7).get_array()[1].is_null());
-        _check_array<int8_t>({(int8_t)(43), (int8_t)(23)}, dest_column->get(8).get_array());
+        ASSERT_EQ("[43,23]", dest_column->debug_item(8));
         ASSERT_TRUE(dest_column->get(9).get_array()[0].is_null());
         ASSERT_EQ(dest_column->get(9).get_array()[1].get_int8(), (int8_t)(43));
         ASSERT_EQ(dest_column->get(9).get_array()[2].get_int8(), (int8_t)(23));
@@ -4523,8 +4476,8 @@ TEST_F(ArrayFunctionsTest, array_sortby_tinyint_with_nullable_notnull) {
 
         ASSERT_TRUE(!dest_column->is_nullable());
         ASSERT_EQ(dest_column->size(), 10);
-        _check_array<int8_t>({(int8_t)(82), (int8_t)(1), (int8_t)(4)}, dest_column->get(0).get_array());
-        _check_array<int8_t>({(int8_t)(23)}, dest_column->get(1).get_array());
+        ASSERT_EQ("[82,1,4]", dest_column->debug_item(0));
+        ASSERT_EQ("[23]", dest_column->debug_item(1));
         ASSERT_EQ(dest_column->get(2).get_array()[0].get_int8(), (int8_t)(3));
         ASSERT_TRUE(dest_column->get(2).get_array()[1].is_null());
         ASSERT_TRUE(dest_column->get(3).get_array()[0].is_null());
@@ -4533,7 +4486,7 @@ TEST_F(ArrayFunctionsTest, array_sortby_tinyint_with_nullable_notnull) {
         ASSERT_TRUE(dest_column->get(6).get_array().empty());
         ASSERT_TRUE(dest_column->get(7).get_array()[0].is_null());
         ASSERT_TRUE(dest_column->get(7).get_array()[1].is_null());
-        _check_array<int8_t>({(int8_t)(6), (int8_t)(-33)}, dest_column->get(8).get_array());
+        ASSERT_EQ("[6,-33]", dest_column->debug_item(8));
         ASSERT_TRUE(dest_column->get(9).get_array()[0].is_null());
         ASSERT_EQ(dest_column->get(9).get_array()[1].get_int8(), (int8_t)(6));
         ASSERT_EQ(dest_column->get(9).get_array()[2].get_int8(), (int8_t)(3));
@@ -4554,12 +4507,12 @@ TEST_F(ArrayFunctionsTest, array_sortby_varchar_with_nullable) {
 
         ASSERT_TRUE(dest_column->is_nullable());
         ASSERT_EQ(dest_column->size(), 6);
-        _check_array<Slice>({Slice("5"), Slice("3"), Slice("6")}, dest_column->get(0).get_array());
-        _check_array<Slice>({Slice("8")}, dest_column->get(1).get_array());
-        _check_array<Slice>({Slice("4")}, dest_column->get(2).get_array());
+        ASSERT_EQ("['5','3','6']", dest_column->debug_item(0));
+        ASSERT_EQ("['8']", dest_column->debug_item(1));
+        ASSERT_EQ("['4']", dest_column->debug_item(2));
         ASSERT_TRUE(dest_column->get(3).is_null());
-        _check_array<Slice>({Slice("1"), Slice("4")}, dest_column->get(4).get_array());
-        _check_array<Slice>({Slice("4"), Slice("1")}, dest_column->get(5).get_array());
+        ASSERT_EQ("['1','4']", dest_column->debug_item(4));
+        ASSERT_EQ("['4','1']", dest_column->debug_item(5));
     }
     {
         ArraySortBy<LogicalType::TYPE_VARCHAR> sort;
@@ -4567,8 +4520,8 @@ TEST_F(ArrayFunctionsTest, array_sortby_varchar_with_nullable) {
 
         ASSERT_TRUE(dest_column->is_nullable());
         ASSERT_EQ(dest_column->size(), 6);
-        _check_array<int8_t>({(int8_t)(5), (int8_t)(3), (int8_t)(6)}, dest_column->get(0).get_array());
-        _check_array<int8_t>({(int8_t)(3)}, dest_column->get(1).get_array());
+        ASSERT_EQ("[5,3,6]", dest_column->debug_item(0));
+        ASSERT_EQ("[3]", dest_column->debug_item(1));
         ASSERT_TRUE(dest_column->get(2).is_null());
         ASSERT_TRUE(dest_column->get(3).get_array()[0].is_null());
         ASSERT_TRUE(dest_column->get(4).get_array()[0].is_null());
@@ -4586,7 +4539,7 @@ TEST_F(ArrayFunctionsTest, array_sortby_with_only_null) {
     {
         ArraySortBy<LogicalType::TYPE_TINYINT> sort;
         auto dest_column = sort.process(nullptr, {src_column, src_column2});
-        _check_array<int8_t>({(int8_t)(5), (int8_t)(3), (int8_t)(6)}, dest_column->get(0).get_array());
+        ASSERT_EQ("[5,3,6]", dest_column->debug_item(0));
     }
     {
         ArraySortBy<LogicalType::TYPE_TINYINT> sort;
@@ -4620,10 +4573,10 @@ TEST_F(ArrayFunctionsTest, array_generate_with_integer_columns) {
     ASSERT_TRUE(dest_column->is_nullable());
     ASSERT_EQ(dest_column->size(), 6);
 
-    _check_array<int32_t>({(int32_t)(3), (int32_t)(5), (int32_t)(7), (int32_t)(9)}, dest_column->get(0).get_array());
-    _check_array<int32_t>({(int32_t)(3), (int32_t)(6), (int32_t)(9)}, dest_column->get(1).get_array());
-    _check_array<int32_t>({(int32_t)(3), (int32_t)(7)}, dest_column->get(2).get_array());
-    _check_array<int32_t>({(int32_t)(9), (int32_t)(7), (int32_t)(5), (int32_t)(3)}, dest_column->get(3).get_array());
+    ASSERT_EQ("[3,5,7,9]", dest_column->debug_item(0));
+    ASSERT_EQ("[3,6,9]", dest_column->debug_item(1));
+    ASSERT_EQ("[3,7]", dest_column->debug_item(2));
+    ASSERT_EQ("[9,7,5,3]", dest_column->debug_item(3));
     ASSERT_TRUE(dest_column->is_null(4));
     ASSERT_TRUE(dest_column->get(5).get_array().empty());
 }
@@ -4638,8 +4591,8 @@ TEST_F(ArrayFunctionsTest, array_generate_when_overflow) {
     ASSERT_TRUE(!dest_column->is_nullable());
     ASSERT_EQ(dest_column->size(), 2);
 
-    _check_array<int8_t>({(int8_t)(9), (int8_t)(97)}, dest_column->get(0).get_array());
-    _check_array<int8_t>({(int8_t)(-9), (int8_t)(-97)}, dest_column->get(1).get_array());
+    ASSERT_EQ("[9,97]", dest_column->debug_item(0));
+    ASSERT_EQ("[-9,-97]", dest_column->debug_item(1));
 }
 
 TEST_F(ArrayFunctionsTest, array_generate_rejects_too_many_elements) {
@@ -4904,9 +4857,9 @@ TEST_F(ArrayFunctionsTest, array_intersect_any_type_int) {
             ArrayFunctions::array_intersect_any_type(nullptr, {src_column, src_column2, src_column3}).value();
 
     ASSERT_EQ(dest_column->size(), 4);
-    _check_array<int32_t>({(int32_t)(5)}, dest_column->get(0).get_array());
-    _check_array<int32_t>({}, dest_column->get(1).get_array());
-    _check_array<int32_t>({(int32_t)(4), (int32_t)(1)}, dest_column->get(2).get_array());
+    ASSERT_EQ("[5]", dest_column->debug_item(0));
+    ASSERT_EQ("[]", dest_column->debug_item(1));
+    ASSERT_EQ("[4,1]", dest_column->debug_item(2));
     ASSERT_TRUE(dest_column->get(3).is_null());
 }
 
@@ -4924,8 +4877,8 @@ TEST_F(ArrayFunctionsTest, array_intersect_any_type_int_with_not_null) {
             ArrayFunctions::array_intersect_any_type(nullptr, {src_column, src_column2, src_column3}).value();
 
     ASSERT_EQ(dest_column->size(), 4);
-    _check_array<int32_t>({(int32_t)(5)}, dest_column->get(0).get_array());
-    _check_array<int32_t>({}, dest_column->get(1).get_array());
+    ASSERT_EQ("[5]", dest_column->debug_item(0));
+    ASSERT_EQ("[]", dest_column->debug_item(1));
 
     {
         std::unordered_set<int32_t> set_expect = {4, 1};
@@ -4968,9 +4921,9 @@ TEST_F(ArrayFunctionsTest, array_intersect_any_type_varchar) {
             ArrayFunctions::array_intersect_any_type(nullptr, {src_column, src_column2, src_column3}).value();
 
     ASSERT_EQ(dest_column->size(), 4);
-    _check_array<Slice>({Slice("5")}, dest_column->get(0).get_array());
-    _check_array<Slice>({}, dest_column->get(1).get_array());
-    _check_array<Slice>({Slice("4"), Slice("1")}, dest_column->get(2).get_array());
+    ASSERT_EQ("['5']", dest_column->debug_item(0));
+    ASSERT_EQ("[]", dest_column->debug_item(1));
+    ASSERT_EQ("['4','1']", dest_column->debug_item(2));
     ASSERT_TRUE(dest_column->get(3).is_null());
 }
 
@@ -4988,8 +4941,8 @@ TEST_F(ArrayFunctionsTest, array_intersect_any_type_varchar_with_not_null) {
     auto dest_column = intersect.process(nullptr, {src_column, src_column2, src_column3});
 
     ASSERT_EQ(dest_column->size(), 4);
-    _check_array<Slice>({Slice("5")}, dest_column->get(0).get_array());
-    _check_array<Slice>({}, dest_column->get(1).get_array());
+    ASSERT_EQ("['5']", dest_column->debug_item(0));
+    ASSERT_EQ("[]", dest_column->debug_item(1));
 
     {
         std::unordered_set<std::string> set_expect = {"4", "1"};
@@ -5026,9 +4979,9 @@ TEST_F(ArrayFunctionsTest, array_reverse_any_types_int) {
     auto dest_column = reverse.process(nullptr, {src_column});
 
     ASSERT_EQ(dest_column->size(), 3);
-    _check_array<int32_t>({6, 3, 5}, dest_column->get(0).get_array());
-    _check_array<int32_t>({8, 7, 3, 2}, dest_column->get(1).get_array());
-    _check_array<int32_t>({1, 2, 3, 4}, dest_column->get(2).get_array());
+    ASSERT_EQ("[6,3,5]", dest_column->debug_item(0));
+    ASSERT_EQ("[8,7,3,2]", dest_column->debug_item(1));
+    ASSERT_EQ("[1,2,3,4]", dest_column->debug_item(2));
 }
 
 TEST_F(ArrayFunctionsTest, array_reverse_any_types_string) {
@@ -5039,9 +4992,9 @@ TEST_F(ArrayFunctionsTest, array_reverse_any_types_string) {
     auto dest_column = ArrayFunctions::array_reverse_any_types(nullptr, {src_column}).value();
 
     ASSERT_EQ(dest_column->size(), 3);
-    _check_array<Slice>({"4325", "66", "352"}, dest_column->get(0).get_array());
-    _check_array<Slice>({"43251", "8", "99", "235"}, dest_column->get(1).get_array());
-    _check_array<Slice>({"112", "22", "33", "44"}, dest_column->get(2).get_array());
+    ASSERT_EQ("['4325','66','352']", dest_column->debug_item(0));
+    ASSERT_EQ("['43251','8','99','235']", dest_column->debug_item(1));
+    ASSERT_EQ("['112','22','33','44']", dest_column->debug_item(2));
 }
 
 TEST_F(ArrayFunctionsTest, array_reverse_any_types_nullable_elements) {
@@ -5054,9 +5007,9 @@ TEST_F(ArrayFunctionsTest, array_reverse_any_types_nullable_elements) {
     auto dest_column = ArrayFunctions::array_reverse_any_types(nullptr, {src_column}).value();
 
     ASSERT_EQ(dest_column->size(), 3);
-    _check_array_nullable<int32_t>({6, 3, 0, 5}, {0, 0, 1, 0}, dest_column->get(0).get_array());
-    _check_array_nullable<int32_t>({0, 0, 3, 2}, {1, 1, 0, 0}, dest_column->get(1).get_array());
-    _check_array_nullable<int32_t>({0, 0, 0, 0}, {1, 1, 1, 1}, dest_column->get(2).get_array());
+    ASSERT_EQ("[6,3,NULL,5]", dest_column->debug_item(0));
+    ASSERT_EQ("[NULL,NULL,3,2]", dest_column->debug_item(1));
+    ASSERT_EQ("[NULL,NULL,NULL,NULL]", dest_column->debug_item(2));
 }
 
 TEST_F(ArrayFunctionsTest, array_reverse_any_types_nullable_array) {
@@ -5067,9 +5020,9 @@ TEST_F(ArrayFunctionsTest, array_reverse_any_types_nullable_array) {
     auto dest_column = ArrayFunctions::array_reverse_any_types(nullptr, {src_column}).value();
 
     ASSERT_EQ(dest_column->size(), 3);
-    _check_array_nullable<int32_t>({6, 3, 0, 5}, {0, 0, 1, 0}, dest_column->get(0).get_array());
+    ASSERT_EQ("[6,3,NULL,5]", dest_column->debug_item(0));
     ASSERT_TRUE(dest_column->get(1).is_null());
-    _check_array_nullable<int32_t>({0, 0, 0, 0}, {1, 1, 1, 1}, dest_column->get(2).get_array());
+    ASSERT_EQ("[NULL,NULL,NULL,NULL]", dest_column->debug_item(2));
 }
 
 TEST_F(ArrayFunctionsTest, array_reverse_any_types_only_null) {
@@ -5445,7 +5398,7 @@ TEST_F(ArrayFunctionsTest, array_repeat_array) {
             ASSERT_EQ(dest_column->get(0).get_array().size(), 1);
             _check_array<int32_t>({(int32_t)0}, dest_column->get(0).get_array()[0].get_array());
             ASSERT_EQ(dest_column->get(1).get_array().size(), 0);
-            _check_array<int32_t>({}, dest_column->get(1).get_array());
+            ASSERT_EQ("[]", dest_column->debug_item(1));
             ASSERT_EQ(dest_column->get(2).get_array().size(), 3);
             ASSERT_TRUE(dest_column->get(2).get_array()[0].get_array()[0].is_null());
             ASSERT_EQ((int32_t)2, dest_column->get(2).get_array()[0].get_array()[1].get_int32());
@@ -5472,7 +5425,7 @@ TEST_F(ArrayFunctionsTest, array_repeat_array) {
             ASSERT_EQ(dest_column->size(), 3);
             ASSERT_TRUE(dest_column->get(0).is_null());
             ASSERT_EQ(dest_column->get(1).get_array().size(), 0);
-            _check_array<int32_t>({}, dest_column->get(1).get_array());
+            ASSERT_EQ("[]", dest_column->debug_item(1));
             ASSERT_EQ(dest_column->get(2).get_array().size(), 3);
             ASSERT_TRUE(dest_column->get(2).get_array()[0].is_null());
             ASSERT_TRUE(dest_column->get(2).get_array()[1].is_null());
@@ -5514,7 +5467,7 @@ TEST_F(ArrayFunctionsTest, array_repeat_offsets_match_counted_size) {
     auto dest_column = ArrayFunctions::repeat(nullptr, {src_column, repeat_count_column}).value();
     ASSERT_EQ(4, dest_column->size());
     ASSERT_TRUE(dest_column->is_null(1));
-    _check_array<int32_t>({(int32_t)7, (int32_t)7, (int32_t)7}, dest_column->get(0).get_array());
+    ASSERT_EQ("[7,7,7]", dest_column->debug_item(0));
     ASSERT_EQ(0, dest_column->get(2).get_array().size());
     ASSERT_EQ(0, dest_column->get(3).get_array().size());
 
@@ -5610,7 +5563,7 @@ TEST_F(ArrayFunctionsTest, array_repeat_map) {
             ASSERT_EQ(element_0.find(2)->second.get_int32(),
                       dest_column->get(0).get_array()[0].get<DatumMap>().find(2)->second.get_int32());
             ASSERT_EQ(dest_column->get(1).get_array().size(), 0);
-            _check_array<int32_t>({}, dest_column->get(1).get_array());
+            ASSERT_EQ("[]", dest_column->debug_item(1));
             ASSERT_EQ(dest_column->get(2).get_array().size(), repeat_count_2);
             ASSERT_EQ(element_2.find(8)->second.get_int32(),
                       dest_column->get(2).get_array()[2].get<DatumMap>().find(8)->second.get_int32());
@@ -5642,7 +5595,7 @@ TEST_F(ArrayFunctionsTest, array_repeat_map) {
             ASSERT_EQ(dest_column->size(), 3);
             ASSERT_TRUE(dest_column->get(0).is_null());
             ASSERT_EQ(dest_column->get(1).get_array().size(), 0);
-            _check_array<int32_t>({}, dest_column->get(1).get_array());
+            ASSERT_EQ("[]", dest_column->debug_item(1));
             ASSERT_EQ(dest_column->get(2).get_array().size(), 3);
             ASSERT_TRUE(dest_column->get(2).get_array()[0].is_null());
             ASSERT_TRUE(dest_column->get(2).get_array()[1].is_null());
