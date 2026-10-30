@@ -232,20 +232,7 @@ PARALLEL_TEST(MapFunctionsTest, test_map_function) {
     //   NULL
 
     auto result = MapFunctions::map_size(nullptr, {column}).value();
-    EXPECT_EQ(6, result->size());
-
-    ASSERT_FALSE(result->get(0).is_null());
-    ASSERT_FALSE(result->get(1).is_null());
-    ASSERT_FALSE(result->get(2).is_null());
-    ASSERT_FALSE(result->get(3).is_null());
-    ASSERT_FALSE(result->get(4).is_null());
-    ASSERT_TRUE(result->get(5).is_null());
-
-    EXPECT_EQ(3, result->get(0).get_int32());
-    EXPECT_EQ(3, result->get(1).get_int32());
-    EXPECT_EQ(2, result->get(2).get_int32());
-    EXPECT_EQ(1, result->get(3).get_int32());
-    EXPECT_EQ(0, result->get(4).get_int32());
+    ASSERT_EQ("[3, 3, 2, 1, 0, NULL]", result->debug_string());
 
     // Inputs:
     //   c0
@@ -375,14 +362,12 @@ PARALLEL_TEST(MapFunctionsTest, test_map_filter_int_nullable) {
         map_column_not_nullable->append_datum(DatumMap());
     }
 
-    TypeDescriptor TYPE_ARRAY_BOOLEAN = array_type(TYPE_BOOLEAN);
-
     // [null, true, false]
     // []
     // [false]
     // [NULL]
     // [true]
-    MutableColumnPtr bool_array_not_nullable = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
+    MutableColumnPtr bool_array_not_nullable = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN_DESC, false);
     bool_array_not_nullable->append_datum(DatumArray{Datum(), true, false});
     bool_array_not_nullable->append_datum(DatumArray{});
     bool_array_not_nullable->append_datum(DatumArray{false});
@@ -394,7 +379,7 @@ PARALLEL_TEST(MapFunctionsTest, test_map_filter_int_nullable) {
     // [false]
     // [null]
     // [false, null]
-    MutableColumnPtr bool_array_nullable = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, true);
+    MutableColumnPtr bool_array_nullable = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN_DESC, true);
     bool_array_nullable->append_datum(DatumArray{Datum(), true, false});
     bool_array_nullable->append_datum(Datum{});
     bool_array_nullable->append_datum(DatumArray{false});

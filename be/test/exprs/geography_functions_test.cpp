@@ -48,6 +48,7 @@
 #include "geo/wkb.h"
 #include "gutil/compiler_util.h"
 #include "runtime/runtime_state.h"
+#include "testutil/column_test_helper.h"
 #include "types/geo_wkb.h"
 
 DECLARE_bool(s2debug);
@@ -86,8 +87,8 @@ public:
         }
         ColumnPtr source = input;
         if (has_null) source = NullableColumn::create(input, nulls);
-        std::unique_ptr<FunctionContext> context(FunctionContext::create_test_context(
-                {TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH)}, geography_type()));
+        std::unique_ptr<FunctionContext> context(
+                FunctionContext::create_test_context({TYPE_VARCHAR_DESC}, geography_type()));
         return GeoFunctions::st_geog_from_text(context.get(), {source}).value();
     }
 
@@ -108,10 +109,8 @@ public:
         ColumnPtr source = input;
         if (has_null) source = NullableColumn::create(input, nulls);
         auto crs = ColumnHelper::create_const_column<TYPE_VARCHAR>(type.geo_type->crs, source->size());
-        std::unique_ptr<FunctionContext> context(FunctionContext::create_test_context(
-                {TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH),
-                 TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH)},
-                type));
+        std::unique_ptr<FunctionContext> context(
+                FunctionContext::create_test_context({TYPE_VARCHAR_DESC, TYPE_VARCHAR_DESC}, type));
         return GeoFunctions::st_geom_from_text(context.get(), {source, crs}).value();
     }
     static std::vector<std::string> geometry_point_wkb_cases() {
@@ -177,11 +176,8 @@ TEST_F(geographyFunctionsTest, st_pointTest) {
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         Columns columns;
 
-        auto str_1 = DoubleColumn::create();
-        auto str_2 = DoubleColumn::create();
-
-        str_1->append(24.7);
-        str_2->append(56.7);
+        auto str_1 = ColumnTestHelper::build_column<double>({24.7});
+        auto str_2 = ColumnTestHelper::build_column<double>({56.7});
         columns.emplace_back(std::move(str_1));
         columns.emplace_back(std::move(str_2));
         ColumnPtr result = GeoFunctions::st_point(ctx.get(), columns).value();
@@ -198,11 +194,8 @@ TEST_F(geographyFunctionsTest, st_pointTest) {
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         Columns columns;
 
-        auto str_1 = DoubleColumn::create();
-        auto str_2 = DoubleColumn::create();
-
-        str_1->append(24.7);
-        str_2->append(56.7);
+        auto str_1 = ColumnTestHelper::build_column<double>({24.7});
+        auto str_2 = ColumnTestHelper::build_column<double>({56.7});
         columns.emplace_back(std::move(str_1));
         columns.emplace_back(std::move(str_2));
         ColumnPtr result = GeoFunctions::st_point(ctx.get(), columns).value();
@@ -259,15 +252,10 @@ TEST_F(geographyFunctionsTest, st_distance_sphereTest) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     Columns columns;
 
-    auto xlng = DoubleColumn::create();
-    auto xlat = DoubleColumn::create();
-    auto ylng = DoubleColumn::create();
-    auto ylat = DoubleColumn::create();
-
-    xlng->append(0.0);
-    xlat->append(0.0);
-    ylng->append(0.0);
-    ylat->append(0.0);
+    auto xlng = ColumnTestHelper::build_column<double>({0.0});
+    auto xlat = ColumnTestHelper::build_column<double>({0.0});
+    auto ylng = ColumnTestHelper::build_column<double>({0.0});
+    auto ylat = ColumnTestHelper::build_column<double>({0.0});
 
     columns.emplace_back(std::move(xlng));
     columns.emplace_back(std::move(xlat));
@@ -609,16 +597,14 @@ TEST_F(geographyFunctionsTest, nativeGeographyWktAndWkbRoundTrip) {
     GeoTypeDescriptor descriptor{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_COORDINATE_SYSTEM_SPHERICAL,
                                  GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", 4326};
     auto geography = TypeDescriptor::create_geo_type(TYPE_GEOGRAPHY, descriptor);
-    std::unique_ptr<FunctionContext> constructor(FunctionContext::create_test_context(
-            {TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH)}, geography));
+    std::unique_ptr<FunctionContext> constructor(FunctionContext::create_test_context({TYPE_VARCHAR_DESC}, geography));
 
-    auto input = BinaryColumn::create();
-    input->append("GEOMETRYCOLLECTION (POINT EMPTY, LINESTRING (1 2, 3 4))");
+    auto input = ColumnTestHelper::build_column<Slice>({"GEOMETRYCOLLECTION (POINT EMPTY, LINESTRING (1 2, 3 4))"});
     auto native = GeoFunctions::st_geog_from_text(constructor.get(), {input}).value();
     ASSERT_FALSE(native->is_null(0));
 
-    std::unique_ptr<FunctionContext> text_serializer(FunctionContext::create_test_context(
-            {geography}, TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH)));
+    std::unique_ptr<FunctionContext> text_serializer(
+            FunctionContext::create_test_context({geography}, TYPE_VARCHAR_DESC));
     auto text = GeoFunctions::st_geography_as_text(text_serializer.get(), {native}).value();
     EXPECT_EQ("GEOMETRYCOLLECTION (POINT EMPTY, LINESTRING (1 2, 3 4))", text->get(0).get_slice().to_string());
 
@@ -879,9 +865,8 @@ TEST_F(geographyFunctionsTest, nativeGeographyRejectsInvalidInputAndSrid) {
     GeoTypeDescriptor descriptor{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_COORDINATE_SYSTEM_SPHERICAL,
                                  GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", 4326};
     auto geography = TypeDescriptor::create_geo_type(TYPE_GEOGRAPHY, descriptor);
-    std::unique_ptr<FunctionContext> context(FunctionContext::create_test_context(
-            {TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH), TypeDescriptor(TYPE_INT)},
-            geography));
+    std::unique_ptr<FunctionContext> context(
+            FunctionContext::create_test_context({TYPE_VARCHAR_DESC, TypeDescriptor(TYPE_INT)}, geography));
     auto input = BinaryColumn::create();
     input->append("POINT (181 0)");
     input->append("POINT (1 2)");
@@ -892,11 +877,7 @@ TEST_F(geographyFunctionsTest, nativeGeographyRejectsInvalidInputAndSrid) {
     nulls->append(0);
     nulls->append(1);
     nulls->append(0);
-    auto srid = Int32Column::create();
-    srid->append(4326);
-    srid->append(3857);
-    srid->append(4326);
-    srid->append(4326);
+    auto srid = ColumnTestHelper::build_column<int32_t>({4326, 3857, 4326, 4326});
 
     auto result = GeoFunctions::st_geog_from_text(context.get(), {NullableColumn::create(input, nulls), srid}).value();
     EXPECT_TRUE(result->is_null(0));
@@ -1606,10 +1587,8 @@ TEST_F(geographyFunctionsTest, nativeGeometryWktAndWkbRoundTrip) {
     for (const char* value : values) input->append(value);
     auto crs = ColumnHelper::create_const_column<TYPE_VARCHAR>("EPSG:3857", input->size());
     auto type = geometry_type();
-    std::unique_ptr<FunctionContext> constructor(FunctionContext::create_test_context(
-            {TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH),
-             TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH)},
-            type));
+    std::unique_ptr<FunctionContext> constructor(
+            FunctionContext::create_test_context({TYPE_VARCHAR_DESC, TYPE_VARCHAR_DESC}, type));
     auto native = GeoFunctions::st_geom_from_text(constructor.get(), {input, crs}).value();
 
     const auto* nullable = down_cast<const NullableColumn*>(native.get());
@@ -1618,8 +1597,7 @@ TEST_F(geographyFunctionsTest, nativeGeometryWktAndWkbRoundTrip) {
     EXPECT_EQ(GEO_DIMENSION_XY, data->descriptor().storage.dimension);
     EXPECT_EQ(GEO_VALIDATION_STATE_SEMANTICALLY_VALIDATED, data->descriptor().storage.validation_state);
 
-    std::unique_ptr<FunctionContext> text_serializer(FunctionContext::create_test_context(
-            {type}, TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH)));
+    std::unique_ptr<FunctionContext> text_serializer(FunctionContext::create_test_context({type}, TYPE_VARCHAR_DESC));
     auto text = GeoFunctions::st_geometry_as_text(text_serializer.get(), {native}).value();
     for (size_t row = 0; row < std::size(values); ++row) {
         EXPECT_EQ(values[row], text->get(row).get_slice().to_string());
@@ -1629,9 +1607,7 @@ TEST_F(geographyFunctionsTest, nativeGeometryWktAndWkbRoundTrip) {
             {type}, TypeDescriptor::create_varbinary_type(TypeDescriptor::MAX_VARCHAR_LENGTH)));
     auto wkb = GeoFunctions::st_geometry_as_wkb(wkb_serializer.get(), {native}).value();
     std::unique_ptr<FunctionContext> wkb_constructor(FunctionContext::create_test_context(
-            {TypeDescriptor::create_varbinary_type(TypeDescriptor::MAX_VARCHAR_LENGTH),
-             TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH)},
-            type));
+            {TypeDescriptor::create_varbinary_type(TypeDescriptor::MAX_VARCHAR_LENGTH), TYPE_VARCHAR_DESC}, type));
     auto reconstructed = GeoFunctions::st_geom_from_wkb(wkb_constructor.get(), {wkb, crs}).value();
     auto reconstructed_text = GeoFunctions::st_geometry_as_text(text_serializer.get(), {reconstructed}).value();
     for (size_t row = 0; row < std::size(values); ++row) {
@@ -1650,21 +1626,17 @@ TEST_F(geographyFunctionsTest, nativeGeometryNullInvalidAndCrsChecks) {
     nulls->append(0);
     auto source = NullableColumn::create(input, nulls);
     auto crs = ColumnHelper::create_const_column<TYPE_VARCHAR>("EPSG:3857", source->size());
-    std::unique_ptr<FunctionContext> context(FunctionContext::create_test_context(
-            {TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH),
-             TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH)},
-            geometry_type()));
+    std::unique_ptr<FunctionContext> context(
+            FunctionContext::create_test_context({TYPE_VARCHAR_DESC, TYPE_VARCHAR_DESC}, geometry_type()));
     auto result = GeoFunctions::st_geom_from_text(context.get(), {source, crs}).value();
     EXPECT_FALSE(result->is_null(0));
     EXPECT_TRUE(result->is_null(1));
     EXPECT_TRUE(result->is_null(2));
 
-    auto malformed_wkb = BinaryColumn::create();
-    malformed_wkb->append("not WKB");
+    auto malformed_wkb = ColumnTestHelper::build_column<Slice>({"not WKB"});
     auto one_crs = ColumnHelper::create_const_column<TYPE_VARCHAR>("EPSG:3857", 1);
     std::unique_ptr<FunctionContext> wkb_context(FunctionContext::create_test_context(
-            {TypeDescriptor::create_varbinary_type(TypeDescriptor::MAX_VARCHAR_LENGTH),
-             TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH)},
+            {TypeDescriptor::create_varbinary_type(TypeDescriptor::MAX_VARCHAR_LENGTH), TYPE_VARCHAR_DESC},
             geometry_type()));
     auto invalid_wkb = GeoFunctions::st_geom_from_wkb(wkb_context.get(), {malformed_wkb, one_crs}).value();
     EXPECT_TRUE(invalid_wkb->is_null(0));
@@ -1680,10 +1652,7 @@ TEST_F(geographyFunctionsTest, nativeGeometryNullInvalidAndCrsChecks) {
     ASSERT_FALSE(mismatch.ok());
     EXPECT_TRUE(mismatch.status().is_invalid_argument());
 
-    auto varying_crs = BinaryColumn::create();
-    varying_crs->append("EPSG:3857");
-    varying_crs->append("EPSG:3857");
-    varying_crs->append("EPSG:3857");
+    auto varying_crs = ColumnTestHelper::build_column<Slice>({"EPSG:3857", "EPSG:3857", "EPSG:3857"});
     auto nonconstant = GeoFunctions::st_geom_from_text(context.get(), {source, varying_crs});
     ASSERT_FALSE(nonconstant.ok());
     EXPECT_TRUE(nonconstant.status().is_invalid_argument());
@@ -1735,6 +1704,268 @@ TEST_F(geographyFunctionsTest, nativeGeoContainmentPredicates) {
             GeoFunctions::st_geography_covers(nullptr, {dateline_polygon, boundary_point}).value());
     EXPECT_FALSE(boundary_contains.value(0));
     EXPECT_TRUE(boundary_covers.value(0));
+}
+
+TEST_F(geographyFunctionsTest, nativeGeographyDirectContainmentMatchesPrepared) {
+    gflags::FlagSaver restore_flags;
+    FLAGS_s2debug = false;
+    struct Case {
+        const char* polygon;
+        const char* point;
+    };
+    const Case cases[] = {
+            {"POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))", "POINT (1 1)"},
+            {"POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))", "POINT (20 20)"},
+            {"POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))", "POINT (0 0)"},
+            {"POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))", "POINT (5 0)"},
+            {"POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))", "POINT (5 0.00000000000005)"},
+            {"POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))", "POINT (5 -0.0000000000001)"},
+            {"POLYGON ((170 -10, -170 -10, -170 10, 170 10, 170 -10))", "POINT (180 0)"},
+            {"POLYGON ((0 80, 120 80, -120 80, 0 80))", "POINT (0 90)"},
+            {"POLYGON ((0 0.000000000001, 90 0.000000000001, 180 0.000000000001, -90 0.000000000001, 0 "
+             "0.000000000001))",
+             "POINT (0 90)"},
+            {"POLYGON ((0 0, 90 0, 180 0, -90 0, 0 0))", "POINT (0 -90)"},
+            {"POLYGON ((0 -10, 90 -10, 180 -10, -90 -10, 0 -10))", "POINT (0 90)"},
+            {"POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0), (2 2, 8 2, 8 8, 2 8, 2 2))", "POINT (2 5)"},
+            {"MULTIPOLYGON (((0 0, 10 0, 10 10, 0 10, 0 0)), ((20 20, 30 30, 20 30, 30 20, 20 20)))", "POINT (0 5)"},
+            {"MULTIPOLYGON (((0 0, 10 0, 10 10, 0 10, 0 0)), ((20 20, 30 30, 20 30, 30 20, 20 20)))", "POINT (1 1)"},
+            {"POLYGON ((0 0, 10 10, 0 10, 10 0, 0 0))", "POINT (1 1)"},
+            {"POLYGON ((0 0, 1 0, 2 0, 0 0))", "POINT (1 1)"},
+            {"POLYGON EMPTY", "POINT (1 1)"},
+            {"POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))", "POINT EMPTY"},
+            {nullptr, "POINT (1 1)"},
+    };
+    using Predicate = decltype(&GeoFunctions::st_geography_contains);
+    const Predicate predicates[] = {GeoFunctions::st_geography_contains, GeoFunctions::st_geography_within,
+                                    GeoFunctions::st_geography_covers, GeoFunctions::st_geography_covered_by};
+    for (const auto& test : cases) {
+        SCOPED_TRACE(test.polygon == nullptr ? "NULL" : test.polygon);
+        for (bool reverse : {false, true}) {
+            auto polygon = geography({test.polygon});
+            if (reverse && test.polygon != nullptr) {
+                WkbGeometry shape;
+                ASSERT_TRUE(WkbCodec::parse_wkb(polygon->get(0).get_slice(), &shape).ok());
+                auto reverse_rings = [](WkbGeometry* geometry) {
+                    for (auto& ring : geometry->rings) std::reverse(ring.begin(), ring.end());
+                };
+                reverse_rings(&shape);
+                for (auto& child : shape.children) reverse_rings(&child);
+                std::string bytes;
+                ASSERT_TRUE(WkbCodec::to_wkb(shape, &bytes).ok());
+                auto data =
+                        GeoColumn::create(down_cast<const GeoColumn*>(
+                                                  down_cast<const NullableColumn*>(polygon.get())->data_column().get())
+                                                  ->descriptor());
+                data->append_wkb(Slice(bytes));
+                polygon = data;
+            }
+            auto point = geography({test.point});
+            for (size_t kind = 0; kind < std::size(predicates); ++kind) {
+                auto evaluate = [&](bool constant) {
+                    ColumnPtr p = constant ? ConstColumn::create(polygon, 1) : polygon;
+                    return kind % 2 == 0 ? predicates[kind](nullptr, {p, point})
+                                         : predicates[kind](nullptr, {point, p});
+                };
+                auto actual = evaluate(false), reference = evaluate(true);
+                ASSERT_EQ(actual.ok(), reference.ok());
+                if (!actual.ok()) {
+                    EXPECT_EQ(actual.status().code(), reference.status().code());
+                    EXPECT_EQ(actual.status().message(), reference.status().message());
+                } else {
+                    ASSERT_EQ((*actual)->is_null(0), (*reference)->is_null(0));
+                    if (!(*actual)->is_null(0)) {
+                        EXPECT_EQ((*actual)->get(0).get_uint8(), (*reference)->get(0).get_uint8());
+                    }
+                }
+            }
+        }
+    }
+}
+
+TEST_F(geographyFunctionsTest, nativeGeoContainmentReusesRows) {
+    WkbGeometry large;
+    large.type = WkbGeometryType::POLYGON;
+    auto& ring = large.rings.emplace_back();
+    for (size_t i = 0; i < 513; ++i) {
+        const double angle = 2 * std::acos(-1.0) * i / 513;
+        ring.push_back({5 + std::cos(angle), 5 + std::sin(angle)});
+    }
+    ring.push_back(ring.front());
+    std::string large_wkt;
+    ASSERT_TRUE(WkbCodec::to_wkt(large, &large_wkt).ok());
+    const char* multi = "MULTIPOLYGON (((0 0, 10 0, 10 10, 0 10, 0 0)), ((20 20, 30 20, 30 30, 20 30, 20 20)))";
+    const char* hole = "POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0), (3 3, 7 3, 7 7, 3 7, 3 3))";
+    const char* wide = "POLYGON ((0 0, 90 0, 90 10, 0 10, 0 0))";
+    const char* square = "POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))";
+    using Predicate = decltype(&GeoFunctions::st_geography_contains);
+    const Predicate predicates[][4] = {{GeoFunctions::st_geometry_contains, GeoFunctions::st_geometry_within,
+                                        GeoFunctions::st_geometry_covers, GeoFunctions::st_geometry_covered_by},
+                                       {GeoFunctions::st_geography_contains, GeoFunctions::st_geography_within,
+                                        GeoFunctions::st_geography_covers, GeoFunctions::st_geography_covered_by}};
+    for (bool spherical : {false, true}) {
+        const auto type = spherical ? geography_type() : geometry_type();
+        auto polygons = spherical ? geography({multi, hole, wide, square, "POLYGON EMPTY", nullptr, large_wkt.c_str()})
+                                  : geometry({multi, hole, wide, square, "POLYGON EMPTY", nullptr, large_wkt.c_str()});
+        auto point_source = spherical ? geography({"POINT (1 1)", "POINT (20 20)", "POINT EMPTY"})
+                                      : geometry({"POINT (1 1)", "POINT (20 20)", "POINT EMPTY"});
+        std::array<std::string, 3> bytes;
+        for (size_t i = 0; i < bytes.size(); ++i) bytes[i] = point_source->get(i).get_slice().to_string();
+        ASSERT_EQ(21, bytes[1].size());
+        bytes[1][0] = 0;
+        for (auto [begin, end] : {std::pair{1, 5}, {5, 13}, {13, 21}})
+            std::reverse(bytes[1].begin() + begin, bytes[1].begin() + end);
+        const auto* nullable = down_cast<const NullableColumn*>(point_source.get());
+        const auto descriptor = down_cast<const GeoColumn*>(nullable->data_column().get())->descriptor();
+        for (size_t offset = 0; offset < bytes.size(); ++offset) {
+            auto points = GeoColumn::create(descriptor);
+            for (size_t row = 0; row < polygons->size(); ++row) points->append_wkb(Slice(bytes[(row + offset) % 3]));
+            // The last choice varies all polygon rows; the others prepare each shape as a constant.
+            for (size_t choice = 0; choice <= polygons->size(); ++choice) {
+                for (bool constant_point : {false, true}) {
+                    auto selected = polygons->clone_empty();
+                    selected->append(*polygons, choice < polygons->size() ? choice : 0, 1);
+                    ColumnPtr p =
+                            choice < polygons->size() ? ConstColumn::create(selected, polygons->size()) : polygons;
+                    auto selected_point = points->clone_empty();
+                    selected_point->append(*points, 0, 1);
+                    ColumnPtr q = points;
+                    if (constant_point) q = ConstColumn::create(selected_point, polygons->size());
+                    for (size_t kind = 0; kind < 4; ++kind) {
+                        SCOPED_TRACE(::testing::Message() << spherical << '/' << offset << '/' << choice << '/'
+                                                          << constant_point << '/' << kind);
+                        auto evaluate = [&](FunctionContext* ctx, const ColumnPtr& a, const ColumnPtr& b) {
+                            return kind % 2 == 0 ? predicates[spherical][kind](ctx, {a, b})
+                                                 : predicates[spherical][kind](ctx, {b, a});
+                        };
+                        std::unique_ptr<FunctionContext> ctx(
+                                FunctionContext::create_test_context({type, type}, TypeDescriptor(TYPE_BOOLEAN)));
+                        Columns constants = {p->is_constant() ? p : nullptr, q->is_constant() ? q : nullptr};
+                        if (kind % 2 != 0) std::reverse(constants.begin(), constants.end());
+                        ctx->set_constant_columns(constants);
+                        ASSERT_TRUE(
+                                GeoFunctions::native_geo_containment_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL)
+                                        .ok());
+                        auto actual = evaluate(ctx.get(), p, q);
+                        ASSERT_TRUE(actual.ok()) << actual.status();
+                        for (size_t row = 0; row < polygons->size(); ++row) {
+                            auto a = polygons->clone_empty();
+                            a->append(*polygons, choice < polygons->size() ? choice : row, 1);
+                            auto b = points->clone_empty();
+                            b->append(*points, constant_point ? 0 : row, 1);
+                            auto expected = evaluate(nullptr, a, b);
+                            ASSERT_TRUE(expected.ok()) << expected.status();
+                            ASSERT_EQ((*expected)->is_null(0), (*actual)->is_null(row)) << row;
+                            if (!(*expected)->is_null(0)) {
+                                EXPECT_EQ((*expected)->get(0).get_uint8(), (*actual)->get(row).get_uint8()) << row;
+                            }
+                        }
+                        ASSERT_TRUE(
+                                GeoFunctions::native_geo_containment_close(ctx.get(), FunctionContext::FRAGMENT_LOCAL)
+                                        .ok());
+                    }
+                }
+            }
+        }
+    }
+}
+
+TEST_F(geographyFunctionsTest, nativeGeographyDirectRingAcceptsApplicableCases) {
+    using Relation = GeoPointPolygonRelation;
+    struct Case {
+        std::vector<GeoCoordinate> ring;
+        GeoCoordinate point;
+        bool applicable;
+        Relation expected;
+    };
+    const std::vector<GeoCoordinate> square = {{0, 0}, {10, 0}, {10, 10}, {0, 10}, {0, 0}};
+    // Both ordinates give an angular distance of 1e-12 radians from the first vertex.
+    const double delta = 1e-12 * 180 / std::acos(-1.0) / std::sqrt(2.0);
+    std::vector<Case> cases = {{square, {1, 1}, true, Relation::INSIDE},
+                               {square, {20, 20}, true, Relation::OUTSIDE},
+                               {square, {delta, delta}, true, Relation::INSIDE},
+                               {square, {-delta, -delta}, true, Relation::OUTSIDE}};
+    for (size_t vertices : {512, 513}) {
+        std::vector<GeoCoordinate> ring;
+        for (size_t i = 0; i < vertices; ++i) {
+            const double angle = 2 * std::acos(-1.0) * i / vertices;
+            ring.push_back({std::cos(angle), std::sin(angle)});
+        }
+        ring.push_back(ring.front());
+        cases.push_back({std::move(ring), {0, 0}, vertices == 512, Relation::INSIDE});
+    }
+    for (double longitude : {60.0 - 1e-8, 60.0 + 1e-8}) {
+        cases.push_back({{{0, 0}, {longitude, 0}, {0, 10}, {0, 0}}, {1, 1}, longitude < 60, Relation::INSIDE});
+    }
+    GeoRingScratch scratch;
+    for (size_t i = 0; i < cases.size(); ++i) {
+        SCOPED_TRACE(i);
+        const auto& test = cases[i];
+        GeoCoordinateList ring;
+        ring.list = test.ring;
+        GeoPoint point;
+        ASSERT_EQ(GEO_PARSE_OK, point.from_coord(test.point));
+        Relation relation;
+        ASSERT_EQ(test.applicable, GeoPolygon::point_relation_direct(ring, point, &scratch, &relation));
+        if (!test.applicable) continue;
+        EXPECT_EQ(test.expected, relation);
+        GeoCoordinateListList rings;
+        rings.add(GeoCoordinateList(ring));
+        GeoPolygon prepared;
+        ASSERT_EQ(GEO_PARSE_OK, prepared.from_coords(rings));
+        EXPECT_EQ(prepared.point_relation(point), relation);
+    }
+}
+
+TEST_F(geographyFunctionsTest, nativeGeographyDirectRingRejectsHemisphereAmbiguity) {
+    for (double latitude : {-10.0, -1e-12, 0.0, 1e-12, 10.0}) {
+        for (bool reverse : {false, true}) {
+            GeoCoordinateList ring;
+            for (double longitude : {0.0, 90.0, 180.0, -90.0}) ring.add({longitude, latitude});
+            if (reverse) std::reverse(ring.list.begin(), ring.list.end());
+            ring.add(ring.list[0]);
+            GeoRingScratch scratch;
+            for (double point_latitude : {-90.0, 0.0, 90.0}) {
+                GeoPoint point;
+                ASSERT_EQ(GEO_PARSE_OK, point.from_coord(0, point_latitude));
+                GeoPointPolygonRelation relation;
+                EXPECT_FALSE(GeoPolygon::point_relation_direct(ring, point, &scratch, &relation));
+            }
+        }
+    }
+}
+
+TEST_F(geographyFunctionsTest, nativeGeographyDirectRingRejectsMalformedCoordinates) {
+    const double nan = std::numeric_limits<double>::quiet_NaN();
+    const double inf = std::numeric_limits<double>::infinity();
+    const std::vector<GeoCoordinate> cases[] = {
+            {},
+            {{0, 0}},
+            {{0, 0}, {0, 0}},
+            {{0, 0}, {10, 0}, {0, 0}},
+            {{0, 0}, {10, 0}, {10, 10}},
+            {{0, 0}, {10, 0}, {10, 10}, {0, 10}},
+            {{0, 10}, {90, 10}, {180, 10}, {-90, 10}},
+            {{0, 0}, {10, 0}, {10, 10}, {0, 0}, {0, 10}, {0, 0}},
+            {{0, 10}, {90, 10}, {180, 10}, {0, 10}, {-90, 10}, {0, 10}},
+            {{0, 0}, {0, 0}, {10, 0}, {10, 0}, {0, 0}},
+            {{0, 0}, {180, 0}, {0, 20}, {0, 0}},
+            {{nan, 0}, {10, 0}, {10, 10}, {nan, 0}},
+            {{0, 0}, {10, 0}, {nan, 10}, {0, 0}},
+            {{0, 10}, {90, 10}, {nan, 10}, {0, 10}},
+            {{0, 0}, {10, 0}, {10, inf}, {0, 0}},
+            {{0, 10}, {90, 10}, {inf, 10}, {0, 10}},
+            {{0, 0}, {-inf, 0}, {10, 10}, {0, 0}},
+    };
+    GeoRingScratch scratch;
+    GeoPoint point;
+    ASSERT_EQ(GEO_PARSE_OK, point.from_coord(1, 1));
+    for (const auto& coordinates : cases) {
+        GeoCoordinateList ring;
+        ring.list = coordinates;
+        GeoPointPolygonRelation relation;
+        EXPECT_FALSE(GeoPolygon::point_relation_direct(ring, point, &scratch, &relation));
+    }
 }
 
 TEST_F(geographyFunctionsTest, nativeGeometryContainmentIsTranslationInvariant) {
@@ -2660,9 +2891,9 @@ TEST_F(geographyFunctionsTest, nativeGeographyMeasurementsRetainExactPolygonResu
         }
         GeoCoordinateListList rings;
         for (const auto& ring : geometry.rings) {
-            auto coordinates = std::make_unique<GeoCoordinateList>();
-            for (const auto& point : ring) coordinates->add({point.x, point.y});
-            rings.add(coordinates.release());
+            GeoCoordinateList coordinates;
+            for (const auto& point : ring) coordinates.add({point.x, point.y});
+            rings.add(std::move(coordinates));
         }
         GeoPolygon polygon;
         const auto status = polygon.from_coords(rings);
@@ -3966,9 +4197,7 @@ TEST_F(geographyFunctionsTest, h3ScalarConstantOperandsRetainNullAndErrorPrecede
     ASSERT_EQ(E_SUCCESS, cellToParent(static_cast<H3Index>(valid), 2, &expected_parent));
     EXPECT_EQ(static_cast<int64_t>(expected_parent), ColumnViewer<TYPE_BIGINT>(*parent).value(1));
 
-    auto resolution_values = Int32Column::create();
-    resolution_values->append(16);
-    resolution_values->append(2);
+    auto resolution_values = ColumnTestHelper::build_column<int32_t>({16, 2});
     auto resolution_nulls = NullColumn::create();
     resolution_nulls->append(1);
     resolution_nulls->append(0);
@@ -4080,8 +4309,7 @@ TEST_F(geographyFunctionsTest, h3ParentConstantTargetPreservesEmptyAndInvalidCel
     ASSERT_TRUE(empty.ok()) << empty.status();
     EXPECT_EQ(0, (*empty)->size());
     for (int target : {-1, 0, 15, 16}) {
-        auto cells = Int64Column::create();
-        cells->append(0);
+        auto cells = ColumnTestHelper::build_column<int64_t>({0});
         auto invalid =
                 GeoFunctions::h3_to_parent(nullptr, {cells, ColumnHelper::create_const_column<TYPE_INT>(target, 1)});
         ASSERT_FALSE(invalid.ok());
@@ -4867,8 +5095,7 @@ TEST_F(geographyFunctionsTest, h3RecursiveFillRetainsNullsConstantInputsAndLimit
     RuntimeState state;
     state.init_instance_mem_tracker();
     std::unique_ptr<FunctionContext> context(FunctionContext::create_context(
-            &state, nullptr, TypeDescriptor::create_array_type(TypeDescriptor(TYPE_BIGINT)),
-            {geography_type(), TypeDescriptor(TYPE_INT)}));
+            &state, nullptr, TYPE_ARRAY_BIGINT_DESC, {geography_type(), TypeDescriptor(TYPE_INT)}));
     const auto evaluate = [&]() {
         return GeoFunctions::h3_polygon_to_cells(context.get(),
                                                  {input, ColumnHelper::create_const_column<TYPE_INT>(9, rows)});
@@ -4978,8 +5205,7 @@ TEST_F(geographyFunctionsTest, h3PolygonFillRetainsOrderedCellsAndVaryingRowOffs
 TEST_F(geographyFunctionsTest, h3PreparedPolygonAcrossBatchesAndThreads) {
     auto polygon = ConstColumn::create(geography({"POLYGON ((-20 -20, 20 -20, 20 20, -20 20, -20 -20))"}), 2);
     std::unique_ptr<FunctionContext> context(
-            FunctionContext::create_test_context({geography_type(), TypeDescriptor(TYPE_INT)},
-                                                 TypeDescriptor::create_array_type(TypeDescriptor(TYPE_BIGINT))));
+            FunctionContext::create_test_context({geography_type(), TypeDescriptor(TYPE_INT)}, TYPE_ARRAY_BIGINT_DESC));
     context->set_constant_columns({polygon, nullptr});
     ASSERT_TRUE(GeoFunctions::h3_polygon_to_cells_prepare(context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
     ASSERT_NE(nullptr, context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
@@ -5086,7 +5312,7 @@ TEST_F(geographyFunctionsTest, h3SingleRingValidityMatchesSphericalPredicate) {
         for (const auto& point : cases[scenario].rings.front()) coordinates.add({point.x, point.y});
         const bool actual = starrocks::GeoPolygon::is_valid_ring(coordinates);
         GeoCoordinateListList rings;
-        rings.add(new GeoCoordinateList(coordinates));
+        rings.add(GeoCoordinateList(coordinates));
         starrocks::GeoPolygon original;
         const bool original_valid = original.from_coords(rings) == GEO_PARSE_OK;
         ASSERT_TRUE(expected.ok()) << expected.status();

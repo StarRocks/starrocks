@@ -51,6 +51,7 @@ import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TIcebergDeleteFile;
 import com.starrocks.thrift.TIcebergFileContent;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TParquetEncryptionInfo;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
@@ -62,10 +63,14 @@ import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.FileContent;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.FileScanTask;
+import org.apache.iceberg.MetadataColumns;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.StructLike;
+import org.apache.iceberg.encryption.EncryptionManager;
+import org.apache.iceberg.encryption.PlaintextEncryptionManager;
+import org.apache.iceberg.encryption.StarRocksKeyMetadata;
 import org.apache.iceberg.types.Conversions;
 import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
@@ -75,6 +80,7 @@ import org.apache.iceberg.util.StructLikeWrapper;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.nio.ByteBuffer;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -112,8 +118,13 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
 
     // specId, StructLikeWrapper -> partitionId
     private final Map<Pair<Integer, StructLikeWrapper>, Long> partitionKeyToId = Maps.newHashMap();
+    // specId, identity partition values -> partitionId. The PartitionKey holds identity fields only, so the files
+    // of one identity partition share it however many bucket(N) or other transform values they span.
+    private final Map<Pair<Integer, List<Object>>, Long> identityValuesToId = Maps.newHashMap();
     // spec_id -> wrapper whose comparator is reused by copyFor(); forType() builds a new comparator on each call
     private final Map<Integer, StructLikeWrapper> partitionWrapperCache = Maps.newHashMap();
+    // spec id -> the spec the scan's tasks are bound to
+    private final Map<Integer, PartitionSpec> specCache = Maps.newHashMap();
     // partitionId -> partition value sent with the scan ranges, shared by every file of the partition
     private final Map<Long, THdfsPartition> partitionValues = Maps.newHashMap();
 
@@ -331,6 +342,18 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
             if (deleteFile.format() == FileFormat.PARQUET || deleteFile.format() == FileFormat.ORC) {
                 // a position delete file may have another format than its data file (write.delete.format.default)
                 target.setFile_format(IcebergApiConverter.getHdfsFileFormat(deleteFile.format()).toThrift());
+                if (referencesOnlyDataFile(deleteFile, task.file())) {
+                    target.setReferences_only_data_file(true);
+                }
+            }
+            // A position-delete file in an encrypted table is itself encrypted, with its own
+            // per-file key. It cannot reuse the data file's key, so carry its key material
+            // separately or the BE has no way to open it.
+            if (deleteFile.keyMetadata() != null && deleteFile.keyMetadata().remaining() > 0) {
+                TParquetEncryptionInfo deleteEncInfo = buildEncryptionInfo(deleteFile);
+                if (deleteEncInfo != null) {
+                    target.setParquet_encryption_info(deleteEncInfo);
+                }
             }
             posDeleteFiles.add(target);
         }
@@ -340,6 +363,27 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
         }
 
         return Lists.newArrayList(buildTScanRangeLocations(hdfsScanRange));
+    }
+
+    // True when every row of a position delete file references dataFile: the file says so
+    // (referenced_data_file), or the lower and upper bounds of its file_path column are both
+    // dataFile's path. A truncated bound never equals the full path.
+    @VisibleForTesting
+    static boolean referencesOnlyDataFile(DeleteFile deleteFile, DataFile dataFile) {
+        String dataFilePath = dataFile.path().toString();
+        if (deleteFile.referencedDataFile() != null) {
+            return deleteFile.referencedDataFile().equals(dataFilePath);
+        }
+        if (deleteFile.lowerBounds() == null || deleteFile.upperBounds() == null) {
+            return false;
+        }
+        int filePathId = MetadataColumns.DELETE_FILE_PATH.fieldId();
+        ByteBuffer lower = deleteFile.lowerBounds().get(filePathId);
+        ByteBuffer upper = deleteFile.upperBounds().get(filePathId);
+        if (lower == null || !lower.equals(upper)) {
+            return false;
+        }
+        return dataFilePath.equals(Conversions.fromByteBuffer(Types.StringType.get(), lower.duplicate()).toString());
     }
 
     private List<TScanRangeLocations> buildDeleteFileScanRanges(FileScanTask task, Long partitionId) throws AnalysisException {
@@ -485,6 +529,21 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
             hdfsScanRange.setFirst_row_id(firstRowId);
         }
 
+        // Table-level gate FIRST, unconditionally. It must not sit inside the key-metadata branch
+        // below: the case it exists to catch is a table that declares encryption while the catalog
+        // supplies a plaintext manager, and such a table's files are written WITHOUT key metadata --
+        // so they would skip the branch and be served silently, which is the exact fail-open the
+        // gate is for.
+        IcebergEncryption.checkReadSupported(table.getNativeTable(), table.getName());
+
+        // Attach encryption info if the file has key metadata (encrypted file)
+        if (file.keyMetadata() != null && file.keyMetadata().remaining() > 0) {
+            TParquetEncryptionInfo encInfo = buildEncryptionInfo(file);
+            if (encInfo != null) {
+                hdfsScanRange.setParquet_encryption_info(encInfo);
+            }
+        }
+
         return hdfsScanRange;
     }
 
@@ -578,10 +637,12 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
 
     @VisibleForTesting
     public long addPartition(FileScanTask task) throws AnalysisException {
-        PartitionSpec spec = task.spec();
-
         // Look up before building the PartitionKey: this runs once per data file, and with a non-identity
         // transform such as bucket(N) the cache below sees N keys per identity partition.
+        // task.spec() parses the spec once per task, and the parse's cache lookup hashes the whole table schema. All
+        // tasks of a scan share the schema and, per spec id, the spec, so parse it once per spec id; the file carries
+        // the id of the spec its task was planned with.
+        PartitionSpec spec = specCache.computeIfAbsent(task.file().specId(), ignore -> task.spec());
         StructLikeWrapper wrappedPartition = partitionWrapperCache
                 .computeIfAbsent(spec.specId(), ignore -> StructLikeWrapper.forType(spec.partitionType()))
                 .copyFor(task.file().partition());
@@ -593,30 +654,43 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
         }
 
         if (!partitionSlotIdsCache.containsKey(spec.specId())) {
-            partitionSlotIdsCache.put(spec.specId(), buildPartitionSlotIds(task.spec()));
+            partitionSlotIdsCache.put(spec.specId(), buildPartitionSlotIds(spec));
         }
 
         BiMap<Integer, PartitionField> indexToPartitionField = indexToFieldCache.computeIfAbsent(spec.specId(),
-                ignore -> getIdentityPartitions(task.spec()));
+                ignore -> getIdentityPartitions(spec));
 
         List<Integer> partitionFieldIndexes = indexesCache.computeIfAbsent(spec.specId(),
                 ignore -> getPartitionFieldIndexes(spec, indexToPartitionField));
 
         StructLike origPartition = task.partition();
-        PartitionKey partitionKey = getPartitionKey(origPartition, task.spec(), partitionFieldIndexes, indexToPartitionField);
-        long partitionId = partitionIdGenerator.getOrGenerate(partitionKey);
-        partitionKeyToId.put(cacheKey, partitionId);
+        // getPartitionKey() is a function of the spec and these values (spec.javaClasses() gives an identity field
+        // its source column's class), so they key its result.
+        Class<?>[] javaClasses = spec.javaClasses();
+        List<Object> identityValues = new ArrayList<>(partitionFieldIndexes.size());
+        for (int index : partitionFieldIndexes) {
+            identityValues.add(PartitionUtil.getPartitionValue(origPartition, index, javaClasses[index]));
+        }
+        Pair<Integer, List<Object>> identityKey = Pair.create(spec.specId(), identityValues);
+        Long partitionId = identityValuesToId.get(identityKey);
+        if (partitionId == null) {
+            PartitionKey partitionKey =
+                    getPartitionKey(origPartition, spec, partitionFieldIndexes, indexToPartitionField);
+            partitionId = partitionIdGenerator.getOrGenerate(partitionKey);
+            identityValuesToId.put(identityKey, partitionId);
 
-        // The PartitionKey holds identity fields only, so several cache keys (one per bucket, say) share one
-        // partition id and one thrift value. The scheduler sends it once per fragment instance and drops it from
-        // later ranges (FragmentInstance.removeDuplicatedPartitionValues).
-        partitionValues.computeIfAbsent(partitionId, ignore -> {
-            THdfsPartition value = new THdfsPartition();
-            value.setPartition_key_exprs(partitionKey.getKeys().stream()
-                    .map(ExprToThrift::treeToThrift)
-                    .collect(Collectors.toList()));
-            return value;
-        });
+            // Several cache keys (one per bucket, say) share one partition id and one thrift value. The scheduler
+            // sends it once per fragment instance and drops it from later ranges
+            // (FragmentInstance.removeDuplicatedPartitionValues).
+            partitionValues.computeIfAbsent(partitionId, ignore -> {
+                THdfsPartition value = new THdfsPartition();
+                value.setPartition_key_exprs(partitionKey.getKeys().stream()
+                        .map(ExprToThrift::treeToThrift)
+                        .collect(Collectors.toList()));
+                return value;
+            });
+        }
+        partitionKeyToId.put(cacheKey, partitionId);
         checkPartitionNumLimit(table, partitionKeyToId.size());
         return partitionId;
     }
@@ -744,4 +818,51 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
         }
         return tableLocation;
     }
+
+    /**
+     * Recover the per-file data key for an encrypted Iceberg file and hand it to BE.
+     *
+     * <p>The key is read straight out of {@code StandardKeyMetadata}. It deliberately does not go
+     * through {@code EncryptionManager.decrypt()}: the standard manager returns a
+     * {@code StandardDecryptedInputFile}, which implements {@code NativeEncryptionInputFile} and
+     * <b>not</b> {@code NativelyEncryptedFile}, and exposes no {@code nativeCryptoParameters()} --
+     * so there is no file key to take from it. That is the shape of the API in Iceberg 1.11, not a
+     * gap in an older version.
+     *
+     * <p>No KMS call and no cache are needed here: in this mode the key is already present in
+     * {@code key_metadata}. Its confidentiality rests on Iceberg encrypting the manifest that
+     * carries it.
+     *
+     * <p>Fails the query rather than returning null if the key cannot be recovered: an encrypted
+     * file must never be handed to BE as though it were plaintext.
+     */
+    private TParquetEncryptionInfo buildEncryptionInfo(ContentFile<?> file) {
+        // The table-level gate runs in buildScanRange, before any per-file test -- see there for why
+        // it cannot live here.
+        EncryptionManager encMgr = table.getNativeTable().encryption();
+        if (encMgr instanceof PlaintextEncryptionManager) {
+            return null;
+        }
+        try {
+            StarRocksKeyMetadata.Parsed parsed = StarRocksKeyMetadata.parse(file.keyMetadata());
+            if (parsed.dek == null || parsed.dek.length == 0) {
+                throw new StarRocksConnectorException(
+                        "Iceberg key_metadata carries no data key for encrypted file " + file.path());
+            }
+            TParquetEncryptionInfo encInfo = new TParquetEncryptionInfo();
+            encInfo.setFile_dek(parsed.dek);
+            // v1 carries an AAD prefix that v0 does not. BE needs it whenever the file itself does
+            // not store one (supply_aad_prefix).
+            if (parsed.aadPrefix != null && parsed.aadPrefix.length > 0) {
+                encInfo.setAad_prefix(parsed.aadPrefix);
+            }
+            return encInfo;
+        } catch (StarRocksConnectorException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new StarRocksConnectorException(
+                    "failed to read Iceberg encryption key metadata for " + file.path(), e);
+        }
+    }
+
 }

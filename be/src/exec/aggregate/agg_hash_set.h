@@ -27,6 +27,7 @@
 #include "common/config_exec_flow_fwd.h"
 #include "common/system/cpu_info.h"
 #include "exec/aggregate/agg_profile.h"
+#include "exec/aggregate/serialized_key_buffer.h"
 #include "gutil/casts.h"
 #include "runtime/mem_pool.h"
 
@@ -383,9 +384,12 @@ struct AggHashSetOfOneStringKey : public AggHashSet<HashSet, AggHashSetOfOneStri
     ALWAYS_NOINLINE void build_set_prefetch(size_t chunk_size, const Columns& key_columns, MemPool* pool,
                                             Filter* not_founds) {
         const auto* column = down_cast<const BinaryColumn*>(key_columns[0].get());
+        // emplace_back, not cache[i] after reserve(): KeyType has no default constructor, and
+        // assigning past size() writes into elements that were never constructed.
+        cache.clear();
         cache.reserve(chunk_size);
         for (size_t i = 0; i < chunk_size; ++i) {
-            cache[i] = KeyType(column->get_slice(i));
+            cache.emplace_back(column->get_slice(i));
         }
 
         const size_t __prefetch_dist = agg_hash_map_default_prefetch_dist();
@@ -485,9 +489,11 @@ struct AggHashSetOfOneNullableStringKey : public AggHashSet<HashSet, AggHashSetO
         const auto* nullable_column = down_cast<const NullableColumn*>(key_columns[0].get());
         const auto* data_column = down_cast<const BinaryColumn*>(nullable_column->data_column().get());
 
+        // See the one-string set above: emplace_back, not cache[i] after reserve().
+        cache.clear();
         cache.reserve(chunk_size);
         for (size_t i = 0; i < chunk_size; ++i) {
-            cache[i] = KeyType(data_column->get_slice(i));
+            cache.emplace_back(data_column->get_slice(i));
         }
         const size_t __prefetch_dist = agg_hash_map_default_prefetch_dist();
         for (size_t i = 0; i < chunk_size; ++i) {
@@ -544,11 +550,7 @@ struct AggHashSetOfSerializedKey : public AggHashSet<HashSet, AggHashSetOfSerial
     using KeyType = typename HashSet::key_type;
 
     template <class... Args>
-    AggHashSetOfSerializedKey(int32_t chunk_size, Args&&... args)
-            : Base(chunk_size, std::forward<Args>(args)...),
-              _mem_pool(std::make_unique<MemPool>()),
-              _buffer(_mem_pool->allocate(max_one_row_size * chunk_size + SLICE_MEMEQUAL_OVERFLOW_PADDING)),
-              _chunk_size(chunk_size) {}
+    AggHashSetOfSerializedKey(int32_t chunk_size, Args&&... args) : Base(chunk_size, std::forward<Args>(args)...) {}
 
     // When compute_and_allocate=false:
     // Elements queried in HashSet will be added to HashSet
@@ -556,23 +558,15 @@ struct AggHashSetOfSerializedKey : public AggHashSet<HashSet, AggHashSetOfSerial
     // and are mainly used in the first stage of two-stage aggregation when aggr reduction is low
     template <bool compute_and_allocate>
     void build_set(size_t chunk_size, const Columns& key_columns, MemPool* pool, Filter* not_founds) {
-        slice_sizes.assign(_chunk_size, 0);
         if constexpr (!compute_and_allocate) {
             DCHECK(not_founds);
             not_founds->assign(chunk_size, 0);
         }
 
-        max_one_row_size = get_max_serialize_size(key_columns);
-        size_t new_buffer_size = max_one_row_size * chunk_size + SLICE_MEMEQUAL_OVERFLOW_PADDING;
-        if (UNLIKELY(new_buffer_size > _mem_pool->total_allocated_bytes())) {
-            _mem_pool->clear();
-            // reserved extra SLICE_MEMEQUAL_OVERFLOW_PADDING bytes to prevent SIMD instructions
-            // from accessing out-of-bound memory.
-            _buffer = _mem_pool->allocate(new_buffer_size);
-        }
-
-        for (const auto& key_column : key_columns) {
-            key_column->serialize_batch(_buffer, slice_sizes, chunk_size, max_one_row_size);
+        if (UNLIKELY(!_key_buffer.serialize(key_columns, chunk_size))) {
+            build_set_by_rows<compute_and_allocate>(chunk_size, key_columns, pool, not_founds,
+                                                    _key_buffer.max_row_size());
+            return;
         }
 
         if (!agg_should_prefetch_table(this->hash_set)) {
@@ -585,26 +579,48 @@ struct AggHashSetOfSerializedKey : public AggHashSet<HashSet, AggHashSetOfSerial
     template <bool compute_and_allocate>
     ALWAYS_NOINLINE void build_set_noprefetch(size_t chunk_size, MemPool* pool, Filter* not_founds) {
         for (size_t i = 0; i < chunk_size; ++i) {
-            Slice tmp = {_buffer + i * max_one_row_size, slice_sizes[i]};
-            if constexpr (compute_and_allocate) {
-                KeyType key(tmp);
-                this->hash_set.lazy_emplace(key, [&](const auto& ctor) {
-                    // we must persist the slice before insert
-                    uint8_t* pos = pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
-                    memcpy(pos, key.data, key.size);
-                    ctor(pos, key.size, key.hash);
-                });
-            } else {
-                (*not_founds)[i] = !this->hash_set.contains(tmp);
+            _probe_or_insert<compute_and_allocate>(i, _key_buffer.key(i), pool, not_founds);
+        }
+    }
+
+    // A chunk whose keys do not fit one batch (see SerializedKeyBuffer::serialize()): serialize
+    // and probe one row at a time through a buffer sized for the largest row.
+    template <bool compute_and_allocate>
+    ALWAYS_NOINLINE void build_set_by_rows(size_t chunk_size, const Columns& key_columns, MemPool* pool,
+                                           Filter* not_founds, size_t max_one_row_size) {
+        uint8_t* buffer = _key_buffer.row_buffer(max_one_row_size);
+        for (size_t i = 0; i < chunk_size; ++i) {
+            uint8_t* cursor = buffer;
+            for (const auto& key_column : key_columns) {
+                cursor += key_column->serialize_compact(i, cursor);
             }
+            DCHECK(cursor <= buffer + max_one_row_size);
+            _probe_or_insert<compute_and_allocate>(i, Slice(buffer, cursor - buffer), pool, not_founds);
+        }
+    }
+
+    template <bool compute_and_allocate>
+    ALWAYS_INLINE void _probe_or_insert(size_t i, const Slice& tmp, MemPool* pool, Filter* not_founds) {
+        if constexpr (compute_and_allocate) {
+            KeyType key(tmp);
+            this->hash_set.lazy_emplace(key, [&](const auto& ctor) {
+                // we must persist the slice before insert
+                uint8_t* pos = pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
+                memcpy(pos, key.data, key.size);
+                ctor(pos, key.size, key.hash);
+            });
+        } else {
+            (*not_founds)[i] = !this->hash_set.contains(tmp);
         }
     }
 
     template <bool compute_and_allocate>
     ALWAYS_NOINLINE void build_set_prefetch(size_t chunk_size, MemPool* pool, Filter* not_founds) {
+        // See the one-string set above: emplace_back, not cache[i] after reserve().
+        cache.clear();
         cache.reserve(chunk_size);
         for (size_t i = 0; i < chunk_size; ++i) {
-            cache[i] = KeyType(Slice(_buffer + i * max_one_row_size, slice_sizes[i]));
+            cache.emplace_back(_key_buffer.key(i));
         }
 
         const size_t __prefetch_dist = agg_hash_map_default_prefetch_dist();
@@ -622,14 +638,6 @@ struct AggHashSetOfSerializedKey : public AggHashSet<HashSet, AggHashSetOfSerial
                 (*not_founds)[i] = this->hash_set.find(key, key.hash) == this->hash_set.end();
             }
         }
-    }
-
-    size_t get_max_serialize_size(const Columns& key_columns) {
-        size_t max_size = 0;
-        for (const auto& key_column : key_columns) {
-            max_size += key_column->max_one_element_serialize_size_compact();
-        }
-        return max_size;
     }
 
     void insert_keys_to_columns(ResultVector& keys, MutableColumns& key_columns, int32_t chunk_size) {
@@ -656,11 +664,7 @@ struct AggHashSetOfSerializedKey : public AggHashSet<HashSet, AggHashSetOfSerial
     static constexpr bool has_single_null_key = false;
     bool has_null_key = false;
 
-    Buffer<uint32_t> slice_sizes;
-    size_t max_one_row_size = 8;
-
-    std::unique_ptr<MemPool> _mem_pool;
-    uint8_t* _buffer;
+    SerializedKeyBuffer _key_buffer;
     ResultVector results;
 
     int32_t _chunk_size;

@@ -235,7 +235,9 @@ CONF_mBool(enable_load_spill_parallel_merge, "true");
 // as auto-increment ID assignment must happen before the memtable is submitted for flush.
 CONF_mBool(enable_parallel_memtable_finalize, "true");
 
-CONF_mBool(enable_put_combinded_txn_log_parallel, "false");
+// Shared-data only. Write the combined txn logs of a load's partitions to object storage in parallel, on
+// put_combined_txn_log_thread_pool, instead of one partition after another.
+CONF_mBool(enable_put_combinded_txn_log_parallel, "true");
 
 // Shared-data only. Seconds a node keeps the shard info of a tablet it does not own, so that touching
 // the tablet again within this time does not ask starmgr for it (GetShard RPC). It keeps what it had

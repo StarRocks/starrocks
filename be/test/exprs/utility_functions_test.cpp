@@ -28,6 +28,7 @@
 #include "common/statusor.h"
 #include "exprs/function_context.h"
 #include "runtime/runtime_state.h"
+#include "testutil/column_test_helper.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -233,16 +234,10 @@ TEST_F(UtilityFunctionsTest, encodeSortKeyBasicOrdering) {
 
     // Prepare columns of different types
     // int32
-    auto c_int = Int32Column::create();
-    c_int->append(1);
-    c_int->append(2);
-    c_int->append(10);
+    auto c_int = ColumnTestHelper::build_column<int32_t>({1, 2, 10});
 
     // binary
-    auto c_str = BinaryColumn::create();
-    c_str->append(Slice("a"));
-    c_str->append(Slice("b"));
-    c_str->append(Slice("c"));
+    auto c_str = ColumnTestHelper::build_column<Slice>({"a", "b", "c"});
 
     // date
     auto c_date = DateColumn::create();
@@ -257,16 +252,10 @@ TEST_F(UtilityFunctionsTest, encodeSortKeyBasicOrdering) {
     c_timestamp->append(TimestampValue::create(2021, 1, 10, 0, 0, 0, 0));
 
     // float32
-    auto c_float32 = FloatColumn::create();
-    c_float32->append(1.0f);
-    c_float32->append(2.0f);
-    c_float32->append(10.0f);
+    auto c_float32 = ColumnTestHelper::build_column<float>({1.0f, 2.0f, 10.0f});
 
     // float64
-    auto c_float64 = DoubleColumn::create();
-    c_float64->append(1.0);
-    c_float64->append(2.0);
-    c_float64->append(10.0);
+    auto c_float64 = ColumnTestHelper::build_column<double>({1.0, 2.0, 10.0});
 
     Columns cols;
     cols.emplace_back(c_int);

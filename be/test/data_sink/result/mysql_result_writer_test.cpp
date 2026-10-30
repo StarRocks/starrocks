@@ -29,6 +29,7 @@
 #include "exprs/expr_context.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/runtime_state.h"
+#include "testutil/column_test_helper.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -64,38 +65,30 @@ TEST_F(MysqlResultWriterTest, should_set_binary_null_bit_after_fallback_column) 
     constexpr int kNumRows = 2;
 
     // Typed BIGINT column.
-    auto bigint_col = Int64Column::create();
-    bigint_col->append(11);
-    bigint_col->append(22);
+    auto bigint_col = ColumnTestHelper::build_column<int64_t>({11, 22});
 
     // Fallback STRUCT column (non-nullable).
-    auto struct_field = BinaryColumn::create();
-    struct_field->append("first");
-    struct_field->append("second");
+    auto struct_field = ColumnTestHelper::build_column<Slice>({"first", "second"});
     Columns struct_fields{struct_field};
     std::vector<std::string> field_names{"f"};
     auto struct_col = StructColumn::create(struct_fields, field_names);
 
     // Nullable BIGINT column that is NULL for the first row.
-    auto nullable_data = Int64Column::create();
-    nullable_data->append(999);
-    nullable_data->append(888);
+    auto nullable_data = ColumnTestHelper::build_column<int64_t>({999, 888});
     auto null_flags = NullColumn::create();
     null_flags->append(1);
     null_flags->append(0);
     auto nullable_col = NullableColumn::create(nullable_data, null_flags);
 
     std::vector<std::pair<TypeDescriptor, ColumnPtr>> expr_columns;
-    expr_columns.emplace_back(TypeDescriptor::from_logical_type(TYPE_BIGINT), bigint_col);
-    expr_columns.emplace_back(
-            TypeDescriptor::create_struct_type(field_names, {TypeDescriptor::from_logical_type(TYPE_VARCHAR)}),
-            struct_col);
-    expr_columns.emplace_back(TypeDescriptor::from_logical_type(TYPE_BIGINT), nullable_col);
+    expr_columns.emplace_back(TYPE_BIGINT_DESC, bigint_col);
+    expr_columns.emplace_back(TypeDescriptor::create_struct_type(field_names, {TYPE_VARCHAR_DESC}), struct_col);
+    expr_columns.emplace_back(TYPE_BIGINT_DESC, nullable_col);
     auto expr_ctxs = make_expr_ctxs(expr_columns);
 
     // Dummy chunk that only carries row count information.
     Chunk chunk;
-    auto dummy_col = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_INT), false);
+    auto dummy_col = ColumnHelper::create_column(TYPE_INT_DESC, false);
     dummy_col->append_default();
     dummy_col->append_default();
     chunk.append_column(dummy_col, 0);
@@ -189,10 +182,9 @@ TEST_F(MysqlResultWriterTest, geography_matches_varbinary_output) {
                 bytes_col = ColumnHelper::create_const_null_column(2);
             }
             auto run = [&](const TypeDescriptor& type, const ColumnPtr& column) {
-                auto ctxs =
-                        make_expr_ctxs({{type, column},
-                                        {TypeDescriptor::from_logical_type(TYPE_BIGINT),
-                                         NullableColumn::create(Int64Column::create(2), NullColumn::create(2, 1))}});
+                auto ctxs = make_expr_ctxs(
+                        {{type, column},
+                         {TYPE_BIGINT_DESC, NullableColumn::create(Int64Column::create(2), NullColumn::create(2, 1))}});
                 Chunk chunk;
                 chunk.append_column(Int32Column::create(2), 0);
                 RuntimeProfile profile("geography_output");
@@ -218,7 +210,7 @@ TEST_F(MysqlResultWriterTest, geography_matches_varbinary_output) {
                 return rows;
             };
             const auto actual = run(geo_type, geo_col);
-            EXPECT_EQ(run(TypeDescriptor::from_logical_type(TYPE_VARBINARY), bytes_col), actual);
+            EXPECT_EQ(run(TYPE_VARBINARY_DESC, bytes_col), actual);
             ASSERT_EQ(2, actual.size());
             if (shape == 0 || shape == 2) {
                 for (size_t row = 0; row < actual.size(); ++row) {

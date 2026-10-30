@@ -827,6 +827,15 @@ Status ChunkPredicateBuilder<E, Type>::normalize_join_runtime_filter(const SlotD
                     (l->type().type != slot.type().type && l->type().type != MappingType && !ignore_cast(slot, *l))) {
                     continue;
                 }
+                // Under a global dictionary MappingType is the dictionary code type, but only a predicate
+                // rewritten onto the codes holds codes. One still over the strings -- an IN list too long
+                // for normalize_in_or_equal_predicate, left unnormalized -- is a VARCHAR predicate, and
+                // reading it as the code type below is a bad cast. Leave it to be evaluated as a conjunct.
+                if constexpr (MappingType != SlotType) {
+                    if (l->type().type != MappingType) {
+                        continue;
+                    }
+                }
 
                 std::vector<SlotId> slot_ids;
                 if (1 != l->get_slot_ids(&slot_ids) || slot_ids[0] != slot.id()) {
@@ -908,6 +917,11 @@ Status ChunkPredicateBuilder<E, Type>::normalize_join_runtime_filter(const SlotD
             // runtime filter existed and does not have null.
             if (rf == nullptr || rf->get_in_filter() != nullptr) {
                 rt_ranger_params.add_unarrived_rf(desc, &slot, _opts.driver_sequence);
+                continue;
+            }
+            // an arrived join filter that passes every row filters nothing. always_true() alone does not tell it: a
+            // top-n filter is always true but has bounds.
+            if (rf->always_true() && rf->is_pass_all()) {
                 continue;
             }
 
@@ -1103,7 +1117,7 @@ struct ColumnRangeBuilder {
     template <LogicalType ltype, typename E, CompoundNodeType Type>
     Status operator()(ChunkPredicateBuilder<E, Type>* parent, const SlotDescriptor* slot,
                       std::map<std::string, ColumnValueRangeType>* column_value_ranges) {
-        if constexpr (ltype == TYPE_TIME || ltype == TYPE_NULL || ltype == TYPE_JSON || ltype == TYPE_VARIANT ||
+        if constexpr (ltype == TYPE_TIME || ltype == TYPE_NULL || lt_is_semi_structured<ltype> ||
                       ltype == TYPE_GEOGRAPHY || ltype == TYPE_GEOMETRY || lt_is_float<ltype> || lt_is_binary<ltype>) {
             return Status::OK();
         } else {

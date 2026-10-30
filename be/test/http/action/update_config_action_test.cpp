@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <arrow/io/interfaces.h>
 #include <gflags/gflags.h>
 #include <gtest/gtest.h>
 
@@ -42,6 +43,7 @@
 #include "common/system/cpu_info.h"
 #include "common/thread/threadpool.h"
 #include "common/util/bthreads/executor.h"
+#include "compute_env/arrow_io_thread_pool.h"
 #include "data_workflows/load/tablet_writer/load_channel_mgr.h"
 #include "exec/exec_env.h"
 #include "fs/fs_util.h"
@@ -243,6 +245,27 @@ TEST_F(ConfigUpdateHooksTest, test_update_number_tablet_writer_threads) {
     }
 }
 
+TEST_F(ConfigUpdateHooksTest, test_update_arrow_io_thread_pool_size) {
+    auto* registry = ConfigUpdateRegistry::instance();
+    const int default_capacity = arrow_io_thread_pool_default_capacity();
+    DeferOp restore([&]() { CHECK_OK(registry->update_config("arrow_io_thread_pool_size", "0")); });
+
+    const int32_t size = default_capacity + 4;
+    ASSERT_OK(registry->update_config("arrow_io_thread_pool_size", std::to_string(size)));
+    EXPECT_EQ(size, arrow::io::GetIOThreadPoolCapacity());
+
+    // An out-of-range value is rejected and rolled back, and the pool keeps its size.
+    for (const std::string& value : {std::string("-1"), std::to_string(kMaxArrowIOThreadPoolSize + 1)}) {
+        EXPECT_TRUE(registry->update_config("arrow_io_thread_pool_size", value).is_invalid_argument()) << value;
+        EXPECT_EQ(size, config::arrow_io_thread_pool_size) << value;
+        EXPECT_EQ(size, arrow::io::GetIOThreadPoolCapacity()) << value;
+    }
+
+    // 0 goes back to the size Arrow chose for itself.
+    ASSERT_OK(registry->update_config("arrow_io_thread_pool_size", "0"));
+    EXPECT_EQ(default_capacity, arrow::io::GetIOThreadPoolCapacity());
+}
+
 TEST_F(ConfigUpdateHooksTest, test_update_transaction_publish_version_worker_count) {
     auto st = ConfigUpdateRegistry::instance()->update_config("transaction_publish_version_worker_count", "8");
     CHECK_OK(st);
@@ -415,6 +438,23 @@ TEST_F(ConfigUpdateHooksTest, test_update_lake_metadata_fetch_thread_count) {
     st = ConfigUpdateRegistry::instance()->update_config("lake_metadata_fetch_thread_count", "0");
     CHECK_OK(st);
     ASSERT_EQ(1, thread_pool->max_threads());
+}
+
+TEST_F(ConfigUpdateHooksTest, test_update_put_combined_txn_log_thread_pool_num_max) {
+    auto* thread_pool = _runtime_env->put_combined_txn_log_thread_pool();
+    ASSERT_NE(nullptr, thread_pool);
+    SCOPED_UPDATE(int32_t, config::put_combined_txn_log_thread_pool_num_max,
+                  config::put_combined_txn_log_thread_pool_num_max);
+    const int saved_max_threads = thread_pool->max_threads();
+    DeferOp restore_pool([&]() { CHECK_OK(thread_pool->update_max_threads(saved_max_threads)); });
+    auto* registry = ConfigUpdateRegistry::instance();
+
+    ASSERT_OK(registry->update_config("put_combined_txn_log_thread_pool_num_max", "8"));
+    EXPECT_EQ(8, thread_pool->max_threads());
+
+    // Non-positive values are clamped to 1 so the pool keeps at least one worker.
+    ASSERT_OK(registry->update_config("put_combined_txn_log_thread_pool_num_max", "0"));
+    EXPECT_EQ(1, thread_pool->max_threads());
 }
 
 #ifdef WITH_TENANN

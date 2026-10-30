@@ -187,8 +187,14 @@ In your Maven project's `pom.xml` file, add the Flink connector as a dependency 
 #### sink.max-retries
 
 - **Required**: No
-- **Default value**: 3
-- **Description**: The number of times that the system retries to perform the Stream Load job. This parameter is available only when you set `sink.version` to `V1`. Valid values: 0 to 10.
+- **Default value**: 3 (`0` when Merge Commit is enabled)
+- **Description**: The number of times that the system retries to perform the Stream Load job. This parameter takes effect when you set `sink.version` to `V1` or when Merge Commit is enabled. Valid values: 0 to 10. When Merge Commit is enabled, the connector does not retry failed load requests unless you explicitly set this parameter, for example, `'sink.max-retries' = '3'`. With retries enabled, the connector keeps the data of each load request in memory until the request succeeds, which increases memory usage. Because Merge Commit provides at-least-once semantics, a retried request may be loaded twice if the original request actually succeeded, for example, when its response is lost.
+
+#### sink.retry.interval-ms
+
+- **Required**: No
+- **Default value**: 10000
+- **Description**: The interval between two retries of a failed load request when Merge Commit is enabled. Unit: ms. This parameter takes effect only when `sink.max-retries` is greater than `0`. It does not take effect when `sink.version` is set to `V1`.
 
 #### sink.connect.timeout-ms
 
@@ -445,6 +451,10 @@ Below are some important notes when using Merge Commit:
 
   Merge Commit only guarantees at-least-once semantic. It does not support exactly-once semantic. Do not set `sink.semantic` to `exactly-once` when Merge Commit is enabled.
 
+- **Retries are disabled by default**
+
+  When Merge Commit is enabled, `sink.max-retries` defaults to `0`, so a load request that fails due to a transient error, such as a StarRocks node being scaled in, is not retried and the sink fails. To retry failed load requests, explicitly set `sink.max-retries`, for example, `'sink.max-retries' = '3'`. You can use `sink.retry.interval-ms` to control the interval between retries.
+
 - **Ordering for Primary Key tables**
 
   By default, `sink.merge-commit.max-concurrent-requests` is `Integer.MAX_VALUE`, which means a single sink subtask may send multiple Stream Load requests concurrently. This can cause out-of-order loading, which may be problematic for Primary Key tables. To ensure in-order loading, set `sink.merge-commit.max-concurrent-requests` to `0`, which, however, will reduce throughput. Alternatively, you can use Conditional Update to prevent newer data from being overwritten by older data. For configuration examples, see [In-order loading for Primary Key tables](#in-order-loading-for-primary-key-tables).
@@ -460,7 +470,7 @@ Below are some important notes when using Merge Commit:
 
   These two parameters control parallelism at different layers and should be tuned independently:
   - `sink.parallelism` controls the number of Flink sink subtasks. Each subtask buffers and sends data to StarRocks. Increase this value when Flink sink operators are CPU- or memory-bound — you can monitor Flink's per-operator CPU and memory usage to determine whether more subtasks are needed.
-  - `sink.properties.merge_commit_parallel` controls the degree of parallelism for the loading plan that StarRocks creates for each Merge Commit transaction. Increase this value when StarRocks becomes the bottleneck. You can monitor the StarRocks metrics [merge_commit_pending_total](../administration/management/monitoring/metrics.md#merge_commit_pending_total) (number of pending Merge Commit tasks) and [merge_commit_pending_bytes](../administration/management/monitoring/metrics.md#merge_commit_pending_bytes) (bytes held by pending tasks) to determine whether more parallelism is needed on the StarRocks side — sustained high values indicate that the loading plan cannot keep up with incoming data.
+  - `sink.properties.merge_commit_parallel` controls the degree of parallelism for the loading plan that StarRocks creates for each Merge Commit transaction. Increase this value when StarRocks becomes the bottleneck. You can monitor the StarRocks metrics [merge_commit_pending_total](../administration/management/monitoring/metric_details/i-p.md#merge_commit_pending_total) (number of pending Merge Commit tasks) and [merge_commit_pending_bytes](../administration/management/monitoring/metric_details/i-p.md#merge_commit_pending_bytes) (bytes held by pending tasks) to determine whether more parallelism is needed on the StarRocks side — sustained high values indicate that the loading plan cannot keep up with incoming data.
 
 - **Relationship between `sink.merge-commit.chunk.size` and `sink.buffer-flush.max-bytes`**:
   - `sink.merge-commit.chunk.size` controls the maximum data size per individual Stream Load request (per chunk). When data in a chunk reaches this size, it is flushed immediately.

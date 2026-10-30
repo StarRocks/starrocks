@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.iceberg;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
@@ -33,24 +34,42 @@ import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.thrift.THdfsFileFormat;
 import com.starrocks.thrift.THdfsPartition;
 import com.starrocks.thrift.THdfsScanRange;
+import com.starrocks.thrift.TIcebergDeleteFile;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.type.DateType;
+import mockit.Mock;
+import mockit.MockUp;
+import org.apache.iceberg.AppendFiles;
+import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.FileMetadata;
 import org.apache.iceberg.FileScanTask;
+import org.apache.iceberg.MetadataColumns;
+import org.apache.iceberg.Metrics;
+import org.apache.iceberg.PartitionData;
 import org.apache.iceberg.PartitionKey;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.StructLike;
+import org.apache.iceberg.encryption.EncryptedInputFile;
+import org.apache.iceberg.encryption.EncryptedOutputFile;
+import org.apache.iceberg.encryption.EncryptionManager;
+import org.apache.iceberg.encryption.StarRocksKeyMetadata;
+import org.apache.iceberg.io.InputFile;
+import org.apache.iceberg.io.OutputFile;
+import org.apache.iceberg.types.Conversions;
 import org.apache.iceberg.types.Types;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -59,6 +78,7 @@ import java.util.Set;
 import static com.starrocks.type.IntegerType.BIGINT;
 import static com.starrocks.type.IntegerType.INT;
 import static com.starrocks.type.VarcharType.VARCHAR;
+import static org.apache.iceberg.TableProperties.ENCRYPTION_TABLE_KEY;
 
 /**
  * Test cases for IcebergConnectorScanRangeSource focusing on initBucketInfo and extractBucketId methods
@@ -176,6 +196,73 @@ public class IcebergConnectorScanRangeSourceTest extends TableTestBase {
         Assertions.assertEquals(THdfsFileFormat.PARQUET, range.getDelete_files().get(0).getFile_format());
     }
 
+    private static DeleteFile positionDeletes(String path, String referencedDataFile, String lowerPath,
+                                              String upperPath) {
+        FileMetadata.Builder builder = FileMetadata.deleteFileBuilder(SPEC_A).ofPositionDeletes()
+                .withPath(path).withFormat(FileFormat.PARQUET).withFileSizeInBytes(10).withRecordCount(1)
+                .withPartitionPath("data_bucket=0");
+        if (referencedDataFile != null) {
+            builder.withReferencedDataFile(referencedDataFile);
+        }
+        if (lowerPath != null) {
+            int filePathId = MetadataColumns.DELETE_FILE_PATH.fieldId();
+            builder.withMetrics(new Metrics(1L, null, null, null, null,
+                    Map.of(filePathId, Conversions.toByteBuffer(Types.StringType.get(), lowerPath)),
+                    Map.of(filePathId, Conversions.toByteBuffer(Types.StringType.get(), upperPath))));
+        }
+        return builder.build();
+    }
+
+    @Test
+    public void testReferencesOnlyDataFile() {
+        String a = FILE_A.location();
+        String b = FILE_A_2.location();
+        // referenced_data_file decides when it is set
+        Assertions.assertTrue(IcebergConnectorScanRangeSource.referencesOnlyDataFile(
+                positionDeletes("/d1.parquet", a, null, null), FILE_A));
+        Assertions.assertFalse(IcebergConnectorScanRangeSource.referencesOnlyDataFile(
+                positionDeletes("/d2.parquet", b, null, null), FILE_A));
+        // else the file_path bounds must both be this data file's path
+        Assertions.assertTrue(IcebergConnectorScanRangeSource.referencesOnlyDataFile(
+                positionDeletes("/d3.parquet", null, a, a), FILE_A));
+        Assertions.assertFalse(IcebergConnectorScanRangeSource.referencesOnlyDataFile(
+                positionDeletes("/d4.parquet", null, a, b), FILE_A));
+        Assertions.assertFalse(IcebergConnectorScanRangeSource.referencesOnlyDataFile(
+                positionDeletes("/d5.parquet", null, b, b), FILE_A));
+        // a truncated bound is a prefix of the path
+        String prefix = a.substring(0, a.length() - 1);
+        Assertions.assertFalse(IcebergConnectorScanRangeSource.referencesOnlyDataFile(
+                positionDeletes("/d6.parquet", null, prefix, prefix), FILE_A));
+        // no bounds: unknown
+        Assertions.assertFalse(IcebergConnectorScanRangeSource.referencesOnlyDataFile(
+                positionDeletes("/d7.parquet", null, null, null), FILE_A));
+    }
+
+    @Test
+    public void testPositionDeleteFileReferencesOnlyDataFileIsSent() {
+        TestTables.TestTable v2Table = create(SCHEMA_A, SPEC_A, "ta_v2_pos_delete_single_file", 2);
+        v2Table.newFastAppend().appendFile(FILE_A).commit();
+        v2Table.newRowDelta()
+                .addDeletes(positionDeletes("/path/to/a-file-scoped-deletes.parquet", FILE_A.location(), null, null))
+                .addDeletes(positionDeletes("/path/to/a-partition-deletes.parquet", null, null, null))
+                .commit();
+        IcebergTable icebergTable = new IcebergTable(1, "iceberg_table", "iceberg_catalog", "resource", "db",
+                "table", "", Lists.newArrayList(new Column("id", INT), new Column("data", VARCHAR)), v2Table,
+                Maps.newHashMap());
+        List<RemoteFileInfo> infos = new ArrayList<>();
+        v2Table.newScan().planFiles().forEach(task -> infos.add(new IcebergRemoteFileInfo(task)));
+        IcebergConnectorScanRangeSource source = new IcebergConnectorScanRangeSource(icebergTable,
+                new RemoteFileInfoDefaultSource(infos), IcebergMORParams.EMPTY, tupleDescriptor, Optional.empty(),
+                PartitionIdGenerator.of(), false, false, false);
+
+        THdfsScanRange range = source.getSourceOutputs(100).get(0).getScan_range().getHdfs_scan_range();
+        Assertions.assertEquals(2, range.getDelete_files().size());
+        for (TIcebergDeleteFile deleteFile : range.getDelete_files()) {
+            Assertions.assertEquals(deleteFile.getFull_path().endsWith("a-file-scoped-deletes.parquet"),
+                    deleteFile.isReferences_only_data_file(), deleteFile.getFull_path());
+        }
+    }
+
     @Test
     public void testBucketsOfOneIdentityPartitionShareAPartitionId() throws Exception {
         PartitionSpec spec = PartitionSpec.builderFor(SCHEMA_B).identity("k2").bucket("k1", 4).build();
@@ -201,9 +288,10 @@ public class IcebergConnectorScanRangeSourceTest extends TableTestBase {
         IcebergTable icebergTable = new IcebergTable(1, "iceberg_table", "iceberg_catalog", "resource", "db",
                 "table", "", Lists.newArrayList(new Column("k1", INT), new Column("k2", INT)), nativeTable,
                 Maps.newHashMap());
+        PartitionIdGenerator partitionIdGenerator = Mockito.spy(PartitionIdGenerator.of());
         IcebergConnectorScanRangeSource scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable,
                 RemoteFileInfoDefaultSource.EMPTY, IcebergMORParams.EMPTY, desc, Optional.empty(),
-                PartitionIdGenerator.of(), false, false);
+                partitionIdGenerator, false, false);
 
         Map<String, Long> idByFile = Maps.newHashMap();
         Map<String, Long> k2ByFile = Maps.newHashMap();
@@ -229,6 +317,119 @@ public class IcebergConnectorScanRangeSourceTest extends TableTestBase {
         Assertions.assertNotSame(valueByFile.get(k2Is1Bucket0.location()), valueByFile.get(k2Is2Bucket0.location()));
         // the partition count still counts every (k2, bucket) combination
         Assertions.assertEquals(3, scanRangeSource.selectedPartitionCount());
+        // the PartitionKey (and its id) is built once per identity partition, not once per bucket
+        Mockito.verify(partitionIdGenerator, Mockito.times(2)).getOrGenerate(Mockito.any());
+    }
+
+    private static DataFile dataFile(PartitionSpec spec, String path, Object... partitionValues) {
+        PartitionData partition = new PartitionData(spec.partitionType());
+        for (int i = 0; i < partitionValues.length; i++) {
+            partition.put(i, partitionValues[i]);
+        }
+        return DataFiles.builder(spec).withPath(path).withFileSizeInBytes(10).withPartition(partition)
+                .withRecordCount(1).build();
+    }
+
+    @Test
+    public void testIdentityPartitionCacheMatchesUncachedPartitionKeys() throws Exception {
+        // string and date identity fields with NULLs beside a bucket, across two specs
+        Schema schema = new Schema(
+                Types.NestedField.optional(1, "id", Types.IntegerType.get()),
+                Types.NestedField.optional(2, "s", Types.StringType.get()),
+                Types.NestedField.optional(3, "d", Types.DateType.get()));
+        PartitionSpec bucketSpec = PartitionSpec.builderFor(schema).identity("s").identity("d").bucket("id", 4).build();
+        TestTables.TestTable nativeTable = create(schema, bucketSpec, "t_identity_cache", 2);
+        // (s, d as days since epoch, id_bucket); 19723 = 2024-01-01
+        Object[][] bucketPartitions = {
+                {"a", 19723, 0}, {"a", 19723, 1}, {"a", 19724, 0}, {"b", 19723, 2},
+                {null, 19723, 0}, {null, 19723, 3}, {"a", null, 1}, {null, null, 1}};
+        AppendFiles append = nativeTable.newFastAppend();
+        for (int i = 0; i < bucketPartitions.length; i++) {
+            append.appendFile(dataFile(bucketSpec, "/path/to/bucket-spec-" + i + ".parquet", bucketPartitions[i]));
+        }
+        append.commit();
+
+        nativeTable.updateSpec().removeField("id_bucket").commit();
+        PartitionSpec identitySpec = nativeTable.spec();
+        Assertions.assertNotEquals(bucketSpec.specId(), identitySpec.specId());
+        nativeTable.newFastAppend()
+                .appendFile(dataFile(identitySpec, "/path/to/identity-spec-0.parquet", "a", 19723))
+                .appendFile(dataFile(identitySpec, "/path/to/identity-spec-1.parquet", null, 19725))
+                .commit();
+
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(5));
+        SlotDescriptor sSlot = new SlotDescriptor(new SlotId(2), desc);
+        sSlot.setType(VARCHAR);
+        sSlot.setColumn(new Column("s", VARCHAR));
+        desc.addSlot(sSlot);
+        SlotDescriptor dSlot = new SlotDescriptor(new SlotId(3), desc);
+        dSlot.setType(DateType.DATE);
+        dSlot.setColumn(new Column("d", DateType.DATE));
+        desc.addSlot(dSlot);
+        IcebergTable icebergTable = new IcebergTable(1, "iceberg_table", "iceberg_catalog", "resource", "db",
+                "table", "", Lists.newArrayList(new Column("id", INT), new Column("s", VARCHAR),
+                        new Column("d", DateType.DATE)), nativeTable, Maps.newHashMap());
+        PartitionIdGenerator partitionIdGenerator = PartitionIdGenerator.of();
+        IcebergConnectorScanRangeSource scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable,
+                RemoteFileInfoDefaultSource.EMPTY, IcebergMORParams.EMPTY, desc, Optional.empty(),
+                partitionIdGenerator, false, false);
+
+        List<FileScanTask> tasks = Lists.newArrayList(nativeTable.newScan().planFiles());
+        Assertions.assertEquals(bucketPartitions.length + 2, tasks.size());
+        Set<Long> partitionIds = new HashSet<>();
+        for (FileScanTask task : tasks) {
+            long partitionId = scanRangeSource.addPartition(task);
+            THdfsPartition value = scanRangeSource.buildScanRange(task, task.file(), partitionId).getPartition_value();
+
+            // A source that sees only this file builds its PartitionKey without any cached identity partition.
+            IcebergConnectorScanRangeSource uncached = new IcebergConnectorScanRangeSource(icebergTable,
+                    RemoteFileInfoDefaultSource.EMPTY, IcebergMORParams.EMPTY, desc, Optional.empty(),
+                    partitionIdGenerator, false, false);
+            long expectedId = uncached.addPartition(task);
+            Assertions.assertEquals(expectedId, partitionId, task.file().location());
+            Assertions.assertEquals(uncached.buildScanRange(task, task.file(), expectedId).getPartition_value(), value,
+                    task.file().location());
+            partitionIds.add(partitionId);
+        }
+        // (a, 2024-01-01), (a, 2024-01-02), (b, 2024-01-01), (null, 2024-01-01), (a, null), (null, null),
+        // (null, 2024-01-03); the identity spec's (a, 2024-01-01) file shares the bucket spec's id
+        Assertions.assertEquals(7, partitionIds.size());
+        // the partition count counts every (spec, full partition tuple)
+        Assertions.assertEquals(bucketPartitions.length + 2, scanRangeSource.selectedPartitionCount());
+    }
+
+    @Test
+    public void testTaskSpecIsParsedOncePerSpecId() throws Exception {
+        PartitionSpec spec = PartitionSpec.builderFor(SCHEMA_B).identity("k2").build();
+        TestTables.TestTable nativeTable = create(SCHEMA_B, spec, "t_spec_parse", 2);
+        nativeTable.newFastAppend().appendFile(DataFiles.builder(spec).withPath("/path/to/k2=1/a.parquet")
+                .withFileSizeInBytes(10).withPartitionPath("k2=1").withRecordCount(1).build())
+                .appendFile(DataFiles.builder(spec).withPath("/path/to/k2=2/b.parquet")
+                .withFileSizeInBytes(10).withPartitionPath("k2=2").withRecordCount(1).build()).commit();
+
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(5));
+        SlotDescriptor k2Slot = new SlotDescriptor(new SlotId(2), desc);
+        k2Slot.setType(INT);
+        k2Slot.setColumn(new Column("k2", INT));
+        desc.addSlot(k2Slot);
+        IcebergTable icebergTable = new IcebergTable(1, "iceberg_table", "iceberg_catalog", "resource", "db",
+                "table", "", Lists.newArrayList(new Column("k1", INT), new Column("k2", INT)), nativeTable,
+                Maps.newHashMap());
+        IcebergConnectorScanRangeSource scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable,
+                RemoteFileInfoDefaultSource.EMPTY, IcebergMORParams.EMPTY, desc, Optional.empty(),
+                PartitionIdGenerator.of(), false, false);
+
+        List<FileScanTask> tasks = Lists.newArrayList(nativeTable.newScan().planFiles());
+        Assertions.assertEquals(2, tasks.size());
+        long firstId = scanRangeSource.addPartition(tasks.get(0));
+        // task.spec() parses the spec per task, hashing the whole schema; a later file of the spec, in another
+        // partition or the same one, must not need it
+        FileScanTask otherPartition = Mockito.spy(tasks.get(1));
+        Assertions.assertNotEquals(firstId, scanRangeSource.addPartition(otherPartition));
+        FileScanTask samePartition = Mockito.spy(tasks.get(0));
+        Assertions.assertEquals(firstId, scanRangeSource.addPartition(samePartition));
+        Mockito.verify(otherPartition, Mockito.never()).spec();
+        Mockito.verify(samePartition, Mockito.never()).spec();
     }
 
     @Test
@@ -1265,5 +1466,230 @@ public class IcebergConnectorScanRangeSourceTest extends TableTestBase {
                 throw new UnsupportedOperationException();
             }
         };
+    }
+
+    /** Non-plaintext EncryptionManager stub: buildEncryptionInfo only checks it is not the plaintext one. */
+    private static class StubEncryptionManager implements EncryptionManager {
+        @Override
+        public InputFile decrypt(EncryptedInputFile encrypted) {
+            throw new UnsupportedOperationException("not reached: the DEK is read straight from key_metadata");
+        }
+
+        @Override
+        public EncryptedOutputFile encrypt(OutputFile rawOutput) {
+            throw new UnsupportedOperationException("not reached: this is the read path");
+        }
+    }
+
+    private TupleDescriptor twoColumnTuple(int tupleId) {
+        TupleDescriptor tuple = new TupleDescriptor(new TupleId(tupleId));
+        SlotDescriptor idSlot = new SlotDescriptor(new SlotId(1), tuple);
+        idSlot.setType(INT);
+        idSlot.setColumn(new Column("id", INT));
+        tuple.addSlot(idSlot);
+        SlotDescriptor dataSlot = new SlotDescriptor(new SlotId(2), tuple);
+        dataSlot.setType(VARCHAR);
+        dataSlot.setColumn(new Column("data", VARCHAR));
+        tuple.addSlot(dataSlot);
+        return tuple;
+    }
+
+    private IcebergConnectorScanRangeSource sourceForTable(TupleDescriptor tuple) {
+        List<Column> schema = Lists.newArrayList(new Column("id", INT), new Column("data", VARCHAR));
+        IcebergTable icebergTable = new IcebergTable(1, "iceberg_table", "iceberg_catalog",
+                "resource", "db", "table", "", schema, mockedNativeTableA, Maps.newHashMap());
+        return new IcebergConnectorScanRangeSource(icebergTable, RemoteFileInfoDefaultSource.EMPTY,
+                IcebergMORParams.EMPTY, tuple, Optional.empty(), PartitionIdGenerator.of(), false, false);
+    }
+
+    private static DataFile encryptedDataFile(String path, ByteBuffer keyMetadata) {
+        return DataFiles.builder(SPEC_A)
+                .withPath(path)
+                .withFileSizeInBytes(10)
+                .withPartitionPath("data_bucket=0")
+                .withRecordCount(2)
+                .withEncryptionKeyMetadata(keyMetadata)
+                .build();
+    }
+
+    @Test
+    public void testBuildScanRangeRecoversDekAndAadFromKeyMetadata() throws Exception {
+        // The read path's whole job: turn the key_metadata Iceberg committed back into the DEK and AAD
+        // prefix the BE needs. Nothing else in FE tests this, and it is what decides whether a file
+        // another engine wrote can be decrypted at all.
+        byte[] dek = new byte[32];
+        byte[] aadPrefix = new byte[16];
+        for (int i = 0; i < dek.length; i++) {
+            dek[i] = (byte) (i + 1);
+        }
+        for (int i = 0; i < aadPrefix.length; i++) {
+            aadPrefix[i] = (byte) (i + 100);
+        }
+
+        new MockUp<BaseTable>() {
+            @Mock
+            public EncryptionManager encryption() {
+                return new StubEncryptionManager();
+            }
+        };
+
+        mockedNativeTableA.newFastAppend()
+                .appendFile(encryptedDataFile("/path/to/enc-a.parquet",
+                        StarRocksKeyMetadata.serialize(dek, aadPrefix)))
+                .commit();
+
+        TupleDescriptor tuple = twoColumnTuple(40);
+        IcebergConnectorScanRangeSource source = sourceForTable(tuple);
+        FileScanTask task = Lists.newArrayList(mockedNativeTableA.newScan().planFiles()).get(0);
+        THdfsScanRange range = source.buildScanRange(task, task.file(), source.addPartition(task));
+
+        Assertions.assertTrue(range.isSetParquet_encryption_info(),
+                "an encrypted file's scan range must carry key material for the BE");
+        Assertions.assertArrayEquals(dek, range.getParquet_encryption_info().getFile_dek());
+        Assertions.assertArrayEquals(aadPrefix, range.getParquet_encryption_info().getAad_prefix());
+    }
+
+    @Test
+    public void testBuildScanRangeFailsWhenKeyMetadataCarriesNoDataKey() throws Exception {
+        // Fail closed: a key_metadata with no usable key must fail the query rather than produce a
+        // scan range the BE will then try to read as plaintext.
+        new MockUp<BaseTable>() {
+            @Mock
+            public EncryptionManager encryption() {
+                return new StubEncryptionManager();
+            }
+        };
+
+        mockedNativeTableA.newFastAppend()
+                .appendFile(encryptedDataFile("/path/to/enc-nokey.parquet", ByteBuffer.wrap(new byte[] {0x00})))
+                .commit();
+
+        TupleDescriptor tuple = twoColumnTuple(41);
+        IcebergConnectorScanRangeSource source = sourceForTable(tuple);
+        FileScanTask task = Lists.newArrayList(mockedNativeTableA.newScan().planFiles()).get(0);
+
+        Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> source.buildScanRange(task, task.file(), source.addPartition(task)));
+    }
+
+    @Test
+    public void testBuildScanRangeFailsWhenKeyMetadataParsesToAnEmptyDataKey() throws Exception {
+        // Well-formed key_metadata whose key is empty. Unlike an unparseable blob, this gets past the
+        // parser, so the explicit empty-key check is what has to refuse it.
+        new MockUp<BaseTable>() {
+            @Mock
+            public EncryptionManager encryption() {
+                return new StubEncryptionManager();
+            }
+        };
+
+        mockedNativeTableA.newFastAppend()
+                .appendFile(encryptedDataFile("/path/to/enc-emptykey.parquet",
+                        StarRocksKeyMetadata.serialize(new byte[0], new byte[16])))
+                .commit();
+
+        TupleDescriptor tuple = twoColumnTuple(44);
+        IcebergConnectorScanRangeSource source = sourceForTable(tuple);
+        FileScanTask task = Lists.newArrayList(mockedNativeTableA.newScan().planFiles()).get(0);
+
+        StarRocksConnectorException e = Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> source.buildScanRange(task, task.file(), source.addPartition(task)));
+        Assertions.assertTrue(e.getMessage().contains("carries no data key"), e.getMessage());
+    }
+
+    @Test
+    public void testPositionDeleteFileCarriesItsOwnKey() throws Exception {
+        // A position-delete file in an encrypted table is encrypted under its OWN per-file key. It must
+        // reach the BE on the delete-file descriptor, distinct from the data file's key, or the BE cannot
+        // open it.
+        byte[] dataDek = new byte[16];
+        byte[] deleteDek = new byte[16];
+        for (int i = 0; i < 16; i++) {
+            dataDek[i] = (byte) (i + 1);
+            deleteDek[i] = (byte) (i + 50);
+        }
+        new MockUp<BaseTable>() {
+            @Mock
+            public EncryptionManager encryption() {
+                return new StubEncryptionManager();
+            }
+        };
+
+        DeleteFile encryptedDeletes = FileMetadata.deleteFileBuilder(SPEC_A)
+                .ofPositionDeletes()
+                .withPath("/path/to/enc-a-deletes.parquet")
+                .withFormat(FileFormat.PARQUET)
+                .withFileSizeInBytes(10)
+                .withPartitionPath("data_bucket=0")
+                .withRecordCount(1)
+                .withEncryptionKeyMetadata(StarRocksKeyMetadata.serialize(deleteDek, new byte[16]))
+                .build();
+        mockedNativeTableA.newRowDelta()
+                .addRows(encryptedDataFile("/path/to/enc-a.parquet", StarRocksKeyMetadata.serialize(dataDek, new byte[16])))
+                .addDeletes(encryptedDeletes)
+                .commit();
+
+        TupleDescriptor tuple = twoColumnTuple(45);
+        IcebergConnectorScanRangeSource source = sourceForTable(tuple);
+        FileScanTask task = Lists.newArrayList(mockedNativeTableA.newScan().planFiles()).get(0);
+        List<TScanRangeLocations> ranges = source.toScanRanges(task);
+
+        THdfsScanRange range = ranges.get(0).getScan_range().getHdfs_scan_range();
+        Assertions.assertArrayEquals(dataDek, range.getParquet_encryption_info().getFile_dek());
+        Assertions.assertEquals(1, range.getDelete_files().size());
+        TIcebergDeleteFile deleteFile = range.getDelete_files().get(0);
+        Assertions.assertTrue(deleteFile.isSetParquet_encryption_info(),
+                "an encrypted position-delete file must carry its own key material");
+        Assertions.assertArrayEquals(deleteDek, deleteFile.getParquet_encryption_info().getFile_dek());
+    }
+
+    @Test
+    public void testBuildScanRangeOnPlaintextTableCarriesNoEncryptionInfo() throws Exception {
+        // A plaintext table must not get encryption info even though the file carries key metadata:
+        // the table's EncryptionManager is what decides, not the presence of bytes on the file.
+        mockedNativeTableA.newFastAppend()
+                .appendFile(encryptedDataFile("/path/to/plain-a.parquet",
+                        StarRocksKeyMetadata.serialize(new byte[16], new byte[16])))
+                .commit();
+
+        TupleDescriptor tuple = twoColumnTuple(42);
+        IcebergConnectorScanRangeSource source = sourceForTable(tuple);
+        FileScanTask task = Lists.newArrayList(mockedNativeTableA.newScan().planFiles()).get(0);
+        THdfsScanRange range = source.buildScanRange(task, task.file(), source.addPartition(task));
+
+        Assertions.assertFalse(range.isSetParquet_encryption_info(),
+                "a plaintext table must not ship key material to the BE");
+    }
+
+    @Test
+    public void testDeclaredEncryptionWithPlaintextManagerFailsEvenForAFileWithNoKeyMetadata() throws Exception {
+        // Regression test for the fail-open this gate exists to close. The gate used to live inside
+        // buildEncryptionInfo(), which is only reached when a file HAS key metadata -- but the state it
+        // guards against is a table declaring encryption.key-id while the catalog supplies a plaintext
+        // manager, and such a table's files are written WITHOUT key metadata. So the offending file
+        // skipped the branch, skipped the gate, and was served silently.
+        //
+        // The file below therefore deliberately has NO key metadata: that is the case that must fail.
+        // If the gate is ever moved back inside the per-file branch, this test fails.
+        // Declared via a mocked property map, not updateProperties(): TableTestBase builds format-v2
+        // tables and EncryptionUtil.checkCompatibility rejects encryption.key-id below v3, so a real
+        // commit would fail for an unrelated reason.
+        new MockUp<BaseTable>() {
+            @Mock
+            public Map<String, String> properties() {
+                return ImmutableMap.of(ENCRYPTION_TABLE_KEY, "some-kms-key");
+            }
+        };
+        mockedNativeTableA.newFastAppend().appendFile(FILE_A).commit();
+
+        TupleDescriptor tuple = twoColumnTuple(43);
+        IcebergConnectorScanRangeSource source = sourceForTable(tuple);
+        FileScanTask task = Lists.newArrayList(mockedNativeTableA.newScan().planFiles()).get(0);
+
+        // No MockUp on encryption(): the real TestTable returns PlaintextEncryptionManager, which is
+        // exactly the unsupported-catalog shape.
+        StarRocksConnectorException e = Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> source.buildScanRange(task, task.file(), source.addPartition(task)));
+        Assertions.assertTrue(e.getMessage().contains("cannot read"), e.getMessage());
     }
 }

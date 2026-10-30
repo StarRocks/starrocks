@@ -26,6 +26,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.spy;
 
@@ -410,6 +411,39 @@ public class TaskRunManagerEditLogTest {
         // Note: This will only work if executeTaskRun returned true in master
         // In practice, we'd need to ensure the task run can actually be executed
         // For now, we verify the replay mechanism exists
+    }
+
+    @Test
+    public void testReplayPendingToRunningKeepsProcessStartTime() throws Exception {
+        Task task = new Task("process_start_time_task");
+        task.setType(Constants.TaskType.MANUAL);
+        task.setDefinition("SELECT 1");
+        task.setDbName("test_db");
+        task.setCatalogName("test_catalog");
+        masterTaskManager.createTask(task);
+        long taskId = task.getId();
+        String queryId = "process_start_time_query";
+
+        TaskRun leaderTaskRun = spy(TaskRunBuilder.newBuilder(task).build());
+        leaderTaskRun.setTaskId(taskId);
+        leaderTaskRun.initStatus(queryId, System.currentTimeMillis());
+        doReturn(Constants.TaskRunState.SUCCESS).when(leaderTaskRun).executeTaskRun();
+        Assertions.assertTrue(new TaskRunExecutor().executeTaskRun(leaderTaskRun));
+        long leaderProcessStartTime = leaderTaskRun.getStatus().getProcessStartTime();
+        Assertions.assertTrue(leaderProcessStartTime > 0);
+
+        TaskManager followerTaskManager = new TaskManager();
+        TaskRun followerTaskRun = TaskRunBuilder.newBuilder(task).build();
+        followerTaskRun.setTaskId(taskId);
+        followerTaskRun.initStatus(queryId, leaderTaskRun.getStatus().getCreateTime());
+        followerTaskManager.getTaskRunScheduler().addPendingTaskRun(followerTaskRun);
+
+        TaskRunStatusChange statusChange = (TaskRunStatusChange) UtFrameUtils.PseudoJournalReplayer
+                .replayNextJournal(OperationType.OP_UPDATE_TASK_RUN);
+        followerTaskManager.replayUpdateTaskRun(statusChange);
+
+        Assertions.assertEquals(Constants.TaskRunState.RUNNING, followerTaskRun.getStatus().getState());
+        Assertions.assertEquals(leaderProcessStartTime, followerTaskRun.getStatus().getProcessStartTime());
     }
 
     @Test

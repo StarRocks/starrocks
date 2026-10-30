@@ -269,7 +269,7 @@ Used for MySQL client compatibility. No practical usage.
 
 * **Scope**: Session
 * **Description**: In shared-data mode, if the compute node the plan prefers for a scan is not among the workers available to the current query (for example, the node is down or appears on the host blocklist), the planner must choose a backup compute node. This variable sets how that backup is chosen among eligible nodes (other than the primary). `RANDOM` samples uniformly at random from the eligible set. `CIRCULAR` walks the sorted compute node id ring from the primary and takes the first eligible node (deterministic). `TABLET_HASH` takes the eligible node with the highest hash of the tablet and the node (rendezvous hashing): the tablets of an unavailable node spread evenly over the other nodes, while each tablet keeps going to the same backup across queries, so its data is cached on only one backup node. For a colocated scan, the hash uses the colocation group and the bucket instead of the tablet, so every table in the group sends the same bucket to the same backup. FEs choose the same backup for a tablet as long as they see the same set of eligible nodes. The variable also applies when a load (for example, `INSERT`) writes to a tablet whose compute node is unavailable. Which nodes are eligible for backup also depends on `skip_black_list`: by default, nodes on the host blocklist are excluded; if `skip_black_list` is `true`, a node that is on the blocklist may still be chosen as a backup when it is otherwise available (for example, alive and in the warehouse).
-* **Default**: `CIRCULAR`
+* **Default**: `TABLET_HASH`
 * **Data type**: String
 * **Valid values**: `CIRCULAR`, `RANDOM`, `TABLET_HASH`
 * **Introduced in**: -
@@ -814,7 +814,7 @@ Default value: `true`, which means global RF is enabled. If this feature is disa
 
 ### enable_insert_partial_update
 
-* **Description**: Whether to enable Partial Update for INSERT statements on Primary Key tables. When this item is set to `true` (default), if an INSERT statement specifies only a subset of columns (fewer than the number of all non-generated columns in the table), the system performs a Partial Update to update only the specified columns while preserving existing values in other columns. When set to `false`, the system uses default values for unspecified columns instead of preserving existing values. This feature is particularly useful for updating specific columns in Primary Key tables without affecting other column values.
+* **Description**: Whether to enable Partial Update for INSERT statements on Primary Key tables. When this item is set to `true` (default), if an INSERT statement specifies only a subset of columns (fewer than the number of all non-generated columns in the table), the system performs a Partial Update to update only the specified columns while preserving existing values in other columns. When set to `false`, the system uses default values for unspecified columns instead of preserving existing values. This feature is particularly useful for updating specific columns in Primary Key tables without affecting other column values. If no transaction has ever committed to the target partitions, there are no existing values to preserve, so the INSERT runs as a plain insert that fills the unspecified columns with default values and skips the Partial Update processing. This applies only when every unspecified column can be filled that way (it is nullable or has a default value, and is not an AUTO_INCREMENT column), and not to INSERT OVERWRITE or to an INSERT inside an explicit transaction (`BEGIN ... COMMIT`), which keep the Partial Update. If another write reaches those partitions first, the INSERT fails with a message asking you to retry it, and the retry runs as a Partial Update.
 * **Default**: true
 * **Introduced in**: v3.3.20, v3.4.9, v3.5.8, v4.0.2
 
@@ -1820,6 +1820,18 @@ Used for compatibility with JDBC connection pool C3P0. No practical use.
 * **Description**: The maximum number of IN predicates that can be used for Range partition pruning. Default value: 100. A value larger than 100 may cause the system to scan all tablets, which compromises the query performance.
 * **Default**: 100
 * **Introduced in**: v3.0
+
+### range_scan_execution_mode
+
+* **Description**: Experimental execution mode for read-only single-table aggregates on native shared-data range-colocate tables. `colocate` preserves range colocation. `parallel` gives the scan effective ANY distribution and requires Hash/Gather Exchanges to merge aggregates, including exact `COUNT DISTINCT`. Values are case-insensitive; `auto` is unsupported.
+* **Scope**: Session
+* **Default**: `colocate`
+* **Data type**: String
+* **Valid values**: `colocate`, `parallel`
+
+A nonempty parallel scan must select at least two logical partitions and two real tablets, and the selected compute resource must contain at least two eligible CNs. Among aggregates with the DISTINCT modifier, only `COUNT DISTINCT` is supported. Pipeline execution and `parallel_fragment_exec_instance_num = 1` are required. Parallel mode adds network and aggregate-state transfer costs and can increase non-owner remote reads; it does not guarantee a speedup or use of every compute node. Partition and tablet pruning remain unchanged.
+
+Parallel mode rejects writes/refreshes, joins, set operations, CTEs, subqueries, analytic functions, grouping sets, special/historical/metadata/cache-stat or sampled/hinted scans, MV/rollup source replacement, multiple final scans, Query Cache, phased scheduling, prepared physical split scans, single-node plans, and nonpipeline execution. Fully pruned input retains normal empty-aggregate semantics. Unsupported requests fail explicitly without changing other session settings.
 
 ### resource_group
 

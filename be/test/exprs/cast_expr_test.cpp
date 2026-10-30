@@ -34,6 +34,7 @@
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/runtime_state.h"
+#include "testutil/column_test_helper.h"
 #include "types/date_value.h"
 #include "types/datetime_value.h"
 #include "types/datum.h"
@@ -2848,8 +2849,7 @@ static ColumnPtr make_root_typed_only_variant_bigint_column(const std::vector<in
 static ColumnPtr make_root_typed_only_variant_array_column(const std::vector<DatumArray>& values,
                                                            const std::vector<uint8_t>& is_null) {
     CHECK_EQ(values.size(), is_null.size());
-    TypeDescriptor array_type = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_INT));
-    auto array_col = ColumnHelper::create_column(array_type, true);
+    auto array_col = ColumnHelper::create_column(TYPE_ARRAY_INT_DESC, true);
     for (size_t i = 0; i < values.size(); ++i) {
         if (is_null[i] != 0) {
             array_col->append_nulls(1);
@@ -2858,7 +2858,7 @@ static ColumnPtr make_root_typed_only_variant_array_column(const std::vector<Dat
         }
     }
 
-    return cast_to_variant(array_type, array_col);
+    return cast_to_variant(TYPE_ARRAY_INT_DESC, array_col);
 }
 
 static ColumnPtr make_base_shredded_root_bigint_variant_column(const std::vector<int64_t>& values,
@@ -3100,9 +3100,7 @@ TEST_F(VectorizedCastExprTest, struct_to_struct_position_cast_different_names) {
 
 // Verifies primitive scalar values encode to variant JSON payloads correctly.
 TEST_F(VectorizedCastExprTest, int_cast_to_variant) {
-    auto column = Int32Column::create();
-    column->append(123);
-    column->append(-7);
+    auto column = ColumnTestHelper::build_column<int32_t>({123, -7});
 
     ColumnPtr result = cast_to_variant(TypeDescriptor(TYPE_INT), column);
     auto json0 = variant_json_at(result, 0);
@@ -3205,12 +3203,7 @@ TEST_F(VectorizedCastExprTest, variant_string_cast_constants_and_nullable_rows) 
     auto variants =
             cast_to_variant(TypeDescriptor(TYPE_VARCHAR), NullableColumn::create(std::move(strings), std::move(nulls)));
     auto result = cast_from_variant(gen_type_desc(TPrimitiveType::TINYINT), variants);
-    ASSERT_EQ(5, result->size());
-    EXPECT_EQ(35, result->get(0).get_int8());
-    EXPECT_TRUE(result->is_null(1));
-    EXPECT_TRUE(result->is_null(2));
-    EXPECT_TRUE(result->is_null(3));
-    EXPECT_EQ(0, result->get(4).get_int8());
+    ASSERT_EQ("[35, NULL, NULL, NULL, 0]", result->debug_string());
 }
 
 TEST_F(VectorizedCastExprTest, variant_string_cast_in_array) {
@@ -3405,10 +3398,7 @@ TEST_F(VectorizedCastExprTest, root_typed_only_scalar_cast_from_variant) {
     auto variant_col = make_root_typed_only_variant_bigint_column({7, 0, -3}, {0, 1, 0});
     {
         auto result = cast_from_variant(gen_type_desc(TPrimitiveType::BIGINT), variant_col);
-        ASSERT_EQ(3, result->size());
-        ASSERT_EQ(7, result->get(0).get_int64());
-        ASSERT_TRUE(result->is_null(1));
-        ASSERT_EQ(-3, result->get(2).get_int64());
+        ASSERT_EQ("[7, NULL, -3]", result->debug_string());
     }
     {
         auto result = cast_from_variant(gen_type_desc(TPrimitiveType::DOUBLE), variant_col);
@@ -3432,9 +3422,7 @@ TEST_F(VectorizedCastExprTest, root_typed_only_array_cast_from_variant) {
     auto variant_col = make_root_typed_only_variant_array_column(
             {DatumArray{Datum((int32_t)1), Datum((int32_t)2)}, DatumArray{}}, {0, 1});
     auto result = cast_from_variant(gen_array_type_desc(TPrimitiveType::INT), variant_col);
-    ASSERT_EQ(2, result->size());
-    ASSERT_EQ("[1,2]", result->debug_item(0));
-    ASSERT_TRUE(result->is_null(1));
+    ASSERT_EQ("[[1,2], NULL]", result->debug_string());
 }
 
 // Verifies base_shredded root scalar keeps cast semantics equivalent to typed-only on same/different target types.
@@ -3442,10 +3430,7 @@ TEST_F(VectorizedCastExprTest, base_shredded_root_scalar_cast_from_variant) {
     auto variant_col = make_base_shredded_root_bigint_variant_column({7, 0, -3}, {0, 1, 0});
     {
         auto result = cast_from_variant(gen_type_desc(TPrimitiveType::BIGINT), variant_col);
-        ASSERT_EQ(3, result->size());
-        ASSERT_EQ(7, result->get(0).get_int64());
-        ASSERT_TRUE(result->is_null(1));
-        ASSERT_EQ(-3, result->get(2).get_int64());
+        ASSERT_EQ("[7, NULL, -3]", result->debug_string());
     }
     {
         auto result = cast_from_variant(gen_type_desc(TPrimitiveType::DOUBLE), variant_col);

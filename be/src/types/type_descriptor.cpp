@@ -284,8 +284,7 @@ bool TypeDescriptor::support_join() const {
     if (type == TYPE_ARRAY || type == TYPE_MAP || type == TYPE_STRUCT) {
         return std::all_of(children.begin(), children.end(), [](const TypeDescriptor& t) { return t.support_join(); });
     }
-    return type != TYPE_JSON && type != TYPE_OBJECT && type != TYPE_PERCENTILE && type != TYPE_HLL &&
-           type != TYPE_VARIANT && type != TYPE_FILE;
+    return !is_object_type(type) && type != TYPE_FILE;
 }
 
 bool TypeDescriptor::support_orderby() const {
@@ -298,8 +297,7 @@ bool TypeDescriptor::support_orderby() const {
                                        [](const TypeDescriptor& t) { return t.support_orderby(); });
         return all_support;
     }
-    return type != TYPE_JSON && type != TYPE_OBJECT && type != TYPE_PERCENTILE && type != TYPE_HLL &&
-           type != TYPE_MAP && type != TYPE_VARIANT && type != TYPE_FILE;
+    return !is_object_type(type) && type != TYPE_MAP && type != TYPE_FILE;
 }
 
 bool TypeDescriptor::support_groupby() const {
@@ -308,8 +306,7 @@ bool TypeDescriptor::support_groupby() const {
         return std::all_of(children.begin(), children.end(),
                            [](const TypeDescriptor& t) { return t.support_groupby(); });
     }
-    return type != TYPE_JSON && type != TYPE_OBJECT && type != TYPE_PERCENTILE && type != TYPE_HLL &&
-           type != TYPE_VARIANT && type != TYPE_FILE;
+    return !is_object_type(type) && type != TYPE_FILE;
 }
 
 TypeDescriptor TypeDescriptor::from_storage_type_info(TypeInfo* type_info) {
@@ -324,8 +321,7 @@ TypeDescriptor TypeDescriptor::from_storage_type_info(TypeInfo* type_info) {
     LogicalType ltype = scalar_field_type_to_logical_type(ftype);
     DCHECK(ltype != TYPE_UNKNOWN);
 
-    TypeDescriptor ret = TypeDescriptor::from_logical_type(ltype, TypeDescriptor::MAX_VARCHAR_LENGTH,
-                                                           type_info->precision(), type_info->scale());
+    TypeDescriptor ret = TypeDescriptor::from_logical_type(ltype, type_info->precision(), type_info->scale());
     if (is_array) {
         TypeDescriptor arr(TYPE_ARRAY);
         arr.children.emplace_back(ret);

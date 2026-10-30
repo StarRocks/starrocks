@@ -66,8 +66,8 @@ protected:
 
     // The matching slot type: ARRAY<STRUCT<a VARCHAR, b VARCHAR>>.
     static TypeDescriptor make_array_of_struct_type() {
-        TypeDescriptor varchar = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
-        TypeDescriptor struct_type = TypeDescriptor::create_struct_type({"a", "b"}, {varchar, varchar});
+        TypeDescriptor struct_type =
+                TypeDescriptor::create_struct_type({"a", "b"}, {TYPE_VARCHAR_DESC, TYPE_VARCHAR_DESC});
         return TypeDescriptor::create_array_type(struct_type);
     }
 
@@ -92,8 +92,7 @@ protected:
     }
 
     static TypeDescriptor make_map_type() {
-        TypeDescriptor varchar = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
-        return TypeDescriptor::create_map_type(varchar, varchar);
+        return TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TYPE_VARCHAR_DESC);
     }
 
     // Helper to call the private method under test on a minimally-constructed helper.
@@ -217,9 +216,7 @@ TEST_F(LakeMetaHelperTest, ScalarTypeIsAlwaysValid) {
     scalar.type = ColumnType::SCALAR;
     scalar.field_id = 1;
 
-    TypeDescriptor type = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
-
-    EXPECT_TRUE(is_valid_type(schema, scalar, top_field, type));
+    EXPECT_TRUE(is_valid_type(schema, scalar, top_field, TYPE_VARCHAR_DESC));
 }
 
 // A struct subfield without a field id (-1 placeholder in field_ids) is matched by its name.
@@ -240,7 +237,7 @@ TEST(ParquetMetaHelperTest, StructSubfieldWithoutFieldIdIsMatchedByName) {
     col.field_id = 10;
     col.children = {a, b};
 
-    TypeDescriptor int_type = TypeDescriptor::from_logical_type(TYPE_INT);
+    TypeDescriptor int_type = TYPE_INT_DESC;
     ParquetMetaHelper helper(/*file_metadata=*/nullptr, /*case_sensitive=*/true);
 
     // x (id 7) is not in the file, b has no id and is matched by name.
@@ -271,14 +268,13 @@ TEST(ParquetMetaHelperTest, IncompatibleGroupMapKeyIsKeptForTheReaderToReject) {
     map.type = ColumnType::MAP;
     map.children = {key, value};
 
-    const TypeDescriptor varchar = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
     const TypeDescriptor unknown(TYPE_UNKNOWN);
     ParquetMetaHelper helper(/*file_metadata=*/nullptr, /*case_sensitive=*/false);
     // incompatible key read, value pruned: kept for the reader to reject
-    const TypeDescriptor key_only = TypeDescriptor::create_map_type(varchar, unknown);
+    const TypeDescriptor key_only = TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, unknown);
     EXPECT_TRUE(helper._is_valid_type(&map, &key_only));
     // key pruned, value read: valid as before
-    const TypeDescriptor value_only = TypeDescriptor::create_map_type(unknown, varchar);
+    const TypeDescriptor value_only = TypeDescriptor::create_map_type(unknown, TYPE_VARCHAR_DESC);
     EXPECT_TRUE(helper._is_valid_type(&map, &value_only));
     // nothing read
     const TypeDescriptor none = TypeDescriptor::create_map_type(unknown, unknown);

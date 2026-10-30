@@ -577,6 +577,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_ENABLE_DP_JOIN_REORDER = "cbo_enable_dp_join_reorder";
     public static final String CBO_MAX_REORDER_NODE_USE_DP = "cbo_max_reorder_node_use_dp";
     public static final String CBO_ENABLE_GREEDY_JOIN_REORDER = "cbo_enable_greedy_join_reorder";
+    public static final String CBO_JOIN_REORDER_WITH_UNKNOWN_STATS = "cbo_join_reorder_with_unknown_stats";
     public static final String CBO_MAX_REORDER_NODE_USE_GREEDY = "cbo_max_reorder_node_use_greedy";
     public static final String CBO_ENABLE_REPLICATED_JOIN = "cbo_enable_replicated_join";
     public static final String CBO_USE_CORRELATED_JOIN_ESTIMATE = "cbo_use_correlated_join_estimate";
@@ -1429,7 +1430,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean skipBlackList = false;
 
     @VariableMgr.VarAttr(name = BLACKLIST_BACKUP_ROUTING)
-    private String blacklistBackupRouting = BlacklistBackupRoutingPolicy.CIRCULAR.name();
+    private String blacklistBackupRouting = BlacklistBackupRoutingPolicy.getDefault().name();
 
     @VariableMgr.VarAttr(name = DEFAULT_VIEW_SQL_SECURITY)
     private String defaultViewSqlSecurity = DefaultViewSqlSecurity.getDefault().name();
@@ -1462,6 +1463,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // read state is unsafe across sibling scans of the same table. Set true to opt such scans back in.
     @VariableMgr.VarAttr(name = ENABLE_LAKE_PREPARED_SPLIT_ON_DUP_TABLE_SCAN)
     private boolean enableLakePreparedSplitOnDupTableScan = false;
+
+    @VariableMgr.VarAttr(name = "range_scan_execution_mode", flag = VariableMgr.SESSION_ONLY)
+    private String rangeScanExecutionMode = "colocate";
 
     // The strategy mode of TabletInternalParallel, which is effective only when enableTabletInternalParallel is true.
     // The optional values are "auto" and "force_split".
@@ -2021,6 +2025,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = CBO_ENABLE_GREEDY_JOIN_REORDER, flag = VariableMgr.INVISIBLE)
     private boolean cboEnableGreedyJoinReorder = true;
+
+    // By default a multi-join with any unknown column statistics is reordered left-deep only (no DP, no greedy).
+    // When on, DP and greedy reorder still run on the estimates, which then use the known side of a key whose
+    // statistics are unknown on one side.
+    @VariableMgr.VarAttr(name = CBO_JOIN_REORDER_WITH_UNKNOWN_STATS, flag = VariableMgr.INVISIBLE)
+    private boolean cboJoinReorderWithUnknownStats = false;
 
     @VariableMgr.VarAttr(name = CBO_DEBUG_ALIVE_BACKEND_NUMBER, flag = VariableMgr.INVISIBLE)
     private int cboDebugAliveBackendNumber = 0;
@@ -4874,6 +4884,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return cboMaxReorderNodeUseDP;
     }
 
+    public boolean isCboJoinReorderWithUnknownStats() {
+        return cboJoinReorderWithUnknownStats;
+    }
+
+    public void setCboJoinReorderWithUnknownStats(boolean cboJoinReorderWithUnknownStats) {
+        this.cboJoinReorderWithUnknownStats = cboJoinReorderWithUnknownStats;
+    }
+
     public boolean isCboEnableGreedyJoinReorder() {
         return cboEnableGreedyJoinReorder;
     }
@@ -5108,6 +5126,21 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setLogRejectedRecordNum(long logRejectedRecordNum) {
         this.logRejectedRecordNum = logRejectedRecordNum;
+    }
+
+    public String getRangeScanExecutionMode() {
+        return rangeScanExecutionMode;
+    }
+
+    public void setRangeScanExecutionMode(String mode) {
+        if (!"colocate".equalsIgnoreCase(mode) && !"parallel".equalsIgnoreCase(mode)) {
+            throw new IllegalArgumentException("Legal values of range_scan_execution_mode are colocate|parallel");
+        }
+        rangeScanExecutionMode = mode.toLowerCase(Locale.ROOT);
+    }
+
+    public boolean isParallelRangeScan() {
+        return "parallel".equals(rangeScanExecutionMode);
     }
 
     public boolean isEnablePipelineEngine() {

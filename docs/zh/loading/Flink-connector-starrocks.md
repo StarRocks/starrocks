@@ -189,8 +189,14 @@ Flink connector JAR 文件的命名格式如下：
 #### sink.max-retries
 
 - **是否必填**：否
-- **默认值**：3
-- **描述**：系统重试执行 Stream Load 作业的次数。仅当您将 `sink.version` 设置为 `V1` 时，此参数才可用。有效值：0 到 10。
+- **默认值**：3（启用 Merge Commit 时为 `0`）
+- **描述**：系统重试执行 Stream Load 作业的次数。当您将 `sink.version` 设置为 `V1` 或启用 Merge Commit 时，此参数生效。有效值：0 到 10。启用 Merge Commit 时，除非显式设置此参数（例如 `'sink.max-retries' = '3'`），否则 connector 不会重试失败的导入请求。启用重试后，connector 会将每个导入请求的数据保留在内存中，直到该请求成功，因此会增加内存使用。由于 Merge Commit 仅保证 at-least-once 语义，如果原始请求实际已成功（例如其响应丢失），重试的请求可能导致数据被导入两次。
+
+#### sink.retry.interval-ms
+
+- **是否必填**：否
+- **默认值**：10000
+- **描述**：启用 Merge Commit 时，失败的导入请求两次重试之间的间隔。单位：ms。仅当 `sink.max-retries` 大于 `0` 时，此参数才生效。当 `sink.version` 设置为 `V1` 时，此参数不生效。
 
 #### sink.connect.timeout-ms
 
@@ -432,6 +438,10 @@ Merge Commit 有助于扩展吞吐量，而不会成比例地增加 StarRocks �
 
   Merge Commit 仅保证 at-least-once 语义。它不支持 exactly-once 语义。启用 Merge Commit 后，请勿将 `sink.semantic` 设置为 `exactly-once`。
 
+- **默认不重试**
+
+  启用 Merge Commit 时，`sink.max-retries` 默认为 `0`。因此，因瞬时错误（例如 StarRocks 节点缩容）而失败的导入请求不会被重试，sink 会直接失败。如需重试失败的导入请求，请显式设置 `sink.max-retries`，例如 `'sink.max-retries' = '3'`。您可以通过 `sink.retry.interval-ms` 控制重试间隔。
+
 - **主键表的排序**
 
   默认情况下，`sink.merge-commit.max-concurrent-requests` 为 `Integer.MAX_VALUE`，这意味着单个 sink 子任务可能会并发发送多个 Stream Load 请求。这可能会导致乱序导入，这对于主键表来说可能存在问题。为了确保按顺序导入，请将 `sink.merge-commit.max-concurrent-requests` 设置为 `0`，但这会降低吞吐量。或者，您可以使用条件更新来防止较新的数据被较旧的数据覆盖。有关配置示例，请参见 [主键表的顺序导入](#in-order-loading-for-primary-key-tables)。
@@ -447,7 +457,7 @@ Merge Commit 有助于扩展吞吐量，而不会成比例地增加 StarRocks �
 
   这两个参数控制不同层的并行度，应独立调整：
   - `sink.parallelism` 控制 Flink sink 子任务的数量。每个子任务缓冲数据并将其发送到 StarRocks。当 Flink sink operator 受到 CPU 或内存限制时，增加此值——您可以监视 Flink 的每个 operator 的 CPU 和内存使用情况，以确定是否需要更多子任务。
-  - `sink.properties.merge_commit_parallel` 控制 StarRocks 为每个 Merge Commit 事务创建的导入计划的并行度。当 StarRocks 成为瓶颈时，增加此值。您可以监视 StarRocks 指标 [merge_commit_pending_total](../administration/management/monitoring/metrics.md#merge_commit_pending_total)（待处理的 Merge Commit 任务数）和 [merge_commit_pending_bytes](../administration/management/monitoring/metrics.md#merge_commit_pending_bytes)（待处理任务持有的字节数），以确定是否需要在 StarRocks 端增加并行度——持续的高值表示导入计划无法跟上输入数据。
+  - `sink.properties.merge_commit_parallel` 控制 StarRocks 为每个 Merge Commit 事务创建的导入计划的并行度。当 StarRocks 成为瓶颈时，增加此值。您可以监视 StarRocks 指标 [merge_commit_pending_total](../administration/management/monitoring/metric_details/i-p.md#merge_commit_pending_total)（待处理的 Merge Commit 任务数）和 [merge_commit_pending_bytes](../administration/management/monitoring/metric_details/i-p.md#merge_commit_pending_bytes)（待处理任务持有的字节数），以确定是否需要在 StarRocks 端增加并行度——持续的高值表示导入计划无法跟上输入数据。
 
 - **`sink.merge-commit.chunk.size` 和 `sink.buffer-flush.max-bytes` 之间的关系**：
   - `sink.merge-commit.chunk.size` 控制每个 Stream Load 请求（每个 chunk）的最大数据大小。当 chunk 中的数据达到此大小时，将立即刷新。

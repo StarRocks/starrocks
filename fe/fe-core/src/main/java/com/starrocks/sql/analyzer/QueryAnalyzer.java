@@ -46,6 +46,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.util.concurrent.lock.SnapshotCopyValidator;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
@@ -1820,6 +1821,10 @@ public class QueryAnalyzer {
             ArrayList<Field> fields = new ArrayList<>();
             for (int fieldIdx = 0; fieldIdx < outputSize; ++fieldIdx) {
                 Field oldField = leftChildScope.getRelationFields().getFieldByIndex(fieldIdx);
+                if (outputTypes[fieldIdx].isGeoType() &&
+                        !(node instanceof UnionRelation && node.getQualifier().equals(SetQualifier.ALL))) {
+                    throw new SemanticException("%s not support set operation", outputTypes[fieldIdx]);
+                }
                 fields.add(new Field(oldField.getName(), outputTypes[fieldIdx], oldField.getRelationAlias(),
                         oldField.getOriginExpression(), true, nullables.get(fieldIdx)));
             }
@@ -2824,7 +2829,12 @@ public class QueryAnalyzer {
                         Preconditions.checkState(mvTable instanceof OlapTable);
                         // Add read lock to avoid concurrent problems.
                         OlapTable mvOlapTable = new OlapTable(mvTable.getType());
-                        ((OlapTable) mvTable).copyOnlyForQuery(mvOlapTable);
+                        // Known: PlannerMetaLocker does not collect a [_SYNC_MV_] relation, so this copies the
+                        // base table without its lock. Tracked as 2-g in the FE lock todo, fixed on its own.
+                        try (SnapshotCopyValidator.KnownViolation known = SnapshotCopyValidator.exemptKnownViolation(
+                                "[_SYNC_MV_] relation is not in the planner lock set (2-g)")) {
+                            ((OlapTable) mvTable).copyOnlyForQuery(mvOlapTable);
+                        }
                         // Copy the necessary olap table meta to avoid changing original meta;
                         mvOlapTable.setBaseIndexMetaId(materializedIndex.second.getIndexMetaId());
                         // The selected index can give same-named columns different key or aggregate properties.

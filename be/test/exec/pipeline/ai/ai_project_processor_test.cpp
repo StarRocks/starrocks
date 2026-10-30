@@ -50,6 +50,7 @@
 #include "platform/llm/ai_task_dispatcher.h"
 #include "runtime/query_context_lifetime.h"
 #include "runtime/runtime_state.h"
+#include "testutil/type_test_helper.h"
 #include "types/json_value.h"
 
 namespace starrocks::pipeline {
@@ -164,7 +165,7 @@ public:
     }
 
     std::optional<size_t> throw_on_prepare_call;
-    TypeDescriptor result_type = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+    TypeDescriptor result_type = TYPE_VARCHAR_DESC;
     AIFunctionResultKind result_kind = AIFunctionResultKind::STRING;
     PrepareException prepare_exception = PrepareException::NONE;
     std::optional<size_t> output_chunk_rows;
@@ -530,7 +531,7 @@ std::string ai_value(const ChunkPtr& chunk, size_t row) {
 TEST(AIProjectProcessorTest, MaterializesEmbeddingWithNullableElementsAndSqlNullRows) {
     auto buffer = make_input_buffer();
     auto projection = std::make_shared<RecordingProjection>();
-    projection->result_type = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_FLOAT));
+    projection->result_type = TYPE_ARRAY_FLOAT_DESC;
     projection->result_kind = AIFunctionResultKind::EMBEDDING;
     projection->row_actions = {AIFunctionRowAction::DISPATCH, AIFunctionRowAction::SQL_NULL};
     auto submitter = std::make_shared<ManualTaskSubmitter>();

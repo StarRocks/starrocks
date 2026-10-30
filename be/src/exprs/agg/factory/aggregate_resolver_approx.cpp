@@ -27,17 +27,17 @@ struct HLLUnionBuilder {
     void operator()(AggregateFuncResolver* resolver) {
         if constexpr (lt_is_fixedlength<lt> || lt_is_string_or_binary<lt>) {
             resolver->add_aggregate_mapping<lt, TYPE_HLL, HyperLogLog>(
-                    "hll_raw", false, AggregateFactory::MakeHllRawAggregateFunction<lt>());
+                    "hll_raw", kWithoutWindow, AggregateFactory::MakeHllRawAggregateFunction<lt>());
 
             using IntersectCountState = BitmapIntersectAggregateState<BitmapRuntimeCppType<lt>>;
             resolver->add_aggregate_mapping_variadic<lt, TYPE_BIGINT, IntersectCountState>(
                     "intersect_count", false, AggregateFactory::MakeIntersectCountAggregateFunction<lt>());
 
             resolver->add_aggregate_mapping<lt, TYPE_BIGINT, HyperLogLog>(
-                    "ndv", false, AggregateFactory::MakeHllNdvAggregateFunction<lt>());
+                    "ndv", kWithoutWindow, AggregateFactory::MakeHllNdvAggregateFunction<lt>());
 
             resolver->add_aggregate_mapping<lt, TYPE_BIGINT, HyperLogLog>(
-                    "approx_count_distinct", false, AggregateFactory::MakeHllNdvAggregateFunction<lt>());
+                    "approx_count_distinct", kWithoutWindow, AggregateFactory::MakeHllNdvAggregateFunction<lt>());
 
             resolver->add_aggregate_mapping_variadic<lt, TYPE_BIGINT, HLLSketchState>(
                     "ds_hll_count_distinct", false, AggregateFactory::MakeHllSketchAggregateFunction<lt>());
@@ -46,7 +46,8 @@ struct HLLUnionBuilder {
                     "ds_theta_count_distinct", false, AggregateFactory::MakeThetaSketchAggregateFunction<lt>());
 
             resolver->add_aggregate_mapping<lt, TYPE_VARCHAR, HistogramHllNdvState<lt>>(
-                    "histogram_hll_ndv", false, AggregateFactory::MakeHistogramHllNdvAggregationFunction<lt>());
+                    "histogram_hll_ndv", kWithoutWindow,
+                    AggregateFactory::MakeHistogramHllNdvAggregationFunction<lt>());
         }
     }
 };
@@ -58,7 +59,7 @@ struct ApproxTopKBuilder {
                       lt_is_date_or_datetime<lt> || lt_is_boolean<lt>) {
             using ApproxTopKState = ApproxTopKState<lt>;
             resolver->add_aggregate_mapping<lt, TYPE_ARRAY, ApproxTopKState, AggregateFunctionPtr, false>(
-                    "approx_top_k", true, AggregateFactory::MakeApproxTopKAggregateFunction<lt>());
+                    "approx_top_k", kWithWindow, AggregateFactory::MakeApproxTopKAggregateFunction<lt>());
         }
     }
 };
@@ -73,15 +74,15 @@ void AggregateFuncResolver::register_approx() {
     for (auto type : aggregate_types()) {
         type_dispatch_all(type, ApproxTopKBuilder(), this);
     }
-    add_aggregate_mapping<TYPE_HLL, TYPE_HLL, HyperLogLog>("hll_union", false,
+    add_aggregate_mapping<TYPE_HLL, TYPE_HLL, HyperLogLog>("hll_union", kWithoutWindow,
                                                            AggregateFactory::MakeHllUnionAggregateFunction());
-    add_aggregate_mapping<TYPE_HLL, TYPE_HLL, HyperLogLog>("hll_raw_agg", false,
+    add_aggregate_mapping<TYPE_HLL, TYPE_HLL, HyperLogLog>("hll_raw_agg", kWithoutWindow,
                                                            AggregateFactory::MakeHllUnionAggregateFunction());
-    add_aggregate_mapping<TYPE_HLL, TYPE_BIGINT, HyperLogLog>("hll_union_agg", false,
+    add_aggregate_mapping<TYPE_HLL, TYPE_BIGINT, HyperLogLog>("hll_union_agg", kWithoutWindow,
                                                               AggregateFactory::MakeHllUnionCountAggregateFunction());
 
     add_aggregate_mapping<TYPE_VARBINARY, TYPE_VARBINARY, ThetaSketchState>(
-            "ds_theta_combine", false, AggregateFactory::MakeThetaSketchCombineAggregateFunction());
+            "ds_theta_combine", kWithoutWindow, AggregateFactory::MakeThetaSketchCombineAggregateFunction());
 
     add_aggregate_mapping_variadic<TYPE_VARBINARY, TYPE_DOUBLE, ThetaSketchIntersectCondState>(
             "ds_theta_intersect_cond_agg", false, AggregateFactory::MakeThetaSketchIntersectCondAggregateFunction());

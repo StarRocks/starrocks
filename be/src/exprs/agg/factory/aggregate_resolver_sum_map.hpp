@@ -41,18 +41,18 @@ struct SumMapValueTypeDispatcher {
                 using MyHashMap = phmap::flat_hash_map<KeyCppType, size_t, Hash128WithSeed<PhmapSeed1>>;
                 auto func = new SumMapAggregateFunction<kt, vt, MyHashMap>();
                 using State = SumMapAggregateFunctionState<kt, vt, MyHashMap>;
-                resolver->add_aggregate_mapping<kt, vt, State>("sum_map", false, func);
+                resolver->add_aggregate_mapping<kt, vt, State>("sum_map", kWithoutWindow, func);
             } else if constexpr (lt_is_fixedlength<kt>) {
                 using MyHashMap = phmap::flat_hash_map<KeyCppType, size_t, StdHash<KeyCppType>>;
                 auto func = new SumMapAggregateFunction<kt, vt, MyHashMap>();
                 using State = SumMapAggregateFunctionState<kt, vt, MyHashMap>;
-                resolver->add_aggregate_mapping<kt, vt, State>("sum_map", false, func);
+                resolver->add_aggregate_mapping<kt, vt, State>("sum_map", kWithoutWindow, func);
             } else if constexpr (lt_is_string<kt>) {
                 using MyHashMap =
                         phmap::flat_hash_map<SliceWithHash, size_t, HashOnSliceWithHash, EqualOnSliceWithHash>;
                 auto func = new SumMapAggregateFunction<kt, vt, MyHashMap>();
                 using State = SumMapAggregateFunctionState<kt, vt, MyHashMap>;
-                resolver->add_aggregate_mapping<kt, vt, State>("sum_map", false, func);
+                resolver->add_aggregate_mapping<kt, vt, State>("sum_map", kWithoutWindow, func);
             }
         }
     }

@@ -14,7 +14,6 @@
 
 #pragma once
 
-#include <functional>
 #include <memory>
 
 #include "common/statusor.h"
@@ -33,8 +32,7 @@ class PreparedGeoPolygon {
 public:
     ~PreparedGeoPolygon();
     static StatusOr<std::unique_ptr<PreparedGeoPolygon>> prepare(Slice wkb);
-    StatusOr<WkbGeometry> overlay(const PreparedGeoPolygon& right, GeoOverlayKind kind,
-                                  const std::function<Status()>& checkpoint = {}) const;
+    StatusOr<WkbGeometry> overlay(const PreparedGeoPolygon& right, GeoOverlayKind kind) const;
 
 private:
     struct Impl;

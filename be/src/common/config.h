@@ -1285,6 +1285,15 @@ CONF_mBool(pipeline_enable_large_column_checker, "true");
 // The number of scan threads pipeline engine.
 CONF_Int64(pipeline_scan_thread_pool_thread_num, "0");
 CONF_mDouble(pipeline_connector_scan_thread_num_per_cpu, "8");
+// Threads in Arrow's process-wide IO pool, which runs Arrow async IO (for example Parquet pre-buffer
+// reads through a file without its own ReadAsync). No BE read path uses this pool today: Parquet
+// pre-buffer reads run on the scan thread (ParquetChunkFile::ReadAsync). The setting stays as a
+// safety valve in case some IO falls into the pool by accident again, such as a new Arrow reader
+// over a file without a ReadAsync override. Applied at startup and on every update, so it can be
+// changed without a restart. 0 keeps the size Arrow chose for itself: the ARROW_IO_THREADS
+// environment variable when it holds a positive integer, 8 otherwise. A value > 0 overrides that.
+// Accepted range: [0, 32768].
+CONF_mInt32(arrow_io_thread_pool_size, "0");
 // Queue size of scan thread pool for pipeline engine.
 CONF_Int64(pipeline_scan_thread_pool_queue_size, "102400");
 // The number of execution threads for pipeline engine.
@@ -1545,6 +1554,9 @@ CONF_Int64(send_runtime_filter_via_http_rpc_min_size, "67108864");
 
 // -1: unlimited, 0: limit by memory use, >0: limit by queue_size
 CONF_mInt64(runtime_filter_queue_limit, "-1");
+// number of threads that merge and deliver global runtime filters on a BE. All events of one runtime filter are
+// handled by the same thread. <= 1 means a single thread.
+CONF_Int32(runtime_filter_worker_thread_num, "4");
 
 CONF_Int64(rpc_connect_timeout_ms, "30000");
 
@@ -1848,6 +1860,8 @@ CONF_mBool(lake_enable_protobuf_file_checksum, "true");
 CONF_mBool(lake_clear_corrupted_cache_meta, "true");
 // clear *.data cache for lake table
 CONF_mBool(lake_clear_corrupted_cache_data, "false");
+// clear corrupted datacache for external tables, as lake_clear_corrupted_cache_data does for lake tables
+CONF_mBool(external_table_clear_corrupted_cache_data, "true");
 // The maximum number of files which need to rebuilt in cloud native pk index.
 // If files which need to rebuilt larger than this, we will flush memtable immediately.
 CONF_mInt32(cloud_native_pk_index_rebuild_files_threshold, "50");
@@ -2287,6 +2301,16 @@ CONF_mBool(enable_json_flat, "true");
 // enable compaction is base on flat json, not whole json
 CONF_mBool(enable_compaction_flat_json, "true");
 
+// When some inputs of a compaction have a flat JSON column and others store it as whole JSON, read the whole-JSON
+// inputs into the flat inputs' layout with every path typed JSON, so the output is written as it is read instead
+// of being buffered whole to derive a layout.
+CONF_mBool(enable_compaction_flat_json_mixed_inputs, "true");
+
+// When the inputs of a flat JSON compaction do not all flatten a path, keep the path if enough rows hold it as a
+// sub-column (json_flat_sparsity_factor), reading the other inputs' values from their remain, rather than only the
+// paths every input flattens.
+CONF_mBool(enable_compaction_flat_json_partial_paths, "true");
+
 // direct read flat json
 CONF_mBool(enable_lazy_dynamic_flat_json, "true");
 
@@ -2313,6 +2337,13 @@ CONF_mDouble(json_flat_sparsity_factor, "0.3");
 
 // the maximum number of extracted JSON sub-field
 CONF_mInt32(json_flat_column_max, "100");
+
+// Maximum object/array nesting depth accepted when parsing JSON (parse_json, CAST AS JSON, JSON
+// column ingest, ...). The velocypack parser recurses once per level, so an unbounded depth lets a
+// crafted document overflow the thread stack and abort the BE. A positive value sets the cap; 0 or
+// below keeps the parser's built-in default (1024) rather than disabling the check, so the guard
+// cannot be silently turned off by leaving it unset. Mutable so it can be tuned without a restart.
+CONF_mInt32(json_max_parse_nesting_depth, "1024");
 
 // for whitelist on flat json remain data, max set 1kb
 CONF_mInt32(json_flat_remain_filter_max_bytes, "1024");
@@ -2603,7 +2634,9 @@ CONF_mInt32(put_combined_txn_log_thread_pool_num_max, "64");
 // When all threads are busy, further closes wait in the pool's queue, which is unbounded: no close is dropped.
 // Must be positive. Runtime changes resize the existing pool without interrupting running closes.
 CONF_mInt32(load_sink_close_thread_pool_num_max, "64");
-CONF_mBool(enable_put_combinded_txn_log_parallel, "false");
+// Shared-data only. Write the combined txn logs of a load's partitions to object storage in parallel, on
+// put_combined_txn_log_thread_pool, instead of one partition after another.
+CONF_mBool(enable_put_combinded_txn_log_parallel, "true");
 // Shared-data only. Seconds a node keeps the shard info of a tablet it does not own, so that touching
 // the tablet again within this time does not ask starmgr for it (GetShard RPC). It keeps what it had
 // to ask starmgr for, and what the tablet's owners hand over to the load coordinator along with the
@@ -2653,13 +2686,6 @@ CONF_mString(ai_function_on_error, "ignore");
 CONF_mInt32(ai_function_rate_limit_qps_chat, "128");
 CONF_mInt32(ai_function_rate_limit_qps_embedding, "128");
 CONF_mInt32(ai_function_max_inflight, "512");
-
-// Legacy ai_query runtime configuration. It is intentionally independent from the AI function runtime.
-CONF_Int32(llm_max_queue_size, "4096");
-
-CONF_Int32(llm_max_concurrent_queries, "8");
-
-CONF_Int32(llm_cache_size, "131072");
 
 CONF_mBool(enable_pipeline_driver_parallel_prepare, "true");
 // When enabled, ScanExecutor uses LockFreeWorkGroupScanTaskQueue for OLAP and connector scan task scheduling.

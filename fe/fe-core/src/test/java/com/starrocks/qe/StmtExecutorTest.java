@@ -1373,6 +1373,7 @@ public class StmtExecutorTest {
         String embedded = onSummary.getInfoString(ProfileKeyDictionary.EXPLAIN_PLAN);
         Assertions.assertNotNull(embedded,
                 "ExplainPlan must be embedded when enable_explain_in_profile is true");
+        Assertions.assertFalse(onCtx.isExplainForProfile(), "Embedding must reset explainForProfile after rendering");
         Assertions.assertTrue(embedded.contains("PLAN FRAGMENT"),
                 "Embedded explain plan should contain rendered fragment headers");
         Assertions.assertTrue(embedded.contains("OlapScanNode"),

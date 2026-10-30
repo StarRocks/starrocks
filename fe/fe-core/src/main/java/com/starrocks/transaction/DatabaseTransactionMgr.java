@@ -64,6 +64,7 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeTableHelper;
 import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
+import com.starrocks.load.routineload.KafkaProgress;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
 import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.metric.MetricRepo;
@@ -393,9 +394,12 @@ public class DatabaseTransactionMgr {
             // too: an empty-partition range rewrite produces zero rows but must still commit so the flip
             // can anchor an empty op_schema_change@W on that partition (the BE converter tolerates an empty
             // source). Without this it would abort with ERR_NO_ROWS_IMPORTED and cancel the schema change.
+            // Kafka routine load must also commit successful empty batches carrying consumption progress:
+            // aborting them prevents the BE from committing the corresponding Kafka consumer-group offsets.
             if (Config.empty_load_as_error && tabletCommitInfos.isEmpty()
                     && transactionState.getSourceType() != TransactionState.LoadJobSourceType.INSERT_STREAMING
-                    && !transactionState.isShadowRewrite()) {
+                    && !transactionState.isShadowRewrite()
+                    && !canCommitEmptyKafkaRoutineLoad(transactionState, txnCommitAttachment)) {
                 throw new TransactionCommitFailedException(ERR_NO_ROWS_IMPORTED.formatErrorMsg());
             }
 
@@ -531,6 +535,7 @@ public class DatabaseTransactionMgr {
             boolean txnOperated;
             writeLock();
             try {
+                checkPartitionsStillEmptyForPlainInsert(copiedState, db);
                 txnOperated = unprotectedCommitPreparedTransaction(copiedState, db);
             } finally {
                 writeUnlock();
@@ -1224,6 +1229,18 @@ public class DatabaseTransactionMgr {
         return result;
     }
 
+    private static boolean canCommitEmptyKafkaRoutineLoad(TransactionState transactionState,
+                                                          TxnCommitAttachment attachment) {
+        if (transactionState.getSourceType() != TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK
+                || !(attachment instanceof RLTaskTxnCommitAttachment)) {
+            return false;
+        }
+        RLTaskTxnCommitAttachment routineLoadAttachment = (RLTaskTxnCommitAttachment) attachment;
+        return routineLoadAttachment.getLoadedRows() == 0
+                && !routineLoadAttachment.isNonRetryable()
+                && routineLoadAttachment.getProgress() instanceof KafkaProgress;
+    }
+
     // check whether transaction can be finished or not
     // for each tablet of load txn, if most replicas version publish successed
     // the trasaction can be treated as successful and can be finished
@@ -1628,6 +1645,39 @@ public class DatabaseTransactionMgr {
         LOG.info("finish transaction {} successfully", copiedState);
         updateTransactionMetrics(copiedState);
         return copiedState;
+    }
+
+    // A column-subset INSERT that InsertAnalyzer planned as a plain insert filled its missing columns
+    // with defaults, which is only correct while no row exists in its target partitions. Any
+    // transaction committed to those partitions since it was planned would have its columns
+    // overwritten. nextVersion advances only under this manager's lock, when a transaction is
+    // assigned its version, so checking it here settles the race for every concurrent writer: the
+    // first one through takes the initial version, every later one sees a larger value and must be
+    // re-planned, which the retry does as a partial update.
+    private void checkPartitionsStillEmptyForPlainInsert(TransactionState transactionState, Database db)
+            throws TransactionCommitFailedException {
+        if (!transactionState.requiresEmptyPartitions()) {
+            return;
+        }
+        for (TableCommitInfo tableCommitInfo : transactionState.getIdToTableCommitInfos().values()) {
+            Table table = globalStateMgr.getLocalMetastore().getTable(db.getId(), tableCommitInfo.getTableId());
+            if (!(table instanceof OlapTable)) {
+                continue;
+            }
+            OlapTable olapTable = (OlapTable) table;
+            for (PartitionCommitInfo partitionCommitInfo : tableCommitInfo.getIdToPartitionCommitInfo().values()) {
+                PhysicalPartition partition = olapTable.getPhysicalPartition(partitionCommitInfo.getPhysicalPartitionId());
+                if (partition == null) {
+                    continue;
+                }
+                if (partition.getNextVersion() != PhysicalPartition.PARTITION_INIT_VERSION + 1) {
+                    throw new TransactionCommitFailedException(String.format(
+                            "partition %d of table %s received other writes while this INSERT was planned as a "
+                                    + "plain insert on an empty partition, retry the statement",
+                            partition.getId(), olapTable.getName()));
+                }
+            }
+        }
     }
 
     protected boolean unprotectedCommitPreparedTransaction(TransactionState transactionState, Database db) {

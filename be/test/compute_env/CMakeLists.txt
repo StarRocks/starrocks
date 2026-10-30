@@ -68,6 +68,7 @@ endif()
 
 add_executable(compute_env_test
         ai_executor_test.cpp
+        arrow_io_thread_pool_test.cpp
         buffer_control_block_test.cpp
         compute_env_test.cpp
         compute_env_test_main.cpp

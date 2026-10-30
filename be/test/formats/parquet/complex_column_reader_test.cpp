@@ -418,7 +418,7 @@ TEST(ParquetComplexColumnReaderTest, BuildVariantBindingArrayScalarChildEncodeFa
 
     ShreddedFieldNode node = make_node("arr", ShreddedFieldNode::Kind::ARRAY);
     TypeDescriptor arr_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_ARRAY);
-    arr_type.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+    arr_type.children.push_back(TYPE_INT_DESC);
     node.typed_value_read_type = std::make_unique<TypeDescriptor>(arr_type);
     node.typed_value_column = make_typed_array_column(DatumArray{Datum(int32_t(1))});
     node.children.emplace_back(std::move(scalar_child));
@@ -441,7 +441,7 @@ TEST(ParquetComplexColumnReaderTest, BuildVariantBindingArrayNoneChildWithGrandc
 
     ShreddedFieldNode node = make_node("arr", ShreddedFieldNode::Kind::ARRAY);
     TypeDescriptor arr_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_ARRAY);
-    arr_type.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+    arr_type.children.push_back(TYPE_INT_DESC);
     node.typed_value_read_type = std::make_unique<TypeDescriptor>(arr_type);
     node.typed_value_column = make_typed_array_column(DatumArray{Datum(int32_t(1))});
     node.children.emplace_back(std::move(child));
@@ -813,7 +813,7 @@ TEST(VariantZoneMapTest, VariantVirtualZoneMapReaderNoOpApis) {
 
     ASSERT_OK(zm_reader.prepare());
 
-    ColumnPtr dst = ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT), true);
+    ColumnPtr dst = ColumnHelper::create_column(TYPE_BIGINT_DESC, true);
     auto st = zm_reader.read_range(Range<uint64_t>(0, 1), nullptr, dst);
     ASSERT_TRUE(st.is_not_supported());
 
@@ -939,7 +939,7 @@ TEST(VariantZoneMapTest, ZoneMapReaderDelegatesPredicatesWhenTypesMatch) {
 
     auto path = VariantPathParser::parse_shredded_path(std::string_view("age"));
     ASSERT_OK(path);
-    VariantVirtualZoneMapReader zm_reader(vr, *path, TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+    VariantVirtualZoneMapReader zm_reader(vr, *path, TYPE_INT_DESC);
 
     ObjectPool pool;
     TypeInfoPtr ti = get_type_info(LogicalType::TYPE_INT);
@@ -1009,7 +1009,7 @@ TEST(VariantZoneMapTest, ZoneMapReaderSkipsDecimalToBigintPredicateDelegation) {
 
     auto path = VariantPathParser::parse_shredded_path(std::string_view("price"));
     ASSERT_OK(path);
-    VariantVirtualZoneMapReader zm_reader(vr, *path, TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT));
+    VariantVirtualZoneMapReader zm_reader(vr, *path, TYPE_BIGINT_DESC);
 
     ObjectPool pool;
     TypeInfoPtr ti = get_type_info(LogicalType::TYPE_BIGINT);
@@ -1041,7 +1041,7 @@ TEST(VariantZoneMapTest, ZoneMapReaderSkipsPushdownWhenPredicateRewriteFails) {
 
     auto path = VariantPathParser::parse_shredded_path(std::string_view("age"));
     ASSERT_OK(path);
-    VariantVirtualZoneMapReader zm_reader(vr, *path, TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+    VariantVirtualZoneMapReader zm_reader(vr, *path, TYPE_INT_DESC);
 
     FailingConvertPredicate pred(get_type_info(LogicalType::TYPE_INT));
 
@@ -1074,7 +1074,7 @@ TEST(VariantZoneMapTest, ZoneMapReaderSkipsWhenFallbackValueMayContainNonNullRow
 
     auto path = VariantPathParser::parse_shredded_path(std::string_view("age"));
     ASSERT_OK(path);
-    VariantVirtualZoneMapReader zm_reader(vr, *path, TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+    VariantVirtualZoneMapReader zm_reader(vr, *path, TYPE_INT_DESC);
 
     ObjectPool pool;
     TypeInfoPtr ti = get_type_info(LogicalType::TYPE_INT);
@@ -1097,8 +1097,7 @@ TEST(VariantZoneMapTest, ZoneMapReaderSkipsWhenFallbackValueMayContainNonNullRow
 
 TEST(ParquetComplexColumnReaderTest, VariantVirtualZoneMapReaderSkipsWhenSourceIsNull) {
     ASSIGN_OR_ABORT(auto leaf_path, VariantPathParser::parse_shredded_path(std::string_view("age")));
-    VariantVirtualZoneMapReader zm_reader(nullptr, std::move(leaf_path),
-                                          TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT));
+    VariantVirtualZoneMapReader zm_reader(nullptr, std::move(leaf_path), TYPE_BIGINT_DESC);
 
     ObjectPool pool;
     const ColumnReader* leaf_reader = nullptr;
@@ -1119,14 +1118,13 @@ TEST(ParquetScalarColumnReaderGuardTest, FillAndRestoreRejectNonTemporarySource)
     ColumnReaderOptions opts;
     ParquetField field;
     tparquet::ColumnChunk chunk_meta;
-    TypeDescriptor varchar_type = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
     GlobalDictMap dict;
     auto make_int_col = [] { return ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true); };
 
     // LowCardColumnReader::fill_dst_column: when src is not _code_column
     // (PHYSICAL dict codes), it is treated as already LOGICAL → swap directly.
     {
-        ScalarColumnReader base(&field, &chunk_meta, &varchar_type, opts);
+        ScalarColumnReader base(&field, &chunk_meta, &TYPE_VARCHAR_DESC, opts);
         LowCardColumnReader reader(base, &dict, /*slot_id=*/1);
         ColumnPtr dst = make_int_col();
         ColumnPtr src = make_int_col();
@@ -1135,7 +1133,7 @@ TEST(ParquetScalarColumnReaderGuardTest, FillAndRestoreRejectNonTemporarySource)
 
     // LowRowsColumnReader::fill_dst_column: same LOGICAL fallback.
     {
-        ScalarColumnReader base(&field, &chunk_meta, &varchar_type, opts);
+        ScalarColumnReader base(&field, &chunk_meta, &TYPE_VARCHAR_DESC, opts);
         LowRowsColumnReader reader(base, &dict, /*slot_id=*/1);
         ColumnPtr dst = make_int_col();
         ColumnPtr src = make_int_col();
@@ -1145,7 +1143,7 @@ TEST(ParquetScalarColumnReaderGuardTest, FillAndRestoreRejectNonTemporarySource)
     // RawColumnReader::_restore_physical_column errors when a PHYSICAL column
     // is still the caller-visible column but _logical_dst was lost.
     {
-        ScalarColumnReader base(&field, &chunk_meta, &varchar_type, opts);
+        ScalarColumnReader base(&field, &chunk_meta, &TYPE_VARCHAR_DESC, opts);
         LowCardColumnReader reader(base, &dict, /*slot_id=*/1);
         ColumnPtr code = make_int_col();
         reader._code_column = code;

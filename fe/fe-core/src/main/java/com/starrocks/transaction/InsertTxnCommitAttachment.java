@@ -39,6 +39,13 @@ public class InsertTxnCommitAttachment extends TxnCommitAttachment {
     @SerializedName("ivmRefreshCommitInfo")
     private IVMRefreshCommitInfo ivmRefreshCommitInfo;
 
+    // Set when a column-subset INSERT into a primary key table was planned as a plain insert because
+    // every target partition had never been committed to. The commit re-checks that under the
+    // transaction manager lock, since another transaction may have committed to those partitions
+    // in between, and fails the commit if so (see DatabaseTransactionMgr.commitPreparedTransaction).
+    @SerializedName("requireEmptyPartitions")
+    private boolean requireEmptyPartitions = false;
+
     public InsertTxnCommitAttachment() {
         super(TransactionState.LoadJobSourceType.INSERT_STREAMING);
     }
@@ -88,5 +95,13 @@ public class InsertTxnCommitAttachment extends TxnCommitAttachment {
 
     public IVMRefreshCommitInfo getIvmRefreshCommitInfo() {
         return ivmRefreshCommitInfo;
+    }
+
+    public void setRequireEmptyPartitions(boolean requireEmptyPartitions) {
+        this.requireEmptyPartitions = requireEmptyPartitions;
+    }
+
+    public boolean getRequireEmptyPartitions() {
+        return requireEmptyPartitions;
     }
 }

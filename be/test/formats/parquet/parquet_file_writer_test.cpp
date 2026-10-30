@@ -38,6 +38,7 @@
 #include "fs/fs_memory.h"
 #include "runtime/runtime_state.h"
 #include "testutil/column_test_helper.h"
+#include "testutil/type_test_helper.h"
 
 namespace starrocks::formats {
 
@@ -480,7 +481,7 @@ TEST(ParquetLevelBuilderTest, DatetimeOffsetsMatchReference) {
                                     "c0", ::parquet::Repetition::OPTIONAL,
                                     ::parquet::LogicalType::Timestamp(false, ::parquet::LogicalType::TimeUnit::MICROS),
                                     ::parquet::Type::INT64);
-            parquet::LevelBuilder builder(TypeDescriptor::from_logical_type(TYPE_DATETIME), node, zone, false, int96);
+            parquet::LevelBuilder builder(TYPE_DATETIME_DESC, node, zone, false, int96);
             ASSERT_OK(builder.init());
             bool called = false;
             ASSERT_OK(builder.write(parquet::LevelBuilderContext(n), column, [&](const parquet::LevelBuilderResult& r) {
@@ -534,7 +535,7 @@ TEST_F(ParquetFileWriterTest, TestWriteVarchar) {
 
 TEST_F(ParquetFileWriterTest, TestWriteArray) {
     std::vector<TypeDescriptor> type_descs;
-    type_descs.push_back(TYPE_INT_ARRAY_DESC);
+    type_descs.push_back(TYPE_ARRAY_INT_DESC);
     ASSIGN_OR_ASSERT_FAIL(auto writer, _create_writer(type_descs));
 
     // [1], NULL, [], [2, NULL, 3]
@@ -665,7 +666,7 @@ TEST_F(ParquetFileWriterTest, TestWriteNestedArray) {
     // type_descs
     std::vector<TypeDescriptor> type_descs;
     auto type_int_array_array = TypeDescriptor::from_logical_type(TYPE_ARRAY);
-    type_int_array_array.children.push_back(TYPE_INT_ARRAY_DESC);
+    type_int_array_array.children.push_back(TYPE_ARRAY_INT_DESC);
     type_descs.push_back(type_int_array_array);
     ASSIGN_OR_ASSERT_FAIL(auto writer, _create_writer(type_descs));
 

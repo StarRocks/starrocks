@@ -61,9 +61,7 @@ TEST_F(StringConverterTest, test_read_hive_string) {
         EXPECT_TRUE(conv->read_string(col.get(), "abcde", options));
         EXPECT_TRUE(conv->read_string(col.get(), "abcdefg", options));
 
-        EXPECT_EQ(2, col->size());
-        EXPECT_EQ("abcde", col->get(0).get_slice());
-        EXPECT_TRUE(col->get(1).is_null());
+        EXPECT_EQ("['abcde', NULL]", col->debug_string());
     }
 
     // test for hive
@@ -77,12 +75,7 @@ TEST_F(StringConverterTest, test_read_hive_string) {
         EXPECT_TRUE(conv->read_string(col.get(), "白嫖斯密斯", options));
         EXPECT_TRUE(conv->read_string(col.get(), "白嫖斯密斯哈", options));
 
-        EXPECT_EQ(5, col->size());
-        EXPECT_EQ("abcde", col->get(0).get_slice());
-        EXPECT_EQ("abcde", col->get(1).get_slice());
-        EXPECT_EQ("斯密斯", col->get(2).get_slice());
-        EXPECT_EQ("白嫖斯密斯", col->get(3).get_slice());
-        EXPECT_EQ("白嫖斯密斯", col->get(4).get_slice());
+        EXPECT_EQ("['abcde', 'abcde', '斯密斯', '白嫖斯密斯', '白嫖斯密斯']", col->debug_string());
     }
 }
 

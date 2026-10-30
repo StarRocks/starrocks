@@ -465,7 +465,7 @@ class DeleteFileIndex {
             return this;
         }
 
-        Builder cachedDeleteFiles(Set<DeleteFile> deleteFiles) {
+        Builder cachedDeleteFiles(Iterable<DeleteFile> deleteFiles) {
             this.cachedDeleteFiles = deleteFiles;
             return this;
         }
@@ -492,8 +492,14 @@ class DeleteFileIndex {
                                 try (CloseableIterable<ManifestEntry<DeleteFile>> reader = deleteFile) {
                                     for (ManifestEntry<DeleteFile> entry : reader) {
                                         if (entry.dataSequenceNumber() > minSequenceNumber) {
+                                            DeleteFile file = entry.file();
+                                            // keep minimum stats to avoid memory pressure (Iceberg 1.11.0)
+                                            Set<Integer> columns =
+                                                    file.content() == FileContent.POSITION_DELETES
+                                                            ? Set.of(MetadataColumns.DELETE_FILE_PATH.fieldId())
+                                                            : Set.copyOf(file.equalityFieldIds());
                                             // copy with stats for better filtering against data file stats
-                                            files.add(entry.file().copy());
+                                            files.add(ContentFileUtil.copy(file, true, columns));
                                         }
                                     }
                                 } catch (IOException e) {

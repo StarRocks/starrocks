@@ -28,9 +28,8 @@ namespace starrocks::avrocpp {
 class BinaryColumnReaderTest : public ColumnReaderTest, public ::testing::Test {};
 
 TEST_F(BinaryColumnReaderTest, test_normal) {
-    auto type_desc = TypeDescriptor::create_varchar_type(1024);
-    auto column = create_adaptive_nullable_column(type_desc);
-    auto reader = get_column_reader(type_desc, false);
+    auto column = create_adaptive_nullable_column(TYPE_VARCHAR_DESC);
+    auto reader = get_column_reader(TYPE_VARCHAR_DESC, false);
 
     {
         bool bool_v = true;
@@ -165,9 +164,8 @@ TEST_F(BinaryColumnReaderTest, test_invalid_as_null) {
 }
 
 TEST_F(BinaryColumnReaderTest, test_from_complex_type) {
-    auto type_desc = TypeDescriptor::create_varchar_type(1024);
-    auto column = create_adaptive_nullable_column(type_desc);
-    auto reader = get_column_reader(type_desc, false);
+    auto column = create_adaptive_nullable_column(TYPE_VARCHAR_DESC);
+    auto reader = get_column_reader(TYPE_VARCHAR_DESC, false);
 
     {
         // record
@@ -246,9 +244,8 @@ TEST_F(BinaryColumnReaderTest, test_from_complex_type) {
 }
 
 TEST_F(BinaryColumnReaderTest, test_from_logical_type) {
-    auto type_desc = TypeDescriptor::create_varchar_type(1024);
-    auto column = create_adaptive_nullable_column(type_desc);
-    auto reader = get_column_reader(type_desc, false);
+    auto column = create_adaptive_nullable_column(TYPE_VARCHAR_DESC);
+    auto reader = get_column_reader(TYPE_VARCHAR_DESC, false);
 
     {
         // date

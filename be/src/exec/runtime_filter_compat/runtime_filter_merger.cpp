@@ -34,6 +34,9 @@
 
 namespace starrocks {
 
+// A build backend number never used by a partial filter.
+static constexpr int32_t kSkewBroadcastStandInBeNumber = -1;
+
 Status RuntimeFilterMergerStatus::_merge_skew_broadcast_runtime_filter(RuntimeFilter* out) {
     if (skew_broadcast_rf_material == nullptr || skew_broadcast_rf_material->key_column == nullptr) {
         return Status::InternalError("skew broadcast rf material is nullptr");
@@ -81,7 +84,10 @@ Status RuntimeFilterMerger::init(const TRuntimeFilterParams& params) {
     return Status::OK();
 }
 
-void finalize_membership_filters(RuntimeFilterMergerStatus* rf_state, const size_t rf_version, const size_t filter_id) {
+// `apply_size_limit` false keeps the bloom filters over max_size; only a partial filter without a bloom filter degrades
+// the merged one then.
+void finalize_membership_filters(RuntimeFilterMergerStatus* rf_state, const size_t rf_version, const size_t filter_id,
+                                 bool apply_size_limit = true) {
     for (const auto& [_, filter] : rf_state->filters) {
         const auto* membership_filter = filter->get_membership_filter();
         if (!membership_filter->can_use_bf()) {
@@ -93,7 +99,7 @@ void finalize_membership_filters(RuntimeFilterMergerStatus* rf_state, const size
         rf_state->current_size += membership_filter->size();
     }
 
-    if (rf_state->current_size > rf_state->max_size) {
+    if (apply_size_limit && rf_state->current_size > rf_state->max_size) {
         // already exceeds max size, no need to build bloom filter, but still reserve min/max filter.
         VLOG_FILE << "RuntimeFilterMerger::merge_runtime_filter. stop building bf since size too "
                      "large. filter_id="
@@ -164,18 +170,34 @@ void RuntimeFilterMerger::merge_runtime_filter(PTransmitRuntimeFilterParams& par
     // to merge runtime filters
     ObjectPool* pool = &(status->pool);
     RuntimeFilter* rf = nullptr;
-    int rf_version = RuntimeFilterSerde::deserialize(pool, &rf, reinterpret_cast<const uint8_t*>(params.data().data()),
+    int rf_version = 0;
+    if (!params.data().empty()) {
+        rf_version = RuntimeFilterSerde::deserialize(pool, &rf, reinterpret_cast<const uint8_t*>(params.data().data()),
                                                      params.data().size());
-    if (rf == nullptr) {
-        // something wrong with deserialization.
-        return;
     }
 
+    // A partial filter that can not be deserialized still arrives, and makes the merged filter pass every row (see
+    // _try_send_total_runtime_filter). Otherwise the merged filter would never complete.
     status->arrives.insert(be_number);
-    status->filters.insert(std::make_pair(be_number, rf));
+    if (rf == nullptr) {
+        LOG(WARNING) << "RuntimeFilterMerger::merge_runtime_filter. can not deserialize the partial filter, the merged "
+                        "filter passes every row. query_id="
+                     << _query_id << ", filter_id=" << filter_id << ", be_number=" << be_number
+                     << ", size=" << params.data().size();
+    } else {
+        status->rf_version = rf_version;
+        status->filters.insert(std::make_pair(be_number, rf));
+    }
+
+    _try_send_total_runtime_filter(filter_id, status);
+}
+
+void RuntimeFilterMerger::_try_send_total_runtime_filter(int32_t filter_id, RuntimeFilterMergerStatus* status,
+                                                         bool apply_size_limit) {
+    if (status->isSent) return;
 
     // not ready. still have to wait more filters.
-    if (status->filters.size() < status->expect_number) return;
+    if (status->arrives.size() < status->expect_number) return;
 
     // skew join's rf from broadcast join not arrived yet, we need to wait.
     if (status->is_skew_join &&
@@ -183,11 +205,75 @@ void RuntimeFilterMerger::merge_runtime_filter(PTransmitRuntimeFilterParams& par
         return;
     }
 
-    if (rf->type() != RuntimeFilterSerializeType::IN_FILTER) {
-        finalize_membership_filters(status, rf_version, filter_id);
+    if (status->filters.empty()) {
+        LOG(WARNING) << "RuntimeFilterMerger::_try_send_total_runtime_filter. no partial filter can be deserialized. "
+                        "query_id="
+                     << _query_id << ", filter_id=" << filter_id;
+        return;
     }
 
-    _send_total_runtime_filter(rf_version, filter_id);
+    RuntimeFilter* first = status->filters.begin()->second;
+    const bool is_in_filter = first->type() == RuntimeFilterSerializeType::IN_FILTER;
+    // stand in a filter that passes every row for `be_number`.
+    auto add_pass_all_filter = [&](int32_t be_number) {
+        if (is_in_filter || status->rf_version < RF_VERSION_V3) {
+            LOG(WARNING) << "RuntimeFilterMerger::_try_send_total_runtime_filter. can not stand in a filter that "
+                            "passes every row. query_id="
+                         << _query_id << ", filter_id=" << filter_id << ", rf_version=" << status->rf_version;
+            return false;
+        }
+        const auto* membership_filter = first->get_membership_filter();
+        RuntimeFilter* pass_all = RuntimeFilterFactory::create_pass_all_filter(
+                &status->pool, membership_filter->logical_type(), membership_filter->join_mode());
+        if (pass_all == nullptr) {
+            LOG(WARNING) << "RuntimeFilterMerger::_try_send_total_runtime_filter. type does not support a filter "
+                            "that passes every row. query_id="
+                         << _query_id << ", filter_id=" << filter_id;
+            return false;
+        }
+        status->filters[be_number] = pass_all;
+        return true;
+    };
+
+    // for each partial filter that can not be deserialized.
+    std::vector<int32_t> missing;
+    for (int32_t be_number : status->arrives) {
+        if (!status->filters.contains(be_number)) missing.push_back(be_number);
+    }
+    for (int32_t be_number : missing) {
+        if (!add_pass_all_filter(be_number)) return;
+    }
+
+    if (!is_in_filter) {
+        // kept alive: a degrade below drops it from the material.
+        ColumnPtr skew_broadcast_keys = status->is_skew_join ? status->skew_broadcast_rf_material->key_column : nullptr;
+        finalize_membership_filters(status, status->rf_version, filter_id, apply_size_limit);
+        // The degraded filter keeps only min/max, and drops the key column of the skew broadcast join, whose keys the
+        // min/max of the partial filters does not cover. Stand in a filter of their min/max instead, or else one that
+        // passes every row.
+        if (status->is_skew_join && !status->exceeded &&
+            !_add_skew_broadcast_min_max_filter(status, first, skew_broadcast_keys) &&
+            !add_pass_all_filter(kSkewBroadcastStandInBeNumber)) {
+            return;
+        }
+    }
+
+    _send_total_runtime_filter(status->rf_version, filter_id);
+}
+
+bool RuntimeFilterMerger::_add_skew_broadcast_min_max_filter(RuntimeFilterMergerStatus* status,
+                                                             const RuntimeFilter* first, const ColumnPtr& keys) {
+    if (keys == nullptr || status->rf_version < RF_VERSION_V3) return false;
+    const auto* membership_filter = first->get_membership_filter();
+    RuntimeFilter* rf = RuntimeFilterFactory::create_empty_filter(&status->pool, membership_filter->logical_type(),
+                                                                  membership_filter->join_mode());
+    if (rf == nullptr) return false;
+    const auto* material = status->skew_broadcast_rf_material;
+    if (!RuntimeFilterBuilder::fill(rf, material->build_type, keys, kHashJoinKeyColumnOffset, material->eq_null).ok()) {
+        return false;
+    }
+    status->filters[kSkewBroadcastStandInBeNumber] = rf;
+    return true;
 }
 
 void RuntimeFilterMerger::store_skew_broadcast_join_runtime_filter(PTransmitRuntimeFilterParams& params) {
@@ -242,11 +328,9 @@ void RuntimeFilterMerger::store_skew_broadcast_join_runtime_filter(PTransmitRunt
         return;
     }
 
-    // not ready. still have to wait more filters.
-    if (status->filters.size() < status->expect_number) return;
-
-    // this only happens when broadcast's rf is the last rf instance arrived
-    _send_total_runtime_filter(rf_version.value(), filter_id);
+    // this only happens when broadcast's rf is the last rf instance arrived. It has always sent the bloom filters
+    // regardless of max_size, which is kept.
+    _try_send_total_runtime_filter(filter_id, status, false);
 }
 
 void RuntimeFilterMerger::_send_total_runtime_filter(int rf_version, int32_t filter_id) {

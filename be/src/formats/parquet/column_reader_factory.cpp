@@ -561,6 +561,35 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(const ColumnReaderOptions&
     }
 }
 
+StatusOr<ColumnReaderPtr> ColumnReaderFactory::create_array_offsets_only(const ColumnReaderOptions& opts,
+                                                                         const ParquetField* field,
+                                                                         const TypeDescriptor& col_type) {
+    if (field->type != ColumnType::ARRAY || col_type.type != TYPE_ARRAY || col_type.children.size() != 1 ||
+        col_type.children[0].type != TYPE_STRUCT || !field->has_same_complex_type(col_type)) {
+        return nullptr;
+    }
+    const ParquetField* element = &field->children[0];
+    if (!element->has_struct_layout()) {
+        return nullptr;
+    }
+    const ParquetField* level_source_field = find_struct_level_source(*element);
+    if (level_source_field == nullptr) {
+        return nullptr;
+    }
+    // The list reader takes its offsets from the element's levels, which a leaf of the element carries in full.
+    std::map<std::string, ColumnReaderPtr> children_readers;
+    for (const auto& name : col_type.children[0].field_names) {
+        children_readers.emplace(name, nullptr);
+    }
+    auto level_source_type =
+            std::make_unique<TypeDescriptor>(variant_typed_desc_from_parquet_field(level_source_field));
+    ASSIGN_OR_RETURN(ColumnReaderPtr level_source, create(opts, level_source_field, *level_source_type));
+    auto element_reader = std::make_unique<StructColumnReader>(element, std::move(children_readers),
+                                                               std::map<std::string, ColumnPtr>{},
+                                                               std::move(level_source), std::move(level_source_type));
+    return std::make_unique<ListColumnReader>(field, std::move(element_reader));
+}
+
 StatusOr<ColumnReaderPtr> ColumnReaderFactory::create_variant_column_reader(const ColumnReaderOptions& opts,
                                                                             const ParquetField* variant_field,
                                                                             const VariantShreddedReadHints& hints) {

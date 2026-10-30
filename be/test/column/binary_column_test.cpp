@@ -742,8 +742,7 @@ PARALLEL_TEST(BinaryColumnTest, test_append_zero_count) {
 
 // Cross type (unsupported): a non-binary column -> BinaryColumn must be rejected.
 PARALLEL_TEST(BinaryColumnTest, test_append_cross_type_non_binary_unsupported) {
-    auto src = Int32Column::create();
-    src->append(1);
+    auto src = ColumnTestHelper::build_column<int32_t>({1});
     auto dst = BinaryColumn::create();
     dst->append_string("bar");
     ASSERT_DEATH_IF_SUPPORTED(dst->append(*src, 0, 1), "incompatible column type");
