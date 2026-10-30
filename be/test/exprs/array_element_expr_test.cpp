@@ -108,18 +108,7 @@ TEST_F(ArrayElementExprTest, test_one_dim_array) {
 
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_TRUE(result->is_nullable());
-        EXPECT_EQ(5, result->size());
-        EXPECT_FALSE(result->is_null(0));
-        EXPECT_TRUE(result->is_null(1));
-        EXPECT_FALSE(result->is_null(2));
-        EXPECT_TRUE(result->is_null(3));
-        EXPECT_TRUE(result->is_null(4));
-
-        EXPECT_EQ(1, result->get(0).get_int32());
-        EXPECT_TRUE(result->get(1).is_null());
-        EXPECT_EQ(3, result->get(2).get_int32());
-        EXPECT_TRUE(result->get(3).is_null());
-        EXPECT_TRUE(result->get(4).is_null());
+        EXPECT_EQ("[1, NULL, 3, NULL, NULL]", result->debug_string());
     }
 
     // Inputs:
@@ -148,12 +137,7 @@ TEST_F(ArrayElementExprTest, test_one_dim_array) {
 
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_TRUE(result->is_nullable());
-        EXPECT_EQ(5, result->size());
-        EXPECT_TRUE(result->is_null(0));
-        EXPECT_TRUE(result->is_null(1));
-        EXPECT_TRUE(result->is_null(2));
-        EXPECT_TRUE(result->is_null(3));
-        EXPECT_TRUE(result->is_null(4));
+        EXPECT_EQ("[NULL, NULL, NULL, NULL, NULL]", result->debug_string());
     }
 
     // Inputs:
@@ -182,12 +166,7 @@ TEST_F(ArrayElementExprTest, test_one_dim_array) {
 
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_TRUE(result->is_nullable());
-        EXPECT_EQ(5, result->size());
-        EXPECT_TRUE(result->is_null(0));
-        EXPECT_TRUE(result->is_null(1));
-        EXPECT_TRUE(result->is_null(2));
-        EXPECT_TRUE(result->is_null(3));
-        EXPECT_TRUE(result->is_null(4));
+        EXPECT_EQ("[NULL, NULL, NULL, NULL, NULL]", result->debug_string());
     }
 
     // Inputs:
@@ -219,12 +198,7 @@ TEST_F(ArrayElementExprTest, test_one_dim_array) {
 
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_TRUE(result->is_nullable());
-        EXPECT_EQ(5, result->size());
-        EXPECT_TRUE(result->is_null(0));
-        EXPECT_TRUE(result->is_null(1));
-        EXPECT_TRUE(result->is_null(2));
-        EXPECT_TRUE(result->is_null(3));
-        EXPECT_TRUE(result->is_null(4));
+        EXPECT_EQ("[NULL, NULL, NULL, NULL, NULL]", result->debug_string());
     }
 
     // Inputs:
@@ -348,11 +322,7 @@ TEST_F(ArrayElementExprTest, test_two_dim_array) {
 
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_TRUE(result->is_nullable());
-        EXPECT_EQ(4, result->size());
-        EXPECT_TRUE(result->is_null(0));
-        EXPECT_TRUE(result->is_null(1));
-        EXPECT_TRUE(result->is_null(2));
-        EXPECT_TRUE(result->is_null(3));
+        EXPECT_EQ("[NULL, NULL, NULL, NULL]", result->debug_string());
     }
 
     // select array[-1]
@@ -370,11 +340,7 @@ TEST_F(ArrayElementExprTest, test_two_dim_array) {
 
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_TRUE(result->is_nullable());
-        EXPECT_EQ(4, result->size());
-        EXPECT_TRUE(result->is_null(0));
-        EXPECT_TRUE(result->is_null(1));
-        EXPECT_TRUE(result->is_null(2));
-        EXPECT_TRUE(result->is_null(3));
+        EXPECT_EQ("[NULL, NULL, NULL, NULL]", result->debug_string());
     }
 
     // select array[0]
@@ -392,11 +358,7 @@ TEST_F(ArrayElementExprTest, test_two_dim_array) {
 
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_TRUE(result->is_nullable());
-        EXPECT_EQ(4, result->size());
-        EXPECT_TRUE(result->is_null(0));
-        EXPECT_TRUE(result->is_null(1));
-        EXPECT_TRUE(result->is_null(2));
-        EXPECT_TRUE(result->is_null(3));
+        EXPECT_EQ("[NULL, NULL, NULL, NULL]", result->debug_string());
     }
 
     // select array[1]
@@ -473,11 +435,7 @@ TEST_F(ArrayElementExprTest, test_two_dim_array) {
 
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_TRUE(result->is_nullable());
-        EXPECT_EQ(4, result->size());
-        EXPECT_TRUE(result->is_null(0));
-        EXPECT_TRUE(result->is_null(1));
-        EXPECT_TRUE(result->is_null(2));
-        EXPECT_TRUE(result->is_null(3));
+        EXPECT_EQ("[NULL, NULL, NULL, NULL]", result->debug_string());
     }
 
     // select array[100000]
@@ -495,11 +453,7 @@ TEST_F(ArrayElementExprTest, test_two_dim_array) {
 
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_TRUE(result->is_nullable());
-        EXPECT_EQ(4, result->size());
-        EXPECT_TRUE(result->is_null(0));
-        EXPECT_TRUE(result->is_null(1));
-        EXPECT_TRUE(result->is_null(2));
-        EXPECT_TRUE(result->is_null(3));
+        EXPECT_EQ("[NULL, NULL, NULL, NULL]", result->debug_string());
     }
     // select array[-100000]
     //
@@ -516,11 +470,7 @@ TEST_F(ArrayElementExprTest, test_two_dim_array) {
 
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_TRUE(result->is_nullable());
-        EXPECT_EQ(4, result->size());
-        EXPECT_TRUE(result->is_null(0));
-        EXPECT_TRUE(result->is_null(1));
-        EXPECT_TRUE(result->is_null(2));
-        EXPECT_TRUE(result->is_null(3));
+        EXPECT_EQ("[NULL, NULL, NULL, NULL]", result->debug_string());
     }
 }
 
