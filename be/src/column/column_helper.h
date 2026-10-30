@@ -131,7 +131,10 @@ public:
     static ColumnPtr unpack_and_duplicate_const_column(const TypeDescriptor& type_desc, size_t chunk_size,
                                                        ColumnPtr&& column) {
         if (column->only_null()) {
-            return unfold_const_column(type_desc, chunk_size, column);
+            auto col = create_column(type_desc, true);
+            [[maybe_unused]] bool ok = col->append_nulls(chunk_size);
+            DCHECK(ok);
+            return col;
         }
         return unpack_and_duplicate_const_column(chunk_size, std::move(column));
     }
