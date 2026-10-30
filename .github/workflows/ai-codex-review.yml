@@ -5,8 +5,8 @@ name: AI CODEX REVIEW
 #   - Automatically when chatgpt-codex-connector[bot] posts "Something went wrong" on an open
 #     PR into main (the hosted review only covers main; its own gating — draft, [UT]/[Doc],
 #     60-minute throttle, unresolved threads — already decided this push should be reviewed),
-#     and only for a trusted author (MEMBER/OWNER/COLLABORATOR or ci-tool's internal
-#     allowlist): this repo is public, and the model holds the ChatGPT login while it reads
+#     and only for a trusted author (MEMBER/OWNER/COLLABORATOR, a private StarRocks org member,
+#     or ci-tool's internal allowlist): this repo is public, and the model holds the ChatGPT login while it reads
 #     the PR. Other authors' PRs are reviewed by hand after a maintainer has read them.
 #     Skipped if this head commit already has our successful review: the bot often fails
 #     twice on one push. Every comment starts this workflow; the others skip in seconds.
@@ -82,6 +82,21 @@ jobs:
         run: |
           [[ "${PR_NUMBER}" =~ ^[0-9]+$ ]] || { echo "bad PR number '${PR_NUMBER}'"; exit 1; }
 
+      # Private org members show as CONTRIBUTOR to github.token; this token can see them.
+      # Limited to members:read, so the review job still holds no write credential. Until
+      # starrocks-bot has the Members permission this step fails and resolve falls back to
+      # author_association.
+      - name: starrocks-bot members token (read-only)
+        id: members-token
+        if: github.event_name == 'issue_comment'
+        continue-on-error: true
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.STARROCKS_BOT_APP_ID }}
+          private-key: ${{ secrets.STARROCKS_BOT_PRIVATE_KEY }}
+          owner: StarRocks
+          permission-members: read
+
       # Open PR -> pre (refs/pull/N/merge), merged -> post (its squash commit), else skip.
       # Automatic runs: only an open PR into main by a trusted author, once per head commit.
       - name: resolve what to review
@@ -90,6 +105,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REQUIRE_OPEN_BASE: ${{ github.event_name == 'issue_comment' && 'main' || '' }}
           REQUIRE_TRUSTED_AUTHOR: ${{ github.event_name == 'issue_comment' && '1' || '0' }}
+          ORG_MEMBERS_TOKEN: ${{ steps.members-token.outputs.token }}
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && (cd ci-tool && git pull -q 2>/dev/null || true)
           OUT="${RUNNER_TEMP}/codex-review-${PR_NUMBER}.md"
