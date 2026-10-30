@@ -18,7 +18,6 @@
 
 #include <algorithm>
 #include <numeric>
-#include <roaring/roaring.hh>
 #include <unordered_set>
 
 #include "base/uid_util.h"
@@ -27,66 +26,6 @@
 #include "storage/tablet_range.h"
 
 namespace starrocks::lake::tablet_reshard_helper {
-
-namespace {
-// True iff every rowid in the half-open range [range_begin, range_end) is set
-// in |gap_bits|. An empty range is trivially covered. nullptr |gap_bits| covers
-// nothing.
-bool range_fully_masked(const roaring::Roaring* gap_bits, rowid_t range_begin, rowid_t range_end) {
-    if (range_begin >= range_end) return true;
-    if (gap_bits == nullptr) return false;
-    // containsRange(x, y) tests that every value in the half-open range [x, y)
-    // is present; it does not enumerate the range.
-    return gap_bits->containsRange(static_cast<uint64_t>(range_begin), static_cast<uint64_t>(range_end));
-}
-} // namespace
-
-Status reconcile_windows_with_gap(const std::vector<DcgRowWindow>& sorted_contributors,
-                                  const roaring::Roaring* gap_bits, rowid_t num_rows,
-                                  std::vector<DcgRowWindow>* out_windows) {
-    if (num_rows <= 0) {
-        return Status::NotSupported("DCG rebuild: target segment has 0 rows");
-    }
-    out_windows->clear();
-    // The highest rowid covered so far by an emitted (contributor or gap) window.
-    rowid_t covered_up_to = 0;
-    for (const auto& contributor : sorted_contributors) {
-        const rowid_t contributor_begin = contributor.range.begin();
-        const rowid_t contributor_end = contributor.range.end();
-        // Defensive bound check (helper is exported; guard against misuse).
-        if (contributor_begin < 0 || contributor_end > num_rows || contributor_begin > contributor_end) {
-            return Status::InternalError(fmt::format("DCG rebuild: contributor window [{}, {}) out of [0, {}]",
-                                                     contributor_begin, contributor_end, num_rows));
-        }
-        if (contributor_begin > covered_up_to) {
-            // Coverage hole ahead of this contributor: accept only if fully masked.
-            if (!range_fully_masked(gap_bits, covered_up_to, contributor_begin)) {
-                return Status::NotSupported(
-                        fmt::format("DCG rebuild: row window coverage gap [{}, {}) not masked by delvec", covered_up_to,
-                                    contributor_begin));
-            }
-            out_windows->push_back(DcgRowWindow{/*old_tablet_index=*/0,
-                                                Range<rowid_t>(covered_up_to, contributor_begin),
-                                                /*is_gap=*/true});
-        } else if (contributor_begin < covered_up_to) {
-            // Overlap between distinct owners must surface, not be collapsed.
-            return Status::NotSupported(fmt::format("DCG rebuild: row window overlap at {} (covered up to {})",
-                                                    contributor_begin, covered_up_to));
-        }
-        out_windows->push_back(contributor);
-        covered_up_to = contributor_end;
-    }
-    if (covered_up_to < num_rows) {
-        if (!range_fully_masked(gap_bits, covered_up_to, num_rows)) {
-            return Status::NotSupported(
-                    fmt::format("DCG rebuild: row window coverage gap at end [{}, {}) not masked by delvec",
-                                covered_up_to, num_rows));
-        }
-        out_windows->push_back(
-                DcgRowWindow{/*old_tablet_index=*/0, Range<rowid_t>(covered_up_to, num_rows), /*is_gap=*/true});
-    }
-    return Status::OK();
-}
 
 // Generates a fresh, non-zero global rowset uid (a 128-bit PUniqueId).
 PUniqueId make_rowset_uid() {
@@ -461,83 +400,6 @@ StatusOr<TabletRangePB> union_range(const TabletRangePB& lhs_pb, const TabletRan
     TabletRangePB result_pb;
     result.to_proto(&result_pb);
     return result_pb;
-}
-
-// Compare lower-bound positions between two ranges. Unbounded lower (-∞) is
-// smallest; otherwise compare values, then prefer included over excluded as
-// the smaller (it covers the boundary point).
-static int compare_lower_position(const TabletRange& a, const TabletRange& b) {
-    if (a.is_minimum() && b.is_minimum()) return 0;
-    if (a.is_minimum()) return -1;
-    if (b.is_minimum()) return 1;
-    int c = a.lower_bound().compare(b.lower_bound());
-    if (c != 0) return c;
-    if (a.lower_bound_included() == b.lower_bound_included()) return 0;
-    return a.lower_bound_included() ? -1 : 1;
-}
-
-// True iff |first| (with first.lower <= second.lower) extends to or past
-// |second|.lower without leaving a gap. Caller guarantees the ordering.
-static bool first_meets_second(const TabletRange& first, const TabletRange& second) {
-    if (first.is_maximum()) return true; // first covers everything to the right
-    if (second.is_minimum())
-        return true; // second covers everything to the left,
-                     //   which forces first.lower == -∞ too
-    int c = first.upper_bound().compare(second.lower_bound());
-    if (c < 0) return false; // strict gap
-    if (c > 0) return true;  // overlap
-    return first.upper_bound_included() || second.lower_bound_included();
-}
-
-bool ranges_are_contiguous(const TabletRangePB& lhs_pb, const TabletRangePB& rhs_pb) {
-    TabletRange lhs;
-    if (!lhs.from_proto(lhs_pb).ok()) return false;
-    TabletRange rhs;
-    if (!rhs.from_proto(rhs_pb).ok()) return false;
-    if (lhs.is_empty() || rhs.is_empty()) return false;
-
-    const TabletRange* first = &lhs;
-    const TabletRange* second = &rhs;
-    if (compare_lower_position(lhs, rhs) > 0) std::swap(first, second);
-    return first_meets_second(*first, *second);
-}
-
-StatusOr<std::vector<TabletRangePB>> sort_and_merge_adjacent_ranges(std::vector<TabletRangePB> ranges) {
-    std::vector<TabletRange> tr;
-    tr.reserve(ranges.size());
-    for (const auto& r : ranges) {
-        TabletRange tmp;
-        RETURN_IF_ERROR(tmp.from_proto(r));
-        if (!tmp.is_empty()) {
-            tr.push_back(std::move(tmp));
-        }
-    }
-
-    std::sort(tr.begin(), tr.end(),
-              [](const TabletRange& a, const TabletRange& b) { return compare_lower_position(a, b) < 0; });
-
-    std::vector<TabletRange> merged;
-    for (auto& cur : tr) {
-        if (merged.empty()) {
-            merged.push_back(std::move(cur));
-            continue;
-        }
-        auto& last = merged.back();
-        if (first_meets_second(last, cur)) {
-            // Overlap or touch with compatible included → merge via union.
-            last = last.union_with(cur);
-        } else {
-            merged.push_back(std::move(cur));
-        }
-    }
-
-    std::vector<TabletRangePB> result;
-    result.reserve(merged.size());
-    for (const auto& r : merged) {
-        result.emplace_back();
-        r.to_proto(&result.back());
-    }
-    return result;
 }
 
 StatusOr<std::vector<TabletRangePB>> compute_disjoint_gaps_within(

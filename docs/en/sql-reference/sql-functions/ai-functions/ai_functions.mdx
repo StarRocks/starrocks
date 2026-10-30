@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "Use AI functions in SQL and reduce AI input rows with TopN pushdown."
+description: "Learn how AI Providers, AI functions, and usage privileges work together to process text with model services in SQL."
 sidebar_position: 10
 ---
 
@@ -10,7 +10,91 @@ import Experimental from '../../../_assets/commonMarkdown/_experimental.mdx'
 
 <Experimental />
 
-AI functions call configured model services from SQL. For text generation, see [ai_complete](ai_complete.md).
+AI functions call model services from SQL to generate, classify, extract, translate, summarize, and embed text. You can call these functions on constant text or process text columns in queries.
+
+## AI Providers and AI functions
+
+An AI Provider is a centrally managed model service configuration in the cluster. It stores an endpoint, protocol, default model, and optional credentials. AI functions obtain these settings from the Provider, so you do not need to repeat endpoints and credentials in SQL.
+
+- `ai_embed` uses an `embedding` Provider.
+- `ai_complete` and the other text helper functions use a `chat` Provider.
+- These AI functions currently require the Provider to use the `openai` protocol. The endpoint and model must also support the corresponding chat or embedding capability.
+
+When calling a function, you can specify a Provider with `provider` or use the cluster default Provider of the corresponding type. Defaults are maintained independently for each type. If you omit `model`, the selected Provider's default model is used. You can also explicitly specify another model supported by the service.
+
+For Provider creation, configuration properties, and management syntax, see [CREATE AI PROVIDER](../../sql-statements/cluster-management/ai_provider/CREATE_AI_PROVIDER.md). For default settings, see [SET DEFAULT AI PROVIDER](../../sql-statements/cluster-management/ai_provider/SET_DEFAULT_AI_PROVIDER.md).
+
+## AI function privileges {/* #ai-function-privileges */}
+
+Calling an AI function requires both types of usage privileges:
+
+- **Function privilege**: Allows use of the corresponding AI function.
+- **Provider privilege**: Allows access to the Provider selected for this call. This privilege is also checked when using a default Provider.
+
+Neither privilege replaces the other. Managing Providers requires SYSTEM OPERATE. Provider management privileges do not mean that ordinary users have usage privileges on functions and Providers. Privileges on the tables, columns, and views involved in the query still apply.
+
+For details, see [AI privilege items](../../../administration/user_privs/authorization/privilege_item.md#ai-function-privileges). For the syntax to grant, revoke, and view privileges, see [GRANT](../../sql-statements/account-management/GRANT.md#ai-functions-and-providers), [REVOKE](../../sql-statements/account-management/REVOKE.md#ai-functions-and-providers), and [SHOW GRANTS](../../sql-statements/account-management/SHOW_GRANTS.md), respectively.
+
+## Getting started
+
+The following examples use the OpenAI-compatible API of Alibaba Cloud Model Studio (Bailian) in the Beijing region. Activate the model service, replace `YOUR_DASHSCOPE_API_KEY` with an API key for the Beijing region, and run the examples with an account that has Provider management privileges and usage privileges on the corresponding functions and Providers.
+
+### Chat Provider: generate text
+
+Create a chat Provider using the `qwen-plus` model, then call `ai_complete`:
+
+```sql
+CREATE AI PROVIDER bailian_chat TYPE chat
+PROPERTIES (
+    "endpoint" = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+    "protocol" = "openai",
+    "model" = "qwen-plus",
+    "api_key" = "YOUR_DASHSCOPE_API_KEY"
+);
+
+-- Explicitly specify the Provider and use its default model.
+SELECT ai_complete(
+    prompt => 'Explain what columnar storage is in one sentence.',
+    provider => 'bailian_chat',
+    options => json_object('enable_thinking', false)
+);
+
+-- After setting the default chat Provider, you can omit provider in calls.
+SET bailian_chat AS DEFAULT AI PROVIDER;
+
+SELECT ai_complete(
+    prompt => 'Explain what columnar storage is in one sentence.',
+    options => json_object('enable_thinking', false)
+);
+```
+
+### Embedding Provider: generate text embeddings
+
+Create an embedding Provider using the `text-embedding-v4` model with 256 output dimensions, then call `ai_embed`:
+
+```sql
+CREATE AI PROVIDER bailian_embedding TYPE embedding
+PROPERTIES (
+    "endpoint" = "https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings",
+    "protocol" = "openai",
+    "model" = "text-embedding-v4",
+    "dimensions" = "256",
+    "api_key" = "YOUR_DASHSCOPE_API_KEY"
+);
+
+-- Explicitly specify the Provider to generate a text embedding.
+SELECT ai_embed(
+    input => 'Columnar storage is suitable for analytical queries.',
+    provider => 'bailian_embedding'
+);
+
+-- Set the default embedding Provider without affecting the default chat Provider.
+SET bailian_embedding AS DEFAULT AI PROVIDER;
+
+SELECT ai_embed('Columnar storage is suitable for analytical queries.');
+```
+
+For complete function syntax, argument rules, and examples, see [AI text functions](ai_text_functions.md). Model calls send input text to the Provider's endpoint. Choose a service according to your data egress requirements, and consider query row counts, latency, and invocation costs.
 
 ## Reducing AI input rows {/* #reducing-ai-input-rows */}
 

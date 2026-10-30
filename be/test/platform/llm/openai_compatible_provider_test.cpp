@@ -100,7 +100,7 @@ TEST(OpenAICompatibleProviderTest, BuildsSingleEmbeddingInputWithTypedOptions) {
             .api_key = "key",
             .prompt = "hello\nworld",
             .options = &options,
-            .capability = AICapability::TEXT_EMBEDDING,
+            .capability = AICapability::EMBEDDING,
     });
     ASSERT_TRUE(result.ok()) << result.status();
     EXPECT_EQ("https://provider.example/v1/embeddings", result->url);
@@ -109,6 +109,38 @@ TEST(OpenAICompatibleProviderTest, BuildsSingleEmbeddingInputWithTypedOptions) {
             result->body);
     ASSERT_EQ(3, result->headers.size());
     EXPECT_EQ("Bearer key", result->headers.back().value);
+}
+
+TEST(OpenAICompatibleProviderTest, BuildsTypedImageChatContentAndRejectsEmbeddingMedia) {
+    OpenAICompatibleProvider provider;
+    AIMediaInput media{"image/jpeg", std::string("\xff\xd8\xff\xe0\0\x02", 6)};
+    AIChatRequest request{.model = "model", .prompt = "describe", .media = &media};
+    auto result = provider.build_request(request);
+    ASSERT_TRUE(result.ok()) << result.status();
+    EXPECT_EQ(
+            R"({"model":"model","messages":[{"role":"system","content":"You are a helpful assistant."},{"role":"user","content":[{"type":"text","text":"describe"},{"type":"image_url","image_url":{"url":"data:image/jpeg;base64,/9j/4AAC"}}]}],"stream":false})",
+            result->body);
+    request.capability = AICapability::EMBEDDING;
+    EXPECT_TRUE(provider.build_request(request).status().is_not_supported());
+}
+
+TEST(OpenAICompatibleProviderTest, VideoRequiresExplicitSupport) {
+    AIMediaInput video{"video/mp4", std::string("\0\0\0\x18"
+                                                "ftypisom\0\0\0\0isommp42",
+                                                24)};
+    AIChatRequest request{.endpoint = "https://dashscope.example/qwen",
+                          .model = "qwen-video-model",
+                          .prompt = "describe",
+                          .media = &video};
+    OpenAICompatibleProvider ordinary;
+    EXPECT_TRUE(ordinary.build_request(request).status().is_not_supported());
+    OpenAICompatibleProvider video_provider(true);
+    auto result = video_provider.build_request(request);
+    ASSERT_TRUE(result.ok()) << result.status();
+    EXPECT_NE(
+            std::string::npos,
+            result->body.find(
+                    R"("type":"video_url","video_url":{"url":"data:video/mp4;base64,AAAAGGZ0eXBpc29tAAAAAGlzb21tcDQy"})"));
 }
 
 TEST(OpenAICompatibleProviderTest, RejectsEmbeddingReservedOptions) {
@@ -123,7 +155,7 @@ TEST(OpenAICompatibleProviderTest, RejectsEmbeddingReservedOptions) {
                 .api_key = "key",
                 .prompt = "input",
                 .options = &options,
-                .capability = AICapability::TEXT_EMBEDDING,
+                .capability = AICapability::EMBEDDING,
         });
         expect_status_redacted(result.status(), {"secret-override"});
     }
@@ -131,8 +163,8 @@ TEST(OpenAICompatibleProviderTest, RejectsEmbeddingReservedOptions) {
 
 TEST(OpenAICompatibleProviderTest, ParsesExactlyOneFiniteFloatEmbedding) {
     OpenAICompatibleProvider provider;
-    auto result = provider.parse_response(R"({"data":[{"index":0,"embedding":[0,0.25,-2,3e-5]}]})",
-                                          AICapability::TEXT_EMBEDDING);
+    auto result =
+            provider.parse_response(R"({"data":[{"index":0,"embedding":[0,0.25,-2,3e-5]}]})", AICapability::EMBEDDING);
     ASSERT_TRUE(std::holds_alternative<AIProviderSuccess>(result));
     const auto& value = std::get<AIProviderSuccess>(result).value;
     ASSERT_TRUE(std::holds_alternative<std::vector<float>>(value));
@@ -168,8 +200,7 @@ TEST(OpenAICompatibleProviderTest, RejectsMalformedEmbeddingCardinalityIndexesAn
             R"({"choices":[{"message":{"content":"not-an-embedding"}}]})",
     };
     for (const auto body : malformed) {
-        EXPECT_TRUE(std::holds_alternative<AIProviderMalformed>(
-                provider.parse_response(body, AICapability::TEXT_EMBEDDING)))
+        EXPECT_TRUE(std::holds_alternative<AIProviderMalformed>(provider.parse_response(body, AICapability::EMBEDDING)))
                 << body;
     }
 }
@@ -178,7 +209,7 @@ TEST(OpenAICompatibleProviderTest, EmbeddingErrorsRetainSanitizedClassificationA
     OpenAICompatibleProvider provider;
     auto result = provider.parse_response(
             R"({"data":[{"index":0,"embedding":[1]}],"error":{"code":"rate_limit_exceeded","message":"secret"}})",
-            AICapability::TEXT_EMBEDDING);
+            AICapability::EMBEDDING);
     ASSERT_TRUE(std::holds_alternative<AIProviderStructuredError>(result));
     EXPECT_EQ(AIProviderErrorCode::RATE_LIMIT_EXCEEDED, std::get<AIProviderStructuredError>(result).code);
 }
@@ -332,7 +363,7 @@ TEST(OpenAICompatibleProviderTest, RejectsEveryC0AndDelApiKeyWithTheSameSecretFr
 
 TEST(OpenAICompatibleProviderTest, KeylessProviderOmitsAuthorization) {
     OpenAICompatibleProvider provider;
-    for (const auto capability : {AICapability::CHAT, AICapability::TEXT_EMBEDDING}) {
+    for (const auto capability : {AICapability::CHAT, AICapability::EMBEDDING}) {
         auto result = provider.build_request(AIChatRequest{
                 .endpoint = "http://127.0.0.1/v1/inference",
                 .model = "local-model",
@@ -397,7 +428,7 @@ TEST(OpenAICompatibleProviderTest, EmbeddingPreservesUsageWithoutInferringComple
     OpenAICompatibleProvider provider;
     auto result = provider.parse_response(
             R"({"data":[{"index":0,"embedding":[0.25,-1]}],"usage":{"prompt_tokens":3,"total_tokens":3}})",
-            AICapability::TEXT_EMBEDDING);
+            AICapability::EMBEDDING);
 
     ASSERT_TRUE(std::holds_alternative<AIProviderSuccess>(result));
     const auto& success = std::get<AIProviderSuccess>(result);
@@ -412,7 +443,7 @@ TEST(OpenAICompatibleProviderTest, MalformedEmbeddingPreservesReportedUsage) {
     for (std::string_view data : {"null", "[]", R"([{"index":1,"embedding":[1]}])", R"([{"index":0,"embedding":[]}])",
                                   R"([{"index":0,"embedding":["bad"]}])", R"([{"index":0,"embedding":[1e100]}])"}) {
         const std::string body = R"({"usage":{"prompt_tokens":0,"total_tokens":4},"data":)" + std::string(data) + "}";
-        auto result = provider.parse_response(body, AICapability::TEXT_EMBEDDING);
+        auto result = provider.parse_response(body, AICapability::EMBEDDING);
         ASSERT_TRUE(std::holds_alternative<AIProviderMalformed>(result)) << body;
         const auto& usage = std::get<AIProviderMalformed>(result).usage;
         EXPECT_EQ(0, usage.prompt_tokens) << body;

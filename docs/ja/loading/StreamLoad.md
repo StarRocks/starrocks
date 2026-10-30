@@ -28,6 +28,11 @@ Stream Load と Broker Load はどちらもデータロード時にデータ変�
 
 ## 始める前に
 
+:::tip
+JWT または OAuth 2.0 の[セキュリティインテグレーション](../administration/user_privs/authentication/security_integration.md)を設定している場合、Stream Load はユーザー名とパスワードのほかに Bearer トークンも受け付けます: `-u <username>:<password>` の代わりに `-H "Authorization: Bearer <token>"` を送ります。ロードの commit 時点でもトークンが有効である必要があるため、長時間のロードには十分な有効期間のトークンを使ってください。[各認証方式が使えるエントリポイント](../administration/user_privs/authentication/authentication.mdx#各認証方式が使えるエントリポイント) を参照してください。
+:::
+
+
 ### 権限の確認
 
 <InsertPrivNote />

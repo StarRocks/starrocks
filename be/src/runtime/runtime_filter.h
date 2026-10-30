@@ -14,8 +14,10 @@
 
 #pragma once
 
+#include <mutex>
 #include <numeric>
 #include <sstream>
+#include <type_traits>
 
 #include "base/hash/hash_std.hpp"
 #include "column/chunk.h"
@@ -293,6 +295,11 @@ public:
                               uint16_t sel_size, uint16_t* dst_sel) const = 0;
 
     bool always_true() const { return _always_true; }
+    void set_always_true() { _always_true = true; }
+
+    // Whether the filter passes every row by its content, see RuntimeFilterFactory::create_pass_all_filter. Unlike
+    // always_true(), it survives serialization.
+    virtual bool is_pass_all() const { return false; }
 
     bool has_null() const { return _has_null; }
 
@@ -680,9 +687,13 @@ public:
     bool left_close_interval() const { return _left_close_interval; }
     bool right_close_interval() const { return _right_close_interval; }
 
-    bool is_empty_range() const { return _min > _max; }
+    bool is_empty_range() const {
+        MinMaxLock lk(_slice_mutex);
+        return _is_empty_range();
+    }
 
     bool is_full_range() const {
+        MinMaxLock lk(_slice_mutex);
         if constexpr (IsSlice<CppType>) {
             return _min == Slice::min_value() && _max == Slice::max_value();
         } else if constexpr (std::is_integral_v<CppType> || std::is_floating_point_v<CppType>) {
@@ -693,7 +704,7 @@ public:
             return _min = TimestampValue::MIN_TIMESTAMP_VALUE && _max == TimestampValue::MAX_TIMESTAMP_VALUE;
         } else if constexpr (IsDecimal<CppType>) {
             return _min == DecimalV2Value::get_min_decimal() && _max == DecimalV2Value::get_max_decimal();
-        } else if constexpr (Type != TYPE_JSON && Type != TYPE_VARIANT) {
+        } else if constexpr (!lt_is_semi_structured<Type>) {
             return _min == RunTimeTypeLimits<Type>::min_value() && _max == RunTimeTypeLimits<Type>::max_value();
         } else {
             return false;
@@ -758,15 +769,44 @@ public:
     void update_to_all_null() {
         DCHECK(_has_null);
 
-        if (is_empty_range()) {
+        MinMaxLock lk(_slice_mutex);
+        if (_is_empty_range()) {
             return;
         }
         _init_min_max();
         _update_version();
     }
 
+    // Widen the bounds to every value of the type and admit null, so that the filter passes every row, also after it
+    // is serialized and merged with other filters. Unlike _always_true, this survives serialization.
+    // Return false if the type has no such bounds (floating types, JSON/VARIANT).
+    bool set_pass_all() {
+        MinMaxLock lk(_slice_mutex);
+        if (!_pass_all_bounds(&_min, &_max)) {
+            return false;
+        }
+        _has_min_max = true;
+        _left_close_interval = true;
+        _right_close_interval = true;
+        _has_null = true;
+        _update_version();
+        return true;
+    }
+
+    // Whether the filter is one that set_pass_all() made.
+    bool is_pass_all() const override {
+        CppType min;
+        CppType max;
+        if (!_pass_all_bounds(&min, &max)) {
+            return false;
+        }
+        MinMaxLock lk(_slice_mutex);
+        return _has_min_max && _has_null && _left_close_interval && _right_close_interval && _min == min && _max == max;
+    }
+
     void update_to_empty_and_not_null() {
-        if (!is_empty_range() || _has_null) {
+        MinMaxLock lk(_slice_mutex);
+        if (!_is_empty_range() || _has_null) {
             _init_min_max();
             _has_null = false;
             _update_version();
@@ -1064,6 +1104,13 @@ public:
         return dst - begin;
     }
 
+    // Deliberately not locked, unlike the other readers of _min / _max: every evaluate_min_max()
+    // overload is `if constexpr (!IsSlice<CppType>)`, so a slice filter passes every row through
+    // without ever looking at the bounds, and a bound that is not a slice owns no storage another
+    // thread can free. Taking the lock here would protect nothing and serialize the probe drivers
+    // against each other for the length of a chunk, since they all share one filter object. A
+    // slice comparison added below would need the bounds copied out under the lock first -- do not
+    // just wrap the call.
     void evaluate(const Column* input_column, RunningContext* ctx) const override {
         t_evaluate<true>(input_column, ctx);
     }
@@ -1077,6 +1124,10 @@ public:
     }
 
 private:
+    // Callers already hold _slice_mutex. is_empty_range() is a bound comparison, and for a slice
+    // that is a memcmp through _min.data / _max.data, which update_min_max() reallocates.
+    bool _is_empty_range() const { return _min > _max; }
+
     void _init_min_max() {
         if constexpr (IsSlice<CppType>) {
             _min = Slice::max_value();
@@ -1096,14 +1147,42 @@ private:
         } else if constexpr (IsDecimal<CppType>) {
             _min = DecimalV2Value::get_max_decimal();
             _max = DecimalV2Value::get_min_decimal();
-        } else if constexpr (Type != TYPE_JSON && Type != TYPE_VARIANT) {
-            // for json vaue, cpp type is JsonValue*
-            // but min/max value type is JsonValue
-            // and JsonValue needs special serialization handling.
+        } else if constexpr (!lt_is_semi_structured<Type>) {
+            // For JSON/VARIANT the cpp type is a pointer (JsonValue* / VariantRowValue*) while
+            // RunTimeTypeLimits exposes the value type, so min/max cannot be stored here.
             _min = RunTimeTypeLimits<Type>::min_value();
             _max = RunTimeTypeLimits<Type>::max_value();
         }
     }
+    static bool _pass_all_bounds(CppType* min, CppType* max) {
+        if constexpr (IsSlice<CppType>) {
+            *min = Slice::min_value();
+            *max = Slice::max_value();
+        } else if constexpr (std::is_floating_point_v<CppType>) {
+            // No bounds hold NaN, so no min/max passes every row; and a filter degraded from real keys may have the
+            // very bounds +-infinity, while it still filters NaN out.
+            return false;
+        } else if constexpr (std::is_integral_v<CppType>) {
+            *min = std::numeric_limits<CppType>::lowest();
+            *max = std::numeric_limits<CppType>::max();
+        } else if constexpr (IsDate<CppType>) {
+            *min = DateValue::MIN_DATE_VALUE;
+            *max = DateValue::MAX_DATE_VALUE;
+        } else if constexpr (IsTimestamp<CppType>) {
+            *min = TimestampValue::MIN_TIMESTAMP_VALUE;
+            *max = TimestampValue::MAX_TIMESTAMP_VALUE;
+        } else if constexpr (IsDecimal<CppType>) {
+            *min = DecimalV2Value::get_min_decimal();
+            *max = DecimalV2Value::get_max_decimal();
+        } else if constexpr (!lt_is_semi_structured<Type>) {
+            *min = RunTimeTypeLimits<Type>::min_value();
+            *max = RunTimeTypeLimits<Type>::max_value();
+        } else {
+            return false;
+        }
+        return true;
+    }
+
     void _init_full_range() {
         if constexpr (IsSlice<CppType>) {
             _max = Slice::max_value();
@@ -1123,10 +1202,9 @@ private:
         } else if constexpr (IsDecimal<CppType>) {
             _max = DecimalV2Value::get_max_decimal();
             _min = DecimalV2Value::get_min_decimal();
-        } else if constexpr (Type != TYPE_JSON && Type != TYPE_VARIANT) {
-            // for json vaue, cpp type is JsonValue*
-            // but min/max value type is JsonValue
-            // and JsonValue needs special serialization handling.
+        } else if constexpr (!lt_is_semi_structured<Type>) {
+            // For JSON/VARIANT the cpp type is a pointer (JsonValue* / VariantRowValue*) while
+            // RunTimeTypeLimits exposes the value type, so min/max cannot be stored here.
             _max = RunTimeTypeLimits<Type>::min_value();
             _min = RunTimeTypeLimits<Type>::max_value();
         }
@@ -1134,11 +1212,11 @@ private:
 
     void _merge_min_max(const MinMaxRuntimeFilter* rf) {
         if (rf->_has_min_max) {
+            MinMaxLock lk(_slice_mutex);
             _min = std::min(_min, rf->_min);
             _max = std::max(_max, rf->_max);
 
             if constexpr (IsSlice<CppType>) {
-                std::lock_guard<std::mutex> lk(_slice_mutex);
                 // maybe we are refering to another runtime filter instance
                 // for security we have to copy that back to our instance.
                 if (_min.size != 0 && _min.data != _slice_min.data()) {
@@ -1156,6 +1234,15 @@ private:
     }
 
 private:
+    // Only a slice bound owns backing storage -- _slice_min / _slice_max -- that one thread can
+    // reallocate while another reads through _min / _max. Every other CppType is a self-contained
+    // value whose load and store cannot tear into a freed buffer, so those types must not pay for
+    // a mutex they do not need.
+    struct NoLock {
+        explicit NoLock(std::mutex&) {}
+    };
+    using MinMaxLock = std::conditional_t<IsSlice<CppType>, std::lock_guard<std::mutex>, NoLock>;
+
     CppType _min;
     CppType _max;
     std::string _slice_min;
@@ -1849,6 +1936,11 @@ public:
 
     const RuntimeFilter* get_min_max_filter() const override { return &_min_max_filter; }
     MembershipFilter* get_membership_filter() override { return &_membership_filter; }
+
+    bool is_pass_all() const override {
+        return _membership_filter.type() == RuntimeFilterSerializeType::EMPTY_FILTER && _membership_filter.has_null() &&
+               _min_max_filter.is_pass_all();
+    }
 
     ComposedRuntimeFilter* create_empty(ObjectPool* pool) override {
         auto* p = pool->add(new ComposedRuntimeFilter());

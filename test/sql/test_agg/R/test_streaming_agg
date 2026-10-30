@@ -58,6 +58,42 @@ select c0, sum(c1) from t1 group by c0 order by 2 desc limit 10;
 9	4087
 10	4086
 -- !result
+create table t2 (
+    c0 INT,
+    c1 VARCHAR(64) NULL,
+    c2 VARCHAR(64) NULL,
+    c3 VARCHAR(64) NULL
+) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 3 PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+insert into t2 SELECT generate_series, concat('aaaaaaaaaaaaaaaa_', generate_series % 97), concat('bbbbbbbbbbbbbbbb_', generate_series % 89), concat('cccccccccccccccc_', generate_series % 83) FROM TABLE(generate_series(1, 40960));
+-- result:
+-- !result
+insert into t2 values (40961, null, null, null);
+-- result:
+-- !result
+set enable_spill = true;
+-- result:
+-- !result
+set spill_mode = "random";
+-- result:
+-- !result
+set spill_rand_ratio = 1.0;
+-- result:
+-- !result
+select count(*) from (select distinct c1, c2, c3 from t2) t;
+-- result:
+40961
+-- !result
+set spill_rand_ratio = 0.1;
+-- result:
+-- !result
+set spill_mode = "auto";
+-- result:
+-- !result
+set enable_spill = false;
+-- result:
+-- !result
 CLEANUP {
     admin disable failpoint 'force_reset_aggregator_after_agg_streaming_sink_finish';
 } END CLEANUP

@@ -21,6 +21,7 @@
 #include "column/array_column.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
+#include "testutil/type_test_helper.h"
 #include "types/json_value.h"
 
 namespace starrocks {
@@ -68,7 +69,7 @@ TEST(AIFunctionResultTest, JsonPreservesWhitespaceInsideStringsAndRejectsMalform
 }
 
 TEST(AIFunctionResultTest, PlainStringIsUnmodifiedAndMismatchedColumnsAreNotRowFailures) {
-    auto output = ColumnHelper::create_column(TypeDescriptor::create_varchar_type(1024), true);
+    auto output = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
     ASSERT_TRUE(
             append_ai_function_result(AIFunctionResultKind::STRING, std::string("  exact text\n"), output.get()).ok());
     EXPECT_EQ("  exact text\n", output->get(0).get_slice().to_string());
@@ -90,7 +91,7 @@ TEST(AIFunctionResultTest, JsonRejectsExcessiveNestingBeforeRecursiveMaterializa
 }
 
 TEST(AIFunctionResultTest, SentimentIsAValidatedNormalizedLabel) {
-    auto output = ColumnHelper::create_column(TypeDescriptor::create_varchar_type(1024), true);
+    auto output = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
     for (const auto& text : {"positive", " NEGATIVE\n", "neutral", "mixed", "unknown"}) {
         ASSERT_TRUE(append_ai_function_result(AIFunctionResultKind::SENTIMENT, std::string(text), output.get()).ok());
     }
@@ -101,7 +102,7 @@ TEST(AIFunctionResultTest, SentimentIsAValidatedNormalizedLabel) {
 }
 
 TEST(AIFunctionResultTest, EmbeddingAppendsNullableFloatElementsAndDoesNotPartiallyAppendInvalidValues) {
-    auto output = ColumnHelper::create_column(TypeDescriptor::create_array_type(TypeDescriptor(TYPE_FLOAT)), true);
+    auto output = ColumnHelper::create_column(TYPE_ARRAY_FLOAT_DESC, true);
     ASSERT_TRUE(
             append_ai_function_result(AIFunctionResultKind::EMBEDDING, std::vector<float>{0.25f, -0.5f}, output.get())
                     .ok());

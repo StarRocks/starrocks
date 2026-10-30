@@ -26,7 +26,7 @@ class DataDir;
 
 namespace lake {
 
-class UpdateManager;
+class PrimaryKeyManager;
 
 #ifdef USE_STAROS
 // Cleanup of local persistent-index directories left behind on the BE's local disks.
@@ -39,9 +39,9 @@ class UpdateManager;
 // single-tablet entry point used by the drop path.
 class LocalPkIndexManager {
 public:
-    static void gc(UpdateManager* update_manager, DataDir* data_dir, std::set<std::string>& tablet_ids);
+    static void gc(PrimaryKeyManager* primary_key_manager, DataDir* data_dir, std::set<std::string>& tablet_ids);
 
-    static void evict(UpdateManager* update_manager, DataDir* data_dir, std::set<std::string>& tablet_ids);
+    static void evict(PrimaryKeyManager* primary_key_manager, DataDir* data_dir, std::set<std::string>& tablet_ids);
 
     // remove pk index meta first, and if success then remove dir.
     static Status clear_persistent_index(int64_t tablet_id);
@@ -55,9 +55,9 @@ private:
 #else
 class LocalPkIndexManager {
 public:
-    static void gc(UpdateManager* update_manager, DataDir* data_dir, std::set<std::string>& tablet_ids) {}
+    static void gc(PrimaryKeyManager* primary_key_manager, DataDir* data_dir, std::set<std::string>& tablet_ids) {}
 
-    static void evict(UpdateManager* update_manager, DataDir* data_dir, std::set<std::string>& tablet_ids) {}
+    static void evict(PrimaryKeyManager* primary_key_manager, DataDir* data_dir, std::set<std::string>& tablet_ids) {}
 
     // remove pk index meta first, and if success then remove dir.
     static Status clear_persistent_index(int64_t tablet_id) { return Status::OK(); }

@@ -14,6 +14,8 @@
 
 #include "exec/pipeline/runtime_filter_types.h"
 
+#include <memory>
+
 #include "common/config_scan_io_fwd.h"
 #include "exprs/predicate.h"
 #include "hashjoin/hash_joiner_fwd.h"
@@ -35,6 +37,38 @@ StatusOr<bool> PartialRuntimeFilterMerger::add_partial_filters(
     _partial_bloom_filter_build_params[idx] = std::move(partial_bloom_filter_build_params);
 
     return _try_do_merge(std::move(bloom_filter_descriptors));
+}
+
+bool PartialRuntimeFilterMerger::skips_local_filter_over_limit(bool enable_join_runtime_bitset_filter, int func_version,
+                                                               bool is_skew_join,
+                                                               const RuntimeFilterBuildDescriptor* desc,
+                                                               const Columns& columns, size_t row_count,
+                                                               size_t local_rf_limit, size_t global_rf_limit) {
+    if (desc->has_remote_targets() || row_count <= local_rf_limit) {
+        return false;
+    }
+    return !can_build_local_bitset_filter(enable_join_runtime_bitset_filter, func_version, is_skew_join, desc, columns,
+                                          row_count, global_rf_limit);
+}
+
+bool PartialRuntimeFilterMerger::can_build_local_bitset_filter(bool enable_join_runtime_bitset_filter, int func_version,
+                                                               bool is_skew_join,
+                                                               const RuntimeFilterBuildDescriptor* desc,
+                                                               const Columns& columns, size_t row_count,
+                                                               size_t global_rf_limit) {
+    if (!enable_join_runtime_bitset_filter ||
+        func_version < TFunctionVersion::type::RUNTIME_FILTER_SERIALIZE_VERSION_3 || row_count > global_rf_limit) {
+        return false;
+    }
+    if (desc->join_mode() != TRuntimeFilterBuildJoinMode::BROADCAST || is_skew_join) {
+        return false;
+    }
+    if (desc->layout().pipeline_level_multi_partitioned() || desc->num_colocate_partition() > 0) {
+        return false;
+    }
+    std::unique_ptr<RuntimeFilter> rf(RuntimeFilterFactory::try_create_bitset_filter(
+            nullptr, desc->build_expr_type(), columns, kHashJoinKeyColumnOffset, row_count));
+    return rf != nullptr;
 }
 
 Status PartialRuntimeFilterMerger::merge_local_in_filters() {
@@ -145,16 +179,19 @@ Status PartialRuntimeFilterMerger::merge_singleton_local_bloom_filters() {
 
         // skip if it does not have consumer.
         if (!desc->has_consumer()) continue;
-        // skip if ht.size() > limit, and it's only for local.
-        if (!desc->has_remote_targets() && row_count > _local_rf_limit) continue;
 
         const LogicalType build_type = desc->build_expr_type();
         RuntimeFilter* rf = nullptr;
         if (maybe_use_bitset_filter && _partial_bloom_filter_build_params[0][i].has_value()) {
             const auto& param = _partial_bloom_filter_build_params[0][i].value();
-            rf = RuntimeFilterFactory::create_join_filter(_pool, build_type, desc->join_mode(), param.columns,
-                                                          kHashJoinKeyColumnOffset, row_count);
-        } else {
+            rf = RuntimeFilterFactory::try_create_bitset_filter(_pool, build_type, param.columns,
+                                                                kHashJoinKeyColumnOffset, row_count);
+        }
+        if (rf == nullptr) {
+            // skip if ht.size() > limit, and it's only for local.
+            // The limit bounds the bloom filter only: a bitset filter is never larger than a bloom filter of the
+            // same row count, so it is built regardless of the limit.
+            if (!desc->has_remote_targets() && row_count > _local_rf_limit) continue;
             rf = RuntimeFilterFactory::create_bloom_filter(_pool, build_type, desc->join_mode());
         }
         if (rf == nullptr) continue;
@@ -291,7 +328,10 @@ StatusOr<bool> PartialRuntimeFilterMerger::_try_do_merge(RuntimeMembershipFilter
     if (1 == _num_active_builders--) {
         if (_always_true) {
             _partial_in_filters.clear();
-            _bloom_filter_descriptors.clear();
+            _bloom_filter_descriptors = std::move(bloom_filter_descriptors);
+            for (auto* desc : _bloom_filter_descriptors) {
+                desc->set_runtime_filter(nullptr);
+            }
             return true;
         }
         _bloom_filter_descriptors = std::move(bloom_filter_descriptors);

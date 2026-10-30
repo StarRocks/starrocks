@@ -91,7 +91,7 @@ TEST_F(IcebergRowIdReaderTest, TestReadRangeWithoutFilter) {
     ASSERT_TRUE(reader.prepare().ok());
 
     Range<uint64_t> range(0, 5);
-    ColumnPtr column = ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT), false);
+    ColumnPtr column = ColumnHelper::create_column(TYPE_BIGINT_DESC, false);
 
     ASSERT_TRUE(reader.read_range(range, nullptr, column).ok());
     ASSERT_EQ(column->size(), 5);
@@ -109,7 +109,7 @@ TEST_F(IcebergRowIdReaderTest, TestReadRangeIgnoresFilter) {
     Range<uint64_t> range(0, 5);
     Filter filter = {true, false, true, false, true};
 
-    ColumnPtr column = ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT), false);
+    ColumnPtr column = ColumnHelper::create_column(TYPE_BIGINT_DESC, false);
 
     ASSERT_TRUE(reader.read_range(range, &filter, column).ok());
     // All 5 rows should be output regardless of filter
@@ -126,7 +126,7 @@ TEST_F(IcebergRowIdReaderTest, TestReadRangeWithOffset) {
 
     // Range [10, 15) means rows 10..14 within the row group
     Range<uint64_t> range(10, 15);
-    ColumnPtr column = ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT), false);
+    ColumnPtr column = ColumnHelper::create_column(TYPE_BIGINT_DESC, false);
 
     ASSERT_TRUE(reader.read_range(range, nullptr, column).ok());
     ASSERT_EQ(column->size(), 5);
@@ -140,7 +140,7 @@ TEST_F(IcebergRowIdReaderTest, TestReadEmptyRange) {
     ASSERT_TRUE(reader.prepare().ok());
 
     Range<uint64_t> range(5, 5);
-    ColumnPtr column = ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT), false);
+    ColumnPtr column = ColumnHelper::create_column(TYPE_BIGINT_DESC, false);
 
     ASSERT_TRUE(reader.read_range(range, nullptr, column).ok());
     ASSERT_EQ(column->size(), 0);
@@ -151,15 +151,12 @@ TEST_F(IcebergRowIdReaderTest, TestFillDstColumn) {
     ASSERT_TRUE(reader.prepare().ok());
 
     Range<uint64_t> range(0, 3);
-    ColumnPtr src = ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT), false);
+    ColumnPtr src = ColumnHelper::create_column(TYPE_BIGINT_DESC, false);
     ASSERT_TRUE(reader.read_range(range, nullptr, src).ok());
 
-    ColumnPtr dst = ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT), false);
+    ColumnPtr dst = ColumnHelper::create_column(TYPE_BIGINT_DESC, false);
     ASSERT_TRUE(reader.fill_dst_column(dst, src).ok());
-    ASSERT_EQ(dst->size(), 3);
-    ASSERT_EQ(dst->get(0).get_int64(), 100);
-    ASSERT_EQ(dst->get(1).get_int64(), 101);
-    ASSERT_EQ(dst->get(2).get_int64(), 102);
+    ASSERT_EQ("[100, 101, 102]", dst->debug_string());
 }
 
 // ==================== No-op method tests ====================
@@ -384,7 +381,7 @@ TEST_F(IcebergRowIdReaderTest, TestRowIdReaderWithoutFirstRowIdReturnsNull) {
     ASSERT_TRUE(reader.prepare().ok());
 
     Range<uint64_t> range(0, 5);
-    ColumnPtr column = ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT), true);
+    ColumnPtr column = ColumnHelper::create_column(TYPE_BIGINT_DESC, true);
 
     ASSERT_TRUE(reader.read_range(range, nullptr, column).ok());
     ASSERT_EQ(column->size(), 5);
@@ -440,7 +437,7 @@ TEST_F(IcebergRowIdReaderTest, TestSequenceNumberReaderWithoutPhysicalColumnUses
     ASSERT_TRUE(reader.prepare().ok());
 
     Range<uint64_t> range(0, 5);
-    ColumnPtr column = ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT), true);
+    ColumnPtr column = ColumnHelper::create_column(TYPE_BIGINT_DESC, true);
 
     ASSERT_TRUE(reader.read_range(range, nullptr, column).ok());
     ASSERT_EQ(column->size(), 5);
@@ -454,7 +451,7 @@ TEST_F(IcebergRowIdReaderTest, TestSequenceNumberReaderWithoutFallbackReturnsNul
     ASSERT_TRUE(reader.prepare().ok());
 
     Range<uint64_t> range(0, 4);
-    ColumnPtr column = ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT), true);
+    ColumnPtr column = ColumnHelper::create_column(TYPE_BIGINT_DESC, true);
 
     ASSERT_TRUE(reader.read_range(range, nullptr, column).ok());
     ASSERT_EQ(column->size(), 4);
@@ -513,7 +510,7 @@ TEST_F(IcebergRowIdReaderTest, TestSequenceNumberReaderWithFilter) {
     Range<uint64_t> range(0, 4);
     Filter filter = {true, false, true, false};
 
-    ColumnPtr column = ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT), true);
+    ColumnPtr column = ColumnHelper::create_column(TYPE_BIGINT_DESC, true);
 
     ASSERT_TRUE(reader.read_range(range, &filter, column).ok());
     // Reserved field readers fill all rows in range; caller applies filter afterwards.
@@ -535,15 +532,14 @@ TEST_F(IcebergRowIdReaderTest, TestRowIdReaderVsFixedValueDifferentBehavior) {
     ASSERT_TRUE(row_id_reader.prepare().ok());
 
     Range<uint64_t> range(0, 3);
-    ColumnPtr row_id_col =
-            ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT), false);
+    ColumnPtr row_id_col = ColumnHelper::create_column(TYPE_BIGINT_DESC, false);
     ASSERT_TRUE(row_id_reader.read_range(range, nullptr, row_id_col).ok());
 
     // FixedValueColumnReader: returns the same value for every row
     auto seq_reader = std::make_unique<FixedValueColumnReader>(Datum(static_cast<int64_t>(10)));
     ASSERT_TRUE(seq_reader->prepare().ok());
 
-    ColumnPtr seq_col = ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT), true);
+    ColumnPtr seq_col = ColumnHelper::create_column(TYPE_BIGINT_DESC, true);
     ASSERT_TRUE(seq_reader->read_range(range, nullptr, seq_col).ok());
 
     ASSERT_EQ(row_id_col->size(), 3);
@@ -569,7 +565,7 @@ TEST_F(IcebergRowIdReaderTest, TestLargeFirstRowId) {
     ASSERT_TRUE(reader.prepare().ok());
 
     Range<uint64_t> range(0, 3);
-    ColumnPtr column = ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT), false);
+    ColumnPtr column = ColumnHelper::create_column(TYPE_BIGINT_DESC, false);
     ASSERT_TRUE(reader.read_range(range, nullptr, column).ok());
 
     ASSERT_EQ(column->size(), 3);
@@ -583,13 +579,10 @@ TEST_F(IcebergRowIdReaderTest, TestNullPhysicalRowIdFallsBackToInheritance) {
     ASSERT_TRUE(reader.prepare().ok());
 
     Range<uint64_t> range(0, 3);
-    ColumnPtr column = ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT), true);
+    ColumnPtr column = ColumnHelper::create_column(TYPE_BIGINT_DESC, true);
     ASSERT_TRUE(reader.read_range(range, nullptr, column).ok());
 
-    ASSERT_EQ(column->size(), 3);
-    ASSERT_EQ(column->get(0).get_int64(), 500);
-    ASSERT_EQ(column->get(1).get_int64(), 501);
-    ASSERT_EQ(column->get(2).get_int64(), 502);
+    ASSERT_EQ("[500, 501, 502]", column->debug_string());
 }
 
 TEST_F(IcebergRowIdReaderTest, TestNullPhysicalSequenceNumberFallsBackToInheritance) {
@@ -598,13 +591,10 @@ TEST_F(IcebergRowIdReaderTest, TestNullPhysicalSequenceNumberFallsBackToInherita
     ASSERT_TRUE(reader.prepare().ok());
 
     Range<uint64_t> range(0, 3);
-    ColumnPtr column = ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT), true);
+    ColumnPtr column = ColumnHelper::create_column(TYPE_BIGINT_DESC, true);
     ASSERT_TRUE(reader.read_range(range, nullptr, column).ok());
 
-    ASSERT_EQ(column->size(), 3);
-    ASSERT_EQ(column->get(0).get_int64(), 42);
-    ASSERT_EQ(column->get(1).get_int64(), 42);
-    ASSERT_EQ(column->get(2).get_int64(), 42);
+    ASSERT_EQ("[42, 42, 42]", column->debug_string());
 }
 
 } // namespace starrocks::parquet

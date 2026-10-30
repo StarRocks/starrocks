@@ -18,6 +18,7 @@
 
 #include <avrocpp/GenericDatum.hh>
 
+#include "base/time/tz_offset_cache.h"
 #include "common/statusor.h"
 #include "types/date_value.h"
 #include "types/timestamp_value.h"
@@ -30,8 +31,10 @@ public:
 
     static int128_t bytes_to_decimal_integer(const std::vector<uint8_t>& from);
     static DateValue int_to_date_value(int32_t from);
+    // offset_cache, when given, is bound to `timezone` (TzOffsetCache::bind) by the caller.
     static StatusOr<TimestampValue> long_to_timestamp_value(const avro::GenericDatum& datum,
-                                                            const cctz::time_zone& timezone);
+                                                            const cctz::time_zone& timezone,
+                                                            TzOffsetCache* offset_cache = nullptr);
 
     static Status datum_to_json(const avro::GenericDatum& datum, std::string* json_str, bool use_logical_type = false,
                                 const cctz::time_zone& timezone = cctz::local_time_zone());

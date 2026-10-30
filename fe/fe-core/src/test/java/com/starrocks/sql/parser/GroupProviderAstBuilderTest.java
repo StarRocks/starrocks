@@ -16,6 +16,7 @@ package com.starrocks.sql.parser;
 
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.group.AlterGroupProviderStmt;
 import com.starrocks.sql.ast.group.CreateGroupProviderStmt;
 import com.starrocks.sql.ast.group.DropGroupProviderStmt;
 import com.starrocks.sql.ast.group.ShowCreateGroupProviderStmt;
@@ -265,6 +266,66 @@ public class GroupProviderAstBuilderTest {
 
         Assertions.assertNotNull(stmt, "Statement should not be null");
         Assertions.assertEquals("unix_group_provider", stmt.getName(), "Provider name should match");
+    }
+
+    /**
+     * Test case: Parse ALTER GROUP PROVIDER with a single property
+     * Test point: Should build AlterGroupProviderStmt with the delta property
+     */
+    @Test
+    public void testParseAlterGroupProviderSingleProperty() throws Exception {
+        String sql = "ALTER GROUP PROVIDER ldap_provider SET (\"ldap_bind_root_pwd\" = \"newpwd\")";
+
+        AlterGroupProviderStmt stmt =
+                (AlterGroupProviderStmt) SqlParser.parseSingleStatement(sql, ctx.getSessionVariable().getSqlMode());
+
+        Assertions.assertNotNull(stmt, "Statement should not be null");
+        Assertions.assertEquals("ldap_provider", stmt.getName(), "Provider name should match");
+
+        Map<String, String> properties = stmt.getProperties();
+        Assertions.assertEquals(1, properties.size(), "Only the listed property should be present (delta)");
+        Assertions.assertEquals("newpwd", properties.get("ldap_bind_root_pwd"), "Property value should match");
+    }
+
+    /**
+     * Test case: Parse ALTER GROUP PROVIDER with multiple properties
+     * Test point: Should build AlterGroupProviderStmt carrying every listed property
+     */
+    @Test
+    public void testParseAlterGroupProviderMultipleProperties() throws Exception {
+        String sql = "ALTER GROUP PROVIDER ldap_provider SET (" +
+                "\"ldap_conn_url\" = \"ldaps://new-host:636\", " +
+                "\"ldap_cache_refresh_interval\" = \"10\")";
+
+        AlterGroupProviderStmt stmt =
+                (AlterGroupProviderStmt) SqlParser.parseSingleStatement(sql, ctx.getSessionVariable().getSqlMode());
+
+        Assertions.assertNotNull(stmt, "Statement should not be null");
+        Assertions.assertEquals("ldap_provider", stmt.getName(), "Provider name should match");
+
+        Map<String, String> properties = stmt.getProperties();
+        Assertions.assertEquals(2, properties.size(), "Both listed properties should be present");
+        Assertions.assertEquals("ldaps://new-host:636", properties.get("ldap_conn_url"), "URL should match");
+        Assertions.assertEquals("10", properties.get("ldap_cache_refresh_interval"), "Interval should match");
+    }
+
+    /**
+     * Test case: Parse ALTER GROUP PROVIDER with an empty SET list
+     * Test point: unlike the shared property list, this statement accepts SET () at the grammar level, so
+     *             the user gets "no property is specified" from the analyzer instead of a syntax error
+     *             pointing at a parenthesis. The rejection itself is asserted in
+     *             GroupProviderStatementAnalyzerTest.
+     */
+    @Test
+    public void testParseAlterGroupProviderEmptySetParses() throws Exception {
+        String sql = "ALTER GROUP PROVIDER ldap_provider SET ()";
+
+        AlterGroupProviderStmt stmt =
+                (AlterGroupProviderStmt) SqlParser.parseSingleStatement(sql, ctx.getSessionVariable().getSqlMode());
+
+        Assertions.assertNotNull(stmt, "Statement should parse");
+        Assertions.assertEquals("ldap_provider", stmt.getName(), "Provider name should match");
+        Assertions.assertTrue(stmt.getProperties().isEmpty(), "No property should be carried");
     }
 
     /**

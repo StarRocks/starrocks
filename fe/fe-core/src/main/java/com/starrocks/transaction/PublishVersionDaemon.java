@@ -101,7 +101,6 @@ public class PublishVersionDaemon extends LeaderDaemon {
 
     private static final Logger LOG = LogManager.getLogger(PublishVersionDaemon.class);
 
-    private static final long RETRY_INTERVAL_MS = 1000;
     // At most one "fail to publish" line per partition per interval, on either publish path.
     private static final long PUBLISH_ERROR_LOG_INTERVAL_MS = 10000;
     private static final int PUBLISH_THREAD_POOL_DEFAULT_MAX_SIZE = 512;
@@ -144,10 +143,14 @@ public class PublishVersionDaemon extends LeaderDaemon {
         MetricRepo.COUNTER_PUBLISH_VERSION_DAEMON_LOOP.increase(1L);
         try {
             GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+            // Read the in-flight markers before the committed transactions are snapshotted, see
+            // dropInFlightBatches() for why the order matters.
+            Set<Long> inFlightTxnIds = Sets.newHashSet(getPublishingTransactions());
+            Set<Long> inFlightTableIds = Sets.newHashSet(getPublishingLakeTransactionsBatchTableId());
             if (Config.lake_enable_batch_publish_version && RunMode.isSharedDataMode()) {
                 // batch publish
-                List<TransactionStateBatch> readyTransactionStatesBatch = globalTransactionMgr.
-                        getReadyPublishTransactionsBatch();
+                List<TransactionStateBatch> readyTransactionStatesBatch = dropInFlightBatches(
+                        globalTransactionMgr.getReadyPublishTransactionsBatch(), inFlightTxnIds, inFlightTableIds);
                 if (readyTransactionStatesBatch.size() != 0) {
                     publishVersionForLakeTableBatch(readyTransactionStatesBatch);
                 }
@@ -159,6 +162,13 @@ public class PublishVersionDaemon extends LeaderDaemon {
                     globalTransactionMgr.getReadyToPublishTransactions(Config.enable_new_publish_mechanism);
             if (readyTransactionStates == null || readyTransactionStates.isEmpty()) {
                 return;
+            }
+            if (RunMode.isSharedDataMode()) {
+                readyTransactionStates =
+                        dropInFlightTransactions(readyTransactionStates, inFlightTxnIds, inFlightTableIds);
+                if (readyTransactionStates.isEmpty()) {
+                    return;
+                }
             }
 
             // TODO: need to refactor after be split into cn + dn
@@ -309,6 +319,63 @@ public class PublishVersionDaemon extends LeaderDaemon {
             publishingLakeTransactionsBatchTableId = Sets.newConcurrentHashSet();
         }
         return publishingLakeTransactionsBatchTableId;
+    }
+
+    /**
+     * Drops the batches that touch a table or a transaction which was in flight when {@code inFlightTableIds}
+     * and {@code inFlightTxnIds} were read.
+     * <p>
+     * The markers must be read before the committed transactions are snapshotted. A marker is removed only
+     * after the finish of its batch moved the transactions out of the running set, so a snapshot taken after
+     * the markers were read sees either the marker or a set that no longer contains the finished transactions.
+     * Checking the live marker after the snapshot instead lets a batch that finished in between be published
+     * and finished a second time, which enqueues its transactions twice in the finished-transaction deque and
+     * makes the label cleaner fail on the duplicate.
+     */
+    @VisibleForTesting
+    static List<TransactionStateBatch> dropInFlightBatches(List<TransactionStateBatch> batches,
+                                                           Set<Long> inFlightTxnIds,
+                                                           Set<Long> inFlightTableIds) {
+        if (inFlightTxnIds.isEmpty() && inFlightTableIds.isEmpty()) {
+            return batches;
+        }
+        List<TransactionStateBatch> ready = new ArrayList<>(batches.size());
+        for (TransactionStateBatch batch : batches) {
+            if (!isInFlight(batch.getTransactionStates(), inFlightTxnIds, inFlightTableIds)) {
+                ready.add(batch);
+            }
+        }
+        return ready;
+    }
+
+    /**
+     * The counterpart of {@link #dropInFlightBatches} for the non-batch publish path.
+     */
+    @VisibleForTesting
+    static List<TransactionState> dropInFlightTransactions(List<TransactionState> states,
+                                                           Set<Long> inFlightTxnIds,
+                                                           Set<Long> inFlightTableIds) {
+        if (inFlightTxnIds.isEmpty() && inFlightTableIds.isEmpty()) {
+            return states;
+        }
+        List<TransactionState> ready = new ArrayList<>(states.size());
+        for (TransactionState state : states) {
+            if (!isInFlight(List.of(state), inFlightTxnIds, inFlightTableIds)) {
+                ready.add(state);
+            }
+        }
+        return ready;
+    }
+
+    private static boolean isInFlight(List<TransactionState> states, Set<Long> inFlightTxnIds,
+                                      Set<Long> inFlightTableIds) {
+        for (TransactionState state : states) {
+            if (inFlightTxnIds.contains(state.getTransactionId())
+                    || state.getTableIdList().stream().anyMatch(inFlightTableIds::contains)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void publishVersionForOlapTable(List<TransactionState> readyTransactionStates) throws StarRocksException {
@@ -522,6 +589,11 @@ public class PublishVersionDaemon extends LeaderDaemon {
                 }
                 List<Long> tableIdList = state.getTableIdList();
                 if (tableIdList.stream().noneMatch(publishingLakeTransactionsBatchTableId::contains)) {
+                    // Skip backed-off transactions before logging a publish start or creating futures.
+                    if (!batchHasPublishablePartition(txnStateBatch.transactionStates,
+                            System.currentTimeMillis())) {
+                        continue;
+                    }
                     publishingLakeTransactionsBatchTableId.addAll(tableIdList);
                     CompletableFuture<Void> future = publishLakeTransactionAsync(state);
                     future.thenRun(() -> tableIdList.forEach(publishingLakeTransactionsBatchTableId::remove));
@@ -569,7 +641,8 @@ public class PublishVersionDaemon extends LeaderDaemon {
         }
     }
 
-    private CompletableFuture<Void> publishLakeTransactionAsync(TransactionState txnState) {
+    @VisibleForTesting
+    CompletableFuture<Void> publishLakeTransactionAsync(TransactionState txnState) {
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         long txnId = txnState.getTransactionId();
         long dbId = txnState.getDbId();
@@ -990,7 +1063,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
 
     // Cheap pre-pass over a batch's commit infos: can any partition publish this round? A
     // partition cannot if every transaction's commit info for it is already published, or if its
-    // most recent attempt failed less than RETRY_INTERVAL_MS ago.
+    // most recent attempt failed less than lake_publish_version_retry_interval_ms ago.
     @VisibleForTesting
     static boolean batchHasPublishablePartition(List<TransactionState> states, long now) {
         Map<Long, Long> lastFailureByPartition = new HashMap<>();
@@ -1023,7 +1096,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
         }
         for (Long partitionId : unpublished) {
             Long failedAt = lastFailureByPartition.get(partitionId);
-            if (failedAt == null || now >= failedAt + RETRY_INTERVAL_MS) {
+            if (failedAt == null || now >= failedAt + publishRetryIntervalMs()) {
                 return true;
             }
         }
@@ -1054,7 +1127,15 @@ public class PublishVersionDaemon extends LeaderDaemon {
         for (PartitionCommitInfo commitInfo : commitInfos) {
             lastFailure = Math.max(lastFailure, commitInfo.getLastPublishFailureTime());
         }
-        return lastFailure > 0 && now < lastFailure + RETRY_INTERVAL_MS;
+        return lastFailure > 0 && now < lastFailure + publishRetryIntervalMs();
+    }
+
+    // The back-off window after a failed publish attempt. Read on every check rather than cached, because
+    // the config is mutable and an operator changing it during an incident should take effect on the next
+    // tick. Clamped because a negative value would make every comparison fall through and silently disable
+    // the back-off, whereas 0 disables it in a way that reads as deliberate.
+    private static long publishRetryIntervalMs() {
+        return Math.max(0, Config.lake_publish_version_retry_interval_ms);
     }
 
     private CompletableFuture<Void> publishLakeTransactionBatchAsync(TransactionStateBatch txnStateBatch) {
@@ -1113,7 +1194,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
             // A partition that already published is deliberately NOT skipped here. Skipping it
             // would also skip publishPartitionBatch, the only place that records this partition's
             // txn logs on the batch for deletion once the batch finishes, and the batch is rebuilt
-            // from scratch every cycle. Its republish is bounded to once per RETRY_INTERVAL_MS by
+            // from scratch every cycle. Its republish is bounded to once per lake_publish_version_retry_interval_ms by
             // the check above, which is the amplification that actually mattered.
             List<PartitionCommitInfo> commitInfos = publishVersionData.getPartitionCommitInfos();
             if (retryTooSoon(commitInfos, submitTime)) {
@@ -1124,7 +1205,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
                 BatchPublishResult result = publishPartitionBatch(db, publishVersionData.getTableId(),
                         publishVersionData, txnStateBatch);
                 // A partition merely waiting for its predecessor keeps its previous stamp, so the
-                // back-off does not add up to RETRY_INTERVAL_MS to every ordinary version-ordering
+                // back-off does not add up to lake_publish_version_retry_interval_ms to every ordinary version-ordering
                 // wait; only a real failure arms it.
                 if (result != BatchPublishResult.NOT_READY) {
                     long now = System.currentTimeMillis();
@@ -1196,7 +1277,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
             return CompletableFuture.completedFuture(true);
         }
         long lastFailure = partitionCommitInfo.getLastPublishFailureTime();
-        if (lastFailure > 0 && System.currentTimeMillis() < lastFailure + RETRY_INTERVAL_MS) {
+        if (lastFailure > 0 && System.currentTimeMillis() < lastFailure + publishRetryIntervalMs()) {
             return CompletableFuture.completedFuture(false);
         }
 
@@ -1342,7 +1423,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
             // Prevent excessive logging. The previous form compared the wrong way round: it skipped
             // the log when the last failure was more than 10s ago and kept logging while the partition
             // failed continuously, which is exactly backwards for a path that retries every
-            // RETRY_INTERVAL_MS.
+            // lake_publish_version_retry_interval_ms.
             if (partitionCommitInfo.shouldLogPublishError(System.currentTimeMillis(), PUBLISH_ERROR_LOG_INTERVAL_MS)) {
                 LOG.error("Fail to publish partition {} of txn {}: {}", partitionCommitInfo.getPhysicalPartitionId(),
                         txnId, e.getMessage());

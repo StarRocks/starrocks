@@ -15,17 +15,18 @@
 #include "storage/lake/compaction_task.h"
 
 #include <algorithm>
+#include <ctime>
 
 #include "common/config_compaction_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "runtime/runtime_env.h"
 #include "storage/compaction_utils.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/tablet_writer.h"
-#include "storage/lake/update_manager.h"
 
 namespace starrocks::lake {
 
@@ -40,9 +41,35 @@ CompactionTask::CompactionTask(VersionedTablet tablet, std::vector<std::shared_p
           _context(context),
           _tablet_schema(std::move(tablet_schema)) {}
 
-int32_t CompactionTask::chunk_size_with_held_segments(int64_t held_segments_bytes, int64_t total_num_rows,
-                                                      int64_t total_mem_footprint, size_t source_num) {
+int64_t CompactionTask::stream_buffer_size(int64_t num_streams) {
+    const int64_t configured = config::lake_compaction_stream_buffer_size_bytes;
     const int64_t mem_limit = config::compaction_memory_limit_per_worker;
+    if (configured <= kMinStreamBufferSize || mem_limit <= 0 || num_streams <= 0) {
+        return configured;
+    }
+    return std::clamp<int64_t>(mem_limit / 2 / num_streams, kMinStreamBufferSize, configured);
+}
+
+int64_t CompactionTask::stream_buffer_size_for_pass(int64_t num_streams) {
+    const int64_t buffer_size = stream_buffer_size(num_streams);
+    if (buffer_size < config::lake_compaction_stream_buffer_size_bytes) {
+        _context->stats->stream_buffer_shrunk_passes++;
+        VLOG(1) << "Compaction read buffer shrunk. tablet: " << _tablet.id() << ", txn: " << _txn_id
+                << ", streams: " << num_streams << ", buffer: " << buffer_size
+                << ", configured: " << config::lake_compaction_stream_buffer_size_bytes;
+    }
+    return buffer_size;
+}
+
+int32_t CompactionTask::chunk_size_with_held_segments(int64_t held_segments_bytes, int64_t total_num_rows,
+                                                      int64_t total_mem_footprint, size_t source_num,
+                                                      int64_t stream_buffer_bytes) {
+    // The read buffers are allocated whatever the chunk size is, so they come off the budget first.
+    // stream_buffer_size() keeps them within half of it unless its floor kicks in; even then leave
+    // the chunk a quarter, so a huge fan-in degrades to small chunks rather than one-row reads.
+    const int64_t worker_limit = config::compaction_memory_limit_per_worker;
+    const int64_t mem_limit =
+            worker_limit <= 0 ? worker_limit : std::max(worker_limit - stream_buffer_bytes, worker_limit / 4);
     const int32_t config_chunk_size = config::lake_compaction_chunk_size;
     // Baseline for judging how much holding shrinks the read chunk. A non-positive limit means
     // "no memory cap", even when segment metadata remains resident.
@@ -107,7 +134,8 @@ Status CompactionTask::execute_index_major_compaction(TxnLogPB* txn_log) {
             if (_context->subtask_id >= 0) {
                 return Status::OK();
             }
-            RETURN_IF_ERROR(_tablet.tablet_manager()->update_mgr()->execute_index_major_compaction(metadata, txn_log));
+            RETURN_IF_ERROR(
+                    _tablet.tablet_manager()->primary_key_mgr()->execute_index_major_compaction(metadata, txn_log));
             if (txn_log->has_op_compaction() && !txn_log->op_compaction().input_sstables().empty()) {
                 size_t total_input_sstable_file_size = 0;
                 for (const auto& input_sstable : txn_log->op_compaction().input_sstables()) {
@@ -122,6 +150,9 @@ Status CompactionTask::execute_index_major_compaction(TxnLogPB* txn_log) {
 }
 
 Status CompactionTask::fill_compaction_segment_info(TxnLogPB_OpCompaction* op_compaction, TabletWriter* writer) {
+    if (_context->is_base_compaction) {
+        op_compaction->set_base_compaction_time(time(nullptr));
+    }
     for (auto& rowset : _input_rowsets) {
         op_compaction->add_input_rowsets(rowset->id());
     }

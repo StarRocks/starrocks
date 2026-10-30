@@ -20,6 +20,7 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/exprs")
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 set(EXPR_FILES
+  agg/coverage_window.cpp
   agg/data_sketch/ds_hll.cpp
   agg/data_sketch/ds_theta.cpp
   agg/combinator/agg_state_utils.cpp
@@ -52,7 +53,6 @@ set(EXPR_FILES
   ai/ai_function_call_expr.cpp
   ai/ai_function_result.cpp
   ai/ai_provider_options_builder.cpp
-  ai_functions.cpp
   array_functions.cpp
   array_map_expr.cpp
   array_sort_lambda_expr.cpp
@@ -86,6 +86,7 @@ set(EXPR_FILES
   function_helper.cpp
   find_in_set.cpp
   geo_functions.cpp
+  h3_functions.cpp
   gin_functions.cpp
   grouping_sets_functions.cpp
   hash_functions.cpp

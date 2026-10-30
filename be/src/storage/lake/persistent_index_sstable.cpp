@@ -330,8 +330,20 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
     return Status::OK();
 }
 
+size_t PersistentIndexSstable::index_block_memory_usage() const {
+    return (_sst != nullptr) ? _sst->index_block_memory_usage() : 0;
+}
+
+size_t PersistentIndexSstable::filter_memory_usage() const {
+    return (_sst != nullptr) ? _sst->filter_memory_usage() : 0;
+}
+
 size_t PersistentIndexSstable::memory_usage() const {
     return (_sst != nullptr) ? _sst->memory_usage() : 0;
+}
+
+size_t PersistentIndexSstable::delvec_memory_usage() const {
+    return (_delvec != nullptr) ? _delvec->memory_usage() : 0;
 }
 
 Status PersistentIndexSstable::sample_keys(std::vector<std::string>* keys, size_t sample_interval_bytes) const {

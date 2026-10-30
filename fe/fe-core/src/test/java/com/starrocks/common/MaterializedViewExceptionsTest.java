@@ -14,7 +14,11 @@
 
 package com.starrocks.common;
 
+import com.starrocks.sql.common.DmlException;
+import com.starrocks.sql.common.MVInactiveException;
 import org.junit.jupiter.api.Test;
+
+import java.util.Collections;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -40,5 +44,49 @@ public class MaterializedViewExceptionsTest {
                 new RuntimeException("No checkpoint found for base table: db.t during IVM planning")));
         assertFalse(MaterializedViewExceptions.isIncrementalBreakingFailure(new RuntimeException()));
         assertFalse(MaterializedViewExceptions.isIncrementalBreakingFailure(null));
+    }
+
+    /**
+     * A column ALTER on an IVM MV knocks its stored schema out of position-alignment with the
+     * rewritten maintenance query; IvmSchemaCompat reports that through these two reasons. The
+     * mismatch is deterministic -- it never heals -- so it must classify as breaking and inactivate
+     * the MV, rather than leaving is_active true with only a FAILED run. Both the pure-IVM path and
+     * the hybrid fallback-to-PCT path surface the same message.
+     */
+    @Test
+    public void testSchemaMismatchIsBreaking() {
+        assertTrue(MaterializedViewExceptions.isIncrementalBreakingFailure(new RuntimeException(
+                "Getting analyzing error. Detail message: "
+                        + MaterializedViewExceptions.inactiveReasonForColumnChanged(
+                                Collections.singleton("column count 6 vs 7")))));
+        assertTrue(MaterializedViewExceptions.isIncrementalBreakingFailure(new RuntimeException(
+                MaterializedViewExceptions.inactiveReasonForColumnNotCompatible(
+                        "`imp` bigint", "`imp` largeint"))));
+        assertTrue(MaterializedViewExceptions.isIncrementalBreakingFailure(
+                new RuntimeException("Refresh mv s1_mv failed after 1 times",
+                        new IllegalStateException(MaterializedViewExceptions.inactiveReasonForColumnChanged(
+                                Collections.singleton("column count 6 vs 7"))))));
+    }
+
+    @Test
+    public void testARefreshOfAnInactiveViewIsNotBreaking() {
+        MVInactiveException inactive = new MVInactiveException(
+                "Materialized view: mv1/1 is not active due to base table schema changed for columns: v.");
+        assertFalse(MaterializedViewExceptions.isIncrementalBreakingFailure(inactive));
+        // the refresh retry wraps it in an exception whose message quotes it, marker included
+        assertFalse(MaterializedViewExceptions.isIncrementalBreakingFailure(
+                new DmlException("Refresh mv mv1 failed after 1 times, error-msg : " + inactive, inactive)));
+    }
+
+    @Test
+    public void testBreakingFailureReasonFollowsTheMatchedCause() {
+        assertTrue(MaterializedViewExceptions.inactiveReasonForBreakingFailure(
+                        new RuntimeException(MaterializedViewExceptions.inactiveReasonForColumnChanged(
+                                Collections.singleton("column count 6 vs 7"))), "mv1")
+                .startsWith(MaterializedViewExceptions.INACTIVE_REASON_FOR_MV_SCHEMA_MISMATCH));
+        // a non-append-only breakage keeps its own reason rather than being relabelled a schema mismatch
+        assertTrue(MaterializedViewExceptions.inactiveReasonForBreakingFailure(
+                        new RuntimeException("x " + MaterializedViewExceptions.FE_NON_APPEND_ONLY_MARKER + " y"), "mv1")
+                .startsWith(MaterializedViewExceptions.INACTIVE_REASON_FOR_INCREMENTAL_BREAKING));
     }
 }

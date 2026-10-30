@@ -19,6 +19,7 @@ import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.sql.common.MetaUtils;
@@ -104,8 +105,8 @@ public abstract class AbstractOlapTableScanNode extends ScanNode {
                 // This bucket-count computation is reached from
                 // ExecutionFragment.getOrCreateColocatedAssignment only when BackendSelectorFactory has
                 // chosen a colocate-dispatch path. Verify alignment HERE, after the dispatch decision: a
-                // misaligned ColocateRangeMgr would silently produce wrong join results under colocate
-                // dispatch. Non-colocate scans go through NormalBackendSelector and never reach this point.
+                // misaligned ColocateRangeMgr would silently produce wrong join / aggregation results under
+                // colocate dispatch. Non-colocate scans go through NormalBackendSelector and never reach this point.
                 //
                 // requireAligned fails closed on two conditions: the group is currently unaligned, OR the
                 // bucketSeq this scan actually built (tabletId2BucketSeq) does not match the aligned mapping.
@@ -113,7 +114,7 @@ public abstract class AbstractOlapTableScanNode extends ScanNode {
                 // position-based assignment when the group is momentarily unaligned (so a non-colocate scan
                 // still works); if the group then re-aligns before this guard runs, comparing the built
                 // assignment against the aligned mapping catches the stale position pairing that would
-                // otherwise reach the colocate join and silently return wrong results.
+                // otherwise reach the colocate plan and silently return wrong results.
                 //
                 // Invariant: the bucketSeq fill always runs before backend selection reaches this guard, so
                 // tabletId2BucketSeq holds the whole scan's built assignment here — an empty map would itself
@@ -129,7 +130,15 @@ public abstract class AbstractOlapTableScanNode extends ScanNode {
         int bucketNum = distInfo.getBucketNum();
         if (selectedLogicalPartitionIds.size() <= 1) {
             for (Long pid : selectedLogicalPartitionIds) {
-                bucketNum = olapTable.getPartition(pid).getDistributionInfo().getBucketNum();
+                // Scheduling runs after planning released the table lock, so a TTL or dynamic-partition
+                // drop can remove the selected partition in between.
+                Partition partition = olapTable.getPartition(pid);
+                if (partition == null) {
+                    throw new IllegalStateException(String.format(
+                            "partition %d of table %s was dropped after the query was planned, please retry",
+                            pid, olapTable.getName()));
+                }
+                bucketNum = partition.getDistributionInfo().getBucketNum();
             }
         }
         return bucketNum;

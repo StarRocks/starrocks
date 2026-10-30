@@ -40,7 +40,6 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
 import com.starrocks.lake.vector.VectorIndexBuildScheduler;
-import com.starrocks.metric.MetricRepo;
 import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.proto.TxnTypePB;
 import com.starrocks.proto.VectorIndexBuildInfoPB;
@@ -94,6 +93,7 @@ public class MergeTabletJob extends TabletReshardJob {
         this.reshardingPhysicalPartitions = reshardingPhysicalPartitions;
     }
 
+    @Override
     public long getDbId() {
         return dbId;
     }
@@ -103,6 +103,7 @@ public class MergeTabletJob extends TabletReshardJob {
         return tableId;
     }
 
+    @Override
     public Map<Long, ReshardingPhysicalPartition> getReshardingPhysicalPartitions() {
         return reshardingPhysicalPartitions;
     }
@@ -123,15 +124,19 @@ public class MergeTabletJob extends TabletReshardJob {
     @Override
     public void init() throws StarRocksException {
         try (LockedObject<OlapTable> lockedTable = getLockedTable(LockType.WRITE)) {
-            OlapTable olapTable = lockedTable.get();
-            reserveTableForReshard(dbId, olapTable, reshardingPhysicalPartitions);
-            rejectIfSourceRegainedSharedFiles(olapTable);
+            initLocked(lockedTable.get());
         } catch (TabletReshardException e) {
-            // Surface admission rejection (table not NORMAL / dropped, or a merge source regained
+            // Surface admission rejection (table in another alter state / dropped, or a merge source regained
             // shared data files) as a checked exception so callers' StarRocksException handling
             // (e.g. TabletPreSplitCoordinator) takes effect.
             throw new StarRocksException(e.getMessage(), e);
         }
+    }
+
+    @Override
+    protected void initLocked(OlapTable table) throws StarRocksException {
+        rejectIfSourceRegainedSharedFiles(table);
+        reserveTableForReshard(dbId, table, reshardingPhysicalPartitions);
     }
 
     /**
@@ -143,17 +148,10 @@ public class MergeTabletJob extends TabletReshardJob {
      * transaction is already committed by publish time, admitting a tablet that still co-owns a
      * file has no fallback -- it wedges the partition.
      *
-     * <p>No writer in a supported configuration can flip a source's flag inside this specific
-     * window today: a split's cross-publish cannot run while the table is not NORMAL, compaction
-     * only carries existing flags forward, and ingest writes private files. This check does not
-     * depend on that holding, though -- an earlier version of this filter rested on an equivalent
-     * enumeration of "nothing can install a shared file after selection," and it turned out to be
-     * wrong (an OpAddIndex cross-publish could). This is defense in depth, not a fix for a
-     * currently reachable bug, and it does not make admission airtight by itself: a stale clean
-     * reading that already landed before this re-read is still believed.
+     * <p>Other disjoint partitions may be resharding concurrently; re-read only these sources.
+     * A stale clean reading that landed before this check remains a separate shared-file proof concern.
      *
-     * <p>Reverts the reservation back to NORMAL before rejecting, so a caller that catches the
-     * thrown exception finds the table exactly as it was before this job started reserving it.
+     * <p>Runs before changing the aggregate table state, so rejection preserves other active jobs.
      */
     private void rejectIfSourceRegainedSharedFiles(OlapTable olapTable) {
         for (ReshardingPhysicalPartition reshardingPhysicalPartition : reshardingPhysicalPartitions.values()) {
@@ -179,7 +177,6 @@ public class MergeTabletJob extends TabletReshardJob {
                     for (Long oldTabletId : mergingTablet.getOldTabletIds()) {
                         Tablet tablet = liveIndex.getTablet(oldTabletId);
                         if (tablet != null && ((LakeTablet) tablet).hasSharedFiles()) {
-                            olapTable.setState(OlapTable.OlapTableState.NORMAL);
                             throw new TabletReshardException("Tablet " + oldTabletId
                                     + " has gained merge-blocking shared data files since this merge"
                                     + " job's tablets were selected and cannot be merged");
@@ -324,8 +321,17 @@ public class MergeTabletJob extends TabletReshardJob {
                     // partition-shared object, so tell the BE where to look, exactly as a normal load does.
                     boolean preferSharedInitialMetadata =
                             Utils.preferSharedInitialMetadata(olapTable, physicalPartition, commitVersion - 1);
-                    Future<Map<Long, TabletRange>> future = publishThreadPool.submit(() -> publishVersion(
-                            tablets, commitVersion, useAggregatePublish, computeResource, preferSharedInitialMetadata));
+                    // Checked inside the future so a rejected result fails this publish attempt: it is
+                    // then retried with backoff and reported like any failed publish, and nothing of it
+                    // is installed.
+                    List<ExpectedMerge> expectedMerges = collectExpectedMerges(physicalPartition,
+                            reshardingPhysicalPartition);
+                    Future<Map<Long, TabletRange>> future = publishThreadPool.submit(() -> {
+                        Map<Long, TabletRange> tabletRanges = publishVersion(tablets, commitVersion,
+                                useAggregatePublish, computeResource, preferSharedInitialMetadata);
+                        checkMergeTabletRanges(expectedMerges, tabletRanges);
+                        return tabletRanges;
+                    });
                     reshardingPhysicalPartition.setPublishFuture(future);
                 } else if (publishResult.publishState() == PublishState.IN_PROGRESS) {
                     // Publish is in progress
@@ -387,10 +393,8 @@ public class MergeTabletJob extends TabletReshardJob {
      * 1. Abort in-flight lake compactions, then wait for the remaining previous transactions finished
      * 2. Remove old versions of materialized index
      * 3. Unregister resharding tablets
-     * 4. Set tablet state to NORMAL
-     * 5. Update metrics
-     * 6. Release the merged shards' creation-time placement pin
-     * 7. Set job state to FINISHED
+     * 4. Release the merged shards' creation-time placement pin
+     * 5. Durably publish FINISHED and update aggregate table state and metrics
      */
     @Override
     protected void runCleaningJob() {
@@ -414,20 +418,11 @@ public class MergeTabletJob extends TabletReshardJob {
         // 3. Unregister resharding tablets
         unregisterReshardingTablets();
 
-        // 4. Set tablet state to NORMAL
-        setTableState(OlapTable.OlapTableState.TABLET_RESHARD, OlapTable.OlapTableState.NORMAL);
-
-        // 5. Update metrics
-        if (MetricRepo.hasInit) {
-            MetricRepo.COUNTER_TABLET_RESHARD_MERGE_JOB_FINISHED.increase(1L);
-            MetricRepo.HISTO_TABLET_RESHARD_JOB_DURATION.update(System.currentTimeMillis() - createdTimeMs);
-        }
-
-        // 6. Release the merged shards' creation-time placement pin so the balancer can spread them
+        // 4. Release the merged shards' creation-time placement pin so the balancer can spread them
         //    now, instead of when the source shards are finally reclaimed tens of minutes later.
         clearPlacementPreference(reshardingPhysicalPartitions);
 
-        // 7. Set job state to FINISHED
+        // 5. Durably publish FINISHED
         setJobState(JobState.FINISHED);
     }
 
@@ -439,9 +434,7 @@ public class MergeTabletJob extends TabletReshardJob {
     /*
      * 1. Unregister resharding tablets
      * 2. Remove new tablets from inverted index
-     * 3. Set table state to NORMAL
-     * 4. Update metrics
-     * 5. Set job state to ABORTED
+     * 3. Durably publish ABORTED and update aggregate table state and metrics
      */
     @Override
     protected void runAbortingJob() {
@@ -451,21 +444,11 @@ public class MergeTabletJob extends TabletReshardJob {
 
             // 2. Remove new tablets from inverted index
             removeTabletsFromInvertedIndex();
-
-            // 3. Set table state to NORMAL
-            //    Any orphan staros shards from a partial createShardsOnStarOS in
-            //    runPendingJob are reaped by StarMgrMetaSyncer's diff-and-purge cycle.
-            setTableState(null, OlapTable.OlapTableState.NORMAL);
         } catch (Exception e) {
             LOG.warn("Ignore exception when aborting tablet reshard job. {}. ", this, e);
         }
 
-        // 4. Update metrics
-        if (MetricRepo.hasInit) {
-            MetricRepo.COUNTER_TABLET_RESHARD_MERGE_JOB_ABORTED.increase(1L);
-        }
-
-        // 5. Set job state to ABORTED
+        // 3. Durably publish ABORTED
         setJobState(JobState.ABORTED);
     }
 
@@ -535,7 +518,7 @@ public class MergeTabletJob extends TabletReshardJob {
 
     @Override
     protected void registerReshardingTabletsOnRestart() {
-        if (jobState == JobState.PENDING || jobState.isFinalState()) {
+        if (!jobState.redirectsPublish()) {
             return;
         }
 
@@ -616,7 +599,12 @@ public class MergeTabletJob extends TabletReshardJob {
     private void setTableState(OlapTable.OlapTableState expectedState, OlapTable.OlapTableState newState) {
         try (LockedObject<OlapTable> lockedTable = getLockedTable(LockType.WRITE)) {
             OlapTable olapTable = lockedTable.get();
-            if (expectedState != null && olapTable.getState() != expectedState) {
+            if (newState == OlapTable.OlapTableState.NORMAL) {
+                GlobalStateMgr.getCurrentState().getTabletReshardJobMgr().refreshTableStateLocked(olapTable, jobId);
+                return;
+            }
+            if (expectedState != null && olapTable.getState() != expectedState
+                    && olapTable.getState() != OlapTable.OlapTableState.TABLET_RESHARD) {
                 throw new TabletReshardException(
                         "Unexpected table state " + olapTable.getState() + " in table " + olapTable.getName());
             }
@@ -652,6 +640,70 @@ public class MergeTabletJob extends TabletReshardJob {
                 }
             }
         }
+    }
+
+    /**
+     * What FE knows about one merge when its publish is submitted: the merged tablet's id, the ids of the
+     * tablets it merges in key order, and the FE ranges of the first and the last of them.
+     */
+    record ExpectedMerge(long newTabletId, List<Long> oldTabletIds, TabletRange firstOldRange,
+                         TabletRange lastOldRange) {
+    }
+
+    /**
+     * Rejects a merge publish result that disagrees with FE. The merged tablet's range must run from the first
+     * old tablet's lower bound to the last old tablet's upper bound on FE. Anything else means the compute node's
+     * tablet metadata does not match FE, and installing it would corrupt FE's ranges, so the result is rejected
+     * instead.
+     */
+    static void checkMergeTabletRanges(List<ExpectedMerge> expectedMerges, Map<Long, TabletRange> tabletRanges) {
+        for (ExpectedMerge expected : expectedMerges) {
+            TabletRange merged = tabletRanges.get(expected.newTabletId());
+            if (merged == null) {
+                throw new TabletReshardException(String.format(
+                        "Merge result rejected: the compute node returned no range for tablet %d merged from tablets "
+                                + "%s. The result is not installed.",
+                        expected.newTabletId(), expected.oldTabletIds()));
+            }
+            if (!TabletReshardUtils.sameLowerBound(merged.getRange(), expected.firstOldRange().getRange())
+                    || !TabletReshardUtils.sameUpperBound(merged.getRange(), expected.lastOldRange().getRange())) {
+                throw new TabletReshardException(String.format(
+                        "Merge result rejected: tablets %s were merged into tablet %d with range %s on the compute "
+                                + "node, but on FE they run from %s to %s. The compute node's tablet metadata does not "
+                                + "match FE; the result is not installed.",
+                        expected.oldTabletIds(), expected.newTabletId(), merged, expected.firstOldRange(),
+                        expected.lastOldRange()));
+            }
+        }
+    }
+
+    // The old tablets' ranges are read from the old index because that is FE's own record of them, and it stays
+    // installed until the job finishes. Only merging tablets are checked, and a merge whose first or last old
+    // tablet has no FE range has nothing to compare against.
+    private static List<ExpectedMerge> collectExpectedMerges(PhysicalPartition physicalPartition,
+                                                             ReshardingPhysicalPartition reshardingPhysicalPartition) {
+        List<ExpectedMerge> expectedMerges = new ArrayList<>();
+        for (ReshardingMaterializedIndex reshardingIndex : reshardingPhysicalPartition.getReshardingIndexes().values()) {
+            MaterializedIndex oldIndex = physicalPartition.getIndex(reshardingIndex.getMaterializedIndexId());
+            if (oldIndex == null) {
+                continue;
+            }
+            for (ReshardingTablet reshardingTablet : reshardingIndex.getReshardingTablets()) {
+                MergingTablet mergingTablet = reshardingTablet.getMergingTablet();
+                if (mergingTablet == null) {
+                    continue;
+                }
+                List<Long> oldTabletIds = mergingTablet.getOldTabletIds();
+                Tablet first = oldIndex.getTablet(oldTabletIds.get(0));
+                Tablet last = oldIndex.getTablet(oldTabletIds.get(oldTabletIds.size() - 1));
+                if (first == null || last == null || first.getRange() == null || last.getRange() == null) {
+                    continue;
+                }
+                expectedMerges.add(new ExpectedMerge(mergingTablet.getNewTabletId(), List.copyOf(oldTabletIds),
+                        first.getRange(), last.getRange()));
+            }
+        }
+        return expectedMerges;
     }
 
     private Map<Long, TabletRange> publishVersion(List<Tablet> tablets, long commitVersion,
@@ -769,7 +821,13 @@ public class MergeTabletJob extends TabletReshardJob {
             // a job that may never be queued (admission-time table-dropped race). The errorMessage
             // assignment is paired with setJobState here so it only fires when it is actually
             // preserved in the journaled ABORTING state; in the PENDING path abort() overwrites it.
-            if (!canAbort()) {
+            //
+            // Leader-only, because setJobState journals: replay reaches this method too, on a
+            // follower, on the leader's activation catch-up (which runs before feType becomes
+            // LEADER), and on the checkpoint worker (a separate GlobalStateMgr whose EditLog has no
+            // journal queue). Writing from any of those either throws at the closed WAL gate or
+            // NPEs, and replay() swallows it, leaving the record half-applied and silent.
+            if (GlobalStateMgr.getCurrentState().isLeader() && !canAbort()) {
                 errorMessage = "Table not found";
                 setJobState(JobState.ABORTING);
             }

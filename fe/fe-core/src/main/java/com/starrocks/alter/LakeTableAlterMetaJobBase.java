@@ -822,6 +822,17 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         }
     }
 
+    /**
+     * Drops the per-tablet data of a done job, which stays in memory only for SHOW ALTER. getInfo reads none of it.
+     * The map is replaced, not cleared: replay shares it with the journal entry it came from. The task batch is
+     * read only while the tablet meta update runs, so it goes back to null as on a new job.
+     */
+    @Override
+    public void pruneMeta() {
+        physicalPartitionIndexMap = HashBasedTable.create();
+        batchTask = null;
+    }
+
     // for test
     public Table<Long, Long, MaterializedIndex> getPartitionIndexMap() {
         return physicalPartitionIndexMap;

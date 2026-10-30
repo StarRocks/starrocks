@@ -27,7 +27,6 @@ import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import org.apache.commons.collections.CollectionUtils;
@@ -86,63 +85,66 @@ public class ForeignKeyConstraint extends Constraint {
         return columnRefPairs;
     }
 
+    /**
+     * Map the constraint's column ids back to column names.
+     *
+     * <p>Every caller runs under an FE metadata lock: SHOW CREATE TABLE prints the constraint under the
+     * table read lock, SWAP TABLE compares constraints under the alter lock, and the optimizer's
+     * constraint collectors run inside the planner lock. Resolving a table that lives in an external
+     * catalog there means a connector RPC inside the critical section, so it is only done for the
+     * internal catalog, where a column rename makes a column's id differ from its name. For any other
+     * table a column's id is its name (see {@link Column#getColumnId()}), and the persisted form of the
+     * constraint is the printed name itself (see {@link #parse}), so the round trip cannot return
+     * anything this constraint does not already hold.
+     */
     public List<Pair<String, String>> getColumnNameRefPairs(Table defaultChildTable) {
-        Table parentTable = getParentTable();
-        Table childTable = defaultChildTable;
-        if (childTableInfo != null) {
-            childTable = getChildTable();
-        }
+        Table parentTable = getTableIfInternal(parentTableInfo);
+        Table childTable = childTableInfo == null ? defaultChildTable : getTableIfInternal(childTableInfo);
         List<Pair<String, String>> result = new ArrayList<>(columnRefPairs.size());
         for (Pair<ColumnId, ColumnId> pair : columnRefPairs) {
-            Column childColumn = childTable.getColumn(pair.first);
-            Column parentColumn = parentTable.getColumn(pair.second);
-            if (childColumn == null || parentColumn == null) {
-                LOG.warn("can not find column by column id: {} in table: {}, the column may have been dropped",
-                        pair.first, childTableInfo);
+            String childColumnName = getColumnName(childTable, pair.first, childTableInfo);
+            String parentColumnName = getColumnName(parentTable, pair.second, parentTableInfo);
+            if (childColumnName == null || parentColumnName == null) {
                 continue;
             }
-            result.add(Pair.create(childColumn.getName(), parentColumn.getName()));
+            result.add(Pair.create(childColumnName, parentColumnName));
         }
 
         return result;
     }
 
-    private Table getParentTable() {
-        if (parentTableInfo.isInternalCatalog()) {
-            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(parentTableInfo.getDbId(), parentTableInfo.getTableId());
-            if (table == null) {
-                throw new SemanticException("Table %s is not found", parentTableInfo.getTableId());
-            }
-            return table;
-        } else {
-            Table table = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                    .getTable(new ConnectContext(), parentTableInfo.getCatalogName(), parentTableInfo.getDbName(),
-                            parentTableInfo.getTableName());
-            if (table == null) {
-                throw new SemanticException("Table %s is not found", parentTableInfo.getTableName());
-            }
-            return table;
+    /**
+     * @param table the resolved table, or null when it was left unresolved because it is not in the
+     *              internal catalog
+     * @return the column's name, or null if the column has been dropped from the resolved table
+     */
+    private static String getColumnName(Table table, ColumnId columnId, BaseTableInfo tableInfo) {
+        if (table == null) {
+            return columnId.getId();
         }
+        Column column = table.getColumn(columnId);
+        if (column == null) {
+            LOG.warn("can not find column by column id: {} in table: {}, the column may have been dropped",
+                    columnId, tableInfo);
+            return null;
+        }
+        return column.getName();
     }
 
-    private Table getChildTable() {
-        if (childTableInfo.isInternalCatalog()) {
-            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(childTableInfo.getDbId(), childTableInfo.getTableId());
-            if (table == null) {
-                throw new SemanticException("Table %s is not found", childTableInfo.getTableId());
-            }
-            return table;
-        } else {
-            Table table = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                    .getTable(new ConnectContext(), childTableInfo.getCatalogName(), childTableInfo.getDbName(),
-                            childTableInfo.getTableName());
-            if (table == null) {
-                throw new SemanticException("Table %s is not found", childTableInfo.getTableName());
-            }
-            return table;
+    /**
+     * @return the table, or null if it is not in the internal catalog and was therefore left unresolved:
+     *         see {@link #getColumnNameRefPairs}
+     */
+    private static Table getTableIfInternal(BaseTableInfo tableInfo) {
+        if (!tableInfo.isInternalCatalog()) {
+            return null;
         }
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(tableInfo.getDbId(), tableInfo.getTableId());
+        if (table == null) {
+            throw new SemanticException("Table %s is not found", tableInfo.getTableId());
+        }
+        return table;
     }
 
     // TODO: refactor this to use db/table name rather than id to identify foreign key constraints, so that we can
@@ -272,12 +274,14 @@ public class ForeignKeyConstraint extends Constraint {
             BaseTableInfo parentTableInfo = constraint.getParentTableInfo();
             BaseTableInfo childTableInfo = constraint.getChildTableInfo();
 
+            List<Pair<String, String>> columnNameRefPairs = constraint.getColumnNameRefPairs(baseTable);
+
             StringBuilder constraintSb = new StringBuilder();
             if (childTableInfo != null) {
                 constraintSb.append(childTableInfo.getReadableString());
             }
             constraintSb.append("(");
-            String baseColumns = Joiner.on(",").join(constraint.getColumnNameRefPairs(baseTable)
+            String baseColumns = Joiner.on(",").join(columnNameRefPairs
                     .stream().map(pair -> pair.first).collect(Collectors.toList()));
             constraintSb.append(baseColumns);
             constraintSb.append(")");
@@ -285,7 +289,7 @@ public class ForeignKeyConstraint extends Constraint {
             constraintSb.append(parentTableInfo.getReadableString());
 
             constraintSb.append("(");
-            String parentColumns = Joiner.on(",").join(constraint.getColumnNameRefPairs(baseTable)
+            String parentColumns = Joiner.on(",").join(columnNameRefPairs
                     .stream().map(pair -> pair.second).collect(Collectors.toList()));
             constraintSb.append(parentColumns);
             constraintSb.append(")");

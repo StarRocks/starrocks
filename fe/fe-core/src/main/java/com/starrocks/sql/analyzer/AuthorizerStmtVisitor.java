@@ -39,6 +39,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -83,6 +84,7 @@ import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterViewClause;
 import com.starrocks.sql.ast.AlterViewStmt;
+import com.starrocks.sql.ast.AnalyzeProfileStmt;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
@@ -192,6 +194,7 @@ import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.sql.ast.ShowDataDistributionStmt;
 import com.starrocks.sql.ast.ShowDataStmt;
+import com.starrocks.sql.ast.ShowDbStmt;
 import com.starrocks.sql.ast.ShowExportStmt;
 import com.starrocks.sql.ast.ShowFailPointStatement;
 import com.starrocks.sql.ast.ShowFrontendsStmt;
@@ -216,6 +219,7 @@ import com.starrocks.sql.ast.ShowSnapshotStmt;
 import com.starrocks.sql.ast.ShowSqlBlackListStmt;
 import com.starrocks.sql.ast.ShowSqlDigestBlackListStmt;
 import com.starrocks.sql.ast.ShowTableStatusStmt;
+import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.ShowTabletStmt;
 import com.starrocks.sql.ast.ShowTransactionStmt;
 import com.starrocks.sql.ast.ShowUserPropertyStmt;
@@ -236,6 +240,7 @@ import com.starrocks.sql.ast.UseCatalogStmt;
 import com.starrocks.sql.ast.UseDbStmt;
 import com.starrocks.sql.ast.UserRef;
 import com.starrocks.sql.ast.expression.SetVarHint;
+import com.starrocks.sql.ast.group.AlterGroupProviderStmt;
 import com.starrocks.sql.ast.group.CreateGroupProviderStmt;
 import com.starrocks.sql.ast.group.DropGroupProviderStmt;
 import com.starrocks.sql.ast.group.ShowCreateGroupProviderStmt;
@@ -976,6 +981,55 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
     public Void visitSetCatalogStatement(SetCatalogStmt statement, ConnectContext context) {
         String catalogName = statement.getCatalogName();
         // No authorization check for using default_catalog
+        if (CatalogMgr.isInternalCatalog(catalogName)) {
+            return null;
+        }
+        try {
+            Authorizer.checkAnyActionOnCatalog(context, catalogName);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(
+                    InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.ANY.name(), ObjectType.CATALOG.name(), catalogName);
+        }
+        return null;
+    }
+
+    @Override
+    public Void visitShowDatabasesStatement(ShowDbStmt statement, ConnectContext context) {
+        String catalogName = statement.getCatalogName();
+        if (catalogName == null) {
+            catalogName = context.getCurrentCatalog();
+        }
+        // Any user has an implicit usage permission on the internal catalog, so SHOW DATABASES on it
+        // relies on the per-database filtering in ShowExecutor. For an external catalog, require the same
+        // catalog-level privilege as SET CATALOG before ShowExecutor lists databases from its metastore,
+        // otherwise a user without any privilege on the catalog can probe its existence and metastore.
+        if (CatalogMgr.isInternalCatalog(catalogName)) {
+            return null;
+        }
+        try {
+            Authorizer.checkAnyActionOnCatalog(context, catalogName);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(
+                    InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.ANY.name(), ObjectType.CATALOG.name(), catalogName);
+        }
+        return null;
+    }
+
+    @Override
+    public Void visitShowTableStatement(ShowTableStmt statement, ConnectContext context) {
+        String catalogName = statement.getCatalogName();
+        if (catalogName == null) {
+            catalogName = context.getCurrentCatalog();
+        }
+        // Same catalog-level gate as visitShowDatabasesStatement. For an external catalog, SHOW TABLES must
+        // require any action on the catalog before ShowExecutor resolves the database and lists tables from the
+        // metastore, otherwise a user without any privilege on the catalog can probe the catalog's existence,
+        // its metastore reachability, and whether a given database exists. The internal catalog keeps relying
+        // on the per-table filtering in ShowExecutor.
         if (CatalogMgr.isInternalCatalog(catalogName)) {
             return null;
         }
@@ -1824,6 +1878,18 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
     }
 
     @Override
+    public Void visitAlterGroupProviderStatement(AlterGroupProviderStmt statement, ConnectContext context) {
+        try {
+            Authorizer.checkSystemAction(context, PrivilegeType.SECURITY);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.SECURITY.name(), ObjectType.SYSTEM.name(), null);
+        }
+        return null;
+    }
+
+    @Override
     public Void visitShowCreateGroupProviderStatement(ShowCreateGroupProviderStmt statement, ConnectContext context) {
         try {
             Authorizer.checkSystemAction(context, PrivilegeType.SECURITY);
@@ -2040,21 +2106,25 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
                         PrivilegeType.DROP.name(), ObjectType.VIEW.name(), tableName.getTbl());
             }
         } else {
-            Table table = null;
             try {
-                table = MetaUtils.getSessionAwareTable(context, null, tableName);
+                MetaUtils.getSessionAwareTable(context, null, tableName);
+            } catch (Exception e) {
+                if (!statement.isSetIfExists()) {
+                    throw e;
+                }
+                // External privileges are keyed by name, so still check them: a connector may drop
+                // the entry of a table whose metadata cannot be loaded.
+                if (CatalogMgr.isInternalCatalog(tableName.getCatalog())) {
+                    return null;
+                }
+            }
+            try {
                 Authorizer.checkTableAction(context, tableName, PrivilegeType.DROP);
             } catch (AccessDeniedException e) {
                 AccessDeniedException.reportAccessDenied(
                         tableName.getCatalog(),
                         context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                         PrivilegeType.DROP.name(), ObjectType.TABLE.name(), tableName.getTbl());
-            } catch (Exception e) {
-                if (table == null && statement.isSetIfExists()) {
-                    // an exception will be thrown if table is not found, ignore it if `if exists` is set.
-                    return null;
-                }
-                throw e;
             }
         }
         return null;
@@ -2579,6 +2649,20 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
     @Override
     public Void visitShowProcesslistStatement(ShowProcesslistStmt statement, ConnectContext context) {
         // Privilege is checked in execution logic, see `StatementExecutor#handleShowProcesslist()` for details.
+        return null;
+    }
+
+    @Override
+    public Void visitAnalyzeProfileStatement(AnalyzeProfileStmt statement, ConnectContext context) {
+        // A profile carries the full SQL text and plan, so reading one that another user produced needs
+        // SYSTEM OPERATE (Authorizer#canReadQueryProfile). A missing profile is left to execution, which
+        // reports it as not found.
+        ProfileManager.ProfileElement element = ProfileManager.getInstance().getProfileElement(statement.getQueryId());
+        if (element != null) {
+            Authorizer.checkQueryProfileAccessAndReport(context, element);
+        }
+        // A profile missing here is left to execution, which reports it as not found -- and which repeats this
+        // check on the element it actually reads, so one published in between is not served unchecked.
         return null;
     }
 

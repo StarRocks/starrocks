@@ -26,6 +26,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
+import com.starrocks.common.Config;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.persist.AlterLoadJobOperationLog;
 import com.starrocks.persist.EditLog;
@@ -40,6 +41,9 @@ import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.LabelName;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.thrift.TStorageType;
+import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterEach;
@@ -57,6 +61,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
 
 public class LoadMgrEditLogTest {
+    private static final long TXN_COMMIT_TIME_MS = 1_700_000_000_000L;
+
     private LoadMgr masterLoadMgr;
     private LoadJobScheduler loadJobScheduler;
 
@@ -353,6 +359,117 @@ public class LoadMgrEditLogTest {
         
         List<LoadJob> loadJobs = exceptionLoadMgr.getLoadJobsByDb(dbId, label, true);
         Assertions.assertTrue(loadJobs.isEmpty());
+    }
+
+    @Test
+    public void testEndResidualInsertJobs() throws Exception {
+        String dbName = "residual_db";
+        long dbId = 10007L;
+        long tableId = 20007L;
+        createDatabaseWithTable(dbId, dbName, tableId, "residual_table", 30007L, 40007L);
+        GlobalTransactionMgr txnMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        LoadMgr leaderLoadMgr = new LoadMgr(new LoadJobScheduler());
+
+        // These jobs come from a former leader that stopped being the leader before their statements recorded the
+        // final state, so this FE has them only from the journal.
+        InsertLoadJob txnDroppedJob = replayJobOfFormerLeader(leaderLoadMgr, dbId, tableId, "txn_dropped_label");
+        replayTxnState(txnDroppedJob, TransactionStatus.COMMITTED);
+        replayTxnState(txnDroppedJob, TransactionStatus.VISIBLE);
+        txnMgr.getDatabaseTransactionMgr(dbId).removeExpiredTxns(
+                System.currentTimeMillis() + (Config.label_keep_max_second + 1) * 1000L);
+        Assertions.assertNull(txnMgr.getTransactionState(dbId, txnDroppedJob.getTransactionId()));
+
+        // Dropping the database aborts the committed transaction at publish.
+        long droppedDbId = 10008L;
+        String droppedDbName = "residual_dropped_db";
+        GlobalStateMgr.getCurrentState().getLocalMetastore().unprotectCreateDb(new Database(droppedDbId, droppedDbName));
+        InsertLoadJob dbDroppedJob = replayJobOfFormerLeader(leaderLoadMgr, droppedDbId, tableId, "db_dropped_label");
+        replayTxnState(dbDroppedJob, TransactionStatus.COMMITTED);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().replayDropDb(droppedDbName, true);
+        replayTxnState(dbDroppedJob, TransactionStatus.ABORTED);
+        txnMgr.getDatabaseTransactionMgr(droppedDbId).removeExpiredTxns(
+                System.currentTimeMillis() + (Config.label_keep_max_second + 1) * 1000L);
+        Assertions.assertNull(txnMgr.getTransactionState(droppedDbId, dbDroppedJob.getTransactionId()));
+
+        InsertLoadJob abortedJob = replayJobOfFormerLeader(leaderLoadMgr, dbId, tableId, "retried_label");
+        replayTxnState(abortedJob, TransactionStatus.ABORTED);
+        // A retry may reuse the label of an aborted transaction.
+        InsertLoadJob retriedJob = replayJobOfFormerLeader(leaderLoadMgr, dbId, tableId, "retried_label");
+        replayTxnState(retriedJob, TransactionStatus.COMMITTED);
+        replayTxnState(retriedJob, TransactionStatus.VISIBLE);
+        Assertions.assertEquals(TXN_COMMIT_TIME_MS, retriedJob.loadCommittedTimestamp);
+
+        InsertLoadJob committedJob = replayJobOfFormerLeader(leaderLoadMgr, dbId, tableId, "committed_label");
+        replayTxnState(committedJob, TransactionStatus.COMMITTED);
+
+        // An INSERT transaction is persisted only once it commits, so this FE never learns of this one.
+        InsertLoadJob lostJob = replayJobOfFormerLeader(leaderLoadMgr, dbId, tableId, "lost_label");
+
+        // A statement on this FE runs this job and records the final state itself.
+        InsertLoadJob runningJob = leaderLoadMgr.registerInsertLoadJob("running_label", dbName, tableId,
+                txnMgr.getTransactionIDGenerator().getNextTransactionId(), "load_id", "test_user", EtlJobType.INSERT,
+                System.currentTimeMillis(), new LoadMgr.EstimateStats(0L, 0, 0L), 3600L, 0L,
+                mock(Coordinator.class), null);
+        replayTxnState(runningJob, TransactionStatus.COMMITTED);
+        replayTxnState(runningJob, TransactionStatus.VISIBLE);
+
+        leaderLoadMgr.endResidualInsertJobs();
+
+        Assertions.assertEquals(JobState.FINISHED, txnDroppedJob.getState());
+        Assertions.assertEquals(JobState.CANCELLED, dbDroppedJob.getState());
+        Assertions.assertEquals(JobState.CANCELLED, abortedJob.getState());
+        Assertions.assertEquals("Cancelled since transaction aborted: abort reason", abortedJob.failMsg.getMsg());
+        Assertions.assertEquals(JobState.FINISHED, retriedJob.getState());
+        Assertions.assertEquals(JobState.LOADING, committedJob.getState());
+        Assertions.assertEquals(JobState.CANCELLED, lostJob.getState());
+        Assertions.assertEquals("Cancelled since transaction status unknown", lostJob.failMsg.getMsg());
+        Assertions.assertEquals(JobState.LOADING, runningJob.getState());
+        leaderLoadMgr.recordFinishedOrCancelledLoadJob(runningJob.getId(), EtlJobType.INSERT, "", "");
+        Assertions.assertEquals(JobState.FINISHED, runningJob.getState());
+
+        // Followers end the jobs by replaying these records.
+        Map<Long, JobState> loggedStates = new HashMap<>();
+        for (int i = 0; i < 6; i++) {
+            LoadJobFinalOperation operation = (LoadJobFinalOperation) UtFrameUtils.PseudoJournalReplayer
+                    .replayNextJournal(OperationType.OP_END_LOAD_JOB_V2);
+            loggedStates.put(operation.getId(), operation.getJobState());
+        }
+        Assertions.assertEquals(Map.of(txnDroppedJob.getId(), JobState.FINISHED, dbDroppedJob.getId(), JobState.CANCELLED,
+                abortedJob.getId(), JobState.CANCELLED, retriedJob.getId(), JobState.FINISHED,
+                lostJob.getId(), JobState.CANCELLED, runningJob.getId(), JobState.FINISHED), loggedStates);
+    }
+
+    private static InsertLoadJob replayJobOfFormerLeader(LoadMgr loadMgr, long dbId, long tableId, String label)
+            throws Exception {
+        long txnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator()
+                .getNextTransactionId();
+        InsertLoadJob job = new InsertLoadJob(label, dbId, tableId, txnId, "load_id", "test_user",
+                System.currentTimeMillis(), 3600L, 0L, mock(Coordinator.class), null);
+        GlobalStateMgr.getCurrentState().getEditLog().logCreateLoadJob(job, wal -> {
+        });
+        loadMgr.replayCreateLoadJob(
+                (LoadJob) UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_CREATE_LOAD_JOB_V2));
+        return (InsertLoadJob) loadMgr.getLoadJob(job.getId());
+    }
+
+    private static void replayTxnState(InsertLoadJob job, TransactionStatus status) throws Exception {
+        TransactionState txnState = new TransactionState(job.getDbId(), Lists.newArrayList(job.getTableId()),
+                job.getTransactionId(), job.getLabel(), null, TransactionState.LoadJobSourceType.INSERT_STREAMING,
+                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, "127.0.0.1"), -1, 3600_000L);
+        txnState.addCallbackId(job.getId());
+        txnState.setTransactionStatus(status);
+        if (status == TransactionStatus.ABORTED) {
+            txnState.setReason("abort reason");
+        } else {
+            txnState.setCommitTime(TXN_COMMIT_TIME_MS);
+        }
+        if (status.isFinalStatus()) {
+            txnState.setFinishTime(System.currentTimeMillis());
+        }
+        GlobalStateMgr.getCurrentState().getEditLog().logInsertTransactionState(txnState, wal -> {
+        });
+        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().replayUpsertTransactionState((TransactionState)
+                UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_UPSERT_TRANSACTION_STATE_V2));
     }
 
     @Test

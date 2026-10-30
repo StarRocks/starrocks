@@ -49,6 +49,7 @@
 #include "storage_primitive/aggregate_type.h"
 #include "storage_primitive/chunk_iterator.h"
 #include "storage_primitive/flat_json_config.h"
+#include "testutil/global_dict_test_helper.h"
 #include "types/json_value.h"
 #include "types/logical_type.h"
 
@@ -199,6 +200,7 @@ protected:
 protected:
     std::shared_ptr<TabletSchema> _dummy_segment_schema;
     std::shared_ptr<ColumnMetaPB> _meta;
+    MemPool _mem_pool;
 };
 
 TEST_F(FlatJsonColumnRWTest, testNormalJson) {
@@ -2618,13 +2620,9 @@ TEST_F(FlatJsonColumnRWTest, test_json_global_dict) {
     // Write data with global dictionary
     {
         // Create global dictionary for sub-columns
-        GlobalDictByNameMaps global_dicts;
-        GlobalDictMap name_dict = {{"Alice", 0}, {"Bob", 1}, {"Charlie", 2}};
-        GlobalDictMap city_dict = {{"Beijing", 0}, {"Shanghai", 1}, {"Guangzhou", 2}};
-
-        // Store dictionaries with column names
-        global_dicts["test_json.name"] = GlobalDictsWithVersion<GlobalDictMap>{name_dict, 1};
-        global_dicts["test_json.city"] = GlobalDictsWithVersion<GlobalDictMap>{city_dict, 1};
+        GlobalDictByNameMaps global_dicts = PaddedGlobalDictBuilder::build_by_name(
+                &_mem_pool, {{"test_json.name", {{"Alice", 0}, {"Bob", 1}, {"Charlie", 2}}},
+                             {"test_json.city", {{"Beijing", 0}, {"Shanghai", 1}, {"Guangzhou", 2}}}});
 
         SegmentWriterOptions opts;
         opts.global_dicts = &global_dicts;
@@ -2664,13 +2662,8 @@ TEST_F(FlatJsonColumnRWTest, test_json_global_dict) {
         ASSIGN_OR_ABORT(auto wfile2, fs->new_writable_file(file_name + "_invalid"));
 
         // Create incomplete dictionary that doesn't contain all values
-        GlobalDictByNameMaps invalid_global_dicts;
-
-        GlobalDictMap incomplete_name_dict;
-        incomplete_name_dict["Alice"] = 0;
-        incomplete_name_dict["Bob"] = 1;
-
-        invalid_global_dicts["test_json.name"] = GlobalDictsWithVersion<GlobalDictMap>{incomplete_name_dict, 1};
+        GlobalDictByNameMaps invalid_global_dicts =
+                PaddedGlobalDictBuilder::build_by_name(&_mem_pool, {{"test_json.name", {{"Alice", 0}, {"Bob", 1}}}});
 
         SegmentWriterOptions seg_opts;
         seg_opts.global_dicts = &invalid_global_dicts;
@@ -2712,14 +2705,13 @@ TEST_F(FlatJsonColumnRWTest, test_json_global_dict) {
         ASSIGN_OR_ABORT(auto wfile3, fs->new_writable_file(file_name + "_different_types"));
 
         // Create global dictionary expecting consistent data types
-        GlobalDictByNameMaps type_consistent_global_dicts;
-        GlobalDictMap name_dict = {{"Alice", 0}, {"Bob", 1}, {"Charlie", 2}, {"David", 3}, {"Eve", 4}, {"Frank", 5}};
-        GlobalDictMap age_dict = {{"30", 0}, {"25", 1}, {"28", 2}, {"35", 3}, {"29", 4}, {"33", 5}}; // All as strings
-        GlobalDictMap city_dict = {{"Beijing", 0}, {"Shanghai", 1}, {"Guangzhou", 2}, {"Shenzhen", 3}, {"Chengdu", 4}};
-
-        type_consistent_global_dicts["test_json.name"] = GlobalDictsWithVersion<GlobalDictMap>{name_dict, 1};
-        type_consistent_global_dicts["test_json.age"] = GlobalDictsWithVersion<GlobalDictMap>{age_dict, 1};
-        type_consistent_global_dicts["test_json.city"] = GlobalDictsWithVersion<GlobalDictMap>{city_dict, 1};
+        GlobalDictByNameMaps type_consistent_global_dicts = PaddedGlobalDictBuilder::build_by_name(
+                &_mem_pool,
+                {{"test_json.name", {{"Alice", 0}, {"Bob", 1}, {"Charlie", 2}, {"David", 3}, {"Eve", 4}, {"Frank", 5}}},
+                 {"test_json.age",
+                  {{"30", 0}, {"25", 1}, {"28", 2}, {"35", 3}, {"29", 4}, {"33", 5}}}, // All as strings
+                 {"test_json.city",
+                  {{"Beijing", 0}, {"Shanghai", 1}, {"Guangzhou", 2}, {"Shenzhen", 3}, {"Chengdu", 4}}}});
 
         SegmentWriterOptions seg_opts3;
         seg_opts3.global_dicts = &type_consistent_global_dicts;
@@ -2762,16 +2754,12 @@ TEST_F(FlatJsonColumnRWTest, test_json_global_dict) {
         ASSIGN_OR_ABORT(auto wfile4, fs->new_writable_file(file_name + "_complex_types"));
 
         // Create global dictionary for nested fields
-        GlobalDictByNameMaps complex_global_dicts;
-        GlobalDictMap user_id_dict = {{"1001", 0}, {"1002", 1}, {"1003", 2}, {"1004", 3}, {"1005", 4}};
-        GlobalDictMap user_name_dict = {{"Alice", 0}, {"Bob", 1}, {"Charlie", 2}, {"David", 3}, {"Eve", 4}};
-        GlobalDictMap user_active_dict = {{"true", 0}, {"false", 1}};
-        GlobalDictMap user_score_dict = {{"95.5", 0}, {"88", 1}, {"92.0", 2}, {"85.5", 3}, {"90", 4}};
-
-        complex_global_dicts["test_json.user.id"] = GlobalDictsWithVersion<GlobalDictMap>{user_id_dict, 1};
-        complex_global_dicts["test_json.user.name"] = GlobalDictsWithVersion<GlobalDictMap>{user_name_dict, 1};
-        complex_global_dicts["test_json.user.active"] = GlobalDictsWithVersion<GlobalDictMap>{user_active_dict, 1};
-        complex_global_dicts["test_json.user.score"] = GlobalDictsWithVersion<GlobalDictMap>{user_score_dict, 1};
+        GlobalDictByNameMaps complex_global_dicts = PaddedGlobalDictBuilder::build_by_name(
+                &_mem_pool,
+                {{"test_json.user.id", {{"1001", 0}, {"1002", 1}, {"1003", 2}, {"1004", 3}, {"1005", 4}}},
+                 {"test_json.user.name", {{"Alice", 0}, {"Bob", 1}, {"Charlie", 2}, {"David", 3}, {"Eve", 4}}},
+                 {"test_json.user.active", {{"true", 0}, {"false", 1}}},
+                 {"test_json.user.score", {{"95.5", 0}, {"88", 1}, {"92.0", 2}, {"85.5", 3}, {"90", 4}}}});
 
         SegmentWriterOptions seg_opts4;
         seg_opts4.global_dicts = &complex_global_dicts;

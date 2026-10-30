@@ -17,6 +17,7 @@ package com.starrocks.connector.iceberg.cost;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.starrocks.connector.iceberg.IcebergUtil;
 import org.apache.iceberg.types.Comparators;
 import org.apache.iceberg.types.Conversions;
 import org.apache.iceberg.types.Type;
@@ -254,7 +255,7 @@ public class IcebergFileStats {
             // SR on Iceberg only support primitive type now, idToTypeMapping do not contains the corresponding id
             // for complex types like struct, map etc.
             Type.PrimitiveType type = idToTypeMapping.get(id);
-            if (type != null) {
+            if (type != null && !IcebergUtil.isPromotedDateBound(type, value)) {
                 map.put(id, Conversions.fromByteBuffer(type, value));
             }
         });

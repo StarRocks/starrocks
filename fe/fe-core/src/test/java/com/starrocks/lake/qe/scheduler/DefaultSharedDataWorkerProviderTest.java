@@ -34,6 +34,7 @@ import com.starrocks.qe.ColocatedBackendSelector;
 import com.starrocks.qe.FragmentScanRangeAssignment;
 import com.starrocks.qe.HostBlacklist;
 import com.starrocks.qe.NormalBackendSelector;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SessionVariableConstants.BlacklistBackupRoutingPolicy;
 import com.starrocks.qe.SessionVariableConstants.ComputationFragmentSchedulingPolicy;
 import com.starrocks.qe.SimpleScheduler;
@@ -564,6 +565,232 @@ public class DefaultSharedDataWorkerProviderTest {
         Assertions.assertEquals(-1, provider.selectBackupWorker(15678));
     }
 
+    private static final long TABLET_HASH_FIRST_NODE_ID = 10001L;
+    private static final long TABLET_HASH_FIRST_TABLET_ID = 20001L;
+
+    private ImmutableMap<Long, ComputeNode> genTabletHashNodes(int numNodes) {
+        ImmutableMap.Builder<Long, ComputeNode> builder = ImmutableMap.builder();
+        for (long id = TABLET_HASH_FIRST_NODE_ID; id < TABLET_HASH_FIRST_NODE_ID + numNodes; id++) {
+            builder.put(id, createTestComputeNode(id, "host" + id, 9030));
+        }
+        return builder.build();
+    }
+
+    private static DefaultSharedDataWorkerProvider newProviderWithDownNode(ImmutableMap<Long, ComputeNode> allNodes,
+                                                                           long downNodeId,
+                                                                           BlacklistBackupRoutingPolicy policy) {
+        ImmutableMap<Long, ComputeNode> availableNodes =
+                ImmutableMap.copyOf(Maps.filterKeys(allNodes, id -> id != downNodeId));
+        return new DefaultSharedDataWorkerProvider(allNodes, availableNodes, WarehouseManager.DEFAULT_RESOURCE, policy);
+    }
+
+    private static Map<Long, Long> selectBackupPerTablet(WorkerProvider provider, long downNodeId, int numTablets) {
+        Map<Long, Long> tabletToBackup = new HashMap<>();
+        for (long tabletId = TABLET_HASH_FIRST_TABLET_ID; tabletId < TABLET_HASH_FIRST_TABLET_ID + numTablets;
+                tabletId++) {
+            tabletToBackup.put(tabletId, provider.selectBackupWorker(downNodeId, tabletId));
+        }
+        return tabletToBackup;
+    }
+
+    /**
+     * {@link com.starrocks.qe.SessionVariableConstants.BlacklistBackupRoutingPolicy#TABLET_HASH}: the backup is a
+     * function of (tablet, eligible nodes) only, so repeated calls, other providers built from the same nodes (another
+     * query or another FE), and providers built from the nodes in another order all agree.
+     */
+    @Test
+    public void testSelectBackupWorkerTabletHashIsDeterministic() {
+        ImmutableMap<Long, ComputeNode> allNodes = genTabletHashNodes(8);
+        ImmutableMap.Builder<Long, ComputeNode> reversedBuilder = ImmutableMap.builder();
+        allNodes.keySet().asList().reverse().forEach(id -> reversedBuilder.put(id, allNodes.get(id)));
+        ImmutableMap<Long, ComputeNode> reversedNodes = reversedBuilder.build();
+        long downNodeId = TABLET_HASH_FIRST_NODE_ID + 3;
+
+        WorkerProvider provider = newProviderWithDownNode(allNodes, downNodeId, BlacklistBackupRoutingPolicy.TABLET_HASH);
+        WorkerProvider otherProvider =
+                newProviderWithDownNode(allNodes, downNodeId, BlacklistBackupRoutingPolicy.TABLET_HASH);
+        WorkerProvider reversedProvider =
+                newProviderWithDownNode(reversedNodes, downNodeId, BlacklistBackupRoutingPolicy.TABLET_HASH);
+
+        Map<Long, Long> tabletToBackup = selectBackupPerTablet(provider, downNodeId, 1000);
+        tabletToBackup.forEach((tabletId, backupId) -> {
+            Assertions.assertTrue(allNodes.containsKey(backupId));
+            Assertions.assertNotEquals(downNodeId, backupId.longValue());
+            for (int i = 0; i < 3; i++) {
+                Assertions.assertEquals(backupId, provider.selectBackupWorker(downNodeId, tabletId));
+            }
+        });
+        Assertions.assertEquals(tabletToBackup, selectBackupPerTablet(otherProvider, downNodeId, 1000));
+        Assertions.assertEquals(tabletToBackup, selectBackupPerTablet(reversedProvider, downNodeId, 1000));
+    }
+
+    /**
+     * {@link com.starrocks.qe.SessionVariableConstants.BlacklistBackupRoutingPolicy#TABLET_HASH}: the tablets of an
+     * unavailable node spread evenly over the other N-1 nodes, whichever node is down. {@code CIRCULAR} sends all of
+     * them to one node.
+     */
+    @Test
+    public void testSelectBackupWorkerTabletHashSpreadsOverSurvivors() {
+        int numNodes = 8;
+        int numTablets = 1000;
+        double expectedPerSurvivor = (double) numTablets / (numNodes - 1);
+        ImmutableMap<Long, ComputeNode> allNodes = genTabletHashNodes(numNodes);
+
+        for (long downNodeId : allNodes.keySet()) {
+            WorkerProvider provider =
+                    newProviderWithDownNode(allNodes, downNodeId, BlacklistBackupRoutingPolicy.TABLET_HASH);
+            Map<Long, Integer> tabletsPerBackup = new HashMap<>();
+            selectBackupPerTablet(provider, downNodeId, numTablets)
+                    .values().forEach(backupId -> tabletsPerBackup.merge(backupId, 1, Integer::sum));
+
+            Assertions.assertEquals(numNodes - 1, tabletsPerBackup.size(), tabletsPerBackup::toString);
+            Assertions.assertFalse(tabletsPerBackup.containsKey(downNodeId));
+            tabletsPerBackup.values().forEach(count -> Assertions.assertTrue(
+                    count > expectedPerSurvivor * 0.7 && count < expectedPerSurvivor * 1.3,
+                    tabletsPerBackup::toString));
+
+            WorkerProvider circularProvider =
+                    newProviderWithDownNode(allNodes, downNodeId, BlacklistBackupRoutingPolicy.CIRCULAR);
+            Assertions.assertEquals(1,
+                    ImmutableSet.copyOf(selectBackupPerTablet(circularProvider, downNodeId, numTablets).values()).size());
+        }
+    }
+
+    /**
+     * {@link com.starrocks.qe.SessionVariableConstants.BlacklistBackupRoutingPolicy#TABLET_HASH}: when a backup node
+     * becomes ineligible as well, only the tablets it served move, and they spread over the remaining nodes; once it is
+     * eligible again, they move back to it.
+     */
+    @Test
+    public void testSelectBackupWorkerTabletHashMovesOnlyTabletsOfIneligibleBackup() {
+        int numTablets = 1000;
+        ImmutableMap<Long, ComputeNode> allNodes = genTabletHashNodes(8);
+        long downNodeId = TABLET_HASH_FIRST_NODE_ID;
+        WorkerProvider provider = newProviderWithDownNode(allNodes, downNodeId, BlacklistBackupRoutingPolicy.TABLET_HASH);
+
+        Map<Long, Long> before = selectBackupPerTablet(provider, downNodeId, numTablets);
+        long blockedBackupId = before.get(TABLET_HASH_FIRST_TABLET_ID);
+        HostBlacklist blockList = SimpleScheduler.getHostBlacklist();
+        blockList.add(blockedBackupId);
+        try {
+            Map<Long, Long> after = selectBackupPerTablet(provider, downNodeId, numTablets);
+            Set<Long> movedTo = new HashSet<>();
+            int numMoved = 0;
+            for (Map.Entry<Long, Long> entry : before.entrySet()) {
+                long newBackupId = after.get(entry.getKey());
+                if (entry.getValue() == blockedBackupId) {
+                    Assertions.assertNotEquals(blockedBackupId, newBackupId);
+                    Assertions.assertNotEquals(downNodeId, newBackupId);
+                    movedTo.add(newBackupId);
+                    numMoved++;
+                } else {
+                    Assertions.assertEquals(entry.getValue().longValue(), newBackupId);
+                }
+            }
+            Assertions.assertTrue(numMoved > 0);
+            Assertions.assertTrue(movedTo.size() > 1, movedTo::toString);
+        } finally {
+            blockList.remove(blockedBackupId);
+        }
+        Assertions.assertEquals(before, selectBackupPerTablet(provider, downNodeId, numTablets));
+    }
+
+    @Test
+    public void testSelectBackupWorkerTabletHashFallbacks() {
+        ImmutableMap<Long, ComputeNode> allNodes = genTabletHashNodes(8);
+        long downNodeId = TABLET_HASH_FIRST_NODE_ID + 2;
+        WorkerProvider tabletHashProvider =
+                newProviderWithDownNode(allNodes, downNodeId, BlacklistBackupRoutingPolicy.TABLET_HASH);
+        WorkerProvider circularProvider =
+                newProviderWithDownNode(allNodes, downNodeId, BlacklistBackupRoutingPolicy.CIRCULAR);
+        long circularBackupId = circularProvider.selectBackupWorker(downNodeId);
+        Assertions.assertEquals(downNodeId + 1, circularBackupId);
+
+        // without an affinity key, TABLET_HASH keeps the CIRCULAR choice
+        Assertions.assertEquals(circularBackupId, tabletHashProvider.selectBackupWorker(downNodeId));
+        // CIRCULAR ignores the affinity key
+        for (long tabletId = TABLET_HASH_FIRST_TABLET_ID; tabletId < TABLET_HASH_FIRST_TABLET_ID + 100; tabletId++) {
+            Assertions.assertEquals(circularBackupId, circularProvider.selectBackupWorker(downNodeId, tabletId));
+        }
+
+        // a worker that does not exist in the provider
+        Assertions.assertEquals(-1, tabletHashProvider.selectBackupWorker(15678, TABLET_HASH_FIRST_TABLET_ID));
+        // no node is available
+        WorkerProvider noneAvailable = new DefaultSharedDataWorkerProvider(allNodes, ImmutableMap.of(),
+                WarehouseManager.DEFAULT_RESOURCE, BlacklistBackupRoutingPolicy.TABLET_HASH);
+        Assertions.assertEquals(-1, noneAvailable.selectBackupWorker(downNodeId, TABLET_HASH_FIRST_TABLET_ID));
+        // the only available node is the primary itself
+        WorkerProvider onlyPrimary = new DefaultSharedDataWorkerProvider(allNodes,
+                ImmutableMap.of(downNodeId, allNodes.get(downNodeId)), WarehouseManager.DEFAULT_RESOURCE,
+                BlacklistBackupRoutingPolicy.TABLET_HASH);
+        Assertions.assertEquals(-1, onlyPrimary.selectBackupWorker(downNodeId, TABLET_HASH_FIRST_TABLET_ID));
+    }
+
+    /**
+     * {@link com.starrocks.qe.SessionVariableConstants.BlacklistBackupRoutingPolicy#TABLET_HASH} is the default: of the
+     * policy, of the blacklist_backup_routing session variable, and of a provider built without a policy.
+     */
+    @Test
+    public void testTabletHashIsDefaultPolicy() {
+        Assertions.assertEquals(BlacklistBackupRoutingPolicy.TABLET_HASH, BlacklistBackupRoutingPolicy.getDefault());
+        Assertions.assertEquals(BlacklistBackupRoutingPolicy.TABLET_HASH,
+                new SessionVariable().getBlacklistBackupRoutingPolicy());
+
+        ImmutableMap<Long, ComputeNode> allNodes = genTabletHashNodes(8);
+        long downNodeId = TABLET_HASH_FIRST_NODE_ID + 2;
+        int numTablets = 100;
+        WorkerProvider defaultProvider = new DefaultSharedDataWorkerProvider(allNodes,
+                ImmutableMap.copyOf(Maps.filterKeys(allNodes, id -> id != downNodeId)),
+                WarehouseManager.DEFAULT_RESOURCE);
+        WorkerProvider tabletHashProvider =
+                newProviderWithDownNode(allNodes, downNodeId, BlacklistBackupRoutingPolicy.TABLET_HASH);
+        Assertions.assertEquals(selectBackupPerTablet(tabletHashProvider, downNodeId, numTablets),
+                selectBackupPerTablet(defaultProvider, downNodeId, numTablets));
+    }
+
+    /**
+     * {@link com.starrocks.qe.SessionVariableConstants.BlacklistBackupRoutingPolicy#TABLET_HASH} through
+     * {@link NormalBackendSelector}: each tablet of the unavailable node is assigned to its hashed backup, the same one
+     * on every query.
+     */
+    @Test
+    public void testNormalBackendSelectorWithTabletHashBackup() throws StarRocksException {
+        int numTablets = 700;
+        ImmutableMap<Long, ComputeNode> allNodes = genTabletHashNodes(8);
+        long downNodeId = TABLET_HASH_FIRST_NODE_ID + 5;
+        OlapScanNode scanNode = newOlapScanNode(1, 1);
+
+        List<TScanRangeLocations> scanLocations = new ArrayList<>();
+        for (long tabletId = TABLET_HASH_FIRST_TABLET_ID; tabletId < TABLET_HASH_FIRST_TABLET_ID + numTablets;
+                tabletId++) {
+            TInternalScanRange internalRange = new TInternalScanRange();
+            internalRange.setTablet_id(tabletId);
+            TScanRangeLocations locations = new TScanRangeLocations();
+            locations.setScan_range(new TScanRange().setInternal_scan_range(internalRange));
+            locations.addToLocations(new TScanRangeLocation(allNodes.get(downNodeId).getAddress())
+                    .setBackend_id(downNodeId));
+            scanLocations.add(locations);
+        }
+
+        Map<Long, Long> expected = selectBackupPerTablet(
+                newProviderWithDownNode(allNodes, downNodeId, BlacklistBackupRoutingPolicy.TABLET_HASH),
+                downNodeId, numTablets);
+        Assertions.assertEquals(allNodes.size() - 1, ImmutableSet.copyOf(expected.values()).size());
+
+        for (int query = 0; query < 2; query++) {
+            WorkerProvider provider =
+                    newProviderWithDownNode(allNodes, downNodeId, BlacklistBackupRoutingPolicy.TABLET_HASH);
+            FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
+            new NormalBackendSelector(scanNode, scanLocations, assignment, provider, false).computeScanRangeAssignment();
+
+            Map<Long, Long> tabletToWorker = new HashMap<>();
+            assignment.forEach((workerId, scanNodeToRanges) -> scanNodeToRanges.values().forEach(ranges ->
+                    ranges.forEach(range ->
+                            tabletToWorker.put(range.getScan_range().getInternal_scan_range().getTablet_id(), workerId))));
+            Assertions.assertEquals(expected, tabletToWorker);
+        }
+    }
+
     private OlapScanNode newOlapScanNode(int id, int numBuckets) {
         // copy from fe/fe-core/src/test/java/com/starrocks/qe/ColocatedBackendSelectorTest.java
         TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
@@ -723,8 +950,9 @@ public class DefaultSharedDataWorkerProviderTest {
         );
 
         // Create a mock WorkerProvider that supports backup node selection
+        // CIRCULAR resolves the backup through the overridden selectBackupWorker(long)
         WorkerProvider backupWorkerProvider = new DefaultSharedDataWorkerProvider(allNodes, availableNodes,
-                WarehouseManager.DEFAULT_RESOURCE) {
+                WarehouseManager.DEFAULT_RESOURCE, BlacklistBackupRoutingPolicy.CIRCULAR) {
             @Override
             public long selectBackupWorker(long workerId) {
                 // Map unavailable nodes to available backup nodes
@@ -818,8 +1046,9 @@ public class DefaultSharedDataWorkerProviderTest {
         ImmutableMap<Long, ComputeNode> availableNodes = ImmutableMap.of();
 
         // Create a mock WorkerProvider that supports backup node selection but returns no backup
+        // CIRCULAR resolves the backup through the overridden selectBackupWorker(long)
         WorkerProvider noBackupWorkerProvider = new DefaultSharedDataWorkerProvider(allNodes, availableNodes,
-                WarehouseManager.DEFAULT_RESOURCE) {
+                WarehouseManager.DEFAULT_RESOURCE, BlacklistBackupRoutingPolicy.CIRCULAR) {
             @Override
             public long selectBackupWorker(long workerId) {
                 // No backup available

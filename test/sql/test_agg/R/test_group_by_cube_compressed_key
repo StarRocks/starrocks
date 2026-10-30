@@ -1,0 +1,56 @@
+-- name: test_group_by_cube_compressed_key
+CREATE TABLE t0 (
+    c0 BIGINT NULL,
+    c1 BIGINT NULL
+)
+DUPLICATE KEY(c0)
+DISTRIBUTED BY HASH(c0) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t0 SELECT generate_series, 4096 - generate_series FROM TABLE(generate_series(1, 4096));
+-- result:
+-- !result
+INSERT INTO t0 SELECT * FROM t0;
+-- result:
+-- !result
+function: wait_min_max_stat_ready('c0', 't0')
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c1', 't0')
+-- result:
+
+-- !result
+SELECT DISTINCT c0 FROM t0 GROUP BY CUBE (c0) ORDER BY 1 ASC LIMIT 5;
+-- result:
+None
+1
+2
+3
+4
+-- !result
+SELECT count(*) FROM (SELECT c0 FROM t0 GROUP BY CUBE (c0)) s;
+-- result:
+4097
+-- !result
+SELECT c0, count(*) FROM t0 GROUP BY ROLLUP (c0) ORDER BY 1 ASC LIMIT 3;
+-- result:
+None	8192
+1	2
+2	2
+-- !result
+SELECT c0, count(*) FROM t0 GROUP BY GROUPING SETS ((c0), ()) ORDER BY 1 ASC LIMIT 3;
+-- result:
+None	8192
+1	2
+2	2
+-- !result
+SELECT c0, c1, count(*) FROM t0 GROUP BY CUBE (c0, c1) ORDER BY 1 ASC, 2 ASC LIMIT 5;
+-- result:
+None	None	8192
+None	0	2
+None	1	2
+None	2	2
+None	3	2
+-- !result

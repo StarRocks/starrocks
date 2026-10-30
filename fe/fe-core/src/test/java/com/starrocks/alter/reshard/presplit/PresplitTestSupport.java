@@ -16,14 +16,22 @@ package com.starrocks.alter.reshard.presplit;
 
 import com.starrocks.alter.reshard.TabletReshardUtils;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Tuple;
 import com.starrocks.catalog.Variant;
+import com.starrocks.persist.ColumnIdExpr;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.SqlModeHelper;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TResultBatch;
+import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.Type;
 import com.starrocks.type.VarcharType;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.LocalFileSystem;
@@ -48,7 +56,9 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.function.BiConsumer;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -101,6 +111,40 @@ final class PresplitTestSupport {
                 Variant.of(IntegerType.BIGINT, Long.toString(position)));
     }
 
+    static final Column ACTIVITY_DATE = new Column("activity_date", DateType.DATETIME, true);
+    /** What the sampler evaluates for {@link #activityMonth()} when activity_date is read from a source column. */
+    static final String MONTH_SQL = "date_trunc('month', CAST(`activity_date` AS DATETIME))";
+
+    /** A generated column defined as {@code definitionSql} over {@code schema}, stored as CREATE TABLE stores it. */
+    static Column generatedColumn(String name, Type type, String definitionSql, List<Column> schema) {
+        Column column = new Column(name, type, true);
+        column.setGeneratedColumnExpr(ColumnIdExpr.create(schema,
+                SqlParser.parseSqlToExpr(definitionSql, SqlModeHelper.MODE_DEFAULT)));
+        return column;
+    }
+
+    /**
+     * activity_date_month DATETIME AS date_trunc('month', activity_date). Built on call, not held as a constant here:
+     * parsing needs the real GlobalStateMgr, and some tests mock it while this class may first load.
+     */
+    static Column activityMonth() {
+        return generatedColumn("activity_date_month", DateType.DATETIME, "date_trunc('month', activity_date)",
+                List.of(ACTIVITY_DATE));
+    }
+
+    /** Stubs the schema of {@code target}: {@code base}, the non-generated columns, plus {@code generated}. */
+    static void stubGeneratedSchema(OlapTable target, List<Column> base, Column... generated) {
+        List<Column> fullSchema = new ArrayList<>(base);
+        fullSchema.addAll(List.of(generated));
+        Map<ColumnId, Column> idToColumn = new HashMap<>();
+        for (Column column : fullSchema) {
+            idToColumn.put(column.getColumnId(), column);
+        }
+        Mockito.when(target.getBaseSchemaWithoutGeneratedColumn()).thenReturn(base);
+        Mockito.when(target.getBaseSchema()).thenReturn(fullSchema);
+        Mockito.when(target.getIdToColumn()).thenReturn(idToColumn);
+    }
+
     /**
      * Builds a {@link ConnectContext} stub whose {@link SessionVariable} carries
      * a specific {@code enable_tablet_pre_split} value. Production hooks read
@@ -147,6 +191,26 @@ final class PresplitTestSupport {
         TResultBatch resultBatch = new TResultBatch();
         resultBatch.setRows(rows);
         return resultBatch;
+    }
+
+    /**
+     * A sample runner that answers with no rows and records the session semantics each sub-query was run with. Its
+     * three-argument {@code run} fails the test: an executor must hand the runner the semantics it carries.
+     */
+    static final class SemanticsRecordingRunner implements AbstractSqlSampleSubqueryExecutor.SampleQueryRunner {
+        final List<SampleSessionSemantics> received = new ArrayList<>();
+
+        @Override
+        public List<TResultBatch> run(String sampleSql, ComputeResource computeResource, int queryTimeoutSeconds) {
+            throw new AssertionError("the sub-query was run without the load's session semantics");
+        }
+
+        @Override
+        public List<TResultBatch> run(String sampleSql, ComputeResource computeResource, int queryTimeoutSeconds,
+                                      String loadTimeZone, SampleSessionSemantics sessionSemantics) {
+            received.add(sessionSemantics);
+            return List.of();
+        }
     }
 
     /**

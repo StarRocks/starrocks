@@ -1001,7 +1001,7 @@ Buckets reflect how data files are actually organized in StarRocks.
 
 - Manually set the number of buckets
 
-  Since v2.4.0, StarRocks supports using multiple threads to scan a tablet in parallel during a query, thereby reducing the dependency of scanning performance on the tablet count. We recommend that each tablet contain about 10 GB of raw data. If you intend to manually set the number of buckets, you can estimate the amount of data in each partition of a table and then decide the number of tablets.
+  Since v2.4.0, StarRocks supports using multiple threads to scan a tablet in parallel during a query, thereby reducing the dependency of scanning performance on the tablet count. We recommend that each tablet contain about 10 GB of raw data. For shared-data clusters of v4.1 or later, which support large-capacity tablets, we recommend that each tablet contain 10 GB to 50 GB of data, and no more than 100 GB. If you intend to manually set the number of buckets, you can estimate the amount of data in each partition of a table and then decide the number of tablets.
 
   To enable parallel scanning on tablets, make sure the `enable_tablet_internal_parallel` parameter is set to `TRUE` globally for the entire system (`SET GLOBAL enable_tablet_internal_parallel = true;`).
 

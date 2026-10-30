@@ -48,11 +48,16 @@ public class EsMetaStateTracker {
         return searchContext;
     }
 
-    public void run() throws StarRocksConnectorException {
+    /**
+     * Runs every phase against this tracker's context and returns it. A tracker is meant to run once: the phases
+     * fill the context in place, so it must not be one a query can already see (see EsTable#syncTableMetaData).
+     */
+    public SearchContext run() throws StarRocksConnectorException {
         for (SearchPhase searchPhase : builtinSearchPhase) {
             searchPhase.preProcess(searchContext);
             searchPhase.execute(searchContext);
             searchPhase.postProcess(searchContext);
         }
+        return searchContext;
     }
 }

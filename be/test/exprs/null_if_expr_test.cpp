@@ -58,19 +58,17 @@ TEST_F(VectorizedNullIfExprTest, nullIfArray) {
     auto expr = VectorizedConditionExprFactory::create_null_if_expr(expr_node);
     std::unique_ptr<Expr> expr_ptr(expr);
 
-    TypeDescriptor type_arr_int = array_type(TYPE_INT);
-
-    auto array0 = ColumnHelper::create_column(type_arr_int, true);
+    auto array0 = ColumnHelper::create_column(TYPE_ARRAY_INT_DESC, true);
     array0->append_datum(DatumArray{Datum((int32_t)1), Datum((int32_t)4)}); // [1,4]
     array0->append_datum(DatumArray{Datum(), Datum()});                     // [NULL, NULL]
     array0->append_datum(DatumArray{Datum(), Datum((int32_t)12)});          // [NULL, 12]
-    auto array_expr0 = MockExpr(type_arr_int, std::move(array0));
+    auto array_expr0 = MockExpr(TYPE_ARRAY_INT_DESC, std::move(array0));
 
-    auto array1 = ColumnHelper::create_column(type_arr_int, false);
+    auto array1 = ColumnHelper::create_column(TYPE_ARRAY_INT_DESC, false);
     array1->append_datum(DatumArray{Datum((int32_t)1), Datum((int32_t)4)}); // [1,4]
     array1->append_datum(DatumArray{Datum(), Datum()});                     // [NULL, NULL]
     array1->append_datum(DatumArray{Datum(), Datum((int32_t)1)});           // [NULL, 1]
-    auto array_expr1 = MockExpr(type_arr_int, std::move(array1));
+    auto array_expr1 = MockExpr(TYPE_ARRAY_INT_DESC, std::move(array1));
 
     expr->_children.emplace_back(&array_expr0);
     expr->_children.emplace_back(&array_expr1);

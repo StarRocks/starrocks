@@ -205,6 +205,9 @@ public class TypeManager {
                 return getEquivalenceBaseType(t1, t2);
             }
         }
+        if (t1.isFileType() || t2.isFileType() || t1.isGeoType() || t2.isGeoType()) {
+            return InvalidType.INVALID;
+        }
         if (t1.getPrimitiveType() == PrimitiveType.NULL_TYPE) {
             return t2;
         }
@@ -287,8 +290,9 @@ public class TypeManager {
         if (type1.isArrayType() || type2.isArrayType()) {
             return TypeManager.getCommonSuperType(type1, type2);
         }
-        if (type1.isComplexType() || type2.isComplexType() || type1.isOnlyMetricType() || type2.isOnlyMetricType()) {
-            // We don't support complex type (map/struct) for GT/LT predicate.
+        if (type1.isComplexType() || type2.isComplexType() || type1.isOnlyMetricType() || type2.isOnlyMetricType() ||
+                type1.isFileType() || type2.isFileType() || type1.isGeoType() || type2.isGeoType()) {
+            // We don't support complex type (map/struct) for GT/LT predicate, and FILE/geo types are never comparable.
             return InvalidType.INVALID;
         }
 
@@ -370,6 +374,10 @@ public class TypeManager {
                     isContainVarcharWithoutLength = true;
                 }
             }
+        }
+        // BE does not support geo values in CASE results or comparisons.
+        if (compatibleType.isGeoType()) {
+            return InvalidType.INVALID;
         }
         if (compatibleType.isStringType()) {
             ScalarType resultType = (ScalarType) compatibleType;
@@ -658,6 +666,10 @@ public class TypeManager {
 
         // Unequal geo types have no implicit common type; preserve the identity/null shortcuts above.
         if (t1.isGeoType() || t2.isGeoType()) {
+            return InvalidType.INVALID;
+        }
+        // FILE is an opaque scalar with no casts in either direction; only FILE/FILE (handled above) is compatible.
+        if (t1.isFileType() || t2.isFileType()) {
             return InvalidType.INVALID;
         }
 

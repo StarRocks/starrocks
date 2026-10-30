@@ -186,6 +186,12 @@ private:
     std::atomic<int32_t> _total_in_flight_rpc = 0;
     std::atomic<int32_t> _num_remaining_eos = 0;
 
+    // Peak statistics exposed by update_profile() to explain where sink memory goes:
+    // requests waiting in the per-destination queues plus requests already in flight.
+    std::atomic<int32_t> _peak_in_flight_rpc = 0;
+    std::atomic<int64_t> _num_buffered_requests = 0;
+    std::atomic<int64_t> _peak_buffered_requests = 0;
+
     size_t _memory_limit = 0;
 
     // True means that SinkBuffer needn't input chunk and send chunk anymore,

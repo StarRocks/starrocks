@@ -86,7 +86,9 @@ public class BypassWriteTransactionHandler implements TransactionOperationHandle
                                         .getTable(db.getFullName(), tableName))
                             .orElseThrow(() -> new StarRocksException(
                                 String.format("Table[%s.%s] does not exist.", dbName, tableName)));
-                result = handleBeginTransaction(db, table, label, sourceType, timeoutMillis);
+                // TransactionOperationParams carries the timeout in milliseconds, while
+                // GlobalTransactionMgr#beginTransaction takes seconds
+                result = handleBeginTransaction(db, table, label, sourceType, timeoutMillis / 1000);
                 break;
             case TXN_PREPARE:
                 result = handlePrepareTransaction(
@@ -116,14 +118,15 @@ public class BypassWriteTransactionHandler implements TransactionOperationHandle
                                                      Table table,
                                                      String label,
                                                      LoadJobSourceType sourceType,
-                                                     long timeoutMillis) throws StarRocksException {
+                                                     long timeoutSecond) throws StarRocksException {
         long dbId = db.getId();
         long tableId = table.getId();
 
         TxnCoordinator coordinator = new TxnCoordinator(TxnSourceType.FE, HOST_NAME);
         GlobalTransactionMgr globalTxnMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         long txnId = globalTxnMgr.beginTransaction(
-                dbId, Lists.newArrayList(tableId), label, coordinator, sourceType, timeoutMillis);
+                dbId, Lists.newArrayList(tableId), label, coordinator, sourceType, timeoutSecond);
+        LOG.info("Begin bypass write transaction, label: {}, txn_id: {}, timeout: {}s", label, txnId, timeoutSecond);
         TransactionResult result = new TransactionResult();
         result.addResultEntry(TransactionResult.TXN_ID_KEY, txnId);
         result.addResultEntry(TransactionResult.LABEL_KEY, label);

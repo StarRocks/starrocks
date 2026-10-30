@@ -123,6 +123,7 @@ endif()
 
 ADD_BE_LIB(ComputeEnv
     ai/ai_executor.cpp
+    arrow_io_thread_pool.cpp
     compute_env.cpp
     data_stream/data_stream_mgr.cpp
     data_stream/data_stream_recvr.cpp

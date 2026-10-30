@@ -54,10 +54,10 @@
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/metacache.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_writer.h"
-#include "storage/lake/update_manager.h"
 #include "storage/query/split_scan_morsel.h"
 #include "storage/rowset/base_rowset.h"
 #include "storage/rowset/rowid_range_option.h"
@@ -78,9 +78,9 @@ public:
               _parent_tracker(std::make_unique<MemTracker>(-1)),
               _update_mem_tracker(
                       std::make_unique<MemTracker>(10 * 1024 * 1024, "lake_data_source", _parent_tracker.get())),
-              _update_manager(std::make_unique<UpdateManager>(_location_provider, _update_mem_tracker.get())),
+              _primary_key_manager(std::make_unique<PrimaryKeyManager>(_location_provider, _update_mem_tracker.get())),
               _owned_tablet_mgr(
-                      std::make_unique<TabletManager>(_location_provider, _update_manager.get(), 1024 * 1024)),
+                      std::make_unique<TabletManager>(_location_provider, _primary_key_manager.get(), 1024 * 1024)),
               _tablet_mgr(_owned_tablet_mgr.get()) {
         _tablet_metadata = std::make_unique<TabletMetadata>();
         _tablet_metadata->set_id(next_id());
@@ -236,7 +236,7 @@ protected:
     std::shared_ptr<LocationProvider> _location_provider;
     std::unique_ptr<MemTracker> _parent_tracker;
     std::unique_ptr<MemTracker> _update_mem_tracker;
-    std::unique_ptr<UpdateManager> _update_manager;
+    std::unique_ptr<PrimaryKeyManager> _primary_key_manager;
     std::unique_ptr<TabletManager> _owned_tablet_mgr;
     TabletManager* _tablet_mgr = nullptr;
 
@@ -1610,6 +1610,24 @@ TEST_F(LakeDataSourceTest, init_counter_registers_prepared_split_counters) {
         if (c != nullptr) {
             EXPECT_EQ(c->value(), 0) << name;
         }
+    }
+
+    // These init phases are children of SegmentInit.
+    for (const auto* name : {"SegmentInitPrepare", "RowidRangeFilter", "PrecomputedRangeFilter", "TabletRangeFilter",
+                             "DelVectorApply", "SegmentInitFinalize", "RewritePredicates", "InitContext"}) {
+        auto it = profile->_counter_map.find(name);
+        ASSERT_NE(it, profile->_counter_map.end()) << name;
+        EXPECT_EQ(it->second.second, "SegmentInit") << name;
+        EXPECT_EQ(it->second.first->value(), 0) << name;
+    }
+
+    // The segment-level zone map prune runs while the iterator is being created, so it belongs to
+    // CreateSegmentIter. Parenting it on SegmentInit would report time that is not in SegmentInit.
+    {
+        auto it = profile->_counter_map.find("SegmentZoneMapFilter");
+        ASSERT_NE(it, profile->_counter_map.end());
+        EXPECT_EQ(it->second.second, "CreateSegmentIter");
+        EXPECT_EQ(it->second.first->value(), 0);
     }
 
     std::stringstream rendered;

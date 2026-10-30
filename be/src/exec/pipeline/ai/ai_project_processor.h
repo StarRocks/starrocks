@@ -44,7 +44,7 @@ struct AIProjectPreparedOutput {
     bool replace_existing = false;
     TypeDescriptor result_type = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
     AIFunctionResultKind result_kind = AIFunctionResultKind::STRING;
-    std::string model_config_id = "__system_chat__";
+    std::string provider_id;
     AICapability capability = AICapability::CHAT;
 };
 
@@ -75,9 +75,11 @@ struct AIProjectTaskRequest {
     // consume these views before it returns.
     std::string_view model;
     std::string_view prompt;
+    // Includes Provider defaults prepared once for the expression's subchunk.
     const AIProviderOptions* options = nullptr;
-    std::string_view model_config_id = "__system_chat__";
+    std::string_view provider_id;
     AICapability capability = AICapability::CHAT;
+    const AIMediaInput* media = nullptr;
 };
 
 class AIProjectTaskHandle {

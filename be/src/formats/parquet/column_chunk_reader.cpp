@@ -34,12 +34,14 @@
 namespace starrocks::parquet {
 
 ColumnChunkReader::ColumnChunkReader(level_t max_def_level, level_t max_rep_level, int32_t type_length,
-                                     const tparquet::ColumnChunk* column_chunk, const ColumnReaderOptions& opts)
+                                     const tparquet::ColumnChunk* column_chunk, const ColumnReaderOptions& opts,
+                                     int16_t column_ordinal)
         : _max_def_level(max_def_level),
           _max_rep_level(max_rep_level),
           _type_length(type_length),
           _chunk_metadata(column_chunk),
           _opts(opts),
+          _column_ordinal(column_ordinal),
           _def_level_decoder(&opts.stats->level_decode_ns),
           _rep_level_decoder(&opts.stats->level_decode_ns) {
     if (_chunk_metadata->meta_data.__isset.statistics && _chunk_metadata->meta_data.statistics.__isset.null_count &&
@@ -60,7 +62,9 @@ Status ColumnChunkReader::init(int chunk_size) {
     int64_t size = metadata().total_compressed_size;
     int64_t num_values = metadata().num_values;
     _stream = _opts.file->stream().get();
-    _page_reader = std::make_unique<PageReader>(_stream, start_offset, size, num_values, _opts, metadata().codec);
+    _page_reader = std::make_unique<PageReader>(_stream, start_offset, size, num_values, _opts, metadata().codec,
+                                                _column_ordinal);
+    _page_reader->set_has_dictionary_page(metadata().__isset.dictionary_page_offset);
 
     // seek to the first page
     RETURN_IF_ERROR(_page_reader->seek_to_offset(start_offset));
@@ -260,6 +264,9 @@ Status ColumnChunkReader::_try_load_dictionary() {
         return Status::OK();
     }
 
+    // _parse_page_header() times itself; the dictionary page read and decode is timed here, as in
+    // _parse_page_data().
+    SCOPED_RAW_TIMER(&_opts.stats->page_read_ns);
     RETURN_IF_ERROR(_parse_dict_page());
     return Status::OK();
 }
@@ -273,6 +280,7 @@ Status ColumnChunkReader::load_dictionary_page() {
     if (UNLIKELY(!current_page_is_dict())) {
         return Status::InternalError("Not a dictionary page in dictionary page offset");
     }
+    SCOPED_RAW_TIMER(&_opts.stats->page_read_ns);
     return _parse_dict_page();
 }
 

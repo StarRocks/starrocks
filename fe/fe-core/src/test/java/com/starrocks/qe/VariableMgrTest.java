@@ -35,15 +35,19 @@
 package com.starrocks.qe;
 
 import com.google.common.collect.Lists;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.persist.GlobalVarPersistInfo;
+import com.starrocks.persist.metablock.SRMetaBlockID;
+import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.SetStmtAnalyzer;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.SystemVariable;
+import com.starrocks.sql.ast.expression.FloatLiteral;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.VariableExpr;
@@ -78,11 +82,88 @@ public class VariableMgrTest {
     }
 
     @Test
+    public void testBroadcastCostMultiplierSettings() throws Exception {
+        String name = SessionVariable.BROADCAST_MEM_EXCEEDED_PENALTY_FACTOR;
+        double maxMultiplier = SessionVariable.MAX_BROADCAST_MEM_EXCEEDED_PENALTY_FACTOR;
+        for (SetType scope : List.of(SetType.SESSION, SetType.GLOBAL)) {
+            VariableMgr variableMgr = new VariableMgr();
+            SessionVariable session = variableMgr.newSessionVariable();
+            Assertions.assertTrue(variableMgr.dump(scope, session, null).stream()
+                    .anyMatch(row -> row.get(0).equals(name) && row.get(1).equals("1000.0")));
+            for (double value : new double[] {1.0, 2.5, 10.0, 1000.0, Math.nextDown(maxMultiplier), maxMultiplier}) {
+                SystemVariable variable = new SystemVariable(scope, name, new FloatLiteral(value));
+                SetStmtAnalyzer.analyze(new SetStmt(List.of(variable)), null);
+                variableMgr.setSystemVariable(session, variable, false);
+                Assertions.assertEquals(value, session.getBroadcastMemExceededPenaltyFactor());
+                Assertions.assertEquals(scope == SetType.GLOBAL ? value : 1000.0,
+                        variableMgr.newSessionVariable().getBroadcastMemExceededPenaltyFactor());
+                Assertions.assertEquals(SessionVariable.DEFAULT_EXEC_MEM_LIMIT, session.getMaxExecMemByte());
+            }
+
+            variableMgr.applySessionVariable(Map.of(name, "2.5"), session);
+            Assertions.assertEquals(2.5, session.getBroadcastMemExceededPenaltyFactor());
+            double globalValue = variableMgr.newSessionVariable().getBroadcastMemExceededPenaltyFactor();
+            for (String value : List.of("0", "-1", "0.999", Double.toString(Math.nextUp(maxMultiplier)),
+                    Double.toString(maxMultiplier + 1), Double.toString(Double.MAX_VALUE),
+                    "NaN", "Infinity", "-Infinity", "1e309", "invalid")) {
+                SystemVariable variable = new SystemVariable(scope, name, new StringLiteral(value));
+                SemanticException error = Assertions.assertThrows(SemanticException.class,
+                        () -> SetStmtAnalyzer.analyze(new SetStmt(List.of(variable)), null));
+                Assertions.assertTrue(error.getMessage().contains(name));
+                Assertions.assertTrue(error.getMessage().contains("finite number in [1.0, " + maxMultiplier + "]"));
+                Assertions.assertThrows(DdlException.class,
+                        () -> variableMgr.applySessionVariable(Map.of(name, value), session));
+                Assertions.assertEquals(2.5, session.getBroadcastMemExceededPenaltyFactor());
+                Assertions.assertEquals(globalValue,
+                        variableMgr.newSessionVariable().getBroadcastMemExceededPenaltyFactor());
+            }
+
+            SystemVariable reset = new SystemVariable(scope, name, null);
+            SetStmtAnalyzer.analyze(new SetStmt(List.of(reset)), null);
+            variableMgr.setSystemVariable(session, reset, false);
+            Assertions.assertEquals(1000.0, session.getBroadcastMemExceededPenaltyFactor());
+        }
+    }
+
+    @Test
+    public void testBroadcastMemThresholdSettings() throws Exception {
+        VariableMgr variableMgr = new VariableMgr();
+        SessionVariable session = variableMgr.newSessionVariable();
+        String name = SessionVariable.BROADCAST_MEM_THRESHOLD;
+        Assertions.assertTrue(variableMgr.dump(SetType.SESSION, session, null).stream()
+                .anyMatch(row -> row.get(0).equals(name) && row.get(1).equals("2147483648")));
+        for (SetType scope : List.of(SetType.SESSION, SetType.GLOBAL)) {
+            for (long value : new long[] {0, 1024, 4294967296L, Long.MAX_VALUE}) {
+                SystemVariable variable = new SystemVariable(scope, name, new IntLiteral(value));
+                SetStmtAnalyzer.analyze(new SetStmt(List.of(variable)), null);
+                variableMgr.setSystemVariable(session, variable, false);
+                Assertions.assertEquals(value, session.getBroadcastMemThreshold());
+                Assertions.assertEquals(scope == SetType.GLOBAL ? value : 2147483648L,
+                        variableMgr.newSessionVariable().getBroadcastMemThreshold());
+                Assertions.assertEquals(SessionVariable.DEFAULT_EXEC_MEM_LIMIT, session.getMaxExecMemByte());
+            }
+        }
+
+        variableMgr.applySessionVariable(Map.of(name, "1024"), session);
+        Assertions.assertEquals(1024L, session.getBroadcastMemThreshold());
+        for (String value : List.of("-1", "9223372036854775808", "invalid")) {
+            for (SetType scope : List.of(SetType.SESSION, SetType.GLOBAL)) {
+                SystemVariable variable = new SystemVariable(scope, name, new StringLiteral(value));
+                Assertions.assertThrows(SemanticException.class,
+                        () -> SetStmtAnalyzer.analyze(new SetStmt(List.of(variable)), null));
+            }
+            Assertions.assertThrows(DdlException.class,
+                    () -> variableMgr.applySessionVariable(Map.of(name, value), session));
+            Assertions.assertEquals(1024L, session.getBroadcastMemThreshold());
+        }
+    }
+
+    @Test
     public void testAITopNHybridVariablesVisibility() {
         VariableMgr variableMgr = new VariableMgr();
         for (SetType scope : List.of(SetType.SESSION, SetType.GLOBAL)) {
             SessionVariable session = variableMgr.newSessionVariable();
-            Assertions.assertTrue(session.isEnableAiTopnPushdown());
+            Assertions.assertTrue(session.isEnableAITopnPushdown());
             List<List<String>> variables = variableMgr.dump(scope, session, null);
             Assertions.assertFalse(variables.stream().anyMatch(row -> row.get(0).equals("enable_ai_topn_pushdown")),
                     scope + " dump should hide the AI TopN switch by default");
@@ -110,16 +191,16 @@ public class VariableMgrTest {
                 SystemVariable variable = new SystemVariable(scope, name, new StringLiteral(Boolean.toString(value)));
                 SetStmtAnalyzer.analyze(new SetStmt(List.of(variable)), null);
                 variableMgr.setSystemVariable(session, variable, false);
-                Assertions.assertEquals(value, session.isEnableAiTopnPushdown());
+                Assertions.assertEquals(value, session.isEnableAITopnPushdown());
                 Assertions.assertEquals(scope != SetType.GLOBAL || value,
-                        variableMgr.newSessionVariable().isEnableAiTopnPushdown());
+                        variableMgr.newSessionVariable().isEnableAITopnPushdown());
             }
         }
         variableMgr.applySessionVariable(Map.of(name, "false"), session);
-        Assertions.assertFalse(session.isEnableAiTopnPushdown());
+        Assertions.assertFalse(session.isEnableAITopnPushdown());
         Assertions.assertThrows(DdlException.class,
                 () -> variableMgr.applySessionVariable(Map.of(name, "invalid"), session));
-        Assertions.assertFalse(session.isEnableAiTopnPushdown());
+        Assertions.assertFalse(session.isEnableAITopnPushdown());
     }
 
     @Test
@@ -134,9 +215,9 @@ public class VariableMgrTest {
                 SystemVariable variable = new SystemVariable(scope, name, new IntLiteral(value));
                 SetStmtAnalyzer.analyze(new SetStmt(List.of(variable)), null);
                 variableMgr.setSystemVariable(session, variable, false);
-                Assertions.assertEquals(value, session.getAiTopnPushdownMaxGlobalLimit());
+                Assertions.assertEquals(value, session.getAITopnPushdownMaxGlobalLimit());
                 Assertions.assertEquals(scope == SetType.GLOBAL ? value : 1000,
-                        variableMgr.newSessionVariable().getAiTopnPushdownMaxGlobalLimit());
+                        variableMgr.newSessionVariable().getAITopnPushdownMaxGlobalLimit());
             }
         }
     }
@@ -160,11 +241,11 @@ public class VariableMgrTest {
         SessionVariable session = variableMgr.newSessionVariable();
         String name = SessionVariable.AI_TOPN_PUSHDOWN_MAX_GLOBAL_LIMIT;
         variableMgr.applySessionVariable(Map.of(name, "0"), session);
-        Assertions.assertEquals(0, session.getAiTopnPushdownMaxGlobalLimit());
+        Assertions.assertEquals(0, session.getAITopnPushdownMaxGlobalLimit());
         for (String value : List.of("-1", "9223372036854775808", "invalid")) {
             Assertions.assertThrows(DdlException.class,
                     () -> variableMgr.applySessionVariable(Map.of(name, value), session));
-            Assertions.assertEquals(0, session.getAiTopnPushdownMaxGlobalLimit());
+            Assertions.assertEquals(0, session.getAITopnPushdownMaxGlobalLimit());
         }
     }
 
@@ -417,15 +498,15 @@ public class VariableMgrTest {
         GlobalVarPersistInfo info = new GlobalVarPersistInfo();
         info.setPersistJsonString("{\"enable_ai_topn_pushdown\":false,\"ai_topn_pushdown_max_global_limit\":0}");
         mgr.replayGlobalVariableV2(info);
-        Assertions.assertFalse(mgr.newSessionVariable().isEnableAiTopnPushdown());
-        Assertions.assertEquals(0, mgr.newSessionVariable().getAiTopnPushdownMaxGlobalLimit());
+        Assertions.assertFalse(mgr.newSessionVariable().isEnableAITopnPushdown());
+        Assertions.assertEquals(0, mgr.newSessionVariable().getAITopnPushdownMaxGlobalLimit());
 
         PseudoImage image = new PseudoImage();
         mgr.save(image.getImageWriter());
         VariableMgr restored = new VariableMgr();
         restored.load(image.getMetaBlockReader());
-        Assertions.assertFalse(restored.newSessionVariable().isEnableAiTopnPushdown());
-        Assertions.assertEquals(0, restored.newSessionVariable().getAiTopnPushdownMaxGlobalLimit());
+        Assertions.assertFalse(restored.newSessionVariable().isEnableAITopnPushdown());
+        Assertions.assertEquals(0, restored.newSessionVariable().getAITopnPushdownMaxGlobalLimit());
     }
 
     @Test
@@ -442,6 +523,53 @@ public class VariableMgrTest {
         mgr2.load(image.getMetaBlockReader());
 
         Assertions.assertEquals(100, mgr2.getDefaultSessionVariable().getQueryTimeoutS());
+    }
+
+    // Same layout as VariableMgr.VariableInfo, used to write an image as a newer build would.
+    private static class PersistedVariable {
+        @SerializedName(value = "n")
+        private String name;
+        @SerializedName(value = "v")
+        private String variable;
+
+        PersistedVariable(String name, String variable) {
+            this.name = name;
+            this.variable = variable;
+        }
+    }
+
+    @Test
+    public void testImageLoadKeepsCurrentValueOfRejectedVariable() throws Exception {
+        int globalConcurrencyLimit = GlobalVariable.getQueryQueueConcurrencyLimit();
+
+        PseudoImage image = new PseudoImage();
+        SRMetaBlockWriter writer = image.getImageWriter().getBlockWriter(SRMetaBlockID.VARIABLE_MGR, 1 + 2 + 1 + 1);
+        writer.writeInt(2);
+        writer.writeJson(new PersistedVariable(SessionVariable.LARGE_DECIMAL_UNDERLYING_TYPE, "future_type"));
+        writer.writeJson(new PersistedVariable(SessionVariable.QUERY_TIMEOUT, "100"));
+        writer.writeInt(1);
+        writer.writeJson(new PersistedVariable(GlobalVariable.QUERY_QUEUE_CONCURRENCY_LIMIT, "not_a_number"));
+        writer.close();
+
+        VariableMgr mgr = new VariableMgr();
+        mgr.load(image.getMetaBlockReader());
+
+        SessionVariable sv = mgr.newSessionVariable();
+        Assertions.assertEquals(SessionVariableConstants.PANIC, sv.getLargeDecimalUnderlyingType());
+        Assertions.assertEquals(100, sv.getQueryTimeoutS());
+        Assertions.assertEquals(globalConcurrencyLimit, GlobalVariable.getQueryQueueConcurrencyLimit());
+    }
+
+    @Test
+    public void testReplayKeepsCurrentValueOfRejectedVariable() throws Exception {
+        VariableMgr mgr = new VariableMgr();
+        GlobalVarPersistInfo info = new GlobalVarPersistInfo();
+        info.setPersistJsonString("{\"large_decimal_underlying_type\":\"future_type\",\"query_timeout\":100}");
+        mgr.replayGlobalVariableV2(info);
+
+        SessionVariable sv = mgr.newSessionVariable();
+        Assertions.assertEquals(SessionVariableConstants.PANIC, sv.getLargeDecimalUnderlyingType());
+        Assertions.assertEquals(100, sv.getQueryTimeoutS());
     }
 
     @Test

@@ -1977,7 +1977,7 @@ public class RestoreJob extends AbstractJob {
                                     mv.setInactiveAndReason(MaterializedViewExceptions
                                             .inactiveReasonForMetadataTableRestoreCorrupted(mv.getName()));
                                     // clear version map so can be refreshed later
-                                    mv.getRefreshScheme().getAsyncRefreshContext().clearVisibleVersionMap();
+                                    mv.resetVisibleVersionMap();
                                     // drop all partitions
                                     Set<String> partitionNames = mv.getPartitionNames();
                                     for (String partitionName : partitionNames) {

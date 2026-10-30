@@ -20,7 +20,6 @@ import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.SqlCredentialRedactor;
 import com.starrocks.qe.ConnectContext;
@@ -99,7 +98,7 @@ public class TasksSystemTable {
             }
             info.setSchedule(scheduleStr);
             info.setCatalog(task.getCatalogName());
-            info.setDatabase(ClusterNamespace.getNameFromFullName(task.getDbName()));
+            info.setDatabase(task.getDbName());
             if (Config.enable_task_info_mask_credential) {
                 info.setDefinition(SqlCredentialRedactor.redact(task.getDefinition()));
             } else {
