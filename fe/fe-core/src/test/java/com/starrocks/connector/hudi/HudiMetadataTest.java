@@ -16,16 +16,19 @@ package com.starrocks.connector.hudi;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.FeConstants;
 import com.starrocks.connector.CachingRemoteFileIO;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.ConnectorType;
+import com.starrocks.connector.DatabaseTableName;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.RemoteFileOperations;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.CachingHiveMetastore;
+import com.starrocks.connector.hive.HiveCacheUpdateProcessor;
 import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.hive.HiveMetastore;
 import com.starrocks.connector.hive.HiveMetastoreOperations;
@@ -37,6 +40,9 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
+import mockit.Invocation;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.apache.hadoop.conf.Configuration;
 import org.junit.jupiter.api.AfterEach;
@@ -48,6 +54,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class HudiMetadataTest {
     private HiveMetaClient client;
@@ -157,5 +164,33 @@ public class HudiMetadataTest {
     public void testGetCloudConfiguration() {
         CloudConfiguration cc = hudiMetadata.getCloudConfiguration();
         Assertions.assertEquals(cc.getCloudType(), CloudType.DEFAULT);
+    }
+
+    @Test
+    public void testInvalidateTableForReadDoesNoRemoteLoad() {
+        AtomicInteger remoteTableLoads = new AtomicInteger();
+        new MockUp<HiveMetastore>() {
+            @Mock
+            public Table getTable(Invocation inv, String dbName, String tableName) {
+                remoteTableLoads.incrementAndGet();
+                return inv.proceed(dbName, tableName);
+            }
+        };
+        HiveCacheUpdateProcessor processor = new HiveCacheUpdateProcessor("hive_catalog", cachingHiveMetastore,
+                cachingRemoteFileIO, executorForPullFiles, false, false);
+        HudiMetadata metadata = new HudiMetadata("hive_catalog", new HdfsEnvironment(), hmsOps, fileOps,
+                statisticsProvider, Optional.of(processor), new ConnectorProperties(ConnectorType.HUDI));
+
+        Table table = hmsOps.getTable("db1", "table1");
+        Assertions.assertEquals(1, remoteTableLoads.get());
+        Assertions.assertTrue(cachingHiveMetastore.isTablePresent(DatabaseTableName.of("db1", "table1")));
+
+        // Invalidating for a read only drops what is cached; it does not reload the table from the metastore.
+        metadata.invalidateTableForRead("db1", table);
+        Assertions.assertEquals(1, remoteTableLoads.get());
+        Assertions.assertFalse(cachingHiveMetastore.isTablePresent(DatabaseTableName.of("db1", "table1")));
+
+        hmsOps.getTable("db1", "table1");
+        Assertions.assertEquals(2, remoteTableLoads.get());
     }
 }

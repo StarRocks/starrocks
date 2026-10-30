@@ -1571,6 +1571,25 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
     }
 
+    /**
+     * Drop only the cached table object, with no remote I/O and without the catalog's per-table refresh lock: the
+     * planner's next getTable then loads the table as it is now. A refresh would load it remotely under that lock,
+     * so concurrent INSERTs reading the same source queue behind each other's remote load. The partition and
+     * manifest caches are keyed by snapshot and file path, so they stay valid for whatever snapshot is loaded.
+     */
+    @Override
+    public void invalidateTableForRead(String srDbName, Table table) {
+        if (isResourceMappingCatalog(catalogName)) {
+            refreshTable(srDbName, table, new ArrayList<>(), false);
+            return;
+        }
+        IcebergTable icebergTable = (IcebergTable) table;
+        String dbName = icebergTable.getCatalogDBName();
+        String tableName = icebergTable.getCatalogTableName();
+        tables.remove(TableIdentifier.of(dbName, tableName));
+        icebergCatalog.invalidateTableCache(dbName, tableName);
+    }
+
     private void refreshTableWithResource(Table table) {
         IcebergTable icebergTable = (IcebergTable) table;
         org.apache.iceberg.Table nativeTable = icebergTable.getNativeTable();

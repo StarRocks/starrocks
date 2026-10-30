@@ -238,6 +238,17 @@ public class HudiMetadata implements ConnectorMetadata {
         }
     }
 
+    /**
+     * Drops this table from both cache levels instead of reloading it, as HiveMetadata does: the table, its
+     * partitions, statistics and file lists. No remote I/O and no per-table refresh lock, so concurrent INSERTs
+     * reading the same source do not queue behind each other's metastore load; planning loads what it reads.
+     */
+    @Override
+    public void invalidateTableForRead(String srDbName, Table table) {
+        hmsOps.invalidateTable(table.getCatalogDBName(), table.getCatalogTableName());
+        cacheUpdateProcessor.ifPresent(processor -> processor.invalidateTableForRead(table));
+    }
+
     @Override
     public void dropTable(ConnectContext context, DropTableStmt stmt) throws DdlException {
         String dbName = stmt.getDbName();
