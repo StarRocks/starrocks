@@ -2672,6 +2672,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                             "PlanValidate",
                             "InputDependenciesChecker",
                             "TypeChecker",
+                            "ConstInPredicateChecker",
                             "CTEUniqueChecker",
                             "ColumnReuseChecker",
                             "PlanBuilder",
