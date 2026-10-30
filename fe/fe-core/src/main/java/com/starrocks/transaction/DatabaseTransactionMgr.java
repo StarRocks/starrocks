@@ -1048,12 +1048,11 @@ public class DatabaseTransactionMgr {
                     txnsWithDependency = getTxnsWithTxnDependencyBatch(
                             Math.min(Config.lake_batch_publish_min_version_num, maxBatchSize), maxBatchSize, txnId);
                     if (txnsWithDependency.equals(frozenTxnIds)) {
-                        LOG.debug("retry frozen lake publish batch db:{} head txn:{} txns:{}",
-                                dbId, txnId, frozenTxnIds);
+                        LOG.debug("retry frozen lake publish batch db:{} txns:{}", dbId, frozenTxnIds);
                     } else {
                         frozenPublishBatches.remove(txnId, frozenTxnIds);
-                        LOG.info("drop frozen lake publish batch db:{} head txn:{} size:{} txns:{}, graph now gives {}",
-                                dbId, txnId, frozenTxnIds.size(), frozenTxnIds, txnsWithDependency);
+                        LOG.info("drop frozen lake publish batch db:{} txns:{}, graph now gives {}",
+                                dbId, frozenTxnIds, txnsWithDependency);
                         txnsWithDependency = null;
                     }
                 }
@@ -1168,8 +1167,7 @@ public class DatabaseTransactionMgr {
             readUnlock();
         }
         if (!txnIds.equals(previous)) {
-            LOG.info("freeze lake publish batch db:{} head txn:{} size:{} txns:{}",
-                    dbId, headTxnId, txnIds.size(), txnIds);
+            LOG.info("freeze lake publish batch db:{} txns:{}", dbId, txnIds);
         }
     }
 
