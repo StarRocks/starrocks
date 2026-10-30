@@ -19,6 +19,7 @@
 #include <memory>
 #include <stdexcept>
 #include <string_view>
+#include <type_traits>
 
 #include "column/array_column.h"
 #include "column/column_helper.h"
@@ -218,6 +219,12 @@ TEST_F(FunctionHelperTest, testCreateColumnSpecialTypes) {
     }
 }
 
+template <LogicalType KT>
+using MapAggState = MapAggAggregateFunctionState<
+        KT, std::conditional_t<lt_is_string<KT>,
+                               phmap::flat_hash_map<SliceWithHash, size_t, HashOnSliceWithHash, EqualOnSliceWithHash>,
+                               phmap::flat_hash_map<RunTimeCppType<KT>, size_t, StdHash<RunTimeCppType<KT>>>>>;
+
 class GeoFunctionHelperTest : public FunctionHelperTest, public ::testing::WithParamInterface<LogicalType> {
 protected:
     TypeDescriptor geo_type() const {
@@ -271,6 +278,100 @@ protected:
         }
         if (mode == 0) return down_cast<NullableColumn*>(column.get())->data_column()->as_mutable_ptr();
         return column;
+    }
+    template <LogicalType KT>
+    void check_map_copy(int path) {
+        auto* function = get_aggregate_function("map_agg", KT, TYPE_MAP, false);
+        ASSERT_NE(nullptr, function);
+        for (const auto& arg : {type, array_type}) {
+            const auto map_type = TypeDescriptor::create_map_type(TypeDescriptor(KT), arg);
+            auto ctx = context(map_type, {TypeDescriptor(KT), arg});
+            auto keys = ColumnHelper::create_column(TypeDescriptor(KT), false);
+            for (int key : {2, 1, 2}) {
+                if constexpr (KT == TYPE_INT)
+                    keys->append_datum(Datum(key));
+                else
+                    keys->append_datum(Datum(Slice(key == 1 ? "a" : "b")));
+            }
+            for (int mode : {0, 1, 2, 3, 4}) {
+                SCOPED_TRACE(::testing::Message() << path << ":" << KT << ":" << arg.type << ":" << mode);
+                auto source = physical_input(arg, mode);
+                const auto expected = check_geo_leaf(source.get(), *type.geo_type)->descriptor();
+                auto state = ManagedAggrState::create(ctx.get(), function);
+                auto* data = reinterpret_cast<MapAggState<KT>*>(state->state());
+                EXPECT_FALSE(data->use_datum);
+                const Column* columns[] = {keys.get(), source.get()};
+                if (path == 0) {
+                    for (size_t i = 0; i < source->size(); ++i) function->update(ctx.get(), columns, state->state(), i);
+                } else {
+                    auto intermediate = ColumnHelper::create_column(map_type, false);
+                    auto unfolded = ColumnHelper::unpack_and_duplicate_const_column(source->size(), source);
+                    function->convert_to_serialize_format(ctx.get(), {keys, unfolded}, source->size(), intermediate);
+                    for (size_t i = 0; i < intermediate->size(); ++i)
+                        function->merge(ctx.get(), intermediate.get(), state->state(), i);
+                    if (path >= 2) {
+                        // Seed the state through column copying, isolating the output path from update/merge.
+                        data->value_column = ColumnHelper::create_column(arg, true);
+                        for (size_t i = 0; i < 2 && i < source->size(); ++i)
+                            data->value_column->append(*unfolded, i, 1);
+                    }
+                }
+                auto result = ColumnHelper::create_column(map_type, false);
+                if (path == 3)
+                    function->finalize_to_column(ctx.get(), state->state(), result.get());
+                else
+                    function->serialize_to_column(ctx.get(), state->state(), result.get());
+                auto* map = down_cast<MapColumn*>(result.get());
+                const auto* copied = path < 2 ? data->value_column.get() : map->values_column_raw_ptr();
+                EXPECT_EQ(expected, check_geo_leaf(copied, *type.geo_type)->descriptor());
+                EXPECT_EQ(mode == 4 ? 0 : 2, map->values().size());
+                for (size_t i = 0; i < map->values().size(); ++i) {
+                    const auto key = map->keys().get(i);
+                    const bool first_key = KT == TYPE_INT ? key.get_int32() == 1 : key.get_slice() == Slice("a");
+                    const bool is_null = mode == 3 || (mode == 1 && first_key);
+                    EXPECT_EQ(is_null, map->values().is_null(i));
+                    if (!is_null) {
+                        EXPECT_EQ(point, check_geo_leaf(result.get(), *type.geo_type)
+                                                 ->get_wkb(arg.type == TYPE_ARRAY ? 0 : i)
+                                                 .to_string());
+                    }
+                }
+                result->check_or_die();
+            }
+            auto state = ManagedAggrState::create(ctx.get(), function);
+            auto source = physical_input(arg, 0);
+            auto wrong_type = map_type;
+            auto* leaf = &wrong_type.children[1];
+            if (leaf->type == TYPE_ARRAY) leaf = &leaf->children[0];
+            leaf->geo_type->crs = "custom:incompatible";
+            auto wrong = ColumnHelper::create_column(wrong_type, false);
+            auto intermediate = ColumnHelper::create_column(map_type, false);
+            function->convert_to_serialize_format(ctx.get(), {keys, source}, source->size(), intermediate);
+            if (path < 2) {
+                auto wrong_ctx = context(wrong_type, {TypeDescriptor(KT), wrong_type.children[1]});
+                auto wrong_state = ManagedAggrState::create(wrong_ctx.get(), function);
+                const Column* columns[] = {keys.get(), source.get()};
+                if (path == 0)
+                    EXPECT_THROW(function->update(wrong_ctx.get(), columns, wrong_state->state(), 0),
+                                 std::invalid_argument);
+                else
+                    EXPECT_THROW(function->merge(wrong_ctx.get(), intermediate.get(), wrong_state->state(), 0),
+                                 std::invalid_argument);
+            } else {
+                auto* data = reinterpret_cast<MapAggState<KT>*>(state->state());
+                data->value_column->append(*source, 0, 1);
+                if constexpr (KT == TYPE_INT)
+                    data->hash_map.emplace(2, 0);
+                else
+                    data->hash_map.emplace(Slice("b"), 0);
+                if (path == 3)
+                    EXPECT_THROW(function->finalize_to_column(ctx.get(), state->state(), wrong.get()),
+                                 std::invalid_argument);
+                else
+                    EXPECT_THROW(function->serialize_to_column(ctx.get(), state->state(), wrong.get()),
+                                 std::invalid_argument);
+            }
+        }
     }
     void check_array_conversion() {
         for (const auto& arg : {type, array_type}) {
@@ -388,6 +489,22 @@ TEST_P(GeoFunctionHelperTest, ArrayAgg) {
 TEST_P(GeoFunctionHelperTest, ArrayV2ConvertCopy) {
     check_array_conversion();
 }
+TEST_P(GeoFunctionHelperTest, MapUpdateCopy) {
+    check_map_copy<TYPE_INT>(0);
+    check_map_copy<TYPE_VARCHAR>(0);
+}
+TEST_P(GeoFunctionHelperTest, MapMergeCopy) {
+    check_map_copy<TYPE_INT>(1);
+    check_map_copy<TYPE_VARCHAR>(1);
+}
+TEST_P(GeoFunctionHelperTest, MapSerializeCopy) {
+    check_map_copy<TYPE_INT>(2);
+    check_map_copy<TYPE_VARCHAR>(2);
+}
+TEST_P(GeoFunctionHelperTest, MapFinalizeCopy) {
+    check_map_copy<TYPE_INT>(3);
+    check_map_copy<TYPE_VARCHAR>(3);
+}
 TEST_P(GeoFunctionHelperTest, AnyValue) {
     check_aggregate("any_value");
 }
@@ -412,9 +529,10 @@ TEST_P(GeoFunctionHelperTest, ArrayAggWindow) {
 TEST_P(GeoFunctionHelperTest, MapAgg) {
     auto map_type = TypeDescriptor::create_map_type(TypeDescriptor(TYPE_INT), type);
     auto ctx = context(map_type, {TypeDescriptor(TYPE_INT), type});
-    auto function = std::make_unique<MapAggAggregateFunction<TYPE_INT>>();
-    auto state = ManagedAggrState::create(ctx.get(), function.get());
-    auto* value_column = reinterpret_cast<MapAggAggregateFunctionState<TYPE_INT>*>(state->state())->value_column.get();
+    auto* function = get_aggregate_function("map_agg", TYPE_INT, TYPE_MAP, false);
+    ASSERT_NE(nullptr, function);
+    auto state = ManagedAggrState::create(ctx.get(), function);
+    auto* value_column = reinterpret_cast<MapAggState<TYPE_INT>*>(state->state())->value_column.get();
     check_geo_leaf(value_column, *type.geo_type);
     auto keys = Int32Column::create();
     keys->append(7);
@@ -427,9 +545,12 @@ TEST_P(GeoFunctionHelperTest, MapAgg) {
     auto result = ColumnHelper::create_column(map_type, false);
     function->finalize_to_column(ctx.get(), state->state(), result.get());
     ASSERT_EQ(1, result->size());
-    EXPECT_EQ(point, check_geo_leaf(result.get(), *type.geo_type)->get_wkb(0).to_string());
-    EXPECT_EQ(7, down_cast<MapColumn*>(result.get())->keys().get(0).get_int32());
-    EXPECT_TRUE(down_cast<MapColumn*>(result.get())->values().is_null(1));
+    auto* map = down_cast<MapColumn*>(result.get());
+    const size_t point_row = map->keys().get(0).get_int32() == 7 ? 0 : 1;
+    EXPECT_EQ(point, check_geo_leaf(result.get(), *type.geo_type)->get_wkb(point_row).to_string());
+    EXPECT_EQ(7, map->keys().get(point_row).get_int32());
+    EXPECT_EQ(8, map->keys().get(1 - point_row).get_int32());
+    EXPECT_TRUE(map->values().is_null(1 - point_row));
     result->check_or_die();
 }
 
@@ -509,6 +630,59 @@ TEST_F(FunctionHelperTest, ArrayV2ColumnCopyControls) {
             ASSERT_EQ(source->size(), array->size());
             for (size_t i = 0; i < source->size(); ++i) EXPECT_EQ(expected(i), array->elements().debug_item(i));
             intermediate->check_or_die();
+        }
+    }
+}
+TEST_F(FunctionHelperTest, MapColumnCopyControls) {
+    MemPool pool;
+    auto* map_function = get_aggregate_function("map_agg", TYPE_INT, TYPE_MAP, false);
+    ASSERT_NE(nullptr, map_function);
+    auto keys = Int32Column::create();
+    for (int key : {2, 1, 2}) keys->append(key);
+    for (const auto& arg : {TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_VARCHAR),
+                            TypeDescriptor::create_array_type(TypeDescriptor(TYPE_INT))}) {
+        for (int mode : {0, 1, 2, 3, 4, 5}) {
+            SCOPED_TRACE(::testing::Message() << arg.type << ":" << mode);
+            auto source = ColumnHelper::create_column(arg, mode != 0 && mode != 2);
+            if (mode < 3) {
+                for (int i = 11; i <= (mode == 2 ? 11 : 33); i += 11) {
+                    Datum value = arg.type == TYPE_INT
+                                          ? Datum(i)
+                                          : arg.type == TYPE_VARCHAR
+                                                    ? Datum(Slice(i == 11 ? "one" : i == 22 ? "two" : "three"))
+                                                    : Datum(DatumArray{Datum(i)});
+                    if (mode == 1 && i == 22)
+                        source->append_nulls(1);
+                    else
+                        source->append_datum(value);
+                }
+            } else if (mode == 3)
+                source->append_nulls(3);
+            else if (mode == 4)
+                source = ColumnHelper::create_const_null_column(3);
+            if (mode == 2) source = ConstColumn::create(std::move(source), 3);
+            auto expected = [&](size_t i) {
+                return source->is_constant() ? down_cast<const ConstColumn*>(source.get())->data_column()->debug_item(0)
+                                             : source->debug_item(i);
+            };
+            auto map_type = TypeDescriptor::create_map_type(TypeDescriptor(TYPE_INT), arg);
+            auto ctx = std::unique_ptr<FunctionContext>(
+                    FunctionContext::create_context(nullptr, &pool, map_type, {TypeDescriptor(TYPE_INT), arg}));
+            auto state = ManagedAggrState::create(ctx.get(), map_function);
+            const Column* columns[] = {keys.get(), source.get()};
+            for (size_t i = 0; i < source->size(); ++i) map_function->update(ctx.get(), columns, state->state(), i);
+            auto serialized = ColumnHelper::create_column(map_type, false);
+            map_function->serialize_to_column(ctx.get(), state->state(), serialized.get());
+            auto merged = ManagedAggrState::create(ctx.get(), map_function);
+            map_function->merge(ctx.get(), serialized.get(), merged->state(), 0);
+            auto result = ColumnHelper::create_column(map_type, false);
+            map_function->finalize_to_column(ctx.get(), merged->state(), result.get());
+            auto* map = down_cast<MapColumn*>(result.get());
+            ASSERT_EQ(mode == 5 ? 0 : 2, map->values().size());
+            for (size_t i = 0; i < map->values().size(); ++i) {
+                EXPECT_EQ(expected(map->keys().get(i).get_int32() == 1 ? 1 : 0), map->values().debug_item(i));
+            }
+            result->check_or_die();
         }
     }
 }
