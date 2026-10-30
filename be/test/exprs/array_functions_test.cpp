@@ -457,15 +457,7 @@ TEST_F(ArrayFunctionsTest, array_contains_no_null) {
         array->append_datum(DatumArray{(int8_t) true, (int8_t) false});
         array->append_datum(DatumArray{(int8_t) true, (int8_t) false});
 
-        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_BOOLEAN), false);
-        target->append_datum(Datum{(int8_t)0});
-        target->append_datum(Datum{(int8_t)1});
-        target->append_datum(Datum{(int8_t)0});
-        target->append_datum(Datum{(int8_t)1});
-        target->append_datum(Datum{(int8_t)0});
-        target->append_datum(Datum{(int8_t)1});
-        target->append_datum(Datum{(int8_t)0});
-        target->append_datum(Datum{(int8_t)1});
+        auto target = ColumnTestHelper::build_column<uint8_t>({0, 1, 0, 1, 0, 1, 0, 1});
 
         auto result = ArrayFunctions::array_contains_specific<TYPE_BOOLEAN>(nullptr, {array, target}).value();
         EXPECT_EQ("[0, 0, 1, 0, 0, 1, 1, 1]", result->debug_string());
@@ -855,15 +847,7 @@ TEST_F(ArrayFunctionsTest, array_position_no_null) {
         array->append_datum(DatumArray{(int8_t) true, (int8_t) false});
         array->append_datum(DatumArray{(int8_t) true, (int8_t) false});
 
-        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_BOOLEAN), false);
-        target->append_datum(Datum{(int8_t)0});
-        target->append_datum(Datum{(int8_t)1});
-        target->append_datum(Datum{(int8_t)0});
-        target->append_datum(Datum{(int8_t)1});
-        target->append_datum(Datum{(int8_t)0});
-        target->append_datum(Datum{(int8_t)1});
-        target->append_datum(Datum{(int8_t)0});
-        target->append_datum(Datum{(int8_t)1});
+        auto target = ColumnTestHelper::build_column<uint8_t>({0, 1, 0, 1, 0, 1, 0, 1});
 
         auto result = ArrayFunctions::array_position_specific<TYPE_BOOLEAN>(nullptr, {array, target}).value();
         EXPECT_EQ("[0, 0, 1, 0, 0, 1, 2, 1]", result->debug_string());
@@ -1280,15 +1264,7 @@ TEST_F(ArrayFunctionsTest, array_remove_no_null) {
         array->append_datum(DatumArray{(int8_t) true, (int8_t) false});
         array->append_datum(DatumArray{(int8_t) true, (int8_t) false});
 
-        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_BOOLEAN), false);
-        target->append_datum(Datum{(int8_t)0});
-        target->append_datum(Datum{(int8_t)1});
-        target->append_datum(Datum{(int8_t)0});
-        target->append_datum(Datum{(int8_t)1});
-        target->append_datum(Datum{(int8_t)0});
-        target->append_datum(Datum{(int8_t)1});
-        target->append_datum(Datum{(int8_t)0});
-        target->append_datum(Datum{(int8_t)1});
+        auto target = ColumnTestHelper::build_column<uint8_t>({0, 1, 0, 1, 0, 1, 0, 1});
 
         auto result = ArrayFunctions::array_remove(nullptr, {array, target}).value();
         EXPECT_EQ(8, result->size());

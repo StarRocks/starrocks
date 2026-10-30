@@ -17,6 +17,7 @@
 #include "column/column_helper.h"
 #include "formats/csv/converter.h"
 #include "formats/io/formatted_output_stream_string.h"
+#include "testutil/column_test_helper.h"
 #include "types/type_descriptor.h"
 
 namespace starrocks::csv {
@@ -100,12 +101,7 @@ TEST(BooleanConverterTest, test_read_quoted_string_invalid_value) {
 TEST(BooleanConverterTest, test_write_string_as_integral_value) {
     csv::Converter::Options opts{.bool_alpha = false};
     auto conv = csv::get_converter(TypeDescriptor(TYPE_BOOLEAN), false);
-    auto col = ColumnHelper::create_column(TypeDescriptor(TYPE_BOOLEAN), false);
-
-    col->append_datum(true);
-    col->append_datum(false);
-    col->append_datum(true);
-    col->append_datum(false);
+    auto col = ColumnTestHelper::build_column<uint8_t>({true, false, true, false});
 
     formats::FormattedOutputStreamString buff;
     ASSERT_TRUE(conv->write_string(&buff, *col, 0, opts).ok());
@@ -127,12 +123,7 @@ TEST(BooleanConverterTest, test_write_string_as_integral_value) {
 TEST(BooleanConverterTest, test_write_string_as_textual_value) {
     csv::Converter::Options opts{.bool_alpha = true};
     auto conv = csv::get_converter(TypeDescriptor(TYPE_BOOLEAN), false);
-    auto col = ColumnHelper::create_column(TypeDescriptor(TYPE_BOOLEAN), false);
-
-    col->append_datum(true);
-    col->append_datum(false);
-    col->append_datum(true);
-    col->append_datum(false);
+    auto col = ColumnTestHelper::build_column<uint8_t>({true, false, true, false});
 
     formats::FormattedOutputStreamString buff;
     ASSERT_TRUE(conv->write_string(&buff, *col, 0, opts).ok());
