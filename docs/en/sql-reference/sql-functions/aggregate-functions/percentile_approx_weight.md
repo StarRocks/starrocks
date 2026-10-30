@@ -20,6 +20,8 @@ DOUBLE PERCENTILE_APPROX_WEIGHT(expr, BIGINT weight, DOUBLE|ARRAY<DOUBLE p[, DOU
 - `weight` : Weight column. It must be a positive constant number or column.
 - `compression` : (Optional) Compression ratio. Range: [2048, 10000]. The larger the value, the higher the precision, the larger the memory consumption, and the longer the calculation time. If this parameter is not specified or the value is beyond the range of [2048, 10000], the default value `10000` is used.
 
+`compression` must be a constant expression with an integer value. `5000`, `5000.0`, `CAST(5000 AS DOUBLE)`, and `2500 * 2` are accepted. Fractional values such as `5000.5` and non-constant expressions are rejected without rounding. An omitted argument, `NULL`, or an integer outside [2048, 10000] uses the default `10000`.
+
 ## Examples
 
 ```plain text

@@ -28,6 +28,13 @@ public:
 
     /**
      * @param:
+     * @paramType columns: [TYPE_DOUBLE, TYPE_DOUBLE]
+     * @return TYPE_PERCENTILE
+     */
+    DEFINE_VECTORIZED_FN(percentile_hash_with_compression);
+
+    /**
+     * @param:
      * @paramType columns: []
      * @return TYPE_PERCENTILE
      */
