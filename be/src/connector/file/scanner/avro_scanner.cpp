@@ -72,19 +72,101 @@ AvroScanner::AvroScanner(RuntimeState* state, RuntimeProfile* profile, const TBr
                          ScannerCounter* counter, std::string schema_text)
         : FileScanner(state, profile, scan_range.params, counter),
           _scan_range(scan_range),
+          _serdes(nullptr),
           _schema_text(std::move(schema_text)),
           _closed(false) {
     _file_format_str = "avro_stream";
 }
 
 AvroScanner::~AvroScanner() {
+    // The cached values and classes are built from schemas owned by _serdes, so release them first.
+    _release_decode_cache();
 #if BE_TEST
-    avro_file_reader_close(_dbreader);
-#else
+    if (_dbreader != nullptr) {
+        avro_file_reader_close(_dbreader);
+    }
+#endif
     if (_serdes != nullptr) {
         serdes_destroy(_serdes);
     }
-#endif
+}
+
+void AvroScanner::_release_decode_cache() {
+    for (auto& kv : _decode_cache) {
+        auto& entry = kv.second;
+        if (entry->value_created) {
+            avro_value_decref(&entry->value);
+        }
+        if (entry->iface != nullptr) {
+            avro_value_iface_decref(entry->iface);
+        }
+        if (entry->reader != nullptr) {
+            avro_reader_free(entry->reader);
+        }
+    }
+    _decode_cache.clear();
+}
+
+serdes_err_t AvroScanner::_decode_confluent_message(const uint8_t* data, size_t length, AvroDecodeEntry** entry) {
+    // Same framing parse and schema lookup as serdes_deserialize_avro: magic byte + 4-byte schema id,
+    // then the schema from the libserdes cache (fetched from the registry once per unknown id). The
+    // error texts left in _err_buf are libserdes' own.
+    const void* payload = data;
+    size_t size = length;
+    serdes_schema_t* schema = nullptr;
+    ssize_t r = serdes_framing_read(_serdes, &payload, &size, &schema, _err_buf, sizeof(_err_buf));
+    if (r == -1) {
+        return SERDES_ERR_PAYLOAD_INVALID;
+    } else if (r == 0) {
+        snprintf(_err_buf, sizeof(_err_buf), "\"deserializer.framing\" not configured");
+        return SERDES_ERR_SCHEMA_REQUIRED;
+    }
+
+    const int schema_id = serdes_schema_id(schema);
+    auto it = _decode_cache.find(schema_id);
+    if (it == _decode_cache.end()) {
+        avro_schema_t avro_schema = serdes_schema_avro(schema);
+        auto new_entry = std::make_unique<AvroDecodeEntry>();
+        new_entry->root_is_bytes = avro_typeof(avro_schema) == AVRO_BYTES;
+        new_entry->iface = avro_generic_class_from_schema(avro_schema);
+        if (new_entry->iface == nullptr) {
+            snprintf(_err_buf, sizeof(_err_buf), "Failed to create avro class for schema id %d: %s", schema_id,
+                     avro_strerror());
+            return SERDES_ERR_SCHEMA_LOAD;
+        }
+        if (avro_generic_value_new(new_entry->iface, &new_entry->value) != 0) {
+            snprintf(_err_buf, sizeof(_err_buf), "Cannot allocate new value instance: %s", avro_strerror());
+            avro_value_iface_decref(new_entry->iface);
+            return SERDES_ERR_SCHEMA_LOAD;
+        }
+        new_entry->value_created = true;
+        new_entry->reader = avro_reader_memory(nullptr, 0);
+        if (new_entry->reader == nullptr) {
+            snprintf(_err_buf, sizeof(_err_buf), "Cannot allocate avro memory reader: %s", avro_strerror());
+            avro_value_decref(&new_entry->value);
+            avro_value_iface_decref(new_entry->iface);
+            return SERDES_ERR_SCHEMA_LOAD;
+        }
+        it = _decode_cache.emplace(schema_id, std::move(new_entry)).first;
+    }
+    AvroDecodeEntry* e = it->second.get();
+
+    // See https://github.com/confluentinc/schema-registry/issues/1411: like libserdes, a schema whose
+    // root type is bytes takes the payload as the raw byte array (no length prefix).
+    if (UNLIKELY(e->root_is_bytes)) {
+        avro_value_set_bytes(&e->value, const_cast<void*>(payload), size);
+        *entry = e;
+        return SERDES_ERR_OK;
+    }
+
+    // avro_value_read resets the value before reading, so nothing from the previous message survives.
+    avro_reader_memory_set_source(e->reader, static_cast<const char*>(payload), static_cast<int64_t>(size));
+    if (avro_value_read(e->reader, &e->value) != 0) {
+        snprintf(_err_buf, sizeof(_err_buf), "Failed to read avro value: %s", avro_strerror());
+        return SERDES_ERR_PAYLOAD_INVALID;
+    }
+    *entry = e;
+    return SERDES_ERR_OK;
 }
 
 // Previously, when parsing avro through JsonScanner, we used.*. to handle union data types,
@@ -120,7 +202,7 @@ Status AvroScanner::open() {
     }
     const TBrokerRangeDesc& range_desc = _scan_range.ranges[0];
 #if BE_TEST
-    if (avro_file_reader(range_desc.path.c_str(), &_dbreader)) {
+    if (!_test_use_confluent_messages && avro_file_reader(range_desc.path.c_str(), &_dbreader)) {
         auto err_msg = "Error opening file: " + std::string(avro_strerror());
         return Status::InternalError(err_msg);
     }
@@ -180,7 +262,6 @@ Status AvroScanner::open() {
         }
         column_index++;
     }
-    _init_data_idx_to_slot_once = false;
     return Status::OK();
 }
 
@@ -263,46 +344,65 @@ Status AvroScanner::_parse_avro(Chunk* chunk, const std::shared_ptr<SequentialFi
     const int capacity = _state->chunk_size();
     DCHECK_EQ(0, chunk->num_rows());
     for (size_t num_rows = chunk->num_rows(); num_rows < capacity; /**/) {
-        avro_value_t avro_value;
+        // The decoded message and the field mapping that belongs to its schema.
+        avro_value_t* avro_value = nullptr;
+        AvroFieldMapping* mapping = nullptr;
         // Routine-load source-metadata for this message (null for non-routine-load); read from the pipe
         // buffer below, or injected by the test in BE_TEST.
         const StreamMessageMeta* meta = nullptr;
-#ifdef BE_TEST
-        // In general, we want to test component injection schemastr.
-        avro_schema_error_t error;
-        avro_schema_t schema = nullptr;
-        int result = avro_schema_from_json(_schema_text.c_str(), _schema_text.size(), &schema, &error);
-        if (result != 0) {
-            auto err_msg = "parse schema from json error: " + std::string(avro_strerror());
-            return Status::InternalError(err_msg);
-        }
-        avro_value_iface_t* iface = avro_generic_class_from_schema(schema);
-        if (avro_generic_value_new(iface, &avro_value)) {
-            auto err_msg = "Cannot allocate new value instance: " + std::string(avro_strerror());
-            return Status::InternalError(err_msg);
-        }
-        DeferOp avro_deleter([&] {
-            avro_schema_decref(schema);
-            avro_value_iface_decref(iface);
-            avro_value_decref(&avro_value);
-        });
-        result = avro_file_reader_read_value(_dbreader, &avro_value);
-        if (result != 0) {
-            auto err_msg = "read avro value error: " + std::string(avro_strerror());
-            return Status::EndOfFile(err_msg);
-        }
-
-        char* avro_as_json = nullptr;
-        result = avro_value_to_json(&avro_value, 1, &avro_as_json);
-        if (result != 0) {
-            auto err_msg = "Unable to read value: " + std::string(avro_strerror());
-            return Status::InternalError(err_msg);
-        }
-        free(avro_as_json);
-        meta = _test_meta;
-#else
         const uint8_t* data{};
         size_t length = 0;
+        bool confluent_message = true;
+#ifdef BE_TEST
+        avro_value_t file_value;
+        avro_schema_t schema = nullptr;
+        avro_value_iface_t* iface = nullptr;
+        bool file_value_created = false;
+        DeferOp avro_deleter([&] {
+            if (schema != nullptr) avro_schema_decref(schema);
+            if (iface != nullptr) avro_value_iface_decref(iface);
+            if (file_value_created) avro_value_decref(&file_value);
+        });
+        meta = _test_meta;
+        if (_test_use_confluent_messages) {
+            if (_test_message_idx >= _test_messages.size()) {
+                return Status::EndOfFile("no more test messages");
+            }
+            const std::string& message = _test_messages[_test_message_idx++];
+            data = reinterpret_cast<const uint8_t*>(message.data());
+            length = message.size();
+        } else {
+            confluent_message = false;
+            // In general, we want to test component injection schemastr.
+            avro_schema_error_t error;
+            int result = avro_schema_from_json(_schema_text.c_str(), _schema_text.size(), &schema, &error);
+            if (result != 0) {
+                auto err_msg = "parse schema from json error: " + std::string(avro_strerror());
+                return Status::InternalError(err_msg);
+            }
+            iface = avro_generic_class_from_schema(schema);
+            if (avro_generic_value_new(iface, &file_value)) {
+                auto err_msg = "Cannot allocate new value instance: " + std::string(avro_strerror());
+                return Status::InternalError(err_msg);
+            }
+            file_value_created = true;
+            result = avro_file_reader_read_value(_dbreader, &file_value);
+            if (result != 0) {
+                auto err_msg = "read avro value error: " + std::string(avro_strerror());
+                return Status::EndOfFile(err_msg);
+            }
+
+            char* avro_as_json = nullptr;
+            result = avro_value_to_json(&file_value, 1, &avro_as_json);
+            if (result != 0) {
+                auto err_msg = "Unable to read value: " + std::string(avro_strerror());
+                return Status::InternalError(err_msg);
+            }
+            free(avro_as_json);
+            avro_value = &file_value;
+            mapping = &_file_field_mapping;
+        }
+#else
         auto* stream_file = down_cast<StreamLoadPipeInputStream*>(file->stream().get());
         {
             ++_counter->file_read_count;
@@ -312,43 +412,29 @@ Status AvroScanner::_parse_avro(Chunk* chunk, const std::shared_ptr<SequentialFi
         data = reinterpret_cast<uint8_t*>(_parser_buf->ptr);
         length = _parser_buf->remaining();
         meta = stream_source_meta_of(_parser_buf);
-        serdes_schema_t* schema;
-        serdes_err_t err =
-                serdes_deserialize_avro(_serdes, &avro_value, &schema, data, length, _err_buf, sizeof(_err_buf));
-        if (err) {
-            auto err_msg = "serdes deserialize avro failed: " + std::string(_err_buf);
-            LOG(ERROR) << err_msg;
-            _counter->num_rows_filtered++;
-            LoadPathStateHelper::append_error_msg_to_file(_state, "", err_msg);
-            return Status::InternalError("serdes deserialize avro failed");
-        }
-        DeferOp op([&] { avro_value_decref(&avro_value); });
 #endif
+        if (confluent_message) {
+            AvroDecodeEntry* entry = nullptr;
+            serdes_err_t err = _decode_confluent_message(data, length, &entry);
+            if (err) {
+                auto err_msg = "serdes deserialize avro failed: " + std::string(_err_buf);
+                LOG(ERROR) << err_msg;
+                _counter->num_rows_filtered++;
+                LoadPathStateHelper::append_error_msg_to_file(_state, "", err_msg);
+                return Status::InternalError("serdes deserialize avro failed");
+            }
+            avro_value = &entry->value;
+            mapping = &entry->mapping;
+        }
         size_t chunk_row_num = chunk->num_rows();
         Status st = Status::OK();
         if (!_json_paths.empty()) {
-            st = _construct_row(avro_value, chunk, meta);
+            st = _construct_row(*avro_value, chunk, meta);
         } else {
-            if (!_init_data_idx_to_slot_once) {
-                size_t element_count;
-                if (UNLIKELY(avro_value_get_size(&avro_value, &element_count) != 0)) {
-                    auto err_msg = "Cannot get record size: " + std::string(avro_strerror());
-                    return Status::InternalError(err_msg);
-                }
-                _data_idx_to_slot.assign(element_count, SlotInfo());
-                for (size_t i = 0; i < element_count; i++) {
-                    const char* field_name;
-                    avro_value_t element_value;
-                    if (UNLIKELY(avro_value_get_by_index(&avro_value, i, &element_value, &field_name) != 0)) {
-                        auto err_msg = "Cannot get value by index: " + std::string(avro_strerror());
-                        return Status::InternalError(err_msg);
-                    }
-                    _data_idx_to_fieldname.emplace_back(field_name);
-                }
-
-                _init_data_idx_to_slot_once = true;
+            if (!mapping->initialized) {
+                RETURN_IF_ERROR(_init_field_mapping(*avro_value, mapping));
             }
-            st = _construct_row_without_jsonpath(avro_value, chunk, meta);
+            st = _construct_row_without_jsonpath(*avro_value, chunk, meta, mapping);
         }
         if (!st.ok()) {
             if (_counter->num_rows_filtered++ < MAX_ERROR_LINES_IN_FILE) {
@@ -366,24 +452,45 @@ Status AvroScanner::_parse_avro(Chunk* chunk, const std::shared_ptr<SequentialFi
     return Status::OK();
 }
 
+Status AvroScanner::_init_field_mapping(const avro_value_t& avro_value, AvroFieldMapping* mapping) {
+    size_t element_count;
+    if (UNLIKELY(avro_value_get_size(&avro_value, &element_count) != 0)) {
+        auto err_msg = "Cannot get record size: " + std::string(avro_strerror());
+        return Status::InternalError(err_msg);
+    }
+    mapping->data_idx_to_slot.assign(element_count, SlotInfo());
+    mapping->data_idx_to_fieldname.clear();
+    for (size_t i = 0; i < element_count; i++) {
+        const char* field_name;
+        avro_value_t element_value;
+        if (UNLIKELY(avro_value_get_by_index(&avro_value, i, &element_value, &field_name) != 0)) {
+            auto err_msg = "Cannot get value by index: " + std::string(avro_strerror());
+            return Status::InternalError(err_msg);
+        }
+        mapping->data_idx_to_fieldname.emplace_back(field_name);
+    }
+    mapping->initialized = true;
+    return Status::OK();
+}
+
 Status AvroScanner::_construct_row_without_jsonpath(const avro_value_t& avro_value, Chunk* chunk,
-                                                    const StreamMessageMeta* meta) {
+                                                    const StreamMessageMeta* meta, AvroFieldMapping* mapping) {
     _found_columns.assign(chunk->num_columns(), false);
-    size_t element_count = _data_idx_to_fieldname.size();
+    size_t element_count = mapping->data_idx_to_fieldname.size();
     avro_value_t element_value;
     for (size_t i = 0; i < element_count; i++) {
         if (UNLIKELY(avro_value_get_by_index(&avro_value, i, &element_value, nullptr) != 0)) {
             auto err_msg = "Cannot get value by index: " + std::string(avro_strerror());
             return Status::InternalError(err_msg);
         }
-        SlotInfo& slot_info = _data_idx_to_slot[i];
+        SlotInfo& slot_info = mapping->data_idx_to_slot[i];
         if (slot_info.id > -1) {
             int column_index = chunk->get_index_by_slot_id(slot_info.id);
             _found_columns[column_index] = true;
         } else if (slot_info.id == -1) {
             continue;
         } else if (UNLIKELY(slot_info.id < -1)) {
-            const std::string& key = _data_idx_to_fieldname[i];
+            const std::string& key = mapping->data_idx_to_fieldname[i];
             // look up key in the slot dict.
             auto itr = _slot_desc_dict.find(key);
             if (itr == _slot_desc_dict.end()) {
@@ -587,6 +694,7 @@ Status AvroScanner::_construct_avro_types() {
 void AvroScanner::close() {
     if (!_closed) {
         _file.reset();
+        _release_decode_cache();
         _closed = true;
     }
     FileScanner::close();
