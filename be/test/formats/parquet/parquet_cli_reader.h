@@ -179,8 +179,7 @@ private:
                     return Status::InternalError(fmt::format("Not supported decimal, precision: {}, scale: {}",
                                                              schema.precision, schema.scale));
                 }
-                return TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL128, -1, schema.precision,
-                                                         schema.scale);
+                return TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL128, schema.precision, schema.scale);
             } else if (schema.converted_type == tparquet::ConvertedType::ENUM) {
                 return TYPE_VARCHAR_DESC;
             } else if (schema.converted_type == tparquet::ConvertedType::JSON) {
