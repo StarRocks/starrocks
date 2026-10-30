@@ -20,6 +20,7 @@
 #include "exprs/condition_expr.h"
 #include "exprs/expr_factory.h"
 #include "exprs/mock_vectorized_expr.h"
+#include "testutil/column_test_helper.h"
 
 namespace starrocks {
 
@@ -57,10 +58,7 @@ TEST_F(VectorizedIfExprTest, ifArray) {
     auto expr = VectorizedConditionExprFactory::create_if_expr(expr_node);
     std::unique_ptr<Expr> expr_ptr(expr);
 
-    auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_BOOLEAN), false);
-    target->append_datum(Datum{(int8_t)0});
-    target->append_datum(Datum{(int8_t)1});
-    target->append_datum(Datum{(int8_t)0});
+    auto target = ColumnTestHelper::build_column<uint8_t>({0, 1, 0});
     auto cond = MockExpr(TypeDescriptor(TYPE_BOOLEAN), target);
 
     auto array0 = ColumnHelper::create_column(TYPE_ARRAY_INT_DESC, true);
