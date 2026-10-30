@@ -17,12 +17,17 @@ name: AI CODEX REVIEW
 # Two jobs, so the model never shares a job with a write token:
 #   review  : codex reads the (untrusted) PR inside a locked-down container on the
 #             [self-hosted, codex] runner (user codexci). Read-only github.token; the
-#             checkout does not persist it. Only the review text leaves the job.
+#             checkout does not persist it. Only the review text leaves the job. Before codex
+#             starts, a starrocks-bot token minted for one step posts the "In progress" summary
+#             comment and is revoked right away, so the model never shares the job with a live
+#             write token.
 #   publish : no model. starrocks-bot posts the sanitized result (mentions broken, HTML comments
 #             dropped, length capped). Findings: one PR review with an inline comment per
-#             finding (a conversation to resolve), like the hosted Codex review. No findings or
-#             a failure: one upserted comment per PR and mode ("<!-- codex-ci-review -->" /
-#             "<!-- codex-ci-post-merge-review -->").
+#             finding (a conversation to resolve), like the hosted Codex review. Every run
+#             keeps one summary comment per PR and mode, upserted ("<!-- codex-ci-review -->" /
+#             "<!-- codex-ci-post-merge-review -->"), like the hosted review summary: In progress,
+#             then No issues found / N findings / Failed. Runs after a cancelled or timed-out
+#             review too, so the summary never stays In progress.
 # A failed review is published too: the comment then carries the error, a log excerpt and
 # what to check, and the run is marked failed.
 # Review context: root/nested AGENTS.md from the checkout, the base branch's REVIEW.md
@@ -75,6 +80,8 @@ jobs:
       mode: ${{ steps.resolve.outputs.mode }}
       status: ${{ steps.review.outputs.status }}
       head_sha: ${{ steps.review.outputs.head_sha }}
+      commit: ${{ steps.resolve.outputs.commit }}
+      started: ${{ steps.progress.outputs.started }}
       review_b64: ${{ steps.review.outputs.review_b64 }}
       inline_b64: ${{ steps.review.outputs.inline_b64 }}
     steps:
@@ -112,6 +119,37 @@ jobs:
           if ! OUT="${OUT}" ./ci-tool/bin/ai_codex_review.sh --resolve; then
             echo "mode=failed" >> "${GITHUB_OUTPUT}"
           fi
+
+      # The run starts from an issue comment, so the PR shows nothing until the result: post the
+      # "In progress" summary now. The token serves this one step and is revoked at its end,
+      # before codex runs (hence skip-token-revoke). Best effort: never blocks the review.
+      - name: starrocks-bot token (in-progress comment only)
+        id: progress-token
+        if: steps.resolve.outputs.mode == 'pre' || steps.resolve.outputs.mode == 'post'
+        continue-on-error: true
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.STARROCKS_BOT_APP_ID }}
+          private-key: ${{ secrets.STARROCKS_BOT_PRIVATE_KEY }}
+          permission-pull-requests: write
+          skip-token-revoke: true
+
+      - name: post the in-progress comment
+        id: progress
+        if: steps.progress-token.outputs.token != ''
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ steps.progress-token.outputs.token }}
+          STATUS: running
+          REVIEW_MODE: ${{ steps.resolve.outputs.mode }}
+          HEAD_SHA: ${{ steps.resolve.outputs.commit }}
+          TRIGGER: ${{ github.event_name == 'workflow_dispatch' && 'Manual run' || 'Hosted review failed' }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if ./ci-tool/bin/ai_codex_review.sh --publish; then
+            echo "started=true" >> "${GITHUB_OUTPUT}"
+          fi
+          gh api --silent -X DELETE installation/token || echo "::warning::could not revoke the in-progress token"
 
       # Both parents are needed: the merge ref's first parent / the squash commit's parent is
       # the base. A PR with conflicts has no merge ref; this step then fails and the next
@@ -165,15 +203,18 @@ jobs:
 
   publish:
     needs: review
-    # Also after a failed review, to post its failure report.
-    if: ${{ !cancelled() && needs.review.outputs.review_b64 != '' }}
+    # Also after a failed review, to post its failure report, and after a cancelled or
+    # timed-out one whose In progress summary is up, to mark it failed.
+    if: ${{ always() && (needs.review.outputs.review_b64 != '' || needs.review.outputs.started == 'true') }}
     runs-on: [self-hosted, quick]
     env:
       PR_NUMBER: ${{ github.event.issue.number || inputs.pr_number }}
-      STATUS: ${{ needs.review.outputs.status }}
+      STATUS: ${{ needs.review.outputs.status == 'ok' && 'ok' || 'failed' }}
       # A resolve failure has no mode to file it under; it goes to the pre-merge comment.
       REVIEW_MODE: ${{ needs.review.outputs.mode == 'post' && 'post' || 'pre' }}
-      HEAD_SHA: ${{ needs.review.outputs.head_sha }}
+      # The reviewed commit; the resolved one when the review never got that far.
+      HEAD_SHA: ${{ needs.review.outputs.head_sha || needs.review.outputs.commit }}
+      TRIGGER: ${{ github.event_name == 'workflow_dispatch' && 'Manual run' || 'Hosted review failed' }}
       REVIEW_B64: ${{ needs.review.outputs.review_b64 }}
       INLINE_B64: ${{ needs.review.outputs.inline_b64 }}
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
