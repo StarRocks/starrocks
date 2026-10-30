@@ -321,8 +321,7 @@ TypeDescriptor TypeDescriptor::from_storage_type_info(TypeInfo* type_info) {
     LogicalType ltype = scalar_field_type_to_logical_type(ftype);
     DCHECK(ltype != TYPE_UNKNOWN);
 
-    TypeDescriptor ret = TypeDescriptor::from_logical_type(ltype, TypeDescriptor::MAX_VARCHAR_LENGTH,
-                                                           type_info->precision(), type_info->scale());
+    TypeDescriptor ret = TypeDescriptor::from_logical_type(ltype, type_info->precision(), type_info->scale());
     if (is_array) {
         TypeDescriptor arr(TYPE_ARRAY);
         arr.children.emplace_back(ret);
