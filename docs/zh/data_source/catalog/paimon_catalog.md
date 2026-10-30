@@ -24,7 +24,11 @@ Paimon catalog 是一种 external catalog，可以让您在不进行数据导入
 
 ## 使用注意事项
 
-Paimon catalog 仅支持查询数据，不支持通过 Paimon catalog 在 Paimon 集群中执行 DROP、DELETE 或 INSERT 操作。
+除查询外，当前 Paimon 集成还实现了 `CREATE/DROP DATABASE`、`CREATE/DROP TABLE`、批量 `INSERT INTO`、`INSERT OVERWRITE`、`CREATE TABLE AS SELECT`（CTAS）以及同一 Catalog 内的 `CREATE TABLE LIKE`。不支持行级 `UPDATE` 和 `DELETE`。只能删除空数据库。
+
+:::caution
+DDL 和批量写入仍处于集成阶段。下文的建表和写入说明描述当前实现，不代表已通过运行时验证的版本可用性。示例和端到端回读行为仍需运行时验证。
+:::
 
 ## Paimon to StarRocks data types
 
@@ -755,3 +759,124 @@ DROP Catalog paimon_catalog_fs;
 ```SQL
 INSERT INTO default_catalog.olap_db.olap_tbl SELECT * FROM paimon_table;
 ```
+
+## 创建和写入 Paimon 表
+
+以下内容描述仍处于集成阶段的 DDL 和批量写入实现。您可以复用已有 Paimon Catalog 及其数据库，或按下例创建数据库。Warehouse、元存储和存储凭据仍在 Catalog 的 `PROPERTIES` 中配置，不要写入表属性。`CREATE DATABASE` 不接受 Catalog 或位置覆盖配置。
+
+### 创建数据库和表
+
+如果 `write_db` 已存在，请跳过 `CREATE DATABASE`，直接使用该数据库。表位置由 Catalog 决定。`ENGINE` 根据目标 Catalog 自动推断为 `paimon`。
+
+```sql
+SET CATALOG paimon_catalog_fs;
+CREATE DATABASE IF NOT EXISTS write_db;
+USE write_db;
+
+CREATE TABLE orders (
+    id BIGINT NOT NULL,
+    dt DATE NOT NULL,
+    amount DECIMAL(12, 2)
+)
+PRIMARY KEY (id, dt)
+PARTITION BY (dt)
+PROPERTIES (
+    "bucket" = "4",
+    "file.format" = "parquet",
+    "merge-engine" = "deduplicate"
+);
+
+CREATE TABLE event_log (
+    id BIGINT,
+    dt DATE,
+    event_time DATETIME,
+    tags ARRAY<STRING>,
+    attributes MAP<STRING, STRING>,
+    details STRUCT<source STRING, attempt INT>,
+    payload VARIANT
+)
+PARTITION BY (dt)
+PROPERTIES (
+    "bucket" = "-1",
+    "file.format" = "parquet"
+);
+```
+
+`PRIMARY KEY` 定义的是 Paimon 原生主键，而不是 OLAP 表模型；主键列不允许为 NULL。对于可写主键表，必须显式设置 `bucket > 0`。不含主键的表为 Append 表。分区使用普通列列表 `PARTITION BY (column, ...)`，不支持分区定义或表达式。原生分桶通过 `PROPERTIES` 中的 `bucket` 及按需指定的 `bucket-key` 配置，而不是 `DISTRIBUTED BY`。不支持 OLAP 的 `ORDER BY`、`ROLLUP`、聚合列、生成列和 `AUTO_INCREMENT`。
+
+### 写入类型和默认值
+
+- 新表支持可表示的标量类型：`BOOLEAN`、`TINYINT`、`SMALLINT`、`INT`、`BIGINT`、`FLOAT`、`DOUBLE`、`DECIMAL`、`CHAR`、`VARCHAR`/`STRING`、`VARBINARY`、`DATE` 和 `DATETIME`。还支持 `ARRAY`、`MAP`、`STRUCT` 和 `VARIANT`，以及由支持类型组成的嵌套结构。
+- 新建的 `DATETIME` 列映射为不带时区的 Paimon `TIMESTAMP(6)`。写入已有表时使用原生时间戳类型，但公共 C++ 0.3 Writer 仅支持精度 `0`、`3`、`6` 和 `9`；精度 `1`、`2`、`4`、`5`、`7` 和 `8` 会在能力检查时被拒绝。对于带时区的目标类型，源 `DATETIME` 按会话时区解释。如果低于 `6` 的目标精度无法精确表示源值的微秒部分，Writer 会拒绝该值，而不是静默截断。这不会增加源值超过微秒的精度，也不会改变读取侧的时间戳映射和限制。
+- 新建嵌套子字段允许为 NULL。SQL `CREATE TABLE` 无法声明嵌套 `NOT NULL`。写入时会检查已有原生可空性约束；`CREATE TABLE LIKE` 会保留这些约束。
+- 普通 `LARGEINT` 列以及其他不支持或无法表示的类型会被明确拒绝，而不是静默缩小范围。支持 `VARIANT` 不代表已验证与公共 Paimon Reader 之间完整的有符号 128 位整数互操作性；该互操作性尚未验证。
+- 可以不声明 `DEFAULT`，或仅为可空列指定 `DEFAULT NULL`。不支持非 NULL 字面量或表达式默认值。向具有原生非 NULL 默认值的已有表插入数据时，必须显式提供值，不能依赖省略列或 `DEFAULT`。必填列和主键列必须提供值。
+
+### 批量 INSERT 和 CTAS
+
+```sql
+INSERT INTO paimon_catalog_fs.write_db.orders
+VALUES (1, '2026-01-01', 12.34);
+
+CREATE TABLE paimon_catalog_fs.write_db.orders_copy
+PROPERTIES ("bucket" = "-1", "file.format" = "parquet")
+AS SELECT id, dt, amount FROM paimon_catalog_fs.write_db.orders;
+```
+
+[INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) 接受值列表或查询结果。对于主键目标表，使用原生 `deduplicate` Merge Engine，而不是 StarRocks OLAP 部分列更新语义。[CTAS](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) 先创建原生新表，再写入查询结果，不会克隆源表的主键或表属性。上例创建 Append 表。若要创建主键目标表，请声明 `PRIMARY KEY` 并显式设置 `bucket > 0`。
+
+CTAS 不保证建表和数据发布之间的原子性。如果写入失败，当前实现会保守地保留已创建的表，因为公共 Catalog 无法根据表身份执行原子条件删除。手动清理或重试前，请检查并核对目标表。发布结果未知的表绝不能自动删除。
+
+### CREATE TABLE LIKE
+
+源表和目标表必须属于同一 Paimon Catalog，但可以位于不同数据库：
+
+```sql
+SET CATALOG paimon_catalog_fs;
+CREATE DATABASE IF NOT EXISTS copy_db;
+CREATE TABLE paimon_catalog_fs.copy_db.orders_like
+LIKE paimon_catalog_fs.write_db.orders;
+```
+
+`LIKE` 复制原生 Schema，包括主键和分区键、原生类型、时间戳类型和精度、顶层及嵌套 `NOT NULL` 约束，以及可复用的表属性。目标表获得新的身份和存储位置，不复制源数据文件或快照，也不复制源表专属位置和凭据。通过 `LIKE` 建表不会绕过下述写入能力检查。
+
+### 写入限制
+
+- 写入目标必须是主分支上的原生 File-Store 表，并使用单条自动提交语句。不支持显式多语句事务，也不保证跨 FE 重启的 Exactly-Once 恢复。
+- 数据文件仅支持 Parquet，包括按层指定文件格式的配置。此 Writer 不支持外部数据路径（`data-file.external-paths`）、替代数据目录（`data-file.path-directory`）或带有附属文件的 Committable。
+- 主键表要求固定分桶（`bucket > 0`）和 `merge-engine = deduplicate`。Append 表支持 Unaware 分桶（`bucket = -1`）或固定分桶（`bucket > 0`，需配置原生要求的 `bucket-key`）。
+- 不支持主键表动态分桶（`bucket = -1`）、Postpone 分桶（`bucket = -2`）、全局索引、Data Evolution、Row Tracking 和 `FILEBLOB`。不支持跨分区主键更新：所有分区列都必须包含在主键中。
+- 分区值目前仅支持 `BOOLEAN`、整数类型、`CHAR`/`VARCHAR` 和 `DATE`；数据列支持时间戳和小数并不代表分区列也支持。可空分区列使用原生 NULL 标记。由于公共 SDK 会将空字符串或全空白字符串与 NULL 混淆，此类字符串分区值会被明确拒绝；保留的默认分区名称同样会被拒绝。
+- 数据写入仅通过隔离的 `libstarrocks_paimon.so` Shim 使用原生 C++ Writer。写入库缺失或不兼容时，操作失败，不提供 JNI Writer 或 JNI 回退。FE 的 Java Catalog 和快照提交协议与数据 Writer 相互独立，不通过 JNI 执行。公共 Paimon C++ 0.3 和 Java 2.0 SDK 基线保持不变。
+
+### INSERT OVERWRITE
+
+Paimon 通过发布快照实现覆盖写入，不使用 StarRocks 临时分区交换。不接受分区名称或临时分区；静态分区使用列值对，必须指定所有分区列。
+
+| 模式 | 选择方式 | 空输入的效果 |
+| --- | --- | --- |
+| 全表 | 未指定 `PARTITION` 且未启用 Dynamic Overwrite；非分区表也使用此模式。替换整表数据。 | 清空整表。 |
+| 静态 | `PARTITION (column = value, ...)`。替换指定分区。 | 清空指定分区。 |
+| 动态 | 无静态分区子句、目标为分区表且 `dynamic_overwrite = true`。仅替换输入行涉及的分区，保留其他分区。 | 不涉及任何分区，已有数据保持不变。 |
+
+```sql
+INSERT OVERWRITE paimon_catalog_fs.write_db.orders
+PARTITION (dt = '2026-01-01')
+SELECT id, amount FROM paimon_catalog_fs.write_db.orders_copy
+WHERE dt = '2026-01-01';
+
+INSERT /*+ SET_VAR(dynamic_overwrite = true) */ OVERWRITE paimon_catalog_fs.write_db.orders
+SELECT id, dt, amount FROM paimon_catalog_fs.write_db.orders_copy;
+```
+
+空输入的 `INSERT INTO` 同样不修改数据。全表和静态覆盖在输入为空时仍执行清空操作。
+
+### 提交结果和回读
+
+非空写入，以及输入为空的全表或静态覆盖，只有在 FE 确认 Paimon 快照发布后才报告成功。仅 BE 完成文件写入不代表成功。空输入的追加和动态覆盖会确认为无数据变更，不需要新快照。
+
+:::warning
+如果错误包含 `Paimon commit outcome is unknown for operation ...; preserve its files and reconcile the snapshot before retrying`，发布结果可能已经持久化。请保留文件及任何 CTAS 目标表，记录操作标识，并核对 Paimon 快照后再决定是否重试。即使客户端收到失败或取消结果，也不要盲目重跑语句或删除输出。
+:::
+
+写入不会消除已有的读取限制，包括上文的 `VARIANT` 边界及时间戳和时区映射。本功能的回读验证范围仅为原生 C++ Reader 和 StarRocks 原生 Parquet Reader，不包含 JNI 互操作验证。主键表遵循原生合并语义，结果不应直接按物理输入行数理解。Reader 选择、Compaction、时间戳及时区行为以及原生回读仍需端到端运行时验证。

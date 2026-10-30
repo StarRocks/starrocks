@@ -61,7 +61,7 @@ You can submit an asynchronous CTAS task using [SUBMIT TASK](../loading_unloadin
 
 ## Usage notes
 
-- The CTAS statement can only create a new table that meets the following requirements:
+- For OLAP targets, CTAS uses the following table model. Paimon targets are described in [CTAS in a Paimon catalog](#ctas-in-a-paimon-catalog).
   - `ENGINE` is `OLAP`.
 
   - The table is a Duplicate Key table by default. You can also specify it as a Primary Key table in `key_desc`.
@@ -78,6 +78,28 @@ You can submit an asynchronous CTAS task using [SUBMIT TASK](../loading_unloadin
 - After a new table is created, you need to manually grant permissions on this table to users.
 
 - If you do not specify a name for a Task when you asynchronously query a table and create a new table based on the query result, StarRocks automatically generates a name for the Task.
+
+## CTAS in a Paimon catalog
+
+The Paimon DDL and batch writer are under integration, without runtime-verified release availability. A Paimon catalog target is a narrow exception to the OLAP table model above: `ENGINE` is inferred as `paimon`. The OLAP `FLOAT`/`DOUBLE`-to-`DECIMAL` conversion, sort-key defaults, and distribution defaults do not apply.
+
+```sql
+CREATE TABLE paimon_catalog_fs.write_db.orders_ctas
+PRIMARY KEY (id, dt)
+PARTITION BY (dt)
+PROPERTIES (
+    "bucket" = "4",
+    "file.format" = "parquet",
+    "merge-engine" = "deduplicate"
+)
+AS SELECT id, dt, amount FROM paimon_catalog_fs.write_db.orders;
+```
+
+Use an existing target database. `PRIMARY KEY` declares native Paimon keys and requires `bucket > 0` for writing; without keys, CTAS creates an append table. Use a plain partition-column list and native table options, not `DISTRIBUTED BY` or OLAP key/sort definitions. Source keys and table options are not automatically cloned.
+
+CTAS creates the table before writing and is **not atomic** across those steps. If writing fails, the current implementation retains the created table because the public catalog cannot prove an atomic identity-conditional drop is safe. An unknown commit outcome must never cause automatic table deletion or a blind retry. Preserve the target and files, and reconcile snapshots before manual cleanup or retry. Multi-statement transactions and exactly-once recovery across FE restarts are unsupported.
+
+Data writing uses only the native C++ writer, with no JNI writer or fallback. The FE's Java catalog and snapshot-commit protocol do not use JNI. See [Paimon catalog](../../../data_source/catalog/paimon_catalog.md) for supported types, defaults, writer dependencies, commit outcomes, and reader limitations. The examples and end-to-end behavior still require runtime validation.
 
 ## Examples
 

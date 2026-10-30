@@ -18,6 +18,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -25,6 +26,7 @@
 
 #include "cache/cache_options.h"
 #include "cache/scan/cache_input_stream.h"
+#include "common/status.h"
 
 namespace starrocks {
 
@@ -95,9 +97,45 @@ private:
     SharedBufferedStats _shared_buffered_stats;
 };
 
-// Adapts the FileSystem instance already created for an HDFS scan range to the
-// file-system API used by paimon-cpp. This keeps cloud credentials and
-// scheme-specific behavior in StarRocks instead of configuring a second client.
+// One tracker per write attempt, bound to the credential-bearing StarRocks FS.
+// The FS must outlive the tracker and every stream. Paths must be attempt-unique
+// SDK data/temp files, never snapshot/commit metadata. SR's remote MUST_CREATE
+// implementations do not all provide atomic no-clobber; an existence precheck
+// cannot protect against another client concurrently creating the same path.
+// Only files successfully created by this attempt can be overwritten/deleted.
+// Directories and preexisting files are never removed by cleanup.
+class PaimonWriteFileTracker {
+public:
+    explicit PaimonWriteFileTracker(starrocks::FileSystem* file_system) : _file_system(file_system) {}
+
+    std::vector<std::string> owned_files() const;
+    // Call only after external publication succeeds. All paths must have closed
+    // successfully. Idempotent; published paths cannot be mutated or rolled back.
+    Status mark_published(const std::vector<std::string>& paths);
+    // Close/destroy SDK writers first. Seals the attempt against further writes;
+    // retries failed deletions, continues past errors and never recursively deletes.
+    Status rollback();
+
+private:
+    friend class PaimonFileSystem;
+    friend class PaimonOutputStream;
+    struct FileState {
+        bool open = true;
+        bool closed_ok = false;
+        bool owned = true;
+        bool published = false;
+    };
+
+    void _stream_closed(const std::string& path, bool success);
+
+    starrocks::FileSystem* _file_system;
+    mutable std::mutex _mutex;
+    std::map<std::string, FileState> _files;
+    bool _rolled_back = false;
+};
+
+// Adapts an existing StarRocks FS without configuring a second client. The
+// constructor is read-only; only create_for_write explicitly enables writes.
 class PaimonFileSystem final : public paimon::FileSystem {
 public:
     // `FileSystem` must be qualified inside this class: the injected-class-name of the
@@ -107,6 +145,12 @@ public:
               _datacache_options(datacache_options),
               _stats(std::make_shared<PaimonFileSystemStats>()) {}
     ~PaimonFileSystem() override = default;
+
+    // Returns null for a null tracker/FS. Writer reads bypass datacache so they
+    // work without scan context/cache initialization and cannot read stale
+    // cached content for files being written by this attempt. On S3/Azure,
+    // Flush finalizes the object; subsequent writes are rejected (SR contract).
+    static std::shared_ptr<PaimonFileSystem> create_for_write(std::shared_ptr<PaimonWriteFileTracker> tracker);
 
     paimon::Result<std::unique_ptr<paimon::InputStream>> Open(const std::string& path) const override;
     paimon::Result<std::unique_ptr<paimon::OutputStream>> Create(const std::string& path,
@@ -120,6 +164,10 @@ public:
     paimon::Status ListFileStatus(const std::string& path,
                                   std::vector<std::unique_ptr<paimon::FileStatus>>* file_status_list) const override;
     paimon::Result<bool> Exists(const std::string& path) const override;
+    // v0.3's default helper discards Close() errors; keep them observable here.
+    paimon::Status WriteFile(const std::string& path, const std::string& content, bool overwrite) override;
+    // SR rename is not an atomic publication primitive (e.g. S3 copy+delete).
+    paimon::Status AtomicStore(const std::string& path, const std::string& content) override;
 
     bool datacache_enabled() const { return _datacache_options.enable_datacache; }
     PaimonFileSystemStats::Snapshot get_stats() const { return _stats->snapshot(); }
@@ -128,6 +176,7 @@ private:
     starrocks::FileSystem* _file_system;
     DataCacheOptions _datacache_options;
     std::shared_ptr<PaimonFileSystemStats> _stats;
+    std::shared_ptr<PaimonWriteFileTracker> _write_tracker;
 };
 
 } // namespace starrocks

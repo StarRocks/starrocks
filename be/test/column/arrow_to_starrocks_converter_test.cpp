@@ -24,6 +24,7 @@
 #include <base/utility/guard.h>
 #include <gtest/gtest.h>
 
+#include <limits>
 #include <random>
 #include <type_traits>
 #include <utility>
@@ -451,6 +452,157 @@ TEST_F(ArrowConverterTest, BuildArrowColumnConvertPlanVariantAndConvert) {
     ASSERT_TRUE(variant_column->try_get_row_ref(2, &row));
     ASSERT_EQ(kMetadata, row.get_metadata().raw());
     ASSERT_EQ(kValue2, row.get_value().raw());
+}
+
+TEST_F(ArrowConverterTest, VariantConverterDistinguishesSqlNullAndVariantNullSlicedAppend) {
+    auto arrow_type = make_arrow_variant_type();
+    constexpr std::string_view kMetadata("\x01\x00\x00", 3);
+    constexpr std::string_view kValue("\x09ok", 3);
+    constexpr std::string_view kVariantNull("\x00", 1);
+    auto values = std::make_shared<arrow::BinaryBuilder>();
+    auto metadata = std::make_shared<arrow::BinaryBuilder>();
+    arrow::StructBuilder builder(arrow_type, arrow::default_memory_pool(), {values, metadata});
+    ASSERT_OK(builder.Append());
+    ASSERT_OK(values->Append(kValue));
+    ASSERT_OK(metadata->Append(kMetadata));
+    ASSERT_OK(builder.AppendNull());
+    ASSERT_OK(builder.Append());
+    ASSERT_OK(values->Append(kVariantNull));
+    ASSERT_OK(metadata->Append(kMetadata));
+    ASSERT_OK(builder.Append());
+    ASSERT_OK(values->Append(kValue));
+    ASSERT_OK(metadata->Append(kMetadata));
+    std::shared_ptr<arrow::Array> array;
+    ASSERT_OK(builder.Finish(&array));
+    ASSERT_OK(array->ValidateFull());
+    auto sliced = array->Slice(1, 3);
+    ASSERT_EQ(1, sliced->offset());
+    TypeDescriptor type(TYPE_VARIANT);
+    TypeDescriptor raw_type;
+    ConvertFuncTree plan;
+    bool need_cast = false;
+    ASSERT_STATUS_OK(build_arrow_column_convert_plan(arrow_type.get(), &type, true, &raw_type, &plan, need_cast, true));
+    ASSERT_FALSE(need_cast);
+    auto column = create_arrow_column_convert_dest(type, raw_type, need_cast, true);
+    Filter filter(1, 1);
+    ASSERT_STATUS_OK(convert_arrow_array_to_column(&plan, 1, array.get(), column.get(), 0, 0, &filter, nullptr));
+    filter.resize(2, 1);
+    ASSERT_STATUS_OK(convert_arrow_array_to_column(&plan, 1, sliced.get(), column.get(), 0, 1, &filter, nullptr));
+    filter.resize(4, 1);
+    ASSERT_STATUS_OK(convert_arrow_array_to_column(&plan, 2, sliced.get(), column.get(), 1, 2, &filter, nullptr));
+    column->check_or_die();
+    auto* nullable = down_cast<NullableColumn*>(column.get());
+    ASSERT_EQ(4, column->size());
+    EXPECT_TRUE(nullable->has_null());
+    EXPECT_EQ(1, nullable->null_count());
+    EXPECT_TRUE(column->is_null(1));
+    EXPECT_FALSE(column->is_null(2));
+    auto* variants = down_cast<VariantColumn*>(nullable->data_column_raw_ptr());
+    VariantRowRef row;
+    ASSERT_TRUE(variants->try_get_row_ref(2, &row));
+    EXPECT_EQ(kMetadata, row.get_metadata().raw());
+    EXPECT_EQ(kVariantNull, row.get_value().raw());
+    EXPECT_TRUE(row.is_null());
+    ASSERT_TRUE(variants->try_get_row_ref(3, &row));
+    EXPECT_EQ(kValue, row.get_value().raw());
+    EXPECT_FALSE(row.is_null());
+}
+
+TEST_F(ArrowConverterTest, VariantConverterRejectsVisibleNullEmptyAndInvalidMetadata) {
+    constexpr std::string_view kMetadata("\x01\x00\x00", 3);
+    constexpr std::string_view kValue("\x09ok", 3);
+    struct TestCase {
+        bool null_value;
+        bool null_metadata;
+        std::string_view value;
+        std::string_view metadata;
+        std::string_view error;
+    };
+    const std::vector<TestCase> cases = {
+            {true, false, kValue, kMetadata, "null value or metadata"},
+            {false, true, kValue, kMetadata, "null value or metadata"},
+            {false, false, {}, kMetadata, "empty value"},
+            {false, false, kValue, {}, "Variant metadata is too short"},
+            {false, false, kValue, std::string_view("\x01\x00", 2), "Variant metadata is too short"},
+            {false, false, kValue, std::string_view("\x02\x00\x00", 3), "Unsupported variant version"},
+    };
+    auto arrow_type = make_arrow_variant_type();
+    TypeDescriptor type(TYPE_VARIANT);
+    for (const auto& test : cases) {
+        SCOPED_TRACE(test.error);
+        auto values = std::make_shared<arrow::BinaryBuilder>();
+        auto metadata = std::make_shared<arrow::BinaryBuilder>();
+        arrow::StructBuilder builder(arrow_type, arrow::default_memory_pool(), {values, metadata});
+        // The malformed row is outside the first append, then made visible from a nonzero slice.
+        ASSERT_OK(builder.Append());
+        ASSERT_OK(values->Append(kValue));
+        ASSERT_OK(metadata->Append(kMetadata));
+        ASSERT_OK(builder.Append());
+        if (test.null_value) {
+            ASSERT_OK(values->AppendNull());
+        } else {
+            ASSERT_OK(values->Append(test.value));
+        }
+        if (test.null_metadata) {
+            ASSERT_OK(metadata->AppendNull());
+        } else {
+            ASSERT_OK(metadata->Append(test.metadata));
+        }
+        std::shared_ptr<arrow::Array> array;
+        ASSERT_OK(builder.Finish(&array));
+        ASSERT_OK(array->ValidateFull());
+        TypeDescriptor raw_type;
+        ConvertFuncTree plan;
+        bool need_cast = false;
+        ASSERT_STATUS_OK(
+                build_arrow_column_convert_plan(arrow_type.get(), &type, true, &raw_type, &plan, need_cast, true));
+        ASSERT_FALSE(need_cast);
+        auto column = create_arrow_column_convert_dest(type, raw_type, need_cast, true);
+        Filter filter(1, 1);
+        ArrowConvertContext ctx;
+        ctx.current_column_name = "payload";
+        ASSERT_STATUS_OK(convert_arrow_array_to_column(&plan, 1, array.get(), column.get(), 0, 0, &filter, &ctx));
+        auto sliced = array->Slice(1, 1);
+        filter.resize(2, 1);
+        auto st = convert_arrow_array_to_column(&plan, 1, sliced.get(), column.get(), 0, 1, &filter, &ctx);
+        ASSERT_FALSE(st.ok());
+        EXPECT_NE(std::string::npos, st.message().find(test.error));
+        EXPECT_NE(std::string::npos, st.message().find("payload"));
+    }
+}
+
+TEST_F(ArrowConverterTest, VariantConverterChecksRangeAndAppendBeforeMutation) {
+    auto arrow_type = make_arrow_variant_type();
+    auto array = arrow::ArrayFromJSON(arrow_type, "[null]");
+    TypeDescriptor type(TYPE_VARIANT);
+    TypeDescriptor raw_type;
+    ConvertFuncTree plan;
+    bool need_cast = false;
+    ASSERT_STATUS_OK(build_arrow_column_convert_plan(arrow_type.get(), &type, true, &raw_type, &plan, need_cast, true));
+    auto column = create_arrow_column_convert_dest(type, raw_type, need_cast, true);
+    Filter filter(1, 1);
+    const auto max_index = std::numeric_limits<size_t>::max();
+    const std::vector<std::pair<size_t, size_t>> invalid_ranges = {{1, 1}, {2, 0}, {0, max_index}, {max_index, 2}};
+    for (const auto& [start, count] : invalid_ranges) {
+        auto st = convert_arrow_array_to_column(&plan, count, array.get(), column.get(), start, 0, &filter, nullptr);
+        ASSERT_FALSE(st.ok());
+        EXPECT_NE(std::string::npos, st.message().find("source range"));
+        EXPECT_EQ(0, column->size());
+    }
+    auto st = convert_arrow_array_to_column(&plan, 1, array.get(), column.get(), 0, 1, &filter, nullptr);
+    ASSERT_FALSE(st.ok());
+    EXPECT_NE(std::string::npos, st.message().find("must append"));
+    EXPECT_EQ(0, column->size());
+    ASSERT_STATUS_OK(convert_arrow_array_to_column(&plan, 0, array.get(), column.get(), 1, 0, &filter, nullptr));
+    EXPECT_EQ(0, column->size());
+    ASSERT_STATUS_OK(convert_arrow_array_to_column(&plan, 1, array.get(), column.get(), 0, 0, &filter, nullptr));
+    column->check_or_die();
+    ASSERT_EQ(1, column->size());
+    EXPECT_TRUE(column->is_null(0));
+    st = convert_arrow_array_to_column(&plan, 1, array.get(), column.get(), 0, 0, &filter, nullptr);
+    ASSERT_FALSE(st.ok());
+    EXPECT_NE(std::string::npos, st.message().find("must append"));
+    EXPECT_EQ(1, column->size());
 }
 
 TEST_F(ArrowConverterTest, BuildArrowColumnConvertPlanRejectsInvalidVariantLayout) {

@@ -30,6 +30,7 @@
 #include "compute_env/global_dict/parser.h"
 #include "exec/pipeline/exec_node_pipeline_adapter.h"
 #include "exec/pipeline/limit_operator.h"
+#include "exec/pipeline/paimon_bucket_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/project_operator.h"
 #include "exprs/column_ref.h"
@@ -57,6 +58,41 @@ ProjectNode::~ProjectNode() {
 
 Status ProjectNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::init(tnode, state));
+    const bool is_paimon_routing = tnode.node_type == TPlanNodeType::PAIMON_BUCKET_ROUTING_NODE;
+    if (is_paimon_routing != tnode.project_node.__isset.paimon_bucket_routing) {
+        return Status::InvalidArgument("Paimon bucket routing requires its explicit native routing node type");
+    }
+    if (is_paimon_routing) {
+        const auto& routing = tnode.project_node.paimon_bucket_routing;
+        ASSIGN_OR_RETURN(auto sink, decode_paimon_bucket_routing(routing));
+        const SlotDescriptor* bucket_slot = nullptr;
+        for (const auto* slot : record_desc().slots()) {
+            if (slot->id() == routing.bucket_slot_id) {
+                bucket_slot = slot;
+                break;
+            }
+        }
+        if (bucket_slot == nullptr || bucket_slot->type().type != TYPE_INT || bucket_slot->is_nullable() ||
+            tnode.project_node.slot_map.count(routing.bucket_slot_id) != 0 ||
+            tnode.project_node.slot_map.size() != routing.schema_exprs.size() ||
+            record_desc().slots().size() != routing.schema_exprs.size() + 1 ||
+            !tnode.project_node.common_slot_map.empty()) {
+            return Status::InvalidArgument(
+                    "Paimon native bucket must be a new nonnullable INT slot outside the schema");
+        }
+        _paimon_bucket_sink = std::make_unique<TPaimonTableSink>(std::move(sink));
+        std::set<SlotId> schema_slots;
+        for (const auto& expr : routing.schema_exprs) {
+            ExprContext* context = nullptr;
+            RETURN_IF_ERROR(ExprFactory::create_expr_tree(_pool, expr, &context, state, true));
+            auto* ref = dynamic_cast<ColumnRef*>(context->root());
+            if (ref == nullptr || tnode.project_node.slot_map.count(ref->slot_id()) == 0 ||
+                !schema_slots.insert(ref->slot_id()).second) {
+                return Status::InvalidArgument("Paimon bucket inputs must reference the materialized native schema");
+            }
+            _paimon_schema_exprs.emplace_back(context);
+        }
+    }
     size_t column_size = tnode.project_node.slot_map.size();
     _expr_ctxs.reserve(column_size);
     _slot_ids.reserve(column_size);
@@ -103,6 +139,9 @@ Status ProjectNode::prepare(RuntimeState* state) {
 }
 
 Status ProjectNode::open(RuntimeState* state) {
+    if (_paimon_bucket_sink != nullptr) {
+        return Status::NotSupported("Paimon bucket routing requires pipeline execution");
+    }
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     RETURN_IF_ERROR(ExecNode::open(state));
     RETURN_IF_CANCELLED(state);
@@ -117,6 +156,9 @@ Status ProjectNode::open(RuntimeState* state) {
 }
 
 Status ProjectNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
+    if (_paimon_bucket_sink != nullptr) {
+        return Status::NotSupported("Paimon bucket routing requires pipeline execution");
+    }
     RETURN_IF_CANCELLED(state);
     SCOPED_TIMER(_runtime_profile->total_time_counter());
 
@@ -225,6 +267,10 @@ StatusOr<pipeline::OpFactories> ProjectNode::decompose_to_pipeline(pipeline::Pip
             std::move(_type_is_nullable), std::move(_common_sub_slot_ids), std::move(_common_sub_expr_ctxs)));
     // Initialize OperatorFactory's fields involving runtime filters.
     pipeline::init_runtime_filter_for_operator(*this, operators.back().get(), context, rc_rf_probe_collector);
+    if (_paimon_bucket_sink != nullptr) {
+        operators.emplace_back(std::make_shared<PaimonBucketOperatorFactory>(
+                context->next_operator_id(), id(), std::move(*_paimon_bucket_sink), std::move(_paimon_schema_exprs)));
+    }
     if (limit() != -1) {
         operators.emplace_back(std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
     }

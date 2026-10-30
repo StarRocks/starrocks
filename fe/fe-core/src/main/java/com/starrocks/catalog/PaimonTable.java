@@ -17,6 +17,7 @@ package com.starrocks.catalog;
 import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.paimon.PaimonUtils;
 import com.starrocks.planner.DescriptorTable;
 import com.starrocks.planner.PaimonScanNode;
@@ -47,6 +48,7 @@ public class PaimonTable extends Table {
     private String tableName;
     private org.apache.paimon.table.Table paimonNativeTable;
     private String uuid;
+    private volatile String nativeWriteIdentity;
     private List<String> partColumnNames;
     private List<String> paimonFieldNames;
     private Map<String, String> properties;
@@ -88,8 +90,30 @@ public class PaimonTable extends Table {
     }
 
     // For refresh table only
-    public void setPaimonNativeTable(org.apache.paimon.table.Table paimonNativeTable) {
+    public synchronized void setPaimonNativeTable(org.apache.paimon.table.Table paimonNativeTable) {
         this.paimonNativeTable = paimonNativeTable;
+        this.nativeWriteIdentity = null;
+    }
+
+    // Resolve outside FE metadata locks: the native uuid may read the original schema from storage.
+    public synchronized void resolveNativeWriteIdentity() {
+        if (nativeWriteIdentity == null) {
+            nativeWriteIdentity = paimonNativeTable.uuid();
+        }
+    }
+
+    public String getNativeWriteIdentity() {
+        String identity = nativeWriteIdentity;
+        if (identity == null) {
+            throw new StarRocksConnectorException("Paimon write identity was not resolved before planning");
+        }
+        return identity;
+    }
+
+    @Override
+    public boolean supportInsert() {
+        // A cheap type gate only. Every write still passes PaimonWriteCapabilities in analysis and sink construction.
+        return paimonNativeTable instanceof FileStoreTable;
     }
 
     @Override

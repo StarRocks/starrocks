@@ -68,6 +68,21 @@ INSERT statements support configuring PROPERTIES from v3.4.0 onwards.
 
 :::
 
+## 写入 Paimon 表
+
+Paimon 批量 Writer 仍处于集成阶段，尚未经过运行时验证。当前实现在外部 Paimon Catalog 中对支持的原生 File-Store 表提供 `INSERT INTO` 和 `INSERT OVERWRITE`：
+
+```sql
+INSERT INTO paimon_catalog_fs.write_db.orders
+VALUES (1, '2026-01-01', 12.34);
+```
+
+- 数据写入仅使用原生 C++ Writer，不提供 JNI Writer 或回退，且数据文件要求为 Parquet。主键目标表要求固定分桶和原生 `deduplicate` Merge Engine，不使用 OLAP 部分列更新语义。不支持非 NULL 默认值；已有原生默认值需要显式提供值。
+- Paimon 支持全表覆盖、按列值指定的静态覆盖和仅覆盖输入涉及分区的动态覆盖。全表或静态覆盖的空输入会清空目标范围；追加或动态覆盖的空输入保持数据不变。本页其他部分的临时分区交换和表达式分区限制不适用于 Paimon。
+- 除确认无数据变更的空操作外，成功要求 FE 确认快照发布。如果提交结果未知，请保留文件并核对快照后再决定是否重试，不要盲目重跑。不支持多语句事务，也不保证跨 FE 重启的 Exactly-Once 恢复。
+
+DDL、类型、原生 Writer 依赖、覆盖示例、提交处理和保持不变的读取限制，请参见 [Paimon catalog](../../../data_source/catalog/paimon_catalog.md)。
+
 ## Dynamic Overwrite
 
 从 v3.4.0 开始，StarRocks 支持分区表的 INSERT OVERWRITE 操作的新语义 — Dynamic Overwrite。

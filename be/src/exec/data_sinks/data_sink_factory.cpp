@@ -21,6 +21,7 @@
 #include "data_sink/external/blackhole_table_sink.h"
 #include "data_sink/external/export_sink.h"
 #include "data_sink/external/hive_table_sink.h"
+#include "data_sink/external/paimon_table_sink.h"
 #include "data_sink/tablet/multi_olap_table_sink.h"
 #include "data_sink/tablet/olap_table_sink.h"
 #include "exec_primitive/data_sink.h"
@@ -166,6 +167,13 @@ Status DataSink::create_data_sink(RuntimeState* state, const TDataSink& thrift_s
         return Status::NotSupported("Iceberg table sink is disabled on macOS");
     }
 #endif
+    case TDataSinkType::PAIMON_TABLE_SINK: {
+        if (!thrift_sink.__isset.paimon_table_sink) {
+            return Status::InvalidArgument("Missing Paimon table sink");
+        }
+        *sink = std::make_unique<PaimonTableSink>(state->obj_pool(), output_exprs);
+        break;
+    }
     case TDataSinkType::HIVE_TABLE_SINK: {
         if (!thrift_sink.__isset.hive_table_sink) {
             return Status::InternalError("Missing hive table sink");

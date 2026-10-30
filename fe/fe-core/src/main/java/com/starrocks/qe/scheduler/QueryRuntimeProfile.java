@@ -29,6 +29,8 @@ import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.ProfilingExecPlan;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
+import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.paimon.PaimonSinkExtra;
 import com.starrocks.datacache.DataCacheSelectMetrics;
 import com.starrocks.datacache.LoadDataCacheMetrics;
 import com.starrocks.load.loadv2.LoadJob;
@@ -39,8 +41,10 @@ import com.starrocks.qe.scheduler.dag.JobSpec;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.task.LoadEtlTask;
 import com.starrocks.thrift.TLoadDataCacheMetrics;
+import com.starrocks.thrift.TPaimonCommitInfo;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TSinkCommitInfo;
+import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTabletCommitInfo;
 import com.starrocks.thrift.TTabletFailInfo;
 import com.starrocks.thrift.TUniqueId;
@@ -138,6 +142,13 @@ public class QueryRuntimeProfile {
     // Fields for external table sink
     // ------------------------------------------------------------------------------------
     private final List<TSinkCommitInfo> sinkCommitInfos = Lists.newCopyOnWriteArrayList();
+    // Only the scheduled Paimon sink instances produce prepare markers, not source-only fragments.
+    // Every fixed-DOP sink driver must report, including drivers which wrote zero rows.
+    private PaimonSinkExtra paimonOperation;
+    private final Map<TUniqueId, Set<String>> expectedPaimonProducers = Maps.newHashMap();
+    private final Set<TUniqueId> finishedPaimonInstances = Sets.newHashSet();
+    private final Map<String, Long> paimonProducerRows = Maps.newHashMap();
+    private String paimonReportFailure;
 
     // Fields for datacache
     private final DataCacheSelectMetrics dataCacheSelectMetrics = new DataCacheSelectMetrics();
@@ -202,6 +213,116 @@ public class QueryRuntimeProfile {
 
     public List<TSinkCommitInfo> getSinkCommitInfos() {
         return sinkCommitInfos;
+    }
+
+    public synchronized void initPaimonSink(PaimonSinkExtra operation, Map<TUniqueId, Integer> sinkInstanceDops) {
+        Preconditions.checkState(paimonOperation == null, "Paimon sink producers were already initialized");
+        Preconditions.checkArgument(operation != null && !sinkInstanceDops.isEmpty(),
+                "Paimon publication requires scheduled sink producers");
+        paimonOperation = operation;
+        int producerCount = 0;
+        for (Map.Entry<TUniqueId, Integer> entry : sinkInstanceDops.entrySet()) {
+            int dop = entry.getValue();
+            if (entry.getKey() == null || dop <= 0 || dop > 100_000 - producerCount) {
+                failPaimonReport("Invalid Paimon scheduled producer layout");
+            }
+            Set<String> producers = Sets.newHashSet();
+            for (int driver = 0; driver < dop; driver++) {
+                producers.add(DebugUtil.printId(entry.getKey()) + ":" + driver);
+            }
+            expectedPaimonProducers.put(entry.getKey().deepCopy(), producers);
+            producerCount += dop;
+        }
+        queryProfile.addInfoString("PaimonExpectedProducers", Integer.toString(producerCount));
+    }
+
+    public synchronized boolean hasPaimonSink() {
+        return paimonOperation != null;
+    }
+
+    public synchronized void recordPaimonReportFailure() {
+        if (paimonOperation != null) {
+            paimonReportFailure = "Cannot aggregate the final Paimon producer report";
+        }
+    }
+
+    public synchronized void validatePaimonSinkCommitInfos(long loadedRows) {
+        if (paimonOperation == null) {
+            throw new StarRocksConnectorException("Paimon scheduled producer layout is unavailable");
+        }
+        if (paimonReportFailure != null) {
+            throw new StarRocksConnectorException(paimonReportFailure);
+        }
+        if (!finishedPaimonInstances.equals(expectedPaimonProducers.keySet())) {
+            failPaimonReport("Missing final Paimon sink instance reports");
+        }
+        long reportedRows = 0;
+        try {
+            for (long rows : paimonProducerRows.values()) {
+                reportedRows = Math.addExact(reportedRows, rows);
+            }
+        } catch (ArithmeticException e) {
+            failPaimonReport("Paimon producer row count overflow");
+        }
+        if (reportedRows != loadedRows) {
+            failPaimonReport("Paimon producer row counts do not match the completed load");
+        }
+        queryProfile.addInfoString("PaimonPreparedProducers", Integer.toString(paimonProducerRows.size()));
+    }
+
+    private synchronized void validatePaimonSinkReport(FragmentInstanceExecState execState,
+                                                       TReportExecStatusParams params) {
+        List<TSinkCommitInfo> reports = params.isSetSink_commit_infos() ? params.getSink_commit_infos() : List.of();
+        Set<String> expected = expectedPaimonProducers.get(execState.getInstanceId());
+        if (expected == null) {
+            if (!reports.isEmpty()) {
+                failPaimonReport("Unexpected Paimon producer report from a source-only fragment");
+            }
+            return;
+        }
+        if (!execState.getInstanceId().equals(params.getFragment_instance_id())) {
+            failPaimonReport("Mismatched Paimon sink instance report");
+        }
+        if (!params.isSetStatus() || !params.getStatus().isSetStatus_code()) {
+            failPaimonReport("Missing final Paimon sink execution status");
+        }
+        // A failed instance still contributes its prepared payloads for abort, but never satisfies
+        // publication completeness. Its original execution status is already propagated by the coordinator.
+        if (params.getStatus().getStatus_code() != TStatusCode.OK) {
+            paimonReportFailure = "A Paimon sink instance failed before completing prepare";
+            return;
+        }
+        Set<String> reported = Sets.newHashSet();
+        for (TSinkCommitInfo report : reports) {
+            if (report == null || !report.isSetPaimon_commit_info()) {
+                failPaimonReport("Missing native Paimon prepare marker");
+            }
+            TPaimonCommitInfo info = report.getPaimon_commit_info();
+            if (!info.isSetProducer_id() || !expected.contains(info.getProducer_id())
+                    || !info.isSetAttempt_id() || info.getAttempt_id() != 0
+                    || !info.isSetPrepare_complete() || !info.isPrepare_complete()
+                    || !info.isSetOperation_id() || !paimonOperation.getOperationId().equals(info.getOperation_id())
+                    || !info.isSetSchema_id() || paimonOperation.getSchemaId() != info.getSchema_id()
+                    || !info.isSetTable_identity() || !paimonOperation.getTableIdentity().equals(info.getTable_identity())
+                    || !info.isSetSerializer_version() || !info.isSetCommit_messages()
+                    || !info.isSetRow_count() || info.getRow_count() < 0) {
+                failPaimonReport("Incomplete or unexpected Paimon prepare marker");
+            }
+            reported.add(info.getProducer_id());
+            Long previousRows = paimonProducerRows.putIfAbsent(info.getProducer_id(), info.getRow_count());
+            if (previousRows != null && previousRows != info.getRow_count()) {
+                failPaimonReport("Conflicting Paimon producer row counts");
+            }
+        }
+        if (!reported.equals(expected)) {
+            failPaimonReport("Missing Paimon sink driver prepare markers");
+        }
+        finishedPaimonInstances.add(execState.getInstanceId());
+    }
+
+    private void failPaimonReport(String message) {
+        paimonReportFailure = message;
+        throw new StarRocksConnectorException(message);
     }
 
     public List<String> getExportFiles() {
@@ -378,6 +499,13 @@ public class QueryRuntimeProfile {
     }
 
     public void updateLoadInformation(FragmentInstanceExecState execState, TReportExecStatusParams params) {
+        if (hasPaimonSink()) {
+            // Retain native abort payloads before parsing any load/profile field. Validate completeness
+            // last so a bad marker does not prevent collecting tracking URLs or final load counters.
+            if (params.isSetSink_commit_infos()) {
+                sinkCommitInfos.addAll(params.getSink_commit_infos());
+            }
+        }
         if (params.isSetDelta_urls()) {
             deltaUrls.addAll(params.getDelta_urls());
         }
@@ -399,11 +527,14 @@ public class QueryRuntimeProfile {
         if (params.isSetRejected_record_path()) {
             rejectedRecordPaths.add(execState.getAddress().getHostname() + ":" + params.getRejected_record_path());
         }
-        if (params.isSetSink_commit_infos()) {
+        if (!hasPaimonSink() && params.isSetSink_commit_infos()) {
             sinkCommitInfos.addAll(params.getSink_commit_infos());
         }
         if (params.isSetLoad_datacache_metrics()) {
             updateDataCacheSelectMetrics(params.backend_id, params.load_datacache_metrics);
+        }
+        if (hasPaimonSink()) {
+            validatePaimonSinkReport(execState, params);
         }
     }
 

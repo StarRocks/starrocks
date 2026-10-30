@@ -80,6 +80,21 @@ Query OK, 5 rows affected, 2 warnings (0.05 sec)
 | status        | Indicates if the loaded data is visible. `VISIBLE`: the data is successfully loaded and visible. `COMMITTED`: the data is successfully loaded but invisible for now. |
 | txnId         | The ID number corresponding to each INSERT transaction.      |
 
+## Write to Paimon tables
+
+The Paimon batch writer is under integration and has not yet been runtime-verified. It implements `INSERT INTO` and `INSERT OVERWRITE` for supported native file-store tables in an external Paimon catalog:
+
+```sql
+INSERT INTO paimon_catalog_fs.write_db.orders
+VALUES (1, '2026-01-01', 12.34);
+```
+
+- Data writing uses only the native C++ writer, with no JNI writer or fallback, and requires Parquet data files. Primary-key targets require fixed buckets and the native `deduplicate` merge engine, not OLAP partial-update semantics. Non-NULL defaults are unsupported; provide explicit values for existing native defaults.
+- Paimon has full, static column-value, and dynamic touched-partition overwrite modes. Empty full/static input clears the target scope; empty append/dynamic input leaves data unchanged. The temporary-partition swap and expression-partition restrictions elsewhere on this page do not describe Paimon.
+- Success requires FE-confirmed snapshot publication, except for confirmed empty no-ops. If the commit outcome is unknown, preserve files and reconcile snapshots before retrying; do not blindly rerun. Multi-statement transactions and exactly-once recovery across FE restarts are unsupported.
+
+See [Paimon catalog](../../../data_source/catalog/paimon_catalog.md) for DDL, types, native writer dependencies, overwrite examples, commit handling, and unchanged reader limitations.
+
 ## Dynamic Overwrite
 
 From v3.4.0 onwards, StarRocks supports a new semantic - Dynamic Overwrite for INSERT OVERWRITE with partitioned tables.

@@ -24,7 +24,11 @@ To ensure successful SQL workloads on your Paimon cluster, your StarRocks cluste
 
 ## Usage notes
 
-You can only use Paimon catalogs to query data. You cannot use Paimon catalogs to drop, delete, or insert data into your Paimon cluster.
+In addition to queries, the current Paimon integration implements `CREATE/DROP DATABASE`, `CREATE/DROP TABLE`, batch `INSERT INTO`, `INSERT OVERWRITE`, `CREATE TABLE AS SELECT` (CTAS), and same-catalog `CREATE TABLE LIKE`. Row-level `UPDATE` and `DELETE` are not supported. Dropping a database requires it to be empty.
+
+:::caution
+DDL and batch writing are still under integration. The create/write sections below describe the current implementation, not runtime-verified release availability. The examples and end-to-end read-back behavior still require runtime validation.
+:::
 
 ## Paimon to StarRocks data types
 
@@ -755,3 +759,124 @@ Suppose you have an OLAP table named `olap_tbl`, you can transform and load data
 ```SQL
 INSERT INTO default_catalog.olap_db.olap_tbl SELECT * FROM paimon_table;
 ```
+
+## Create and write Paimon tables
+
+The following sections describe the DDL and batch writer currently under integration. Reuse an existing Paimon catalog and its database, or create a database as shown below. Warehouse, metastore, and storage credentials remain in the catalog's `PROPERTIES`; do not put them in table properties. `CREATE DATABASE` does not accept catalog or location overrides.
+
+### Create a database and tables
+
+If `write_db` already exists, skip `CREATE DATABASE` and use that database. The catalog determines the table location. `ENGINE` is inferred as `paimon` from the target catalog.
+
+```sql
+SET CATALOG paimon_catalog_fs;
+CREATE DATABASE IF NOT EXISTS write_db;
+USE write_db;
+
+CREATE TABLE orders (
+    id BIGINT NOT NULL,
+    dt DATE NOT NULL,
+    amount DECIMAL(12, 2)
+)
+PRIMARY KEY (id, dt)
+PARTITION BY (dt)
+PROPERTIES (
+    "bucket" = "4",
+    "file.format" = "parquet",
+    "merge-engine" = "deduplicate"
+);
+
+CREATE TABLE event_log (
+    id BIGINT,
+    dt DATE,
+    event_time DATETIME,
+    tags ARRAY<STRING>,
+    attributes MAP<STRING, STRING>,
+    details STRUCT<source STRING, attempt INT>,
+    payload VARIANT
+)
+PARTITION BY (dt)
+PROPERTIES (
+    "bucket" = "-1",
+    "file.format" = "parquet"
+);
+```
+
+`PRIMARY KEY` defines native Paimon primary keys, not an OLAP table model; primary-key columns are non-nullable. Set `bucket > 0` explicitly for a writable primary-key table. A table without primary keys is an append table. Use `PARTITION BY (column, ...)` with ordinary columns, without partition definitions or expressions. Configure native bucketing through `bucket` and, where required, `bucket-key` in `PROPERTIES`, not `DISTRIBUTED BY`. OLAP `ORDER BY`, `ROLLUP`, aggregate columns, generated columns, and `AUTO_INCREMENT` are not supported.
+
+### Write types and defaults
+
+- New tables support representable scalar types: `BOOLEAN`, `TINYINT`, `SMALLINT`, `INT`, `BIGINT`, `FLOAT`, `DOUBLE`, `DECIMAL`, `CHAR`, `VARCHAR`/`STRING`, `VARBINARY`, `DATE`, and `DATETIME`. `ARRAY`, `MAP`, `STRUCT`, and `VARIANT` are also supported, including supported nested types.
+- New `DATETIME` columns become Paimon `TIMESTAMP(6)` without time zone. Writes to existing tables use the native timestamp kind, but the public C++ 0.3 writer supports only precisions `0`, `3`, `6`, and `9`; precisions `1`, `2`, `4`, `5`, `7`, and `8` are rejected during capability validation. For time-zone-bearing targets, the source `DATETIME` is interpreted in the session time zone. If a target precision below `6` cannot exactly represent the source microseconds, the writer rejects the value rather than silently truncating it. This does not add source precision beyond microseconds or change reader-side timestamp mappings and limitations.
+- Newly created nested children are nullable. SQL `CREATE TABLE` cannot declare nested `NOT NULL`. Existing native nullability constraints are enforced when writing; `CREATE TABLE LIKE` preserves them.
+- Plain `LARGEINT` columns and other unsupported or unrepresentable types are explicitly rejected rather than silently narrowed. `VARIANT` support does not establish full signed 128-bit integer interoperability with public Paimon readers; that interoperability is not yet verified.
+- Omit `DEFAULT`, or use `DEFAULT NULL` only for nullable columns. Non-NULL literal or expression defaults are unsupported. When inserting into an existing table with native non-NULL defaults, supply explicit values instead of relying on omitted columns or `DEFAULT`. Required columns and primary-key columns must be supplied.
+
+### Batch INSERT and CTAS
+
+```sql
+INSERT INTO paimon_catalog_fs.write_db.orders
+VALUES (1, '2026-01-01', 12.34);
+
+CREATE TABLE paimon_catalog_fs.write_db.orders_copy
+PROPERTIES ("bucket" = "-1", "file.format" = "parquet")
+AS SELECT id, dt, amount FROM paimon_catalog_fs.write_db.orders;
+```
+
+[INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) accepts values or query results. For primary-key targets, it uses the native `deduplicate` merge engine, not StarRocks OLAP partial-update semantics. [CTAS](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) creates a new native table and then writes the query result; it does not clone source keys or table options. The example creates an append table. To create a primary-key target, declare `PRIMARY KEY` and set `bucket > 0` explicitly.
+
+CTAS is not atomic across table creation and data publication. If writing fails, the current implementation conservatively retains the created table because the public catalog cannot perform an atomic, identity-conditional drop. Inspect and reconcile the target before manual cleanup or retry. A table whose publication outcome is unknown must not be automatically dropped.
+
+### CREATE TABLE LIKE
+
+Source and target must be in the same Paimon catalog, but may be in different databases:
+
+```sql
+SET CATALOG paimon_catalog_fs;
+CREATE DATABASE IF NOT EXISTS copy_db;
+CREATE TABLE paimon_catalog_fs.copy_db.orders_like
+LIKE paimon_catalog_fs.write_db.orders;
+```
+
+`LIKE` copies the native schema, including primary/partition keys, native types, timestamp kind and precision, and top-level and nested `NOT NULL` constraints, together with reusable table options. The target receives a new identity and location; no source data files or snapshots are copied. Source-specific locations and credentials are not copied. Creating a table with `LIKE` does not bypass the writer capability checks below.
+
+### Writer boundaries
+
+- Writes target native file-store tables on the main branch and require a single autocommit statement. Explicit multi-statement transactions and exactly-once recovery across FE restarts are not supported.
+- Only Parquet data files are supported, including any per-level file-format configuration. External data paths (`data-file.external-paths`), alternate data directories (`data-file.path-directory`), and committables with auxiliary files are not supported by this writer.
+- Primary-key tables require fixed buckets (`bucket > 0`) and `merge-engine = deduplicate`. Append tables support unaware buckets (`bucket = -1`) or fixed buckets (`bucket > 0`, with the required native bucket-key configuration).
+- Primary-key dynamic buckets (`bucket = -1`), postponed buckets (`bucket = -2`), global indexes, data evolution, row tracking, and `FILEBLOB` are unsupported. Cross-partition primary-key updates are unsupported: every partition column must be included in the primary key.
+- Partition values currently support `BOOLEAN`, integer types, `CHAR`/`VARCHAR`, and `DATE`; support for timestamps and decimals as data columns does not extend to partition columns. Nullable partition columns use the native NULL marker. Empty or whitespace-only string partition values are explicitly rejected because the public SDK conflates them with NULL; the reserved default-partition name is also rejected.
+- Data writing uses only the native C++ writer through the isolated `libstarrocks_paimon.so` shim. A missing or incompatible writer library fails the operation; there is no JNI writer or JNI fallback. The FE's Java catalog and snapshot-commit protocol remain separate from the data writer and do not use JNI. The public Paimon C++ 0.3 and Java 2.0 SDK baselines are unchanged.
+
+### INSERT OVERWRITE
+
+Paimon overwrites publish a snapshot rather than swapping StarRocks temporary partitions. Named and temporary partitions are not accepted; static partitions use column-value pairs and must specify all partition columns.
+
+| Mode | Selection | Effect with empty input |
+| --- | --- | --- |
+| Full | No `PARTITION` clause and dynamic overwrite disabled; also used for unpartitioned tables. Replaces the whole table. | Clears the whole table. |
+| Static | `PARTITION (column = value, ...)`. Replaces the specified partition. | Clears the specified partition. |
+| Dynamic | No static partition clause, a partitioned table, and `dynamic_overwrite = true`. Replaces only partitions touched by input rows; leaves other partitions unchanged. | No partitions are touched; existing data remains unchanged. |
+
+```sql
+INSERT OVERWRITE paimon_catalog_fs.write_db.orders
+PARTITION (dt = '2026-01-01')
+SELECT id, amount FROM paimon_catalog_fs.write_db.orders_copy
+WHERE dt = '2026-01-01';
+
+INSERT /*+ SET_VAR(dynamic_overwrite = true) */ OVERWRITE paimon_catalog_fs.write_db.orders
+SELECT id, dt, amount FROM paimon_catalog_fs.write_db.orders_copy;
+```
+
+An empty `INSERT INTO` is also a no-op. Full and static overwrites still perform their clearing operation when the input is empty.
+
+### Commit outcomes and read-back
+
+A nonempty write, or a full/static overwrite with empty input, is reported successful only after the FE confirms Paimon snapshot publication. Finishing BE file writes alone is not success. Empty append and empty dynamic-overwrite operations are confirmed no-ops and need no new snapshot.
+
+:::warning
+If the error contains `Paimon commit outcome is unknown for operation ...; preserve its files and reconcile the snapshot before retrying`, publication may already be durable. Preserve the files and any CTAS target, retain the operation identifier, and reconcile Paimon snapshots before deciding whether to retry. Do not blindly rerun the statement or delete its output, even if the client saw a failure or cancellation.
+:::
+
+Writing does not remove existing reader limitations, including the `VARIANT` boundary described above or timestamp/time-zone mappings. Read-back validation for this feature is scoped to the native C++ reader and the StarRocks native Parquet reader, not JNI interoperability. Primary-key results follow native merge semantics rather than physical input row counts. Reader selection, compaction, timestamp/time-zone behavior, and native read-back still require end-to-end runtime validation.

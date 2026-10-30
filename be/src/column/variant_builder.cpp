@@ -25,6 +25,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/string/utf8_check.h"
 #include "column/variant_encoder.h"
 
 namespace starrocks {
@@ -117,18 +118,10 @@ static Status decode_variant_to_node(const VariantMetadata& metadata, const Vari
                     raw.data() + info.id_start_offset + i * info.id_size, info.id_size);
             ASSIGN_OR_RETURN(const auto key, metadata.get_key(field_id));
 
-            // Read the [offset, next_offset) byte range for this field's value.
-            const uint32_t offset = VariantUtil::read_little_endian_unsigned32(
-                    raw.data() + info.offset_start_offset + i * info.offset_size, info.offset_size);
-            const uint32_t next_offset = VariantUtil::read_little_endian_unsigned32(
-                    raw.data() + info.offset_start_offset + (i + 1) * info.offset_size, info.offset_size);
-            if (next_offset < offset || info.data_start_offset + next_offset > raw.size()) {
-                return Status::VariantError("Invalid variant object field offset");
-            }
-
+            // Field-name order and physical payload order can differ in an OBJECT.
+            ASSIGN_OR_RETURN(const auto field, value.get_object_field_at_index(i));
             VariantNode child;
-            RETURN_IF_ERROR(decode_variant_to_node(
-                    metadata, VariantValue(raw.substr(info.data_start_offset + offset, next_offset - offset)), &child));
+            RETURN_IF_ERROR(decode_variant_to_node(metadata, field, &child));
             const size_t idx = node->fields.size();
             node->fields.emplace_back(std::string(key), std::make_unique<VariantNode>(std::move(child)));
             node->field_index.emplace(node->fields.back().first, idx);
@@ -260,6 +253,250 @@ static Status apply_overlay(VariantNode* root, const VariantPath& path, VariantN
         }
     }
     return Status::OK();
+}
+
+namespace {
+
+struct StrictVariantBudget {
+    size_t work = VariantBuilder::kMaxStrictWork;
+    size_t bytes = VariantRowValue::kMaxVariantSize;
+
+    Status consume(size_t count, size_t size) {
+        if (count > work || size > bytes) {
+            return Status::InvalidArgument("Strict VARIANT materialization work/byte limit exceeded");
+        }
+        work -= count;
+        bytes -= size;
+        return Status::OK();
+    }
+};
+
+uint32_t read_variant_uint(std::string_view raw, size_t offset, uint8_t width) {
+    return VariantUtil::read_little_endian_unsigned32(raw.data() + offset, width);
+}
+
+StatusOr<std::vector<std::string_view>> strict_metadata_keys(std::string_view raw, StrictVariantBudget* budget) {
+    RETURN_IF_ERROR(budget->consume(0, raw.size()));
+    RETURN_IF_ERROR(VariantRowValue::validate_metadata(raw));
+    const uint8_t header = static_cast<uint8_t>(raw[0]);
+    if ((header & 0x20) != 0) {
+        return Status::InvalidArgument("Reserved VARIANT metadata header bit");
+    }
+    const uint8_t width = (header >> 6) + 1;
+    if (raw.size() < size_t{1} + width) {
+        return Status::InvalidArgument("Truncated VARIANT dictionary size");
+    }
+    const uint32_t count = read_variant_uint(raw, 1, width);
+    RETURN_IF_ERROR(budget->consume(count, 0));
+    const size_t data_start = 1 + size_t{width} * (size_t{count} + 2);
+    if (data_start > raw.size()) {
+        return Status::InvalidArgument("Truncated VARIANT dictionary offsets");
+    }
+    if (read_variant_uint(raw, 1 + width, width) != 0 ||
+        read_variant_uint(raw, 1 + size_t{width} * (size_t{count} + 1), width) != raw.size() - data_start) {
+        return Status::InvalidArgument("Invalid VARIANT dictionary extent");
+    }
+    std::vector<std::string_view> keys;
+    keys.reserve(count);
+    for (uint32_t i = 0; i < count; ++i) {
+        const uint32_t begin = read_variant_uint(raw, 1 + size_t{width} * (size_t{i} + 1), width);
+        const uint32_t end = read_variant_uint(raw, 1 + size_t{width} * (size_t{i} + 2), width);
+        if (end < begin || end > raw.size() - data_start) {
+            return Status::InvalidArgument("Invalid VARIANT dictionary offset");
+        }
+        const auto key = raw.substr(data_start + begin, end - begin);
+        if (!validate_utf8(key.data(), key.size()) || ((header & 0x10) != 0 && !keys.empty() && keys.back() >= key)) {
+            return Status::InvalidArgument("Invalid VARIANT dictionary string/order");
+        }
+        keys.emplace_back(key);
+    }
+    return keys;
+}
+
+// Validate physical child extents, not next-field offsets: OBJECT field order is lexical,
+// whereas ARRAY elements must be adjacent in index order. Scalars remain opaque binary.
+Status strict_variant_value(std::string_view raw, const std::vector<std::string_view>& keys, size_t depth,
+                            StrictVariantBudget* budget) {
+    if (depth > VariantBuilder::kMaxStrictDepth) {
+        return Status::InvalidArgument("Strict VARIANT materialization nesting limit exceeded");
+    }
+    RETURN_IF_ERROR(budget->consume(1, 0));
+    if (raw.empty()) {
+        return Status::InvalidArgument("Empty VARIANT value");
+    }
+    const uint8_t header = static_cast<uint8_t>(raw[0]);
+    const uint8_t basic = header & 3;
+    const uint8_t info = header >> 2;
+    if (basic == 1) {
+        if (raw.size() != size_t{info} + 1 || !validate_utf8(raw.data() + 1, info)) {
+            return Status::InvalidArgument("Invalid VARIANT short string");
+        }
+        return Status::OK();
+    }
+    if (basic == 0) {
+        size_t expected;
+        switch (static_cast<VariantType>(info)) {
+        case VariantType::NULL_TYPE:
+        case VariantType::BOOLEAN_TRUE:
+        case VariantType::BOOLEAN_FALSE:
+            expected = 1;
+            break;
+        case VariantType::INT8:
+            expected = 2;
+            break;
+        case VariantType::INT16:
+            expected = 3;
+            break;
+        case VariantType::INT32:
+        case VariantType::DATE:
+        case VariantType::FLOAT:
+            expected = 5;
+            break;
+        case VariantType::INT64:
+        case VariantType::DOUBLE:
+        case VariantType::TIMESTAMP_TZ:
+        case VariantType::TIMESTAMP_NTZ:
+        case VariantType::TIME_NTZ:
+        case VariantType::TIMESTAMP_TZ_NANOS:
+        case VariantType::TIMESTAMP_NTZ_NANOS:
+            expected = 9;
+            break;
+        case VariantType::DECIMAL4:
+        case VariantType::DECIMAL8:
+        case VariantType::DECIMAL16: {
+            const uint8_t precision = info == 8 ? 9 : (info == 9 ? 18 : 38);
+            expected = info == 8 ? 6 : (info == 9 ? 10 : 18);
+            if (raw.size() < 2 || static_cast<uint8_t>(raw[1]) > precision) {
+                return Status::InvalidArgument("Invalid VARIANT decimal scale");
+            }
+            // Do not constrain the integer bytes to decimal(38): LARGEINT uses the full int128 range.
+            break;
+        }
+        case VariantType::BINARY:
+        case VariantType::STRING:
+            if (raw.size() < 5 || read_variant_uint(raw, 1, 4) != raw.size() - 5 ||
+                (info == static_cast<uint8_t>(VariantType::STRING) && !validate_utf8(raw.data() + 5, raw.size() - 5))) {
+                return Status::InvalidArgument("Invalid VARIANT binary/string extent");
+            }
+            return Status::OK();
+        case VariantType::UUID:
+            expected = 17;
+            break;
+        default:
+            return Status::InvalidArgument("Unknown VARIANT primitive type");
+        }
+        return raw.size() == expected ? Status::OK() : Status::InvalidArgument("Invalid VARIANT primitive extent");
+    }
+
+    const bool object = basic == 2;
+    if ((object && (info & 0x20) != 0) || (!object && (info & 0x38) != 0)) {
+        return Status::InvalidArgument("Reserved VARIANT container header bits");
+    }
+    uint32_t count;
+    size_t offsets_start;
+    size_t data_start;
+    uint8_t width;
+    uint8_t id_width = 0;
+    size_t ids_start = 0;
+    const VariantValue value(raw);
+    if (object) {
+        ASSIGN_OR_RETURN(const auto shape, value.get_object_info());
+        count = shape.num_elements;
+        offsets_start = shape.offset_start_offset;
+        data_start = shape.data_start_offset;
+        width = shape.offset_size;
+        id_width = shape.id_size;
+        ids_start = shape.id_start_offset;
+    } else {
+        ASSIGN_OR_RETURN(const auto shape, value.get_array_info());
+        count = shape.num_elements;
+        offsets_start = shape.offset_start_offset;
+        data_start = shape.data_start_offset;
+        width = shape.offset_size;
+    }
+    if (count > budget->work) {
+        return Status::InvalidArgument("Strict VARIANT container work limit exceeded");
+    }
+    const uint32_t total = read_variant_uint(raw, offsets_start + size_t{count} * width, width);
+    if (total != raw.size() - data_start) {
+        return Status::InvalidArgument("Invalid VARIANT container extent");
+    }
+    std::vector<uint32_t> offsets;
+    offsets.reserve(size_t{count} + 1);
+    std::string_view previous_key;
+    for (uint32_t i = 0; i < count; ++i) {
+        if (object) {
+            const uint32_t id = read_variant_uint(raw, ids_start + size_t{i} * id_width, id_width);
+            if (id >= keys.size() || (i > 0 && previous_key >= keys[id])) {
+                return Status::InvalidArgument("Invalid VARIANT object field id/order");
+            }
+            previous_key = keys[id];
+        }
+        const uint32_t offset = read_variant_uint(raw, offsets_start + size_t{i} * width, width);
+        if (offset >= total || (!object && !offsets.empty() && offsets.back() >= offset)) {
+            return Status::InvalidArgument("Invalid VARIANT child offset");
+        }
+        offsets.emplace_back(offset);
+    }
+    if (object) {
+        std::sort(offsets.begin(), offsets.end());
+    }
+    if ((count == 0 && total != 0) || (count > 0 && offsets.front() != 0)) {
+        return Status::InvalidArgument("Invalid VARIANT first payload offset");
+    }
+    offsets.emplace_back(total);
+    for (uint32_t i = 0; i < count; ++i) {
+        if (offsets[i] >= offsets[i + 1]) {
+            return Status::InvalidArgument("Overlapping VARIANT payload offsets");
+        }
+        RETURN_IF_ERROR(strict_variant_value(raw.substr(data_start + offsets[i], offsets[i + 1] - offsets[i]), keys,
+                                             depth + 1, budget));
+    }
+    return Status::OK();
+}
+
+Status strict_variant_row(std::string_view metadata, std::string_view value, size_t depth,
+                          StrictVariantBudget* budget) {
+    ASSIGN_OR_RETURN(const auto keys, strict_metadata_keys(metadata, budget));
+    RETURN_IF_ERROR(budget->consume(0, value.size()));
+    return strict_variant_value(value, keys, depth, budget);
+}
+
+} // namespace
+
+Status VariantBuilder::validate_metadata_strict(std::string_view metadata) {
+    StrictVariantBudget budget;
+    return strict_metadata_keys(metadata, &budget).status();
+}
+
+Status VariantBuilder::validate_row_strict(std::string_view metadata, std::string_view value) {
+    StrictVariantBudget budget;
+    return strict_variant_row(metadata, value, 0, &budget);
+}
+
+StatusOr<VariantRowValue> VariantBuilder::build_row_from_overlays_strict(std::optional<VariantRowRef> base,
+                                                                         std::vector<Overlay> overlays) {
+    if (!base.has_value() && overlays.empty()) {
+        return Status::InvalidArgument("Missing VARIANT residual and effective overlays");
+    }
+    StrictVariantBudget budget;
+    if (base.has_value()) {
+        RETURN_IF_ERROR(strict_variant_row(base->get_metadata().raw(), base->get_value().raw(), 0, &budget));
+    }
+    for (const auto& overlay : overlays) {
+        if (overlay.path.segments.size() > kMaxStrictDepth) {
+            return Status::InvalidArgument("Strict VARIANT overlay path nesting limit exceeded");
+        }
+        for (const auto& segment : overlay.path.segments) {
+            if (!segment.is_object() || !validate_utf8(segment.get_key().data(), segment.get_key().size())) {
+                return Status::InvalidArgument("Invalid strict VARIANT overlay object path");
+            }
+            RETURN_IF_ERROR(budget.consume(1, segment.get_key().size()));
+        }
+        RETURN_IF_ERROR(strict_variant_row(overlay.value.get_metadata().raw(), overlay.value.get_value().raw(),
+                                           overlay.path.segments.size(), &budget));
+    }
+    return build_row_from_overlays(std::move(base), std::move(overlays));
 }
 
 Status VariantBuilder::set_overlays(std::vector<Overlay>&& overlays) {

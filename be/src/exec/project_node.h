@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <memory>
+
 #include "column/vectorized_fwd.h"
 #include "common/runtime_profile.h"
 #include "common/statusor.h"
@@ -21,6 +23,7 @@
 #include "exprs/expr_context.h"
 
 namespace starrocks {
+class TPaimonTableSink;
 class ProjectNode final : public ExecNode {
 public:
     ProjectNode(ObjectPool* pool, const TPlanNode& node, const DescriptorTbl& desc);
@@ -45,6 +48,9 @@ private:
 
     std::vector<SlotId> _common_sub_slot_ids;
     std::vector<ExprContext*> _common_sub_expr_ctxs;
+
+    std::unique_ptr<TPaimonTableSink> _paimon_bucket_sink;
+    std::vector<ExprContext*> _paimon_schema_exprs;
 
     RuntimeProfile::Counter* _expr_compute_timer = nullptr;
     RuntimeProfile::Counter* _common_sub_expr_compute_timer = nullptr;

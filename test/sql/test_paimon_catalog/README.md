@@ -78,6 +78,21 @@ a Catalog requiring cleanup. Tests that generate or modify data must use a
 separate `tmp/<case-name>/<UUID>/` prefix, not this persistent warehouse.
 See [T/test_paimon_reader_modes](T/test_paimon_reader_modes) for an example.
 
+### Live native writer case
+
+[T/test_paimon_native_writer](T/test_paimon_native_writer) is a separate live-write
+case. It uses only its own `tmp/paimon_native_writer/<UUID>/` warehouse, never the
+persistent fixtures above. It covers native VALUES/SELECT, fixed-bucket primary-key
+upserts, CTAS/LIKE, empty/static/dynamic overwrite, and nested/VARIANT values. Writes
+never use JNI; read assertions select the existing Paimon C++ or StarRocks native
+file paths. Java SDK metadata/committable tests in FE do not use JNI either.
+
+The new T case is authored but not runtime-verified. Record and verify its matching
+R file on the authorized community build before registering it as executed SQL
+coverage. Do not manufacture an expected-results file from source inspection.
+The final explicit DROP statements remove only objects created by the case; an
+interrupted run may require cleanup of its uniquely identified temporary warehouse.
+
 ## Reader assertions
 
 After creating the catalog as in that example, add
