@@ -37,6 +37,7 @@
 #include "formats/io/async_flush_stream_poller.h"
 #include "formats/utils.h"
 #include "runtime/runtime_state.h"
+#include "testutil/type_test_helper.h"
 
 namespace starrocks::connector {
 namespace {
@@ -96,7 +97,7 @@ TEST_F(IcebergChunkSinkTest, test_callback) {
         std::vector<std::string> partition_column_names = {"k1"};
         std::vector<std::string> transform = {"identity"};
         std::vector<std::unique_ptr<ColumnEvaluator>> partition_column_evaluators =
-                ColumnSlotIdEvaluator::from_types({TypeDescriptor::from_logical_type(TYPE_VARCHAR)});
+                ColumnSlotIdEvaluator::from_types({TYPE_VARCHAR_DESC});
         auto mock_writer_factory = std::make_shared<MockFileWriterFactory>();
         auto location_provider = std::make_shared<LocationProvider>("base_path", "ffffff", 0, 0, "parquet");
         WriterAndStream ws;
@@ -168,8 +169,7 @@ TEST_F(IcebergChunkSinkTest, test_factory) {
         sink_ctx->options = {}; // default for now
         sink_ctx->parquet_field_ids = {};
         sink_ctx->max_file_size = 1 << 30;
-        sink_ctx->column_evaluators = ColumnSlotIdEvaluator::from_types(
-                {TypeDescriptor::from_logical_type(TYPE_VARCHAR), TypeDescriptor::from_logical_type(TYPE_INT)});
+        sink_ctx->column_evaluators = ColumnSlotIdEvaluator::from_types({TYPE_VARCHAR_DESC, TYPE_INT_DESC});
         sink_ctx->runtime_state = _runtime_state.get();
         IcebergChunkSinkProvider provider(sink_ctx);
         formats::AsyncFlushStreamPoller poller;
@@ -190,8 +190,7 @@ TEST_F(IcebergChunkSinkTest, test_factory) {
         sink_ctx->options = {};
         sink_ctx->parquet_field_ids = {};
         sink_ctx->max_file_size = 1 << 30;
-        sink_ctx->column_evaluators = ColumnSlotIdEvaluator::from_types(
-                {TypeDescriptor::from_logical_type(TYPE_VARCHAR), TypeDescriptor::from_logical_type(TYPE_INT)});
+        sink_ctx->column_evaluators = ColumnSlotIdEvaluator::from_types({TYPE_VARCHAR_DESC, TYPE_INT_DESC});
         sink_ctx->runtime_state = _runtime_state.get();
         IcebergChunkSinkProvider provider(sink_ctx);
         formats::AsyncFlushStreamPoller poller;
@@ -241,8 +240,8 @@ TEST_F(IcebergChunkSinkTest, test_utils) {
             partition_key_columns.emplace_back(ptr);
             extra_metas.push_back(ChunkExtraColumnsMeta{TYPE_BIGINT_DESC, true /*useless*/, true /*useless*/});
         }
-        std::vector<std::unique_ptr<ColumnEvaluator>> partition_column_evaluators = ColumnSlotIdEvaluator::from_types(
-                {TypeDescriptor::from_logical_type(TYPE_BIGINT), TypeDescriptor::from_logical_type(TYPE_VARCHAR)});
+        std::vector<std::unique_ptr<ColumnEvaluator>> partition_column_evaluators =
+                ColumnSlotIdEvaluator::from_types({TYPE_BIGINT_DESC, TYPE_VARCHAR_DESC});
         auto chunk_extra_data = std::make_shared<ChunkExtraColumnsData>(extra_metas, std::move(partition_key_columns));
         // Unlock during merging partition chunks into a full chunk.
         chunk->set_extra_data(chunk_extra_data);
@@ -281,8 +280,8 @@ TEST_F(IcebergChunkSinkTest, test_utils) {
             extra_metas.push_back(ChunkExtraColumnsMeta{TYPE_DATE_DESC, true /*useless*/, true /*useless*/});
         }
 
-        std::vector<std::unique_ptr<ColumnEvaluator>> partition_column_evaluators = ColumnSlotIdEvaluator::from_types(
-                {TypeDescriptor::from_logical_type(TYPE_VARCHAR), TypeDescriptor::from_logical_type(TYPE_DATE)});
+        std::vector<std::unique_ptr<ColumnEvaluator>> partition_column_evaluators =
+                ColumnSlotIdEvaluator::from_types({TYPE_VARCHAR_DESC, TYPE_DATE_DESC});
 
         auto chunk_extra_data = std::make_shared<ChunkExtraColumnsData>(extra_metas, std::move(partition_key_columns));
         // Unlock during merging partition chunks into a full chunk.
@@ -379,9 +378,8 @@ TEST_F(IcebergChunkSinkTest, test_utils) {
         chunk->set_extra_data(chunk_extra_data);
         std::vector<int8_t> field_is_null;
         std::vector<std::unique_ptr<ColumnEvaluator>> partition_column_evaluators = ColumnSlotIdEvaluator::from_types(
-                {TypeDescriptor::from_logical_type(TYPE_VARBINARY), TypeDescriptor::from_logical_type(TYPE_CHAR),
-                 TypeDescriptor::from_logical_type(TYPE_DATETIME), TypeDescriptor::from_logical_type(TYPE_TINYINT),
-                 TypeDescriptor::from_logical_type(TYPE_INT), TypeDescriptor::from_logical_type(TYPE_BIGINT)});
+                {TypeDescriptor::from_logical_type(TYPE_VARBINARY), TYPE_CHAR_DESC, TYPE_DATETIME_DESC,
+                 TYPE_TINYINT_DESC, TYPE_INT_DESC, TYPE_BIGINT_DESC});
         auto ret = IcebergUtils::iceberg_make_partition_name(
                 {"k1", "k2", "k3", "k4", "k5", "k6", "k7"}, partition_column_evaluators,
                 {"bucket", "identity", "truncate", "truncate", "truncate", "truncate", "truncate"}, chunk.get(), true,

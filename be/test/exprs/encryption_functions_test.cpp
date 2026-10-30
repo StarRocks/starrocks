@@ -2217,7 +2217,7 @@ protected:
 TEST_P(RowFingerprintTestFixture, test_encode_fingerprint_sha256) {
     auto [str, expected] = GetParam();
 
-    std::vector<FunctionContext::TypeDesc> arg_types = {TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
+    std::vector<FunctionContext::TypeDesc> arg_types = {TYPE_VARCHAR_DESC};
     auto return_type = TypeDescriptor::from_logical_type(TYPE_VARBINARY);
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
 
@@ -2244,7 +2244,7 @@ INSTANTIATE_TEST_SUITE_P(
                                           "f5a08e0c4ce4f0c1289265b8e4e93fc261979c835d2e98947e03ded44cf20635")));
 
 TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_null_test) {
-    std::vector<FunctionContext::TypeDesc> arg_types = {TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
+    std::vector<FunctionContext::TypeDesc> arg_types = {TYPE_VARCHAR_DESC};
     auto return_type = TypeDescriptor::from_logical_type(TYPE_VARBINARY);
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
     Columns columns;
@@ -2284,7 +2284,7 @@ TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_integer_types) {
 
     // Test INT8
     {
-        std::vector<FunctionContext::TypeDesc> arg_types = {TypeDescriptor::from_logical_type(TYPE_TINYINT)};
+        std::vector<FunctionContext::TypeDesc> arg_types = {TYPE_TINYINT_DESC};
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
         Columns columns;
         auto col = ColumnTestHelper::build_column<int8_t>({1, 127, -128});
@@ -2300,7 +2300,7 @@ TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_integer_types) {
 
     // Test INT32
     {
-        std::vector<FunctionContext::TypeDesc> arg_types = {TypeDescriptor::from_logical_type(TYPE_INT)};
+        std::vector<FunctionContext::TypeDesc> arg_types = {TYPE_INT_DESC};
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
         Columns columns;
         auto col = ColumnTestHelper::build_column<int32_t>({0, 12345, -67890});
@@ -2313,7 +2313,7 @@ TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_integer_types) {
 
     // Test INT64
     {
-        std::vector<FunctionContext::TypeDesc> arg_types = {TypeDescriptor::from_logical_type(TYPE_BIGINT)};
+        std::vector<FunctionContext::TypeDesc> arg_types = {TYPE_BIGINT_DESC};
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
         Columns columns;
         auto col = Int64Column::create();
@@ -2349,7 +2349,7 @@ TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_float_types) {
 
     // Test FLOAT
     {
-        std::vector<FunctionContext::TypeDesc> arg_types = {TypeDescriptor::from_logical_type(TYPE_FLOAT)};
+        std::vector<FunctionContext::TypeDesc> arg_types = {TYPE_FLOAT_DESC};
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
         Columns columns;
         auto col = ColumnTestHelper::build_column<float>({0.0f, 3.14159f, -2.71828f});
@@ -2363,7 +2363,7 @@ TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_float_types) {
 
     // Test DOUBLE
     {
-        std::vector<FunctionContext::TypeDesc> arg_types = {TypeDescriptor::from_logical_type(TYPE_DOUBLE)};
+        std::vector<FunctionContext::TypeDesc> arg_types = {TYPE_DOUBLE_DESC};
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
         Columns columns;
         auto col = ColumnTestHelper::build_column<double>({0.0, 3.141592653589793, -2.718281828459045});
@@ -2382,7 +2382,7 @@ TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_date_types) {
 
     // Test DATE
     {
-        std::vector<FunctionContext::TypeDesc> arg_types = {TypeDescriptor::from_logical_type(TYPE_DATE)};
+        std::vector<FunctionContext::TypeDesc> arg_types = {TYPE_DATE_DESC};
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
         Columns columns;
         auto col = DateColumn::create();
@@ -2403,7 +2403,7 @@ TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_date_types) {
 
     // Test DATETIME
     {
-        std::vector<FunctionContext::TypeDesc> arg_types = {TypeDescriptor::from_logical_type(TYPE_DATETIME)};
+        std::vector<FunctionContext::TypeDesc> arg_types = {TYPE_DATETIME_DESC};
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
         Columns columns;
         auto col = TimestampColumn::create();
@@ -2422,7 +2422,7 @@ TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_date_types) {
 
 // Test encode_fingerprint_sha256 with boolean type
 TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_boolean_type) {
-    std::vector<FunctionContext::TypeDesc> arg_types = {TypeDescriptor::from_logical_type(TYPE_BOOLEAN)};
+    std::vector<FunctionContext::TypeDesc> arg_types = {TYPE_BOOLEAN_DESC};
     auto return_type = TypeDescriptor::from_logical_type(TYPE_VARBINARY);
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
     Columns columns;
@@ -2443,9 +2443,7 @@ TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_boolean_type) {
 
 // Test encode_fingerprint_sha256 with multiple columns
 TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_multiple_columns) {
-    std::vector<FunctionContext::TypeDesc> arg_types = {TypeDescriptor::from_logical_type(TYPE_INT),
-                                                        TypeDescriptor::from_logical_type(TYPE_VARCHAR),
-                                                        TypeDescriptor::from_logical_type(TYPE_DOUBLE)};
+    std::vector<FunctionContext::TypeDesc> arg_types = {TYPE_INT_DESC, TYPE_VARCHAR_DESC, TYPE_DOUBLE_DESC};
     auto return_type = TypeDescriptor::from_logical_type(TYPE_VARBINARY);
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
     Columns columns;
@@ -2476,8 +2474,7 @@ TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_multiple_columns) {
 
 // Test encode_fingerprint_sha256 with mixed nullable and non-nullable columns
 TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_mixed_nullable) {
-    std::vector<FunctionContext::TypeDesc> arg_types = {TypeDescriptor::from_logical_type(TYPE_INT),
-                                                        TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
+    std::vector<FunctionContext::TypeDesc> arg_types = {TYPE_INT_DESC, TYPE_VARCHAR_DESC};
     auto return_type = TypeDescriptor::from_logical_type(TYPE_VARBINARY);
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
     Columns columns;
@@ -2547,8 +2544,7 @@ TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_decimal_types) {
 
 // Test encode_fingerprint_sha256 deterministic behavior
 TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_deterministic) {
-    std::vector<FunctionContext::TypeDesc> arg_types = {TypeDescriptor::from_logical_type(TYPE_INT),
-                                                        TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
+    std::vector<FunctionContext::TypeDesc> arg_types = {TYPE_INT_DESC, TYPE_VARCHAR_DESC};
     auto return_type = TypeDescriptor::from_logical_type(TYPE_VARBINARY);
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
 
@@ -2576,7 +2572,7 @@ TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_deterministic) {
 
 // Test encode_fingerprint_sha256 with empty string vs null
 TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_empty_vs_null) {
-    std::vector<FunctionContext::TypeDesc> arg_types = {TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
+    std::vector<FunctionContext::TypeDesc> arg_types = {TYPE_VARCHAR_DESC};
     auto return_type = TypeDescriptor::from_logical_type(TYPE_VARBINARY);
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
     Columns columns;
@@ -2608,7 +2604,7 @@ TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_type_markers) {
     // Create INT32 with value 65
     Columns columns1;
     {
-        std::vector<FunctionContext::TypeDesc> arg_types = {TypeDescriptor::from_logical_type(TYPE_INT)};
+        std::vector<FunctionContext::TypeDesc> arg_types = {TYPE_INT_DESC};
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
         auto int_col = ColumnTestHelper::build_column<int32_t>({65});
         columns1.emplace_back(std::move(int_col));
@@ -2617,11 +2613,10 @@ TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_type_markers) {
     // Create VARCHAR with value "A" (ASCII 65)
     Columns columns2;
     {
-        std::vector<FunctionContext::TypeDesc> arg_types = {TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
-        std::unique_ptr<FunctionContext> ctx_int(
-                FunctionContext::create_test_context({TypeDescriptor::from_logical_type(TYPE_INT)}, return_type));
+        std::vector<FunctionContext::TypeDesc> arg_types = {TYPE_VARCHAR_DESC};
+        std::unique_ptr<FunctionContext> ctx_int(FunctionContext::create_test_context({TYPE_INT_DESC}, return_type));
         std::unique_ptr<FunctionContext> ctx_str(
-                FunctionContext::create_test_context({TypeDescriptor::from_logical_type(TYPE_VARCHAR)}, return_type));
+                FunctionContext::create_test_context({TYPE_VARCHAR_DESC}, return_type));
         auto str_col = ColumnTestHelper::build_column<Slice>({"A"});
         columns2.emplace_back(std::move(str_col));
 
@@ -2640,9 +2635,7 @@ TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_type_markers) {
 TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_const_arg_matches_materialized) {
     constexpr size_t kNumRows = 4;
     auto return_type = TypeDescriptor::from_logical_type(TYPE_VARBINARY);
-    std::vector<FunctionContext::TypeDesc> arg_types = {TypeDescriptor::from_logical_type(TYPE_INT),
-                                                        TypeDescriptor::from_logical_type(TYPE_VARCHAR),
-                                                        TypeDescriptor::from_logical_type(TYPE_BIGINT)};
+    std::vector<FunctionContext::TypeDesc> arg_types = {TYPE_INT_DESC, TYPE_VARCHAR_DESC, TYPE_BIGINT_DESC};
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
 
     const std::string const_str = "starrocks";
@@ -2690,7 +2683,7 @@ TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_const_arg_matches_mate
 TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_all_const_args) {
     constexpr size_t kNumRows = 8;
     auto return_type = TypeDescriptor::from_logical_type(TYPE_VARBINARY);
-    std::vector<FunctionContext::TypeDesc> arg_types = {TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
+    std::vector<FunctionContext::TypeDesc> arg_types = {TYPE_VARCHAR_DESC};
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
 
     const std::string const_str = "starrocks";
@@ -2718,9 +2711,7 @@ TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_all_const_args) {
 TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_const_null_and_const_value) {
     constexpr size_t kNumRows = 4;
     auto return_type = TypeDescriptor::from_logical_type(TYPE_VARBINARY);
-    std::vector<FunctionContext::TypeDesc> arg_types = {TypeDescriptor::from_logical_type(TYPE_INT),
-                                                        TypeDescriptor::from_logical_type(TYPE_VARCHAR),
-                                                        TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
+    std::vector<FunctionContext::TypeDesc> arg_types = {TYPE_INT_DESC, TYPE_VARCHAR_DESC, TYPE_VARCHAR_DESC};
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
 
     auto varying = Int32Column::create();
@@ -2746,7 +2737,7 @@ TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_const_null_and_const_v
 // NULL included -- fingerprinted to SHA-256("").
 TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_rejects_complex_types) {
     auto return_type = TypeDescriptor::from_logical_type(TYPE_VARBINARY);
-    auto int_type = TypeDescriptor::from_logical_type(TYPE_INT);
+    auto int_type = TYPE_INT_DESC;
     std::vector<TypeDescriptor> complex_types = {
             TypeDescriptor::create_array_type(int_type),
             TypeDescriptor::create_map_type(int_type, int_type),

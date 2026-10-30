@@ -59,10 +59,10 @@ TEST(OrcMappingTest, IcebergFieldIdMapping) {
     EXPECT_EQ((std::vector<std::string>{"c1", "", "s"}), *names);
 
     TypeDescriptor struct_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT);
-    struct_type.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+    struct_type.children.push_back(TYPE_INT_DESC);
     struct_type.field_names.emplace_back("a");
-    SlotDescriptor c1(0, "c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
-    SlotDescriptor dropped(1, "dropped", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+    SlotDescriptor c1(0, "c1", TYPE_INT_DESC);
+    SlotDescriptor dropped(1, "dropped", TYPE_INT_DESC);
     SlotDescriptor s(2, "s", struct_type);
     std::vector<SlotDescriptor*> slots{&c1, &dropped, &s};
 
@@ -104,7 +104,7 @@ TEST(OrcMappingTest, IcebergMissingStructSubfield) {
     auto struct_of = [](const std::vector<std::string>& fields) {
         TypeDescriptor type = TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT);
         for (const auto& name : fields) {
-            type.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+            type.children.push_back(TYPE_INT_DESC);
             type.field_names.emplace_back(name);
         }
         return type;

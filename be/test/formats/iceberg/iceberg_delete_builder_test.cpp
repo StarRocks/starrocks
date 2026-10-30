@@ -93,8 +93,7 @@ protected:
     // Writes a 2-column (file_path, pos) parquet position-delete file into `fs`.
     void write_parquet_delete_file(MemoryFileSystem& fs, const std::string& path,
                                    const std::vector<std::pair<std::string, int64_t>>& rows) {
-        std::vector type_descs{TypeDescriptor::from_logical_type(TYPE_VARCHAR),
-                               TypeDescriptor::from_logical_type(TYPE_BIGINT)};
+        std::vector type_descs{TYPE_VARCHAR_DESC, TYPE_BIGINT_DESC};
         auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
         auto writer_options = std::make_shared<ParquetWriterOptions>();
         writer_options->column_ids = {FileColumnId{IcebergDeleteFileMeta::get_delete_file_path_slot().id(), {}},
@@ -112,8 +111,7 @@ protected:
 
     // Writes a 2-column (file_path, pos) orc position-delete file under _tmp_dir (default fs).
     void write_orc_delete_file(const std::string& path, const std::vector<std::pair<std::string, int64_t>>& rows) {
-        std::vector type_descs{TypeDescriptor::from_logical_type(TYPE_VARCHAR),
-                               TypeDescriptor::from_logical_type(TYPE_BIGINT)};
+        std::vector type_descs{TYPE_VARCHAR_DESC, TYPE_BIGINT_DESC};
         auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
         ASSIGN_OR_ABORT(auto writable_file, FileSystem::Default()->new_writable_file(path));
         auto stream = std::make_unique<AsyncFlushOutputStream>(std::move(writable_file), nullptr, _runtime_state.get());

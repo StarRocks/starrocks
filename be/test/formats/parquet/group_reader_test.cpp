@@ -259,7 +259,7 @@ public:
         if (col.get() == _temp_col.get()) {
             _finalize_called = true;
             size_t n = _temp_col->size();
-            auto dest = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_VARCHAR), true);
+            auto dest = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
             dest->append_default(n);
             _temp_col->as_mutable_raw_ptr()->reset_column();
             col = std::move(dest);
@@ -2346,7 +2346,7 @@ TEST_F(GroupReaderTest, TestCreateReservedIcebergColumnReaderNotFound) {
     auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
     ASSERT_OK(group_reader->init());
 
-    SlotDescriptor slot(0, "_row_id", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT));
+    SlotDescriptor slot(0, "_row_id", TYPE_BIGINT_DESC);
     auto result = group_reader->_create_reserved_iceberg_column_reader(&slot, formats::kIcebergRowIdColumnId);
     ASSERT_OK(result);
     ASSERT_EQ(result.value(), nullptr);
@@ -2355,8 +2355,7 @@ TEST_F(GroupReaderTest, TestCreateReservedIcebergColumnReaderNotFound) {
 TEST_F(GroupReaderTest, TestIcebergRowIdColumnReaderCreation) {
     auto* param = _create_group_reader_param();
     auto* reserved_slots = new std::vector<SlotDescriptor*>();
-    auto* row_id_slot = _pool.add(new SlotDescriptor(100, formats::kIcebergRowIdColumnName,
-                                                     TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    auto* row_id_slot = _pool.add(new SlotDescriptor(100, formats::kIcebergRowIdColumnName, TYPE_BIGINT_DESC));
     reserved_slots->push_back(row_id_slot);
     param->scan_ctx->reserved_field_slots = *_pool.add(reserved_slots);
     param->scan_ctx->timezone = "UTC";
@@ -2378,8 +2377,7 @@ TEST_F(GroupReaderTest, TestIcebergRowIdColumnReaderCreation) {
 TEST_F(GroupReaderTest, TestIcebergRowIdWithoutFirstRowIdReturnsNull) {
     auto* param = _create_group_reader_param();
     auto* reserved_slots = new std::vector<SlotDescriptor*>();
-    auto* row_id_slot = _pool.add(new SlotDescriptor(100, formats::kIcebergRowIdColumnName,
-                                                     TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    auto* row_id_slot = _pool.add(new SlotDescriptor(100, formats::kIcebergRowIdColumnName, TYPE_BIGINT_DESC));
     reserved_slots->push_back(row_id_slot);
     param->scan_ctx->reserved_field_slots = *_pool.add(reserved_slots);
     param->scan_ctx->timezone = "UTC";
@@ -2396,7 +2394,7 @@ TEST_F(GroupReaderTest, TestIcebergRowIdWithoutFirstRowIdReturnsNull) {
     auto group_reader = std::make_unique<GroupReader>(*param, 0, skip_rows_ctx, 0);
     ASSERT_OK(group_reader->init());
 
-    ColumnPtr column = ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT), true);
+    ColumnPtr column = ColumnHelper::create_column(TYPE_BIGINT_DESC, true);
     ASSERT_OK(group_reader->_column_readers[100]->read_range(Range<uint64_t>(0, 4), nullptr, column));
     ASSERT_EQ(4, column->size());
     for (int i = 0; i < 4; ++i) {
@@ -2409,10 +2407,8 @@ TEST_F(GroupReaderTest, TestIcebergRowIdWithoutFirstRowIdUsesRowPositionForLooku
     // file-local, so a row group starting at row 7 must emit 7..10 for its first four rows.
     auto* param = _create_group_reader_param();
     auto* reserved_slots = new std::vector<SlotDescriptor*>();
-    auto* row_id_slot = _pool.add(new SlotDescriptor(100, formats::kIcebergRowIdColumnName,
-                                                     TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
-    auto* scan_range_id_slot = _pool.add(
-            new SlotDescriptor(101, "_scan_range_id", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)));
+    auto* row_id_slot = _pool.add(new SlotDescriptor(100, formats::kIcebergRowIdColumnName, TYPE_BIGINT_DESC));
+    auto* scan_range_id_slot = _pool.add(new SlotDescriptor(101, "_scan_range_id", TYPE_INT_DESC));
     reserved_slots->push_back(row_id_slot);
     reserved_slots->push_back(scan_range_id_slot);
     param->scan_ctx->reserved_field_slots = *_pool.add(reserved_slots);
@@ -2430,7 +2426,7 @@ TEST_F(GroupReaderTest, TestIcebergRowIdWithoutFirstRowIdUsesRowPositionForLooku
     auto group_reader = std::make_unique<GroupReader>(*param, 0, skip_rows_ctx, 7);
     ASSERT_OK(group_reader->init());
 
-    ColumnPtr column = ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT), true);
+    ColumnPtr column = ColumnHelper::create_column(TYPE_BIGINT_DESC, true);
     ASSERT_OK(group_reader->_column_readers[100]->read_range(Range<uint64_t>(7, 11), nullptr, column));
     ASSERT_EQ("[7, 8, 9, 10]", column->debug_string());
 }
@@ -2442,8 +2438,7 @@ TEST_F(GroupReaderTest, TestIcebergRowIdSecondRowGroupUsesFileLevelFirstRowId) {
     // 1014..1017 instead of 1007..1010.
     auto* param = _create_group_reader_param();
     auto* reserved_slots = new std::vector<SlotDescriptor*>();
-    auto* row_id_slot = _pool.add(new SlotDescriptor(100, formats::kIcebergRowIdColumnName,
-                                                     TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    auto* row_id_slot = _pool.add(new SlotDescriptor(100, formats::kIcebergRowIdColumnName, TYPE_BIGINT_DESC));
     reserved_slots->push_back(row_id_slot);
     param->scan_ctx->reserved_field_slots = *_pool.add(reserved_slots);
     param->scan_ctx->timezone = "UTC";
@@ -2462,7 +2457,7 @@ TEST_F(GroupReaderTest, TestIcebergRowIdSecondRowGroupUsesFileLevelFirstRowId) {
     auto group_reader = std::make_unique<GroupReader>(*param, 0, skip_rows_ctx, 7);
     ASSERT_OK(group_reader->init());
 
-    ColumnPtr column = ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT), true);
+    ColumnPtr column = ColumnHelper::create_column(TYPE_BIGINT_DESC, true);
     ASSERT_OK(group_reader->_column_readers[100]->read_range(Range<uint64_t>(7, 11), nullptr, column));
     ASSERT_EQ("[1007, 1008, 1009, 1010]", column->debug_string());
 }
@@ -2470,8 +2465,8 @@ TEST_F(GroupReaderTest, TestIcebergRowIdSecondRowGroupUsesFileLevelFirstRowId) {
 TEST_F(GroupReaderTest, TestIcebergLastUpdatedSequenceNumberColumnReaderCreation) {
     auto* param = _create_group_reader_param();
     auto* reserved_slots = new std::vector<SlotDescriptor*>();
-    auto* seq_slot = _pool.add(new SlotDescriptor(101, formats::kIcebergLastUpdatedSequenceNumberColumnName,
-                                                  TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    auto* seq_slot =
+            _pool.add(new SlotDescriptor(101, formats::kIcebergLastUpdatedSequenceNumberColumnName, TYPE_BIGINT_DESC));
     reserved_slots->push_back(seq_slot);
     param->scan_ctx->reserved_field_slots = *_pool.add(reserved_slots);
     param->scan_ctx->timezone = "UTC";
@@ -2505,8 +2500,8 @@ TEST_F(GroupReaderTest, TestIcebergLastUpdatedSequenceNumberColumnReaderCreation
 TEST_F(GroupReaderTest, TestIcebergLastUpdatedSequenceNumberNullExtendedLiteralReturnsNull) {
     auto* param = _create_group_reader_param();
     auto* reserved_slots = new std::vector<SlotDescriptor*>();
-    auto* seq_slot = _pool.add(new SlotDescriptor(101, formats::kIcebergLastUpdatedSequenceNumberColumnName,
-                                                  TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    auto* seq_slot =
+            _pool.add(new SlotDescriptor(101, formats::kIcebergLastUpdatedSequenceNumberColumnName, TYPE_BIGINT_DESC));
     reserved_slots->push_back(seq_slot);
     param->scan_ctx->reserved_field_slots = *_pool.add(reserved_slots);
     param->scan_ctx->timezone = "UTC";
@@ -2532,7 +2527,7 @@ TEST_F(GroupReaderTest, TestIcebergLastUpdatedSequenceNumberNullExtendedLiteralR
     auto group_reader = std::make_unique<GroupReader>(*param, 0, skip_rows_ctx, 0);
     ASSERT_OK(group_reader->init());
 
-    ColumnPtr column = ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT), true);
+    ColumnPtr column = ColumnHelper::create_column(TYPE_BIGINT_DESC, true);
     ASSERT_OK(group_reader->_column_readers[101]->read_range(Range<uint64_t>(0, 4), nullptr, column));
     ASSERT_EQ(4, column->size());
     for (int i = 0; i < 4; ++i) {
@@ -2701,8 +2696,7 @@ TEST_F(GroupReaderTest, TestCreateReservedIcebergColumnReaderFound) {
     auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
     ASSERT_OK(group_reader->init());
 
-    SlotDescriptor slot(200, formats::kIcebergRowIdColumnName,
-                        TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT));
+    SlotDescriptor slot(200, formats::kIcebergRowIdColumnName, TYPE_BIGINT_DESC);
     auto result = group_reader->_create_reserved_iceberg_column_reader(&slot, formats::kIcebergRowIdColumnId);
     ASSERT_OK(result);
     // Physical column found -> non-null reader
@@ -2714,8 +2708,7 @@ TEST_F(GroupReaderTest, TestIcebergRowIdPhysicalColumnReaderCreation) {
 
     // Set up reserved_field_slots with _row_id
     auto* reserved_slots = new std::vector<SlotDescriptor*>();
-    auto* row_id_slot = _pool.add(new SlotDescriptor(100, formats::kIcebergRowIdColumnName,
-                                                     TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    auto* row_id_slot = _pool.add(new SlotDescriptor(100, formats::kIcebergRowIdColumnName, TYPE_BIGINT_DESC));
     reserved_slots->push_back(row_id_slot);
     param->scan_ctx->reserved_field_slots = *_pool.add(reserved_slots);
     param->scan_ctx->timezone = "UTC";
@@ -2743,8 +2736,8 @@ TEST_F(GroupReaderTest, TestIcebergLastUpdatedSeqNumPhysicalColumnReaderCreation
 
     // Set up reserved_field_slots with _last_updated_sequence_number
     auto* reserved_slots = new std::vector<SlotDescriptor*>();
-    auto* seq_slot = _pool.add(new SlotDescriptor(101, formats::kIcebergLastUpdatedSequenceNumberColumnName,
-                                                  TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    auto* seq_slot =
+            _pool.add(new SlotDescriptor(101, formats::kIcebergLastUpdatedSequenceNumberColumnName, TYPE_BIGINT_DESC));
     reserved_slots->push_back(seq_slot);
     param->scan_ctx->reserved_field_slots = *_pool.add(reserved_slots);
     param->scan_ctx->timezone = "UTC";
@@ -2774,8 +2767,7 @@ TEST_F(GroupReaderTest, VariantVirtualColumnMapsPrefixAndLeafPathsIndependently)
     ASSERT_OK(_create_filemeta(&file_meta, param));
     param->file_metadata = file_meta;
 
-    auto* leaf_slot = _pool.add(
-            new SlotDescriptor(120, "data.a.b.c", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    auto* leaf_slot = _pool.add(new SlotDescriptor(120, "data.a.b.c", TYPE_BIGINT_DESC));
     auto* prefix_slot = _pool.add(
             new SlotDescriptor(121, "data.a.b", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARIANT)));
     auto* source_slot =
@@ -2835,8 +2827,7 @@ TEST_F(GroupReaderTest, FillDstChunkProjectsVirtualColumnFromPhysicalSourceSlot)
     ASSERT_OK(_create_filemeta(&file_meta, param));
     param->file_metadata = file_meta;
 
-    auto* virtual_slot =
-            _pool.add(new SlotDescriptor(100, "data.id", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    auto* virtual_slot = _pool.add(new SlotDescriptor(100, "data.id", TYPE_BIGINT_DESC));
     param->read_cols.clear();
     GroupReaderParam::Column virtual_col{};
     virtual_col.slot_desc = virtual_slot;
@@ -2866,8 +2857,7 @@ TEST_F(GroupReaderTest, FillDstChunkProjectsVirtualColumnReturnsNullForNullAndMi
     ASSERT_OK(_create_filemeta(&file_meta, param));
     param->file_metadata = file_meta;
 
-    auto* virtual_slot =
-            _pool.add(new SlotDescriptor(103, "data.id", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    auto* virtual_slot = _pool.add(new SlotDescriptor(103, "data.id", TYPE_BIGINT_DESC));
     param->read_cols.clear();
     GroupReaderParam::Column virtual_col{};
     virtual_col.slot_desc = virtual_slot;
@@ -2898,8 +2888,7 @@ TEST_F(GroupReaderTest, FillDstChunkProjectsExactTypedVirtualColumnRespectsSourc
     ASSERT_OK(_create_filemeta(&file_meta, param));
     param->file_metadata = file_meta;
 
-    auto* virtual_slot =
-            _pool.add(new SlotDescriptor(105, "data.id", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    auto* virtual_slot = _pool.add(new SlotDescriptor(105, "data.id", TYPE_BIGINT_DESC));
     param->read_cols.clear();
     GroupReaderParam::Column virtual_col{};
     virtual_col.slot_desc = virtual_slot;
@@ -2995,8 +2984,7 @@ TEST_F(GroupReaderTest, FillDstChunkProjectsVirtualVarcharColumnFromPhysicalSour
     ASSERT_OK(_create_filemeta(&file_meta, param));
     param->file_metadata = file_meta;
 
-    auto* virtual_slot =
-            _pool.add(new SlotDescriptor(104, "data.id", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)));
+    auto* virtual_slot = _pool.add(new SlotDescriptor(104, "data.id", TYPE_VARCHAR_DESC));
     param->read_cols.clear();
     GroupReaderParam::Column virtual_col{};
     virtual_col.slot_desc = virtual_slot;
@@ -3028,8 +3016,7 @@ TEST_F(GroupReaderTest, FillDstChunkProjectsVirtualColumnFromHiddenVariantSource
     ASSERT_OK(_create_filemeta(&file_meta, param));
     param->file_metadata = file_meta;
 
-    auto* virtual_slot =
-            _pool.add(new SlotDescriptor(101, "data.id", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    auto* virtual_slot = _pool.add(new SlotDescriptor(101, "data.id", TYPE_BIGINT_DESC));
     param->read_cols.clear();
     GroupReaderParam::Column virtual_col{};
     virtual_col.slot_desc = virtual_slot;
@@ -3064,8 +3051,7 @@ TEST_F(GroupReaderTest, FillDstChunkProjectsVirtualColumnWhenVirtualSlotPrecedes
     ASSERT_OK(_create_filemeta(&file_meta, param));
     param->file_metadata = file_meta;
 
-    auto* virtual_slot =
-            _pool.add(new SlotDescriptor(101, "data.id", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    auto* virtual_slot = _pool.add(new SlotDescriptor(101, "data.id", TYPE_BIGINT_DESC));
     auto* source_slot =
             _pool.add(new SlotDescriptor(102, "data", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARIANT)));
 
@@ -3149,8 +3135,7 @@ TEST_F(GroupReaderTest, ProcessColumnsDefersVirtualColumnConjunctsUntilAfterProj
     ASSERT_OK(_create_filemeta(&file_meta, param));
     param->file_metadata = file_meta;
 
-    auto* virtual_slot =
-            _pool.add(new SlotDescriptor(110, "data.id", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    auto* virtual_slot = _pool.add(new SlotDescriptor(110, "data.id", TYPE_BIGINT_DESC));
     auto* source_slot =
             _pool.add(new SlotDescriptor(111, "data", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARIANT)));
 
@@ -3205,10 +3190,9 @@ TEST_F(GroupReaderTest, TestIcebergBothPhysicalColumnsCreation) {
 
     // Set up reserved_field_slots with both _row_id and _last_updated_sequence_number
     auto* reserved_slots = new std::vector<SlotDescriptor*>();
-    auto* row_id_slot = _pool.add(new SlotDescriptor(100, formats::kIcebergRowIdColumnName,
-                                                     TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
-    auto* seq_slot = _pool.add(new SlotDescriptor(101, formats::kIcebergLastUpdatedSequenceNumberColumnName,
-                                                  TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    auto* row_id_slot = _pool.add(new SlotDescriptor(100, formats::kIcebergRowIdColumnName, TYPE_BIGINT_DESC));
+    auto* seq_slot =
+            _pool.add(new SlotDescriptor(101, formats::kIcebergLastUpdatedSequenceNumberColumnName, TYPE_BIGINT_DESC));
     reserved_slots->push_back(row_id_slot);
     reserved_slots->push_back(seq_slot);
     param->scan_ctx->reserved_field_slots = *_pool.add(reserved_slots);
@@ -3239,8 +3223,7 @@ TEST_F(GroupReaderTest, CreateColumnReadersRegistersVirtualZoneMapReaderForPhysi
 
     auto* source_slot =
             _pool.add(new SlotDescriptor(180, "data", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARIANT)));
-    auto* virtual_slot =
-            _pool.add(new SlotDescriptor(181, "data.a", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    auto* virtual_slot = _pool.add(new SlotDescriptor(181, "data.a", TYPE_BIGINT_DESC));
 
     GroupReaderParam::Column source_col{};
     source_col.slot_desc = source_slot;
@@ -3311,10 +3294,8 @@ TEST_F(GroupReaderTest, ProcessColumnsClassifiesHiddenSourcesAsActiveOrLazy) {
 
     // Two virtual columns: slot 120 has a conjunct (→ active source),
     //                      slot 121 is projection-only (→ lazy source).
-    auto* vslot_active =
-            _pool.add(new SlotDescriptor(120, "v1.a", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
-    auto* vslot_lazy =
-            _pool.add(new SlotDescriptor(121, "v2.a", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    auto* vslot_active = _pool.add(new SlotDescriptor(120, "v1.a", TYPE_BIGINT_DESC));
+    auto* vslot_lazy = _pool.add(new SlotDescriptor(121, "v2.a", TYPE_BIGINT_DESC));
 
     param->read_cols.clear();
     GroupReaderParam::Column vc1{};
@@ -3381,8 +3362,8 @@ TEST_F(GroupReaderTest, VariantVirtualPromotionSkipsDuplicateTypedLeafReaders) {
     param->file_metadata = file_meta;
     param->read_cols.clear();
 
-    auto* vslot1 = _pool.add(new SlotDescriptor(220, "data.a1", TypeDescriptor::from_logical_type(TYPE_INT)));
-    auto* vslot2 = _pool.add(new SlotDescriptor(221, "data.a2", TypeDescriptor::from_logical_type(TYPE_INT)));
+    auto* vslot1 = _pool.add(new SlotDescriptor(220, "data.a1", TYPE_INT_DESC));
+    auto* vslot2 = _pool.add(new SlotDescriptor(221, "data.a2", TYPE_INT_DESC));
     param->read_cols.emplace_back(make_variant_virtual_column_for_promotion_test(vslot1, "a"));
     param->read_cols.emplace_back(make_variant_virtual_column_for_promotion_test(vslot2, "a"));
 
@@ -3414,8 +3395,8 @@ TEST_F(GroupReaderTest, VariantVirtualPromotionPromotesDifferentTypedLeafReaders
     param->file_metadata = file_meta;
     param->read_cols.clear();
 
-    auto* vslot1 = _pool.add(new SlotDescriptor(222, "data.a", TypeDescriptor::from_logical_type(TYPE_INT)));
-    auto* vslot2 = _pool.add(new SlotDescriptor(223, "data.b", TypeDescriptor::from_logical_type(TYPE_INT)));
+    auto* vslot1 = _pool.add(new SlotDescriptor(222, "data.a", TYPE_INT_DESC));
+    auto* vslot2 = _pool.add(new SlotDescriptor(223, "data.b", TYPE_INT_DESC));
     param->read_cols.emplace_back(make_variant_virtual_column_for_promotion_test(vslot1, "a"));
     param->read_cols.emplace_back(make_variant_virtual_column_for_promotion_test(vslot2, "b"));
 
@@ -3451,8 +3432,8 @@ TEST_F(GroupReaderTest, VariantVirtualPromotionClassifiesDictFilterConjuncts) {
     param->file_metadata = file_meta;
     param->read_cols.clear();
 
-    auto* dict_slot = _pool.add(new SlotDescriptor(228, "data.a", TypeDescriptor::from_logical_type(TYPE_VARCHAR)));
-    auto* expr_slot = _pool.add(new SlotDescriptor(229, "data.b", TypeDescriptor::from_logical_type(TYPE_INT)));
+    auto* dict_slot = _pool.add(new SlotDescriptor(228, "data.a", TYPE_VARCHAR_DESC));
+    auto* expr_slot = _pool.add(new SlotDescriptor(229, "data.b", TYPE_INT_DESC));
     param->read_cols.emplace_back(make_variant_virtual_column_for_promotion_test(dict_slot, "a"));
     param->read_cols.emplace_back(make_variant_virtual_column_for_promotion_test(expr_slot, "b"));
 
@@ -3499,7 +3480,7 @@ TEST_F(GroupReaderTest, VariantVirtualPromotionSkipsNonAllNullFallback) {
     param->file_metadata = file_meta;
     param->read_cols.clear();
 
-    auto* vslot = _pool.add(new SlotDescriptor(224, "data.a", TypeDescriptor::from_logical_type(TYPE_INT)));
+    auto* vslot = _pool.add(new SlotDescriptor(224, "data.a", TYPE_INT_DESC));
     param->read_cols.emplace_back(make_variant_virtual_column_for_promotion_test(vslot, "a"));
 
     SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
@@ -3526,7 +3507,7 @@ TEST_F(GroupReaderTest, VariantVirtualPromotionSkipsIncompatibleTargetType) {
     param->file_metadata = file_meta;
     param->read_cols.clear();
 
-    auto* vslot = _pool.add(new SlotDescriptor(225, "data.a", TypeDescriptor::from_logical_type(TYPE_BIGINT)));
+    auto* vslot = _pool.add(new SlotDescriptor(225, "data.a", TYPE_BIGINT_DESC));
     param->read_cols.emplace_back(make_variant_virtual_column_for_promotion_test(vslot, "a"));
 
     SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
@@ -3553,9 +3534,8 @@ TEST_F(GroupReaderTest, VariantVirtualPromotionKeepsUnpromotedMixedSourceActiveA
     param->file_metadata = file_meta;
     param->read_cols.clear();
 
-    auto* promoted_slot = _pool.add(new SlotDescriptor(226, "data1.a", TypeDescriptor::from_logical_type(TYPE_INT)));
-    auto* unpromoted_slot =
-            _pool.add(new SlotDescriptor(227, "data2.a", TypeDescriptor::from_logical_type(TYPE_BIGINT)));
+    auto* promoted_slot = _pool.add(new SlotDescriptor(226, "data1.a", TYPE_INT_DESC));
+    auto* unpromoted_slot = _pool.add(new SlotDescriptor(227, "data2.a", TYPE_BIGINT_DESC));
     auto promoted_col = make_variant_virtual_column_for_promotion_test(promoted_slot, "a");
     promoted_col.source_variant_column_name = "data1";
     auto unpromoted_col = make_variant_virtual_column_for_promotion_test(unpromoted_slot, "a");
@@ -3621,8 +3601,7 @@ TEST_F(GroupReaderTest, CreateColumnReadersRegistersVirtualZoneMapReaderForHidde
     auto* param = _create_group_reader_param();
     param->read_cols.clear();
 
-    auto* virtual_slot =
-            _pool.add(new SlotDescriptor(190, "data.a", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    auto* virtual_slot = _pool.add(new SlotDescriptor(190, "data.a", TYPE_BIGINT_DESC));
 
     GroupReaderParam::Column virtual_col{};
     virtual_col.slot_desc = virtual_slot;
@@ -3658,10 +3637,8 @@ TEST_F(GroupReaderTest, ProcessColumnsPopulatesLazySlotIdsForPhysicalColumnsWith
     param->file_metadata = file_meta;
 
     // Two physical variant columns: slot 130 has a predicate (active), 131 has none (lazy).
-    auto* active_slot =
-            _pool.add(new SlotDescriptor(130, "col_a", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
-    auto* lazy_slot =
-            _pool.add(new SlotDescriptor(131, "col_b", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    auto* active_slot = _pool.add(new SlotDescriptor(130, "col_a", TYPE_BIGINT_DESC));
+    auto* lazy_slot = _pool.add(new SlotDescriptor(131, "col_b", TYPE_BIGINT_DESC));
 
     param->read_cols.clear();
     GroupReaderParam::Column ca{};
@@ -3709,8 +3686,7 @@ TEST_F(GroupReaderTest, ProcessColumnsPromotesPhysicalVariantSourceForDeferredCo
     auto* phys_slot =
             _pool.add(new SlotDescriptor(170, "v", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARIANT)));
     // Virtual slot with a deferred conjunct whose source is the physical slot.
-    auto* virt_slot =
-            _pool.add(new SlotDescriptor(171, "v.a", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    auto* virt_slot = _pool.add(new SlotDescriptor(171, "v.a", TYPE_BIGINT_DESC));
 
     param->read_cols.clear();
     GroupReaderParam::Column pc{};
@@ -3759,8 +3735,7 @@ TEST_F(GroupReaderTest, ApplyDeferredVariantConjunctsReturnsErrorWhenConjunctSou
     ASSERT_OK(_create_filemeta(&file_meta, param));
     param->file_metadata = file_meta;
 
-    auto* vslot =
-            _pool.add(new SlotDescriptor(140, "v.a", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    auto* vslot = _pool.add(new SlotDescriptor(140, "v.a", TYPE_BIGINT_DESC));
 
     SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
     auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
@@ -3795,8 +3770,7 @@ TEST_F(GroupReaderTest, ApplyDeferredVariantConjunctsProjectsSourceAndFilters) {
     ASSERT_OK(_create_filemeta(&file_meta, param));
     param->file_metadata = file_meta;
 
-    auto* vslot =
-            _pool.add(new SlotDescriptor(150, "v.a", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    auto* vslot = _pool.add(new SlotDescriptor(150, "v.a", TYPE_BIGINT_DESC));
 
     SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
     auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
@@ -3893,8 +3867,7 @@ TEST_F(GroupReaderTest, FillDstChunkReturnsErrorWhenSourceSlotMissingFromActiveC
     ASSERT_OK(_create_filemeta(&file_meta, param));
     param->file_metadata = file_meta;
 
-    auto* vslot =
-            _pool.add(new SlotDescriptor(160, "v.a", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    auto* vslot = _pool.add(new SlotDescriptor(160, "v.a", TYPE_BIGINT_DESC));
 
     param->read_cols.clear();
     GroupReaderParam::Column vc{};
@@ -3923,8 +3896,7 @@ TEST_F(GroupReaderTest, FillDstChunkReturnsErrorWhenDeferredProjectedColumnIsNul
     ASSERT_OK(_create_filemeta(&file_meta, param));
     param->file_metadata = file_meta;
 
-    auto* vslot =
-            _pool.add(new SlotDescriptor(260, "v.a", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    auto* vslot = _pool.add(new SlotDescriptor(260, "v.a", TYPE_BIGINT_DESC));
 
     param->read_cols.clear();
     GroupReaderParam::Column vc{};
@@ -3960,8 +3932,7 @@ TEST_F(GroupReaderTest, FillDstChunkReturnsErrorWhenDeferredProjectedColumnRowCo
     ASSERT_OK(_create_filemeta(&file_meta, param));
     param->file_metadata = file_meta;
 
-    auto* vslot =
-            _pool.add(new SlotDescriptor(261, "v.a", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    auto* vslot = _pool.add(new SlotDescriptor(261, "v.a", TYPE_BIGINT_DESC));
 
     param->read_cols.clear();
     GroupReaderParam::Column vc{};
@@ -4208,12 +4179,9 @@ TEST_F(GroupReaderTest, LazyMaterializationContextCanMaterializeAndProvidePhysic
     param->file_metadata = file_meta;
     param->read_cols.clear();
 
-    auto* active_slot = _pool.add(
-            new SlotDescriptor(200, "active_col", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
-    auto* lazy_slot =
-            _pool.add(new SlotDescriptor(201, "lazy_col", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
-    auto* unrelated_slot = _pool.add(
-            new SlotDescriptor(202, "other_col", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    auto* active_slot = _pool.add(new SlotDescriptor(200, "active_col", TYPE_BIGINT_DESC));
+    auto* lazy_slot = _pool.add(new SlotDescriptor(201, "lazy_col", TYPE_BIGINT_DESC));
+    auto* unrelated_slot = _pool.add(new SlotDescriptor(202, "other_col", TYPE_BIGINT_DESC));
 
     GroupReaderParam::Column ca{};
     ca.slot_desc = active_slot;
@@ -4231,7 +4199,7 @@ TEST_F(GroupReaderTest, LazyMaterializationContextCanMaterializeAndProvidePhysic
     auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
 
     // Wire mock readers: active slot has data, lazy slot has mock that records reads.
-    auto bigint_col = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_BIGINT), true);
+    auto bigint_col = ColumnHelper::create_column(TYPE_BIGINT_DESC, true);
     bigint_col->append_datum(Datum(int64_t(42)));
     bigint_col->append_datum(Datum(int64_t(99)));
     group_reader->_column_readers.emplace(active_slot->id(),
@@ -4281,10 +4249,8 @@ TEST_F(GroupReaderTest, LazyMaterializationContextHasSlotReturnsTrueForCachedAnd
     param->file_metadata = file_meta;
     param->read_cols.clear();
 
-    auto* active_slot =
-            _pool.add(new SlotDescriptor(210, "ac", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
-    auto* lazy_slot =
-            _pool.add(new SlotDescriptor(211, "lz", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    auto* active_slot = _pool.add(new SlotDescriptor(210, "ac", TYPE_BIGINT_DESC));
+    auto* lazy_slot = _pool.add(new SlotDescriptor(211, "lz", TYPE_BIGINT_DESC));
 
     GroupReaderParam::Column ca{};
     ca.slot_desc = active_slot;
@@ -4301,7 +4267,7 @@ TEST_F(GroupReaderTest, LazyMaterializationContextHasSlotReturnsTrueForCachedAnd
     SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
     auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
 
-    auto bigint_col = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_BIGINT), true);
+    auto bigint_col = ColumnHelper::create_column(TYPE_BIGINT_DESC, true);
     bigint_col->append_datum(Datum(int64_t(42)));
     group_reader->_column_readers.emplace(active_slot->id(),
                                           std::make_unique<MockVariantSourceColumnReader>(bigint_col));
@@ -4333,10 +4299,8 @@ TEST_F(GroupReaderTest, LazyMaterializationContextMaterializeSlotDelegatesToColu
     param->file_metadata = file_meta;
     param->read_cols.clear();
 
-    auto* active_slot =
-            _pool.add(new SlotDescriptor(220, "aa", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
-    auto* lazy_slot =
-            _pool.add(new SlotDescriptor(221, "bb", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    auto* active_slot = _pool.add(new SlotDescriptor(220, "aa", TYPE_BIGINT_DESC));
+    auto* lazy_slot = _pool.add(new SlotDescriptor(221, "bb", TYPE_BIGINT_DESC));
 
     GroupReaderParam::Column ca{};
     ca.slot_desc = active_slot;
@@ -4353,7 +4317,7 @@ TEST_F(GroupReaderTest, LazyMaterializationContextMaterializeSlotDelegatesToColu
     SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
     auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
 
-    auto bigint_col = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_BIGINT), true);
+    auto bigint_col = ColumnHelper::create_column(TYPE_BIGINT_DESC, true);
     bigint_col->append_datum(Datum(int64_t(42)));
     group_reader->_column_readers.emplace(active_slot->id(),
                                           std::make_unique<MockVariantSourceColumnReader>(bigint_col));
@@ -4387,12 +4351,9 @@ TEST_F(GroupReaderTest, LazyMaterializationContextGetColumnReturnsNullForUnknown
     param->file_metadata = file_meta;
     param->read_cols.clear();
 
-    auto* active_slot =
-            _pool.add(new SlotDescriptor(230, "x", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
-    auto* lazy_slot =
-            _pool.add(new SlotDescriptor(231, "y", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
-    auto* unknown_slot =
-            _pool.add(new SlotDescriptor(999, "zz", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    auto* active_slot = _pool.add(new SlotDescriptor(230, "x", TYPE_BIGINT_DESC));
+    auto* lazy_slot = _pool.add(new SlotDescriptor(231, "y", TYPE_BIGINT_DESC));
+    auto* unknown_slot = _pool.add(new SlotDescriptor(999, "zz", TYPE_BIGINT_DESC));
 
     GroupReaderParam::Column ca{};
     ca.slot_desc = active_slot;
@@ -4409,7 +4370,7 @@ TEST_F(GroupReaderTest, LazyMaterializationContextGetColumnReturnsNullForUnknown
     SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
     auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
 
-    auto bigint_col = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_BIGINT), true);
+    auto bigint_col = ColumnHelper::create_column(TYPE_BIGINT_DESC, true);
     bigint_col->append_datum(Datum(int64_t(42)));
     group_reader->_column_readers.emplace(active_slot->id(),
                                           std::make_unique<MockVariantSourceColumnReader>(bigint_col));
@@ -4444,12 +4405,9 @@ TEST_F(GroupReaderTest, ReadLazyColumnsSeparatesTriggeredFromUntriggered) {
     param->file_metadata = file_meta;
     param->read_cols.clear();
 
-    auto* active_slot =
-            _pool.add(new SlotDescriptor(240, "a", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
-    auto* lazy_a_slot =
-            _pool.add(new SlotDescriptor(241, "la", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
-    auto* lazy_b_slot =
-            _pool.add(new SlotDescriptor(242, "lb", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    auto* active_slot = _pool.add(new SlotDescriptor(240, "a", TYPE_BIGINT_DESC));
+    auto* lazy_a_slot = _pool.add(new SlotDescriptor(241, "la", TYPE_BIGINT_DESC));
+    auto* lazy_b_slot = _pool.add(new SlotDescriptor(242, "lb", TYPE_BIGINT_DESC));
 
     GroupReaderParam::Column ca{};
     ca.slot_desc = active_slot;
@@ -4469,7 +4427,7 @@ TEST_F(GroupReaderTest, ReadLazyColumnsSeparatesTriggeredFromUntriggered) {
     SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
     auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
 
-    auto bigint_col = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_BIGINT), true);
+    auto bigint_col = ColumnHelper::create_column(TYPE_BIGINT_DESC, true);
     bigint_col->append_datum(Datum(int64_t(42)));
     bigint_col->append_datum(Datum(int64_t(99)));
     group_reader->_column_readers.emplace(active_slot->id(),
@@ -4489,7 +4447,7 @@ TEST_F(GroupReaderTest, ReadLazyColumnsSeparatesTriggeredFromUntriggered) {
     size_t num_rows = 2;
     Range<uint64_t> full_range(0, num_rows);
     auto active_chunk = std::make_shared<Chunk>();
-    auto active_col = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_BIGINT), true);
+    auto active_col = ColumnHelper::create_column(TYPE_BIGINT_DESC, true);
     active_col->append_datum(Datum(int64_t(1)));
     active_col->append_datum(Datum(int64_t(2)));
     active_chunk->append_column(active_col, active_slot->id());
@@ -4527,10 +4485,8 @@ TEST_F(GroupReaderTest, ReadLazyColumnsFiltersTriggeredColumnsWithChunkFilter) {
     param->file_metadata = file_meta;
     param->read_cols.clear();
 
-    auto* active_slot =
-            _pool.add(new SlotDescriptor(250, "act", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
-    auto* lazy_slot =
-            _pool.add(new SlotDescriptor(251, "lz", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    auto* active_slot = _pool.add(new SlotDescriptor(250, "act", TYPE_BIGINT_DESC));
+    auto* lazy_slot = _pool.add(new SlotDescriptor(251, "lz", TYPE_BIGINT_DESC));
 
     GroupReaderParam::Column ca{};
     ca.slot_desc = active_slot;
@@ -4547,7 +4503,7 @@ TEST_F(GroupReaderTest, ReadLazyColumnsFiltersTriggeredColumnsWithChunkFilter) {
     SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
     auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
 
-    auto bigint_col = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_BIGINT), true);
+    auto bigint_col = ColumnHelper::create_column(TYPE_BIGINT_DESC, true);
     bigint_col->append_datum(Datum(int64_t(10)));
     bigint_col->append_datum(Datum(int64_t(20)));
     group_reader->_column_readers.emplace(active_slot->id(),
@@ -4562,7 +4518,7 @@ TEST_F(GroupReaderTest, ReadLazyColumnsFiltersTriggeredColumnsWithChunkFilter) {
 
     // Build active_chunk manually: 2 surviving rows for active_slot.
     auto active_chunk = std::make_shared<Chunk>();
-    auto active_col = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_BIGINT), true);
+    auto active_col = ColumnHelper::create_column(TYPE_BIGINT_DESC, true);
     active_col->append_datum(Datum(int64_t(1)));
     active_col->append_datum(Datum(int64_t(2)));
     active_chunk->append_column(active_col, active_slot->id());
@@ -4617,10 +4573,8 @@ TEST_F(GroupReaderTest, ReservedSlotConjunctFiltersAllSkipsActiveColumns) {
     auto* param = _create_group_reader_param();
     param->read_cols.clear();
 
-    auto* reserved_slot =
-            _pool.add(new SlotDescriptor(260, "_pos", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
-    auto* active_slot =
-            _pool.add(new SlotDescriptor(261, "a", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    auto* reserved_slot = _pool.add(new SlotDescriptor(260, "_pos", TYPE_BIGINT_DESC));
+    auto* active_slot = _pool.add(new SlotDescriptor(261, "a", TYPE_BIGINT_DESC));
     GroupReaderParam::Column ca{};
     ca.slot_desc = active_slot;
     param->read_cols.emplace_back(ca);
@@ -4631,7 +4585,7 @@ TEST_F(GroupReaderTest, ReservedSlotConjunctFiltersAllSkipsActiveColumns) {
     std::vector<ExprContext*> conjunct_ctxs;
     ASSERT_OK(create_bigint_eq_conjunct_ctxs(&_pool, &runtime_state, reserved_slot->id(), 42, &conjunct_ctxs));
 
-    auto reserved_col = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_BIGINT), true);
+    auto reserved_col = ColumnHelper::create_column(TYPE_BIGINT_DESC, true);
     reserved_col->append_datum(Datum(int64_t(1)));
     reserved_col->append_datum(Datum(int64_t(2)));
 
@@ -4734,10 +4688,8 @@ TEST_F(GroupReaderTest, MaterializeSlotFinalizesLazyStateBeforeCaching) {
     param->file_metadata = file_meta;
     param->read_cols.clear();
 
-    auto* active_slot =
-            _pool.add(new SlotDescriptor(300, "a", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)));
-    auto* lazy_slot =
-            _pool.add(new SlotDescriptor(301, "lz", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)));
+    auto* active_slot = _pool.add(new SlotDescriptor(300, "a", TYPE_VARCHAR_DESC));
+    auto* lazy_slot = _pool.add(new SlotDescriptor(301, "lz", TYPE_VARCHAR_DESC));
 
     GroupReaderParam::Column ca{};
     ca.slot_desc = active_slot;
@@ -4756,7 +4708,7 @@ TEST_F(GroupReaderTest, MaterializeSlotFinalizesLazyStateBeforeCaching) {
 
     auto mock_lazy = std::make_unique<MockTempColumnReader>();
     auto* mock_lazy_ptr = mock_lazy.get();
-    auto bigint_col = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_BIGINT), true);
+    auto bigint_col = ColumnHelper::create_column(TYPE_BIGINT_DESC, true);
     bigint_col->append_datum(Datum(int64_t(42)));
     bigint_col->append_datum(Datum(int64_t(99)));
     group_reader->_column_readers.emplace(active_slot->id(),
@@ -4830,10 +4782,8 @@ TEST_F(GroupReaderTest, FinalizeResetsTempPreventingStaleAccretion) {
     param->file_metadata = file_meta;
     param->read_cols.clear();
 
-    auto* active_slot =
-            _pool.add(new SlotDescriptor(310, "a", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)));
-    auto* lazy_slot =
-            _pool.add(new SlotDescriptor(311, "lz", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)));
+    auto* active_slot = _pool.add(new SlotDescriptor(310, "a", TYPE_VARCHAR_DESC));
+    auto* lazy_slot = _pool.add(new SlotDescriptor(311, "lz", TYPE_VARCHAR_DESC));
 
     GroupReaderParam::Column ca{};
     ca.slot_desc = active_slot;
@@ -4852,7 +4802,7 @@ TEST_F(GroupReaderTest, FinalizeResetsTempPreventingStaleAccretion) {
 
     auto mock_lazy = std::make_unique<MockTempColumnReader>();
     auto* mock_lazy_ptr = mock_lazy.get();
-    auto bigint_col = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_BIGINT), true);
+    auto bigint_col = ColumnHelper::create_column(TYPE_BIGINT_DESC, true);
     bigint_col->append_datum(Datum(int64_t(42)));
     bigint_col->append_datum(Datum(int64_t(99)));
     group_reader->_column_readers.emplace(active_slot->id(),
@@ -4915,7 +4865,7 @@ public:
         if (_finalize_called) return Status::OK();
         if (col.get() == _code_column.get()) {
             _finalize_called = true;
-            auto logical = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_VARCHAR), true);
+            auto logical = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
             logical->as_mutable_raw_ptr()->append_datum(Datum(Slice("hello")));
             logical->as_mutable_raw_ptr()->append_datum(Datum(Slice("world")));
             col = std::move(logical);
@@ -4925,7 +4875,7 @@ public:
 
     Status fill_dst_column(ColumnPtr& dst, ColumnPtr& src) override {
         if (src.get() == _code_column.get()) {
-            auto logical = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_VARCHAR), true);
+            auto logical = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
             logical->as_mutable_raw_ptr()->append_datum(Datum(Slice("decoded_hello")));
             logical->as_mutable_raw_ptr()->append_datum(Datum(Slice("decoded_world")));
             dst->as_mutable_raw_ptr()->swap_column(*logical);
@@ -4956,10 +4906,8 @@ TEST_F(GroupReaderTest, EmitPhysicalColumnsBypassesFillDstForLogicalSlots) {
     param->file_metadata = file_meta;
     param->read_cols.clear();
 
-    auto* active_slot =
-            _pool.add(new SlotDescriptor(350, "act", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
-    auto* lazy_slot =
-            _pool.add(new SlotDescriptor(351, "lzc", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)));
+    auto* active_slot = _pool.add(new SlotDescriptor(350, "act", TYPE_BIGINT_DESC));
+    auto* lazy_slot = _pool.add(new SlotDescriptor(351, "lzc", TYPE_VARCHAR_DESC));
 
     GroupReaderParam::Column ca{};
     ca.slot_desc = active_slot;
@@ -4976,7 +4924,7 @@ TEST_F(GroupReaderTest, EmitPhysicalColumnsBypassesFillDstForLogicalSlots) {
     SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
     auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
 
-    auto bigint_col = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_BIGINT), true);
+    auto bigint_col = ColumnHelper::create_column(TYPE_BIGINT_DESC, true);
     bigint_col->append_datum(Datum(int64_t(42)));
     bigint_col->append_datum(Datum(int64_t(99)));
     auto mock_lazy = std::make_unique<MockGlobalDictColumnReader>();
@@ -4993,7 +4941,7 @@ TEST_F(GroupReaderTest, EmitPhysicalColumnsBypassesFillDstForLogicalSlots) {
     size_t num_rows = 2;
     Range<uint64_t> full_range(0, num_rows);
     auto active_chunk = std::make_shared<Chunk>();
-    auto active_col = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_BIGINT), true);
+    auto active_col = ColumnHelper::create_column(TYPE_BIGINT_DESC, true);
     active_col->append_datum(Datum(int64_t(1)));
     active_col->append_datum(Datum(int64_t(2)));
     active_chunk->append_column(active_col, active_slot->id());
@@ -5046,10 +4994,8 @@ TEST_F(GroupReaderTest, ActiveGlobalDictEmitBypassesFillDstAfterCompoundFinalize
     param->read_cols.clear();
 
     // Two active low-card-like slots, each with a single-slot conjunct.
-    auto* slot_a =
-            _pool.add(new SlotDescriptor(360, "dict_a", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)));
-    auto* slot_b =
-            _pool.add(new SlotDescriptor(361, "dict_b", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)));
+    auto* slot_a = _pool.add(new SlotDescriptor(360, "dict_a", TYPE_VARCHAR_DESC));
+    auto* slot_b = _pool.add(new SlotDescriptor(361, "dict_b", TYPE_VARCHAR_DESC));
 
     GroupReaderParam::Column ca{};
     ca.slot_desc = slot_a;
@@ -5163,7 +5109,7 @@ TEST_F(GroupReaderTest, EvaluateAllPredicatesWithScannerCtxs) {
 
     // Create a BIGINT chunk with 2 rows: values [0, 1].
     auto chunk = std::make_shared<Chunk>();
-    auto col = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_BIGINT), true);
+    auto col = ColumnHelper::create_column(TYPE_BIGINT_DESC, true);
     col->append_datum(Datum(int64_t(0)));
     col->append_datum(Datum(int64_t(1)));
     SlotId slot_id = 600;
